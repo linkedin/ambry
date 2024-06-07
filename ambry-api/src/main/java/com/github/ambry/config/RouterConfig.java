@@ -60,7 +60,9 @@ public class RouterConfig {
   public static final String ROUTER_DROP_REQUEST_ON_TIMEOUT = "router.drop.request.on.timeout";
   public static final String ROUTER_MAX_PUT_CHUNK_SIZE_BYTES = "router.max.put.chunk.size.bytes";
   public static final String ROUTER_PUT_REQUEST_PARALLELISM = "router.put.request.parallelism";
+  public static final String ROUTER_PUT_REMOTE_REQUEST_PARALLELISM = "router.put.remote.request.parallelism";
   public static final String ROUTER_PUT_SUCCESS_TARGET = "router.put.success.target";
+  public static final String ROUTER_PUT_REMOTE_SUCCESS_TARGET = "router.put.remote.success.target";
   public static final String ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM = "router.replicate.blob.request.parallelism";
   public static final String ROUTER_REPLICATE_BLOB_SUCCESS_TARGET = "router.replicate.blob.success.target";
   public static final String ROUTER_MAX_SLIPPED_PUT_ATTEMPTS = "router.max.slipped.put.attempts";
@@ -254,11 +256,25 @@ public class RouterConfig {
   public final int routerPutRequestParallelism;
 
   /**
+   * Paranoid durability: Max parallel requests issued at a time in remote data centers for a chunk.
+   */
+  @Config(ROUTER_PUT_REMOTE_REQUEST_PARALLELISM)
+  @Default("1")
+  public final int routerPutRemoteRequestParallelism;
+
+  /**
    * The minimum number of successful responses required for a put operation.
    */
   @Config(ROUTER_PUT_SUCCESS_TARGET)
   @Default("2")
   public final int routerPutSuccessTarget;
+
+  /**
+   * Paranoid durability: The min number of successful responses in remote data centers required for a put operation.
+   */
+  @Config(ROUTER_PUT_REMOTE_SUCCESS_TARGET)
+  @Default("1")
+  public final int routerPutRemoteSuccessTarget;
 
   /**
    * The maximum number of parallel requests issued at a time by the ReplicateBlob manager.
@@ -752,7 +768,10 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_MAX_PUT_CHUNK_SIZE_BYTES, 4 * 1024 * 1024, 1, Integer.MAX_VALUE);
     routerPutRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_PUT_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
+    routerPutRemoteRequestParallelism =
+        verifiableProperties.getIntInRange(ROUTER_PUT_REMOTE_REQUEST_PARALLELISM, 1, 1, Integer.MAX_VALUE);
     routerPutSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
+    routerPutRemoteSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_REMOTE_SUCCESS_TARGET, 1, 1, Integer.MAX_VALUE);
     routerReplicateBlobRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
     routerReplicateBlobSuccessTarget =
