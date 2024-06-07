@@ -68,11 +68,18 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     localReplicaSuccessTarget = routerConfig.routerPutSuccessTarget;
     remoteReplicaSuccessTarget = routerConfig.routerPutRemoteSuccessTarget;
 
+    // Calling getEligibleReplicas with null will return replicas from all data centers.
     List<ReplicaId> allEligibleReplicas = getEligibleReplicas(null, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
     addReplicasToPool(allEligibleReplicas);
     this.otIterator = new ParanoidDurabilityTrackerIterator();
   }
 
+  /**
+   * Create a "pool" of replicas that we can send requests to. Replicas are divided up into local and remote replicas.
+   * The remote replicas are sorted to obtain the best possible performance (given the additional latency and bandwidth
+   * associated with cross-colo requests).
+   * @param replicas the list of replicas to add to the pool.
+   */
   private void addReplicasToPool(List<? extends ReplicaId> replicas) {
     Collections.shuffle(replicas);
 
@@ -131,7 +138,10 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     }
   }
 
-  // Returns true if there are still remote replicas that have not been added to the final list, false otherwise.
+  /**
+   * Returns true if there are still remote replicas that have not yet been added to the final list (i.e. remoteReplicas),
+   * false otherwise.
+   */
   private boolean remoteReplicasLeft() {
     for(String dcName : remoteDatacenters) {
       if(!replicaPoolByDc.get(dcName).isEmpty()) {
@@ -141,6 +151,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     return false;
   }
 
+  /**
+   * Returns the "next" remote data center that we should pick up a replica from, for insertion into the remoteReplicas
+   * list. Remote data center names are returned in a round-robin fashion.
+   * @return the String name of the next colo.
+   */
   private String getNextRemoteDatacenter()  {
     int i = 0;
     int remoteDatacenterCount = remoteDatacenters.size();
@@ -154,6 +169,9 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     return nextDatacenter;
   }
 
+  /**
+   * Initialize various tracking variables that are used to determine the success or failure of this PUT operation.
+   */
   private void initializeTracking() {
     totalLocalReplicaCount = localReplicas.size();
     failedLocalReplicas = 0;
@@ -166,6 +184,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     });
   }
 
+  /**
+   * Generate a human-readable error message for when there are not enough replicas to satisfy the request.
+   * @param partitionId The chosen partition.
+   * @return
+   */
   private String generateErrorMessage(PartitionId partitionId) {
     StringBuilder errMsg = new StringBuilder("Partition " + partitionId + " has too few replicas to satisfy paranoid durability requirements. ");
     replicaPoolByDc.forEach((dcName, v) -> {
@@ -174,6 +197,10 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     return errMsg.toString();
   }
 
+  /**
+   * Check if there are enough replicas to satisfy the paranoid durability requirements.
+   * @return true if there are enough replicas, false otherwise.
+   */
   private boolean enoughReplicas() {
     if (localReplicas.size() < localReplicaSuccessTarget) {
       logger.error("Not enough replicas in local data center for partition " + partitionId
@@ -189,10 +216,19 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     return true;
   }
 
+  /**
+   * Check if the operation has succeeded. This is determined by the number of successful responses received from both
+   * local and remote replicas.
+   * @return true if we have received enough successful responses from both local and remote replicas, false otherwise.
+   */
   public boolean hasSucceeded() {
     return hasSucceededLocally() && hasSucceededRemotely();
   }
 
+  /**
+   * Check if the operation has succeeded locally (i.e. in the local data center).
+   * @return true if we have received enough successful responses from local replicas, false otherwise.
+   */
   private boolean hasSucceededLocally() {
     // This logic only applies locally, to replicas where the quorum can change during replica movement.
     if(routerConfig.routerPutUseDynamicSuccessTarget) {
@@ -202,6 +238,10 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     return localReplicaSuccessCount >= localReplicaSuccessTarget;
   }
 
+  /**
+   * Check if the operation has succeeded remotely (i.e. in the remote data centers).
+   * @return true if we have received enough successful responses from remote replicas, false otherwise.
+   */
   private boolean hasSucceededRemotely() {
     return remoteReplicaSuccessCount >= remoteReplicaSuccessTarget;
   }
@@ -217,13 +257,18 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       if(!replicaId.isDown())
         localReplicas.addFirst(replicaId);
     } else {
-      localReplicas.addLast(replicaId);
+      localReplicas.addLast(replicaId);  // We may still attempt to send requests to down replicas as a very last resort.
     }
 
     // Remote replicas will be sorted later so just add them in any order.
     replicaPoolByDc.computeIfAbsent(replicaDatacenterName, k -> new LinkedList<>()).add(replicaId);
   }
 
+  /**
+   * Handle a response from a replica, updating the state of the operation.
+   * @param replicaId ReplicaId associated with this response.
+   * @param trackedRequestFinalState The final state of a single request being tracked.
+   */
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     super.onResponse(replicaId, trackedRequestFinalState);
     modifyReplicasInPoolOrInFlightCount(replicaId, -1);
@@ -249,10 +294,21 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     }
   }
 
+  /**
+   * Check if the operation has failed. This is determined by the number of failed responses received from both local and
+   * remote replicas.
+   * @return true if we have received enough failed responses from both local and remote replicas, false otherwise.
+   */
   public boolean hasFailed() {
       return hasFailedLocally() || hasFailedRemotely();
   }
 
+  /**
+   * Check if the operation has failed "dynamically", accounting for the intermediate Helix state where we may have more
+   * replicas than normal (e.g. Helix brought up a replacement replica, but the old one is still online).
+   * @return true if we have received enough failed responses from local replicas to trigger dynamic failure, false
+   * otherwise.
+   */
   private boolean hasFailedDynamically()  {
     if (routerConfig.routerPutUseDynamicSuccessTarget) {
       return (totalLocalReplicaCount - failedLocalReplicas) < Math.max(totalLocalReplicaCount - 1, localReplicaSuccessTarget + disabledLocalReplicas);
@@ -260,10 +316,20 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     return false;
   }
 
+  /**
+   * Check if the operation has failed remotely (i.e. in the remote data centers).
+   * @return true if we have received enough failed responses from remote replicas that the operation cannot possibly
+   * succeed, false otherwise.
+   */
   private boolean hasFailedRemotely() {
     return (remoteReplicaSuccessCount + remoteInflightCount + remoteReplicas.size()) < remoteReplicaSuccessTarget;
   }
 
+  /**
+   * Check if the operation has failed locally (i.e. in the local data center).
+   * @return true if we have received enough failed responses from local replicas that the operation cannot possibly
+   * succeed, false otherwise.
+   */
   private boolean hasFailedLocally() {
     return hasFailedDynamically() || // The dynamic failure mode only applies in the local colo.
            ((localReplicaSuccessCount + localInflightCount + localReplicas.size()) < localReplicaSuccessTarget);
@@ -281,7 +347,6 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       remoteInflightCount += delta;
     }
   }
-
 
   int getCurrentLocalParallelism() {
     return replicaParallelism;
@@ -338,7 +403,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       if (hasNextLocal()) {
         lastReturnedByIterator = localReplicas.removeFirst();
       } else {
-        // hasNextRemote() must be true
+        // At this point, hasNextRemote() must be true
         lastReturnedByIterator = remoteReplicas.removeFirst();
       }
       return lastReturnedByIterator;
