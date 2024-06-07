@@ -241,8 +241,8 @@ public class BackupCheckerThread extends ReplicaThread {
                 MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey().getID());
                 Set<BlobMatchStatus> status = azureBlob == null ? Collections.singleton(BLOB_ABSENT_IN_AZURE)
                     : serverBlob.isEqual(azureBlob);
-                // if size mismatch, then re-check
-                // this is the only workaround due to a field reservedMetadataBlobId
+                // if size mismatch, then re-check.
+                // this is the only workaround due to different versions on serialization.
                 if (status.contains(BLOB_STATE_SIZE_MISMATCH)) {
                   status = recheck(replica, serverBlob, azureBlob, status);
                 }
