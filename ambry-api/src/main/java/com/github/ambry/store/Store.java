@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.replication.FindToken;
+import java.io.IOException;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -217,4 +218,14 @@ public interface Store {
    * Shuts down the store
    */
   void shutdown() throws StoreException;
-}
+
+  /**
+   * Returns blob-content CRC
+   * @param msg Metadata of blob
+   * @return CRC of blob-content
+   * @throws StoreException
+   * @throws IOException
+   */
+  default Long getBlobContentCRC(MessageInfo msg) throws StoreException, IOException { return null; }
+
+  }

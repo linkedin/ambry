@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
@@ -327,6 +328,30 @@ public class BlobStore implements Store {
         throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
       } finally {
         context.stop();
+      }
+    }
+  }
+
+  /**
+   * Returns CRC of blob-content
+   * @param msg Metadata of blob
+   * @return CRC of blob-content
+   */
+  @Override
+  public Long getBlobContentCRC(MessageInfo msg) throws StoreException, IOException {
+    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+        StoreGetOptions.Store_Include_Expired);
+    MessageReadSet rdset = null;
+    try {
+      StoreInfo stinfo = this.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
+      rdset = stinfo.getMessageReadSet();
+      MessageInfo minfo = stinfo.getMessageReadSetInfo().get(0);
+      rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
+          MessageFormatRecord.Crc_Size);
+      return rdset.getPrefetchedData(0).getLong(0);
+    } finally {
+      if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
+        rdset.getPrefetchedData(0).release();
       }
     }
   }
