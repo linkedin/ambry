@@ -144,7 +144,7 @@ public class RemoteReplicaInfo {
     return localReplicaId;
   }
 
-  Store getLocalStore() {
+  public Store getLocalStore() {
     return localStore;
   }
 

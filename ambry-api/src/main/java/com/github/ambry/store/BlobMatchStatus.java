@@ -17,6 +17,8 @@ package com.github.ambry.store;
  * Status code blob-state match operation
  */
 public enum BlobMatchStatus {
+  BLOB_INTACT_IN_AZURE,
+  BLOB_CORRUPT_IN_AZURE,
   BLOB_STATE_MATCH,
   BLOB_ABSENT,
   BLOB_ABSENT_IN_AZURE,
