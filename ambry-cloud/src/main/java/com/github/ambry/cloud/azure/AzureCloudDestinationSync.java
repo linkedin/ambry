@@ -409,6 +409,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   public boolean uploadBlobs(MessageFormatWriteSet messageSetToWrite) throws CloudStorageException {
     // Each input stream is a blob
+    Timer.Context storageTimer = azureMetrics.blobBatchUploadLatency.time();
     MessageSievingInputStream stream = (MessageSievingInputStream) messageSetToWrite.getStreamToWrite();
     ListIterator<InputStream> messageStreamListIter = stream.getValidMessageStreamList().listIterator();
     boolean unused_ret = true;
@@ -420,6 +421,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       cloudBlobMetadata.setReplicaLocation(stream.getReplicaLocation());
       unused_ret &= uploadBlob(blobId, messageInfo.getSize(), cloudBlobMetadata, messageStreamListIter.next());
     }
+    storageTimer.stop();
     // Unused return value
     return unused_ret;
   }
