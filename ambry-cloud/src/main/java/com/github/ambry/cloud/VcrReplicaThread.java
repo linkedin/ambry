@@ -21,6 +21,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ReplicaSelectionPolicy;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
@@ -56,6 +58,7 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected CloudConfig vcrNodeConfig;
   protected ReplicaComparator comparator;
   protected String azureTableNameReplicaTokens;
   protected AzureMetrics azureMetrics;
@@ -80,6 +83,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);
+    this.vcrNodeConfig = new CloudConfig(properties);
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
     this.numReplIter = 0;
@@ -116,7 +120,20 @@ public class VcrReplicaThread extends ReplicaThread {
     Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
     partitions.values().forEach(rlist -> {
       rlist.sort(comparator);
-      RemoteReplicaInfo replica = rlist.get(numReplIter % rlist.size());
+      RemoteReplicaInfo replica;
+      switch (vcrNodeConfig.replicaSelectionPolicy) {
+        case FIXED:
+          replica = rlist.get(0);
+          logger.trace("FIXED replicaSelectionPolicy picked {} for partition-{}",
+              replica.getReplicaId().getDataNodeId().getHostname(), replica.getReplicaId().getPartitionId().getId());
+          break;
+        case ROUND_ROBIN:
+        default:
+          replica = rlist.get(numReplIter % rlist.size());
+          logger.trace("{} replicaSelectionPolicy picked {} for partition-{}",
+              vcrNodeConfig.DEFAULT_REPLICA_SELECTION_POLICY, replica.getReplicaId().getDataNodeId().getHostname(),
+              replica.getReplicaId().getPartitionId().getId());
+      }
       nodes.computeIfAbsent(replica.getReplicaId().getDataNodeId(), k -> new ArrayList<>()).add(replica);
     });
     numReplIter = (numReplIter % 100) + 1; // Prevent integer overflow
