@@ -35,8 +35,8 @@ public class NamedBlobPath {
 
   static final String PREFIX_PARAM = "prefix";
   static final String PAGE_PARAM = "page";
-  static final String MARKER = "Marker";
-  static final String CONTINUATION_TOKEN = "ContinuationToken";
+  static final String MARKER = "marker";
+  static final String CONTINUATION_TOKEN = "continuation-token";
   static final int MAX_BLOB_NAME_LENGTH = 350;
   static final String LIST_TYPE = "list-type";
   static final String LIST_TYPE_VERSION_2 = "2";
