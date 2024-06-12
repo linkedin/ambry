@@ -470,7 +470,7 @@ public class CloudConfig {
   public final double backupNodeCpuScale;
 
   /**
-   * Fraction of token expiry time after which storage client token refresh will be attempted.
+   * Specifies how the backup-node must select server replicas to replicate from
    */
   public static final String REPLICA_SELECTION_POLICY = "replica.selection.policy";
   public static final ReplicaSelectionPolicy DEFAULT_REPLICA_SELECTION_POLICY = ReplicaSelectionPolicy.ROUND_ROBIN;
