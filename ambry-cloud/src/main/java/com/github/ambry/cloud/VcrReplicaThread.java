@@ -116,7 +116,6 @@ public class VcrReplicaThread extends ReplicaThread {
     replicas.values().forEach(rlist -> rlist.forEach(replica -> partitions.computeIfAbsent(
         replica.getReplicaId().getPartitionId().getId(), k -> new ArrayList<>()).add(replica)));
     // Pick one replica per partition for this iteration
-    // Group by data node
     Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
     partitions.values().forEach(rlist -> {
       rlist.sort(comparator);
@@ -134,6 +133,7 @@ public class VcrReplicaThread extends ReplicaThread {
               vcrNodeConfig.DEFAULT_REPLICA_SELECTION_POLICY, replica.getReplicaId().getDataNodeId().getHostname(),
               replica.getReplicaId().getPartitionId().getId());
       }
+      // Group by data node
       nodes.computeIfAbsent(replica.getReplicaId().getDataNodeId(), k -> new ArrayList<>()).add(replica);
     });
     numReplIter = (numReplIter % 100) + 1; // Prevent integer overflow
