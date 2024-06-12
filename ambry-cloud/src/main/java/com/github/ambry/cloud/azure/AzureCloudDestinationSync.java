@@ -568,30 +568,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return HTTP response and blob metadata
    */
   protected Response<Void> updateBlobMetadata(AzureBlobLayoutStrategy.BlobLayout blobLayout, BlobProperties blobProperties, Map<String, String> metadata) {
-    threadLocalMdCache.get().deleteObject(blobLayout.blobFilePath);
     BlobClient blobClient = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath);
     BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(blobProperties.getETag());
     return blobClient.setMetadataWithResponse(metadata, blobRequestConditions,
         Duration.ofMillis(cloudConfig.cloudRequestTimeout), Context.NONE);
-  }
-
-  /**
-   * Returns cached blob properties from Azure
-   * @param blobLayout BlobLayout
-   * @return Blob properties
-   * @throws CloudStorageException
-   */
-  protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
-      throws CloudStorageException {
-    BlobMetadata entry = (BlobMetadata) threadLocalMdCache.get().getObject(blobLayout.blobFilePath);
-    BlobProperties blobProperties;
-    if (entry == null) {
-      blobProperties = getBlobProperties(blobLayout);
-      threadLocalMdCache.get().putObject(blobLayout.blobFilePath, new BlobMetadata(blobProperties));
-    } else {
-      blobProperties = entry.getProperties();
-    }
-    return blobProperties;
   }
 
   /**
@@ -643,7 +623,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
-    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
+    BlobProperties blobProperties = getBlobProperties(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
     try {
@@ -710,7 +690,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
+    BlobProperties blobProperties = getBlobProperties(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
@@ -817,7 +797,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
+    BlobProperties blobProperties = getBlobProperties(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
     // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
@@ -921,7 +901,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
     for (BlobId blobId: blobIds) {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
-        BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
+        BlobMetadata entry = (BlobMetadata) threadLocalMdCache.get().getObject(blobLayout.blobFilePath);
+        BlobProperties blobProperties;
+        if (entry == null) {
+          blobProperties = getBlobProperties(blobLayout);
+          threadLocalMdCache.get().putObject(blobLayout.blobFilePath, new BlobMetadata(blobProperties));
+        } else {
+          blobProperties = entry.getProperties();
+        }
         cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
       } catch (CloudStorageException cse) {
         if (cse.getCause() instanceof BlobStorageException &&
