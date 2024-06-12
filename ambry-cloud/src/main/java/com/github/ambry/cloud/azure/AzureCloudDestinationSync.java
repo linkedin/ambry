@@ -52,6 +52,8 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.AmbryCache;
+import com.github.ambry.commons.AmbryCacheEntry;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -70,6 +72,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -103,7 +106,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected AccountService accountService;
   protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
+  ThreadLocal<AmbryCache> threadLocalMdCache;
+  protected class BlobMetadata implements AmbryCacheEntry {
 
+    private final BlobProperties properties;
+    public BlobMetadata(BlobProperties properties) {
+      this.properties = properties;
+    }
+
+    public BlobProperties getProperties() {
+      return properties;
+    }
+  }
   /**
    * Constructor for AzureCloudDestinationSync
    * @param verifiableProperties Configuration properties
@@ -170,6 +184,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
     logger.info("azureCloudConfig.azureStorageClientClass = {}", azureCloudConfig.azureStorageClientClass);
     StorageClient storageClient =
         Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics);
+    threadLocalMdCache = new ThreadLocal<>();
+    threadLocalMdCache.set(
+        new AmbryCache("thread-local-mdcache", true, 1000, metricRegistry));
     this.azureStorageClient = storageClient.getStorageSyncClient();
     this.azureTableServiceClient = storageClient.getTableServiceClient();
     testAzureStorageConnectivity();
@@ -884,7 +901,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
     for (BlobId blobId: blobIds) {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
-        BlobProperties blobProperties = getBlobProperties(blobLayout);
+        BlobMetadata entry = (BlobMetadata) threadLocalMdCache.get().getObject(blobLayout.blobFilePath);
+        BlobProperties blobProperties;
+        if (entry == null) {
+          blobProperties = getBlobProperties(blobLayout);
+          threadLocalMdCache.get().putObject(blobLayout.blobFilePath, new BlobMetadata(blobProperties));
+        } else {
+          blobProperties = entry.getProperties();
+        }
         cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
       } catch (CloudStorageException cse) {
         if (cse.getCause() instanceof BlobStorageException &&
