@@ -52,6 +52,8 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.AmbryCache;
+import com.github.ambry.commons.AmbryCacheEntry;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -70,6 +72,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -89,6 +92,7 @@ import org.slf4j.LoggerFactory;
 
 public class AzureCloudDestinationSync implements CloudDestination {
 
+  private final MetricRegistry metrics;
   protected AzureBlobLayoutStrategy azureBlobLayoutStrategy;
   protected AzureCloudConfig azureCloudConfig;
   protected AzureMetrics azureMetrics;
@@ -103,7 +107,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected AccountService accountService;
   protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
+  ThreadLocal<AmbryCache> threadLocalMdCache;
+  protected class BlobMetadata implements AmbryCacheEntry {
 
+    private final BlobProperties properties;
+    public BlobMetadata(BlobProperties properties) {
+      this.properties = properties;
+    }
+
+    public BlobProperties getProperties() {
+      return properties;
+    }
+  }
   /**
    * Constructor for AzureCloudDestinationSync
    * @param verifiableProperties Configuration properties
@@ -170,10 +185,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
     logger.info("azureCloudConfig.azureStorageClientClass = {}", azureCloudConfig.azureStorageClientClass);
     StorageClient storageClient =
         Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics);
+    threadLocalMdCache = new ThreadLocal<>();
+    metrics = metricRegistry;
     this.azureStorageClient = storageClient.getStorageSyncClient();
     this.azureTableServiceClient = storageClient.getTableServiceClient();
     testAzureStorageConnectivity();
     logger.info("Created AzureCloudDestinationSync");
+  }
+
+  AmbryCache getThreadLocalMdCache() {
+    if (threadLocalMdCache.get() == null) {
+      // The thread that creates this client object is not the thread that uploads blobs to Azure,
+      // So we need this fn to create thread-specific caches
+      String cacheName = "thread-local-mdcache-" + Thread.currentThread().getName();
+      threadLocalMdCache.set(new AmbryCache(cacheName, true, 2<<10, metrics));
+      logger.info("Created AmbryCache {}", threadLocalMdCache.get().toString());
+    }
+    return threadLocalMdCache.get();
   }
 
   /**
@@ -550,11 +578,48 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param metadata Blob metadata
    * @return HTTP response and blob metadata
    */
-  protected Response<Void> updateBlobMetadata(AzureBlobLayoutStrategy.BlobLayout blobLayout, BlobProperties blobProperties, Map<String, String> metadata) {
+  protected Response<Void> updateBlobMetadata(AzureBlobLayoutStrategy.BlobLayout blobLayout,
+      BlobProperties blobProperties, Map<String, String> metadata) {
     BlobClient blobClient = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath);
-    BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(blobProperties.getETag());
-    return blobClient.setMetadataWithResponse(metadata, blobRequestConditions,
+    /**
+     * When replicating, we might receive a TTL-UPDATE for a blob from replica-A and a DELETE for the same blob from replica-B.
+     * The thread-local cache functions as a write-through cache. We process the TTL-UPDATE from replica-A through this cache,
+     * followed by the DELETE from replica-B. The ETag changes in the cloud after each update, and we avoid additional read
+     * requests by not reading it from the cloud between updates. This approach means we are not performing read-modify-write
+     * operations on the blob metadata in the cloud, so we cannot rely on ETag matching to constrain updates.
+     * Additionally, ETag matching is primarily useful for concurrent updates, which is not relevant here because all
+     * replicas for a partition are scanned serially by the same thread. This is a departure from the previous design,
+     * where all replicas for a partition were scanned concurrently, often resulting in races during cloud updates.
+     */
+    BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch("*");
+    Response<Void> response = blobClient.setMetadataWithResponse(metadata, blobRequestConditions,
         Duration.ofMillis(cloudConfig.cloudRequestTimeout), Context.NONE);
+    /**
+     * Must update the only after updating cloud. If we are here, then it means cloud-update succeeded
+     * and it is safe to update thread-local cache. If the cloud-update failed, we will never reach this line
+     * and the thread-local cache will have the previous safe copy of metadata consistent with cloud.
+     */
+    getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new BlobMetadata(blobProperties));
+    return response;
+  }
+
+  /**
+   * Returns cached blob properties from Azure
+   * @param blobLayout BlobLayout
+   * @return Blob properties
+   * @throws CloudStorageException
+   */
+  protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
+      throws CloudStorageException {
+    BlobMetadata entry = (BlobMetadata) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
+    BlobProperties blobProperties;
+    if (entry == null) {
+      blobProperties = getBlobProperties(blobLayout);
+      getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new BlobMetadata(blobProperties));
+    } else {
+      blobProperties = entry.getProperties();
+    }
+    return blobProperties;
   }
 
   /**
@@ -606,7 +671,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
-    BlobProperties blobProperties = getBlobProperties(blobLayout);
+    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
     try {
@@ -673,7 +738,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobProperties = getBlobProperties(blobLayout);
+    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
@@ -780,7 +845,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobProperties = getBlobProperties(blobLayout);
+    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
     // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
@@ -884,7 +949,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     for (BlobId blobId: blobIds) {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
-        BlobProperties blobProperties = getBlobProperties(blobLayout);
+        BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
         cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
       } catch (CloudStorageException cse) {
         if (cse.getCause() instanceof BlobStorageException &&
