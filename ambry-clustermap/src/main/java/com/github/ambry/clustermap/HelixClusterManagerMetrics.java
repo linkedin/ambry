@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -59,6 +60,11 @@ class HelixClusterManagerMetrics {
   public final Timer routingTableQueryTime;
   public final Counter resourceNameMismatchCount;
   public final Counter paranoidDurabilityIneligibleReplicaCount;
+  // These maps are updated when 'partitionCountWithOneReplicaDown' metric is populated. Rest of the metrics such as
+  // 'partitionCountWithTwoReplicaDown', 'partitionCountWithThreeReplicaDown' use these values instead of re-calculating
+  // the partitionCounts inorder to save cpu cycles.
+  public Map<Integer, Integer> localPartitionCountsByDownReplicas = new ConcurrentHashMap<>();
+  public Map<Integer, Integer> localPartitionCountsByNonLeaderStandbyReplicas = new ConcurrentHashMap<>();
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -190,8 +196,8 @@ class HelixClusterManagerMetrics {
           }
         }
         if (downReplicaCount > replicaCount / 2) {
-            logger.info("There are more than half of the replicas are down for partition {}, the down replicas are {}",
-                partition.toPathString(), downReplicas);
+          logger.info("There are more than half of the replicas are down for partition {}, the down replicas are {}",
+              partition.toPathString(), downReplicas);
           return 1L;
         }
       }
@@ -199,6 +205,95 @@ class HelixClusterManagerMetrics {
     };
     registry.gauge(MetricRegistry.name(HelixClusterManager.class, "isMajorityReplicasDownForAnyPartition"),
         () -> isMajorityReplicasDownForAnyPartition);
+
+    Gauge<Integer> getLocalPartitionCountWithOneReplicaDown = () -> {
+      String dcName = clusterMapCallback.getDatacenterName();
+
+      for (PartitionId partition : clusterMapCallback.getPartitions()) {
+        // Get total replica count
+        int totalLocalReplicaCount = (int) partition.getReplicaIds()
+            .stream()
+            .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(dcName))
+            .count();
+
+        // Get local leader/standby/bootstrap replica counts of this partition
+        int localLeaderStandByReplicaCount = 0;
+        for (List<? extends ReplicaId> replicaIds : partition.getReplicaIdsByStates(
+            EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY), dcName).values()) {
+          localLeaderStandByReplicaCount += replicaIds.size();
+        }
+        int localBootstrapReplicaCount = partition.getReplicaIdsByState(ReplicaState.BOOTSTRAP, dcName).size();
+        int localInactiveReplicaCount = partition.getReplicaIdsByState(ReplicaState.INACTIVE, dcName).size();
+
+        // Calculate the number of replicas that are down. Bootstrap (upcoming) and Inactive (deactivating) replicas are considered as good.
+        int downReplicaCount = totalLocalReplicaCount - localLeaderStandByReplicaCount - localBootstrapReplicaCount
+            - localInactiveReplicaCount;
+
+        // Calculate the number of replicas that are not in leader or standby
+        int nonLeaderStandbyReplicaCount = totalLocalReplicaCount - localLeaderStandByReplicaCount;
+
+        // Update the maps to keep track of partition counts where 1, 2 or more replicas are down.
+        if (downReplicaCount > 0) {
+          localPartitionCountsByDownReplicas.put(downReplicaCount,
+              localPartitionCountsByDownReplicas.getOrDefault(downReplicaCount, 0) + 1);
+        }
+        if (nonLeaderStandbyReplicaCount > 0) {
+          localPartitionCountsByNonLeaderStandbyReplicas.put(nonLeaderStandbyReplicaCount,
+              localPartitionCountsByNonLeaderStandbyReplicas.getOrDefault(nonLeaderStandbyReplicaCount, 0) + 1);
+        }
+      }
+
+      return localPartitionCountsByDownReplicas.getOrDefault(1, 0);
+    };
+
+    // Metric to see number of local partitions with 1 replica down
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "localPartitionCountWithOneReplicaDown"),
+        () -> getLocalPartitionCountWithOneReplicaDown);
+
+    // Metric to see number of local partitions with 2 replica down
+    Gauge<Integer> getLocalPartitionCountWithTwoReplicaDown =
+        () -> localPartitionCountsByDownReplicas.getOrDefault(2, 0);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "localPartitionCountWithTwoReplicaDown"),
+        () -> getLocalPartitionCountWithTwoReplicaDown);
+
+    // Metric to see number of local partitions with 3 or more replica down
+    Gauge<Integer> getLocalPartitionCountWithThreeOrMoreReplicaDown = () -> {
+      int numOfPartitions = 0;
+      for (int downReplicaCount : localPartitionCountsByDownReplicas.keySet()) {
+        if (downReplicaCount >= 3) {
+          numOfPartitions += localPartitionCountsByDownReplicas.get(downReplicaCount);
+        }
+      }
+      return numOfPartitions;
+    };
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "localPartitionCountWithThreeOrMoreReplicaDown"),
+        () -> getLocalPartitionCountWithThreeOrMoreReplicaDown);
+
+    // Metric to see number of local partitions with 1 non leader/standby replica
+    Gauge<Integer> getLocalPartitionCountWithOneNonLeaderStandByReplica =
+        () -> localPartitionCountsByNonLeaderStandbyReplicas.getOrDefault(1, 0);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "localPartitionCountWithOneNonLeaderStandByReplica"),
+        () -> getLocalPartitionCountWithOneNonLeaderStandByReplica);
+
+    // Metric to see number of local partitions with 2 non leader/standby replica
+    Gauge<Integer> getLocalPartitionCountWithTwoNonLeaderStandByReplica =
+        () -> localPartitionCountsByNonLeaderStandbyReplicas.getOrDefault(2, 0);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "localPartitionCountWithTwoNonLeaderStandByReplica"),
+        () -> getLocalPartitionCountWithTwoNonLeaderStandByReplica);
+
+    // Metric to see number of local partitions with 3 or more non leader/standby replica
+    Gauge<Integer> getLocalPartitionCountWithThreeOrMoreNonLeaderStandByReplica = () -> {
+      int numOfPartitions = 0;
+      for (int inactiveReplicaCount : localPartitionCountsByNonLeaderStandbyReplicas.keySet()) {
+        if (inactiveReplicaCount >= 3) {
+          numOfPartitions += localPartitionCountsByNonLeaderStandbyReplicas.get(inactiveReplicaCount);
+        }
+      }
+      return numOfPartitions;
+    };
+    registry.gauge(
+        MetricRegistry.name(HelixClusterManager.class, "localPartitionCountWithThreeOrMoreNonLeaderStandByReplica"),
+        () -> getLocalPartitionCountWithThreeOrMoreNonLeaderStandByReplica);
   }
 
   /**
