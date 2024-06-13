@@ -469,9 +469,17 @@ public class CloudConfig {
   @Config(BACKUP_NODE_CPU_SCALE)
   public final double backupNodeCpuScale;
 
+  /**
+   * Specifies how the backup-node must select server replicas to replicate from
+   */
+  public static final String REPLICA_SELECTION_POLICY = "replica.selection.policy";
+  public static final ReplicaSelectionPolicy DEFAULT_REPLICA_SELECTION_POLICY = ReplicaSelectionPolicy.ROUND_ROBIN;
+  @Config(REPLICA_SELECTION_POLICY)
+  public ReplicaSelectionPolicy replicaSelectionPolicy;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
-
+    replicaSelectionPolicy = verifiableProperties.getEnum(REPLICA_SELECTION_POLICY, ReplicaSelectionPolicy.class,
+        DEFAULT_REPLICA_SELECTION_POLICY);
     backupNodeCpuScale = verifiableProperties.getDoubleInRange(BACKUP_NODE_CPU_SCALE,
         DEFAULT_BACKUP_NODE_CPU_SCALE, MIN_BACKUP_NODE_CPU_SCALE, MAX_BACKUP_NODE_CPU_SCALE);
     cloudCompactionGracePeriodDays = verifiableProperties.getInt(CLOUD_COMPACTION_GRACE_PERIOD_DAYS, 7);

@@ -203,10 +203,13 @@ public class AzureMetrics {
   public static final String BLOB_CHECK_ERROR = "BlobCheckError";
   public final Counter blobCheckError;
 
+  public static final String BLOB_BATCH_UPLOAD_LATENCY = "BlobBatchUploadLatency";
+  public final Timer blobBatchUploadLatency;
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
 
     // V2 metrics
+    blobBatchUploadLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_BATCH_UPLOAD_LATENCY));
     blobCheckError = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_CHECK_ERROR));
     blobCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_ERROR_COUNT));
     blobCompactionLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_LATENCY));
