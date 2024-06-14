@@ -1478,6 +1478,13 @@ public class HelixClusterManager implements ClusterMap {
     long getAllocatedUsableCapacity() {
       return clusterWideAllocatedUsableCapacityBytes.get();
     }
+
+    /**
+     * @return the current data center name
+     */
+    String getDatacenterName() {
+      return clusterMapConfig.clusterMapDatacenterName;
+    }
   }
 
   /**
