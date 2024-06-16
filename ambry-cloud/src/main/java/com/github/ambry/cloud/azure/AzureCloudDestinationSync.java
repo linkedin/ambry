@@ -72,7 +72,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Duration;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -108,10 +107,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
   ThreadLocal<AmbryCache> threadLocalMdCache;
-  protected class BlobMetadata implements AmbryCacheEntry {
+  protected class AzureBlobProperties implements AmbryCacheEntry {
 
     private final BlobProperties properties;
-    public BlobMetadata(BlobProperties properties) {
+    public AzureBlobProperties(BlobProperties properties) {
       this.properties = properties;
     }
 
@@ -583,9 +582,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
     BlobClient blobClient = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath);
     /**
      * When replicating, we might receive a TTL-UPDATE for a blob from replica-A and a DELETE for the same blob from replica-B.
-     * The thread-local cache functions as a write-through cache. We process the TTL-UPDATE from replica-A through this cache,
+     * The thread-local cache functions as a write-through cache. We write the TTL-UPDATE from replica-A through this cache,
      * followed by the DELETE from replica-B. The ETag changes in the cloud after each update, and we avoid additional read
-     * requests by not reading it from the cloud between updates. This approach means we are not performing read-modify-write
+     * requests from the cloud between updates. This means we are not performing read-modify-write
      * operations on the blob metadata in the cloud, so we cannot rely on ETag matching to constrain updates.
      * Additionally, ETag matching is primarily useful for concurrent updates, which is not relevant here because all
      * replicas for a partition are scanned serially by the same thread. This is a departure from the previous design,
@@ -595,11 +594,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Response<Void> response = blobClient.setMetadataWithResponse(metadata, blobRequestConditions,
         Duration.ofMillis(cloudConfig.cloudRequestTimeout), Context.NONE);
     /**
-     * Must update the only after updating cloud. If we are here, then it means cloud-update succeeded
+     * Must cache only after updating cloud. If we are here, then it means cloud-update succeeded,
      * and it is safe to update thread-local cache. If the cloud-update failed, we will never reach this line
      * and the thread-local cache will have the previous safe copy of metadata consistent with cloud.
      */
-    getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new BlobMetadata(blobProperties));
+    getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new AzureBlobProperties(blobProperties));
     return response;
   }
 
@@ -611,11 +610,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
-    BlobMetadata entry = (BlobMetadata) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
+    AzureBlobProperties entry = (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
     BlobProperties blobProperties;
     if (entry == null) {
       blobProperties = getBlobProperties(blobLayout);
-      getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new BlobMetadata(blobProperties));
+      getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new AzureBlobProperties(blobProperties));
     } else {
       blobProperties = entry.getProperties();
     }

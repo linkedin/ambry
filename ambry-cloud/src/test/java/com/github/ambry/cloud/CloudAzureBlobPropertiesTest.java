@@ -33,7 +33,7 @@ import static org.junit.Assert.*;
 
 /** Test for {@link CloudBlobMetadata} class. */
 @Ignore
-public class CloudBlobMetadataTest {
+public class CloudAzureBlobPropertiesTest {
 
   private static final ObjectMapper mapperObj = new ObjectMapper();
   private final byte dataCenterId = 66;
