@@ -1923,7 +1923,7 @@ public class GetBlobOperationTest {
     int randomOne = random.nextInt(blobSize);
     int randomTwo = random.nextInt(blobSize);
     doPut();
-    assertNull("AzureBlobProperties must not be cached after PUT request", this.blobMetadataCache.getObject(blobIdStr));
+    assertNull("BlobMetadata must not be cached after PUT request", this.blobMetadataCache.getObject(blobIdStr));
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .range(ByteRanges.fromOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo)))
         .resolveRangeOnEmptyBlob(true)
