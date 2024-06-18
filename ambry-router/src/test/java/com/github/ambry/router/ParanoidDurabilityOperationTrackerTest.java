@@ -52,6 +52,7 @@ public class ParanoidDurabilityOperationTrackerTest {
   private MockClusterMap mockClusterMap;
   private final LinkedList<ReplicaId> inflightReplicas = new LinkedList<>();
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
+  private List<ReplicaId> responseReplicas = new ArrayList<>();
 
 
   public ParanoidDurabilityOperationTrackerTest() { }
@@ -61,6 +62,8 @@ public class ParanoidDurabilityOperationTrackerTest {
    */
   @Test
   public void basicSuccessTest() {
+    int localReplicaSuccessTarget = 2;
+    int remoteReplicaSuccessTarget = 1;
     localDcName = new String("dc-0");
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
@@ -79,15 +82,21 @@ public class ParanoidDurabilityOperationTrackerTest {
     mockClusterMap = new MockClusterMap(false, buildDataNodeList(testReplicas), 1, Collections.singletonList(mockPartition), localDcName);
     populateReplicaList(testReplicas);
 
-    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, true);
+    responseReplicas.clear();
+    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, localReplicaSuccessTarget, remoteReplicaSuccessTarget, true);
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 3);
       for (int i = 0; i < 3; i++) {
-        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+        ReplicaId currentReplica = inflightReplicas.poll();
+        responseReplicas.add(currentReplica);
+        ot.onResponse(currentReplica, TrackedRequestFinalState.SUCCESS);
       }
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
+    assertFalse("Operation should not have failed", ot.hasFailed());
+    assertTrue(localReplicaSuccessTarget + " of the successful replicas should be local and " + remoteReplicaSuccessTarget +" should be remote",
+        verifySuccessfulReplicas(responseReplicas, localReplicaSuccessTarget, remoteReplicaSuccessTarget));
   }
 
   /**
@@ -118,7 +127,7 @@ public class ParanoidDurabilityOperationTrackerTest {
   }
 
   /**
-   * A test with just enough local replicas, and a successful outcome.
+   * A test with not enough local replicas, resulting in failure.
    */
   @Test
   public void tooFewLocalReplicasTest() {
@@ -127,6 +136,8 @@ public class ParanoidDurabilityOperationTrackerTest {
     List<String> mountPaths = Collections.singletonList("mockMountPath");
     List<ReplicaSpec> testReplicas = new ArrayList<ReplicaSpec>(Arrays.asList(new ReplicaSpec[] {
         new ReplicaSpec(localDcName, ReplicaState.LEADER, portList, mountPaths),
+        new ReplicaSpec(localDcName, ReplicaState.DROPPED, portList, mountPaths),        // Not eligible for writes
+        new ReplicaSpec(localDcName, ReplicaState.BOOTSTRAP, portList, mountPaths),      // Not eligible for writes
         new ReplicaSpec("remote-1", ReplicaState.LEADER, portList, mountPaths),
         new ReplicaSpec("remote-1", ReplicaState.STANDBY, portList, mountPaths),
         new ReplicaSpec("remote-1", ReplicaState.STANDBY, portList, mountPaths),
@@ -149,6 +160,8 @@ public class ParanoidDurabilityOperationTrackerTest {
    */
   @Test
   public void justEnoughLocalReplicasTest() {
+    int localReplicaSuccessTarget = 2;
+    int remoteReplicaSuccessTarget = 1;
     localDcName = new String("dc-0");
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
@@ -166,16 +179,60 @@ public class ParanoidDurabilityOperationTrackerTest {
     mockClusterMap = new MockClusterMap(false, buildDataNodeList(testReplicas), 1, Collections.singletonList(mockPartition), localDcName);
     populateReplicaList(testReplicas);
 
+    responseReplicas.clear();
     ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, true);
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 3);
       for (int i = 0; i < 3; i++) {
-        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+        ReplicaId currentReplica = inflightReplicas.poll();
+        responseReplicas.add(currentReplica);
+        ot.onResponse(currentReplica, TrackedRequestFinalState.SUCCESS);
       }
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
+    assertFalse("Operation should not have failed", ot.hasFailed());
+    assertTrue(localReplicaSuccessTarget + " of the successful replicas should be local and " + remoteReplicaSuccessTarget +" should be remote",
+        verifySuccessfulReplicas(responseReplicas, localReplicaSuccessTarget, remoteReplicaSuccessTarget));
   }
+
+  /**
+   * A test with just enough remote replicas, and a successful outcome.
+   */
+  @Test
+  public void justEnoughRemoteReplicasTest() {
+    int localReplicaSuccessTarget = 2;
+    int remoteReplicaSuccessTarget = 1;
+    localDcName = new String("dc-0");
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    List<ReplicaSpec> testReplicas = new ArrayList<ReplicaSpec>(Arrays.asList(new ReplicaSpec[] {
+        new ReplicaSpec(localDcName, ReplicaState.LEADER, portList, mountPaths),
+        new ReplicaSpec(localDcName, ReplicaState.STANDBY, portList, mountPaths),
+        new ReplicaSpec(localDcName, ReplicaState.STANDBY, portList, mountPaths),
+        new ReplicaSpec("remote-2", ReplicaState.STANDBY, portList, mountPaths) }));
+
+    mockPartition = new MockPartitionId();
+    mockClusterMap = new MockClusterMap(false, buildDataNodeList(testReplicas), 1, Collections.singletonList(mockPartition), localDcName);
+    populateReplicaList(testReplicas);
+
+    responseReplicas.clear();
+    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, localReplicaSuccessTarget, remoteReplicaSuccessTarget, true);
+    while (!ot.hasSucceeded()) {
+      sendRequests(ot, 3);
+      for (int i = 0; i < 3; i++) {
+        ReplicaId currentReplica = inflightReplicas.poll();
+        responseReplicas.add(currentReplica);
+        ot.onResponse(currentReplica, TrackedRequestFinalState.SUCCESS);
+      }
+    }
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+    assertFalse("Operation should not have failed", ot.hasFailed());
+    assertTrue(localReplicaSuccessTarget + " of the successful replicas should be local and " + (remoteReplicaSuccessTarget+1) +" should be remote",
+        verifySuccessfulReplicas(responseReplicas, localReplicaSuccessTarget, remoteReplicaSuccessTarget));
+  }
+
 
 
   /**
@@ -238,10 +295,30 @@ public class ParanoidDurabilityOperationTrackerTest {
    */
   private void populateReplicaList(List<ReplicaSpec> specs) {
     for (ReplicaSpec spec : specs) {
-      ReplicaId replicaId = new MockReplicaId(PORT, mockPartition, spec.getDataNode(), 0);
+      ReplicaId replicaId = new MockReplicaId(PORT, mockPartition, spec.getDataNode(), 0, spec.getState());
       mockPartition.replicaIds.add(replicaId);
       mockPartition.replicaAndState.put(replicaId, spec.getState());
     }
+  }
+
+  /**
+   * Verify that the expected number of local and remote replicas successfully processed the request.
+   * @param replicas The list of replicas to verify.
+   * @param expectedLocalSuccessCount The expected number of local replicas.
+   * @param expectedRemoteSuccessCount The expected number of remote replicas.
+   * @return {@code true} if the number of local and remote replicas match the expected values, {@code false} otherwise.
+   */
+  private boolean verifySuccessfulReplicas(List<ReplicaId> replicas, int expectedLocalSuccessCount, int expectedRemoteSuccessCount) {
+    int actualLocalSuccessCount = 0;
+    int actualRemoteSuccessCount = 0;
+    for (ReplicaId replica: replicas) {
+      if (replica.getDataNodeId().getDatacenterName().equals(localDcName)) {
+        actualLocalSuccessCount++;
+      } else {
+        actualRemoteSuccessCount++;
+      }
+    }
+    return actualLocalSuccessCount == expectedLocalSuccessCount && actualRemoteSuccessCount == expectedRemoteSuccessCount;
   }
 
   /**
@@ -256,9 +333,7 @@ public class ParanoidDurabilityOperationTrackerTest {
       dataNode = new MockDataNodeId(ports, mounts, dcName);
     }
 
-    public ReplicaState getState() {
-      return helixState;
-    }
+    public ReplicaState getState() { return helixState; }
 
     public MockDataNodeId getDataNode() {
       return dataNode;
