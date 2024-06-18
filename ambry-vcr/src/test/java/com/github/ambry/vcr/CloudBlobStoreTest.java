@@ -254,28 +254,9 @@ public class CloudBlobStoreTest {
     assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && new AzuriteUtils().connectToAzurite());
   }
 
-  protected void clearContainer(PartitionId testPartitionId, AzureCloudDestinationSync azureCloudDestinationSync, VerifiableProperties verifiableProperties) {
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    AzureBlobLayoutStrategy azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, new AzureCloudConfig(verifiableProperties));
-    String blobContainerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(String.valueOf(testPartitionId.getId()));
-    BlobContainerClient blobContainerClient = azureCloudDestinationSync.getBlobStore(blobContainerName);
-    if (blobContainerClient == null) {
-      logger.info("Blob container {} does not exist", blobContainerName);
-      return;
-    }
-    ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails().setRetrieveMetadata(true));
-    String continuationToken = null;
-    for (PagedResponse<BlobItem> blobItemPagedResponse :
-        blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
-      continuationToken = blobItemPagedResponse.getContinuationToken();
-      for (BlobItem blobItem : blobItemPagedResponse.getValue()) {
-        blobContainerClient.getBlobClient(blobItem.getName()).delete();
-      }
-      if (continuationToken == null) {
-        logger.info("Reached end-of-partition as Azure blob storage continuationToken is null");
-        break;
-      }
-    }
+  protected void clearContainer(PartitionId testPartitionId, AzureCloudDestinationSync azureCloudDestinationSync,
+      VerifiableProperties verifiableProperties) {
+    new AzuriteUtils().clearContainer(testPartitionId, azureCloudDestinationSync, verifiableProperties);
   }
 
   protected BlobContainerClient getTestBlobContainerClient(AzureCloudDestinationSync azureCloudDestinationSync, PartitionId partitionId) {

@@ -1286,38 +1286,17 @@ public class CloudBlobStore implements Store {
 
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
-    checkStarted();
-
-    if (recentBlobCache == null) {
-      return keys.stream()
-          .filter(key -> !cloudDestination.doesBlobExist((BlobId) key))
-          .collect(Collectors.toSet());
-    }
-
-    // Check existence of keys in cloud metadata
-    // Note that it is ok to refer cache here, because all we are doing is eliminating blobs that were seen before and
-    // we don't care about the state of the blob.
-    // TODO Fix corner case where a blob is deleted in cache, and has been compacted. Ideally it should show as missing.
-    List<BlobId> blobIdQueryList = keys.stream()
-        .filter(key -> !checkCacheState(key.getID()))
-        .map(key -> (BlobId) key)
-        .collect(Collectors.toList());
-    if (blobIdQueryList.isEmpty()) {
-      // Cool, the cache did its job and eliminated a possibly expensive query to cloud!
-      return Collections.emptySet();
-    }
-    try {
-      Set<String> foundSet =
-          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdQueryList), "FindMissingKeys",
-              partitionId.toPathString()).keySet();
-      // return input keys - cached keys - keys returned by query
-      return keys.stream()
-          .filter(key -> !foundSet.contains(key.getID()))
-          .filter(key -> !recentBlobCache.containsKey(key.getID()))
-          .collect(Collectors.toSet());
-    } catch (CloudStorageException ex) {
-      throw new StoreException(ex, StoreErrorCodes.IOError);
-    }
+    Set<StoreKey> missingKeys = new HashSet<>();
+    keys.stream().forEach(k -> {
+      try {
+        if (!cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) k)).containsKey(k.getID())) {
+          missingKeys.add(k);
+        }
+      } catch (Throwable e) {
+        // pass; error is handled or printed in getBlobMetadata
+      }
+    });
+    return missingKeys;
   }
 
   @Override

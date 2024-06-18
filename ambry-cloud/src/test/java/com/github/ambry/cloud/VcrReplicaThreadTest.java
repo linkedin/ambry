@@ -13,23 +13,37 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.cloud.azure.AzuriteUtils;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.Assert;
@@ -37,21 +51,79 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 public class VcrReplicaThreadTest {
   protected final VerifiableProperties properties;
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThreadTest.class);
+  private final MetricRegistry metrics;
+  private final AzureMetrics azureMetrics;
+  protected AzureCloudDestinationSync azureClient;
   protected MockClusterMap clustermap;
   public static final int NUM_NODES = 5; // Also num_replicas
   public static final int NUM_PARTITIONS = 10;
-
-  public VcrReplicaThreadTest() throws IOException {
-    properties = new VerifiableProperties(new AzuriteUtils().getAzuriteConnectionProperties());
+  protected ClusterMap clusterMap;
+  public VcrReplicaThreadTest() throws IOException, ReflectiveOperationException {
+    clusterMap = new MockClusterMap();
+    Properties props = new AzuriteUtils().getAzuriteConnectionProperties();
+    props.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, String.valueOf(1));
+    props.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION.name());
+    metrics = new MetricRegistry();
+    azureMetrics = new AzureMetrics(metrics);
+    azureClient = new AzuriteUtils().getAzuriteClient(props, metrics, clusterMap);
+    properties = new VerifiableProperties(props);
     // Create test cluster MAP
     clustermap = new MockClusterMap(false, false, NUM_NODES,
         1, NUM_PARTITIONS, true, false,
         "localhost");
+  }
+
+  HashMap<BlobId, CloudBlobMetadata> createBlob(String data) {
+    HashMap<BlobId, CloudBlobMetadata> blobs = new HashMap<>();
+    PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        partitionId, false, BlobId.BlobDataType.DATACHUNK);
+    HashMap<String, String> map = new HashMap<>();
+    long now = System.currentTimeMillis();
+    // Required fields
+    map.put(CloudBlobMetadata.FIELD_ID, blobId.getID());
+    map.put(CloudBlobMetadata.FIELD_PARTITION_ID, String.valueOf(blobId.getPartition().getId()));
+    map.put(CloudBlobMetadata.FIELD_ACCOUNT_ID, String.valueOf(blobId.getAccountId()));
+    map.put(CloudBlobMetadata.FIELD_CONTAINER_ID, String.valueOf(blobId.getContainerId()));
+    map.put(CloudBlobMetadata.FIELD_SIZE, String.valueOf(data.length()));
+    map.put(CloudBlobMetadata.FIELD_CREATION_TIME, String.valueOf(now));
+    map.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(now));
+    map.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(now));
+    blobs.put(blobId, CloudBlobMetadata.fromMap(map));
+    return blobs;
+  }
+
+  /**
+   * Tests thread-local metadata cache by fetching blob metadata from azure
+   * @throws CloudStorageException
+   */
+  @Test
+  public void testThreadLocalMetadataCache() throws CloudStorageException {
+    String data = "hello world!";
+    HashMap<BlobId, CloudBlobMetadata> blobs = createBlob(data);
+    BlobId blob = blobs.keySet().stream().collect(Collectors.toList()).get(0);
+    CloudBlobMetadata metadata = blobs.values().stream().collect(Collectors.toList()).get(0);
+    azureClient.uploadBlob(blob, data.length(), metadata,
+        new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
+    AtomicReference<CloudBlobMetadata> md = new AtomicReference<>();
+    IntStream.range(0,5).forEach(i -> {
+      try {
+        md.set(azureClient.getBlobMetadata(Collections.singletonList(blob)).get(blob.getID()));
+      } catch (CloudStorageException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    assertEquals(1, azureMetrics.blobGetPropertiesSuccessRate.getCount()); // get-blob-properties must be called once
+    assertEquals(metadata, md.get());
   }
 
   @Test
@@ -122,9 +194,9 @@ public class VcrReplicaThreadTest {
         new VcrReplicationManager(properties, null, null, clustermap,
             mock(VcrClusterParticipant.class), mock(AzureCloudDestinationSync.class), null,
             mock(NetworkClientFactory.class), null, null);
-    Assert.assertEquals(0, manager.getNumReplThreads(0));
-    Assert.assertEquals(2, manager.getNumReplThreads(-2.5));
-    Assert.assertEquals((int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * 2.5),
+    assertEquals(0, manager.getNumReplThreads(0));
+    assertEquals(2, manager.getNumReplThreads(-2.5));
+    assertEquals((int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * 2.5),
         manager.getNumReplThreads(2.5));
   }
 }

@@ -40,7 +40,7 @@ public class AzureBlobLayoutStrategy {
   /**
    * Enum for deciding how Azure storage containers are organized.
    */
-  enum BlobContainerStrategy {
+  public enum BlobContainerStrategy {
 
     /** Each Azure container corresponds to an Ambry partitionId. */
     PARTITION,
