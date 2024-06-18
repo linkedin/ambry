@@ -87,11 +87,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       addToPool(replicaId);
     }
 
+    initializeTracking();
+    listRemoteReplicas();
     if(!enoughReplicas()) {
       throw new IllegalArgumentException(generateErrorMessage(partitionId));
     }
-    initializeTracking();
-    listRemoteReplicas();
   }
 
   /**
@@ -252,16 +252,16 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    */
   private void addToPool(ReplicaId replicaId) {
     String replicaDatacenterName = replicaId.getDataNodeId().getDatacenterName();
-    modifyReplicasInPoolOrInFlightCount(replicaId, 1);
-    if(replicaDatacenterName.equals(datacenterName)) {
-      if(!replicaId.isDown())
+    if (replicaDatacenterName.equals(datacenterName)) {
+      if (!replicaId.isDown()) {
         localReplicas.addFirst(replicaId);
+      } else {
+        localReplicas.addLast(replicaId);  // We may still attempt to send requests to down replicas as a very last resort.
+      }
     } else {
-      localReplicas.addLast(replicaId);  // We may still attempt to send requests to down replicas as a very last resort.
+      // Remote replicas will be sorted later so just add them in any order.
+      replicaPoolByDc.computeIfAbsent(replicaDatacenterName, k -> new LinkedList<>()).add(replicaId);
     }
-
-    // Remote replicas will be sorted later so just add them in any order.
-    replicaPoolByDc.computeIfAbsent(replicaDatacenterName, k -> new LinkedList<>()).add(replicaId);
   }
 
   /**
@@ -271,8 +271,13 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    */
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     super.onResponse(replicaId, trackedRequestFinalState);
-    modifyReplicasInPoolOrInFlightCount(replicaId, -1);
     String dcName = replicaId.getDataNodeId().getDatacenterName();
+
+    if(dcName.equals(datacenterName)) {
+      localInflightCount--;
+    } else {
+      remoteInflightCount--;
+    }
 
     switch (trackedRequestFinalState) {
       case SUCCESS:
@@ -335,18 +340,6 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
            ((localReplicaSuccessCount + localInflightCount + localReplicas.size()) < localReplicaSuccessTarget);
   }
 
-  /**
-   * Add {@code delta} to a replicas in pool or in flight counter.
-   * @param delta the value to add to the counter.
-   */
-  private void modifyReplicasInPoolOrInFlightCount(ReplicaId replica, int delta) {
-    String dcName = replica.getDataNodeId().getDatacenterName();
-    if(dcName.equals(datacenterName)) {
-      localInflightCount += delta;
-    } else {
-      remoteInflightCount += delta;
-    }
-  }
 
   int getCurrentLocalParallelism() {
     return replicaParallelism;
