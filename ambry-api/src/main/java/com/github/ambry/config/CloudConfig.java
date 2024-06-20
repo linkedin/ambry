@@ -307,7 +307,7 @@ public class CloudConfig {
    * The max size of recently-accessed blob cache in each cloud blob store.
    */
   @Config(CLOUD_RECENT_BLOB_CACHE_LIMIT)
-  @Default("256")
+  @Default("128")
   public final int recentBlobCacheLimit;
 
   /**
