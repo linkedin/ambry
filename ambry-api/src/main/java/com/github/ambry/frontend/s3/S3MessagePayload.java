@@ -154,7 +154,7 @@ public class S3MessagePayload {
     }
   }
 
-  public static class ListBucketResult {
+  public static abstract class AbstractListBucketResult {
     @JacksonXmlProperty(localName = "Name")
     private String name;
     @JacksonXmlProperty(localName = "Prefix")
@@ -170,13 +170,15 @@ public class S3MessagePayload {
     private List<Contents> contents;
     @JacksonXmlProperty(localName = "EncodingType")
     private String encodingType;
+    @JacksonXmlProperty(localName = "isTruncated")
+    private Boolean isTruncated;
 
-    private ListBucketResult() {
+    private AbstractListBucketResult() {
 
     }
 
-    public ListBucketResult(String name, String prefix, int maxKeys, int keyCount, String delimiter,
-        List<Contents> contents, String encodingType) {
+    public AbstractListBucketResult(String name, String prefix, int maxKeys, int keyCount, String delimiter,
+        List<Contents> contents, String encodingType, boolean isTruncated) {
       this.name = name;
       this.prefix = prefix;
       this.maxKeys = maxKeys;
@@ -184,6 +186,7 @@ public class S3MessagePayload {
       this.delimiter = delimiter;
       this.contents = contents;
       this.encodingType = encodingType;
+      this.isTruncated = isTruncated;
     }
 
     public String getPrefix() {
@@ -210,10 +213,84 @@ public class S3MessagePayload {
       return keyCount;
     }
 
+    public boolean getIsTruncated() {
+      return isTruncated;
+    }
+
     @Override
     public String toString() {
       return "Name=" + name + ", Prefix=" + prefix + ", MaxKeys=" + maxKeys + ", KeyCount=" + keyCount + ", Delimiter="
-          + delimiter + ", Contents=" + contents + ", Encoding type=" + encodingType;
+          + delimiter + ", Contents=" + contents + ", Encoding type=" + encodingType + ", IsTruncated=" + isTruncated;
+    }
+  }
+
+  /**
+   * ListBucketResult for listObjects API.
+   */
+  public static class ListBucketResult extends AbstractListBucketResult {
+    @JacksonXmlProperty(localName = "Marker")
+    private String marker;
+    @JacksonXmlProperty(localName = "NextMarker")
+    private String nextMarker;
+
+    private ListBucketResult() {
+      super();
+    }
+
+    public ListBucketResult(String name, String prefix, int maxKeys, int keyCount, String delimiter,
+        List<Contents> contents, String encodingType, String marker, String nextMarker, boolean isTruncated) {
+      super(name, prefix, maxKeys, keyCount, delimiter, contents, encodingType, isTruncated);
+      this.marker = marker;
+      this.nextMarker = nextMarker;
+    }
+
+    public String getMarker() {
+      return marker;
+    }
+
+    public String getNextMarker() {
+      return nextMarker;
+    }
+
+    @Override
+    public String toString() {
+      return super.toString() + ", Marker=" + marker + ", NextMarker=" + nextMarker;
+    }
+  }
+
+  /**
+   * ListBucketResult for listObjectsV2 API.
+   */
+  public static class ListBucketResultV2 extends AbstractListBucketResult {
+    @JacksonXmlProperty(localName = "ContinuationToken")
+    private String continuationToken;
+    @JacksonXmlProperty(localName = "NextContinuationToken")
+    private String nextContinuationToken;
+
+    private ListBucketResultV2() {
+      super();
+    }
+
+    public ListBucketResultV2(String name, String prefix, int maxKeys, int keyCount, String delimiter,
+        List<Contents> contents, String encodingType, String continuationToken, String nextContinuationToken,
+        boolean isTruncated) {
+      super(name, prefix, maxKeys, keyCount, delimiter, contents, encodingType, isTruncated);
+      this.continuationToken = continuationToken;
+      this.nextContinuationToken = nextContinuationToken;
+    }
+
+    public String getContinuationToken() {
+      return continuationToken;
+    }
+
+    public String getNextContinuationToken() {
+      return nextContinuationToken;
+    }
+
+    @Override
+    public String toString() {
+      return super.toString() + ", ContinuationToken=" + continuationToken + ", NextContinuationToken="
+          + nextContinuationToken;
     }
   }
 
