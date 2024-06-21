@@ -153,6 +153,9 @@ public class RouterConfig {
   public static final String ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL =
       "router.get.operation.min.local.replica.count.to.prioritize.local";
 
+  // Whether or not to use paranoid durability
+  public static final String ROUTER_PARANOID_DURABILITY_ENABLED = "router.paranoid.durability.enabled";
+
   /**
    * Number of independent scaling units for the router.
    */
@@ -733,6 +736,13 @@ public class RouterConfig {
   public final int routerGetOperationMinLocalReplicaCountToPrioritizeLocal;
 
   /**
+   * {@code true} if the router should use paranoid durability for PUTs when the corresponding container setting is turned on.
+   */
+  @Config(ROUTER_PARANOID_DURABILITY_ENABLED)
+  @Default("false")
+  public final boolean routerParanoidDurabilityEnabled;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -895,6 +905,7 @@ public class RouterConfig {
     routerGetOperationMinLocalReplicaCountToPrioritizeLocal =
         verifiableProperties.getInt(ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL,
             DEFAULT_ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL);
+    routerParanoidDurabilityEnabled = verifiableProperties.getBoolean(ROUTER_PARANOID_DURABILITY_ENABLED, false);
   }
 
   /**
