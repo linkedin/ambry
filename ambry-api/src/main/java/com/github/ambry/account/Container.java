@@ -67,6 +67,7 @@ public class Container {
   static final long CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE = 0;
   static final boolean SECURE_PATH_REQUIRED_DEFAULT_VALUE = false;
   static final boolean OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE = false;
+  static final boolean PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE = false;
   static final NamedBlobMode NAMED_BLOB_MODE_DEFAULT_VALUE = NamedBlobMode.DISABLED;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
@@ -240,6 +241,23 @@ public class Container {
   public static final boolean DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
 
   /**
+   * The paranoid durability setting for {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_CONTAINER_PARANOID_DURABILITY_SETTING = PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE;
+
+  /**
+   * The paranoid durability setting for {@link #DEFAULT_PUBLIC_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_PARANOID_DURABILITY_SETTING =
+      PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE;
+
+  /**
+   * The paranoid durability setting for {@link #DEFAULT_PRIVATE_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_PARANOID_DURABILITY_SETTING =
+      PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE;
+
+  /**
    * The ttl required setting for {@link #UNKNOWN_CONTAINER}.
    */
   public static final boolean UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING = TTL_REQUIRED_DEFAULT_VALUE;
@@ -281,11 +299,12 @@ public class Container {
       new Container(UNKNOWN_CONTAINER_ID, UNKNOWN_CONTAINER_NAME, UNKNOWN_CONTAINER_STATUS,
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
-          UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING,
-          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
-          BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
-          UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID, UNKNOWN_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-          SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
+          UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, UNKNOWN_CONTAINER_PARANOID_DURABILITY_SETTING, null,
+          UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
+          OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID,
+          UNKNOWN_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE,
+          ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
           USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
 
   /**
@@ -299,12 +318,13 @@ public class Container {
       new Container(DEFAULT_PUBLIC_CONTAINER_ID, DEFAULT_PUBLIC_CONTAINER_NAME, DEFAULT_PUBLIC_CONTAINER_STATUS,
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
-          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
-          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
-          BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
-          DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME,
-          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE,
-          CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
+          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PUBLIC_CONTAINER_PARANOID_DURABILITY_SETTING,
+          null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
+          OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID,
+          DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
+          SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -317,9 +337,10 @@ public class Container {
       new Container(DEFAULT_PRIVATE_CONTAINER_ID, DEFAULT_PRIVATE_CONTAINER_NAME, DEFAULT_PRIVATE_CONTAINER_STATUS,
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
-          DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
-          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
-          BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
+          DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PRIVATE_CONTAINER_PARANOID_DURABILITY_SETTING,
+          null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
+          OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME,
           LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE,
           CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
@@ -338,6 +359,7 @@ public class Container {
   private final boolean cacheable;
   private final boolean backupEnabled;
   private final boolean mediaScanDisabled;
+  private final boolean paranoidDurabilityEnabled;
   private final String replicationPolicy;
   private final boolean ttlRequired;
   private final boolean securePathRequired;
@@ -366,6 +388,7 @@ public class Container {
    * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
    *                  this container.
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
+   * @param paranoidDurabilityEnabled {@code true} if paranoid durability should be enabled for this container.
    * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
    * @param ttlRequired {@code true} if ttl is required on content created in this container.
    * @param securePathRequired {@code true} if secure path validation is required in this container.
@@ -379,11 +402,12 @@ public class Container {
    * @param accessControlAllowOrigin The Access-Control-Allow-Origin header field name of this container.
    */
   public Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
-      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
-      boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
-      boolean backupEnabled, boolean overrideAccountAcl, NamedBlobMode namedBlobMode, short parentAccountId,
-      long deleteTriggerTime, long lastModifiedTime, int snapshotVersion, String accessControlAllowOrigin,
-      Long cacheTtlInSecond, Set<String> userMetadataKeysToNotPrefixInResponse) {
+      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, boolean paranoidDurabilityEnabled,
+      String replicationPolicy, boolean ttlRequired, boolean securePathRequired,
+      Set<String> contentTypeWhitelistForFilenamesOnDownload, boolean backupEnabled, boolean overrideAccountAcl,
+      NamedBlobMode namedBlobMode, short parentAccountId, long deleteTriggerTime, long lastModifiedTime,
+      int snapshotVersion, String accessControlAllowOrigin, Long cacheTtlInSecond,
+      Set<String> userMetadataKeysToNotPrefixInResponse) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -399,6 +423,7 @@ public class Container {
         this.encrypted = ENCRYPTED_DEFAULT_VALUE;
         this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+        this.paranoidDurabilityEnabled = PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE;
         this.replicationPolicy = null;
         this.deleteTriggerTime = CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE;
         this.ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
@@ -416,6 +441,7 @@ public class Container {
         this.encrypted = encrypted;
         this.previouslyEncrypted = previouslyEncrypted;
         this.mediaScanDisabled = mediaScanDisabled;
+        this.paranoidDurabilityEnabled = paranoidDurabilityEnabled;
         this.replicationPolicy = replicationPolicy;
         this.deleteTriggerTime = deleteTriggerTime;
         this.ttlRequired = ttlRequired;
@@ -550,6 +576,13 @@ public class Container {
   }
 
   /**
+   * @return {@code true} if paranoid durability should be enabled for PUTs in this container.
+   */
+  public boolean isParanoidDurabilityEnabled() {
+    return paranoidDurabilityEnabled;
+  }
+
+  /**
    * @return the replication policy desired by the container. Can be {@code null} if the container has no preference.
    */
   public String getReplicationPolicy() {
@@ -667,6 +700,7 @@ public class Container {
         && previouslyEncrypted == container.previouslyEncrypted
         && cacheable == container.cacheable
         && mediaScanDisabled == container.mediaScanDisabled
+        && paranoidDurabilityEnabled == container.paranoidDurabilityEnabled
         && parentAccountId == container.parentAccountId
         && Objects.equals(name, container.name)
         && status == container.status

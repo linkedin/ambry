@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -77,6 +78,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerCachingValues;
   private List<Boolean> refContainerBackupEnabledValues;
   private List<Boolean> refContainerMediaScanDisabledValues;
+  private List<Boolean> refContainerParanoidDurabilityEnabledValues;
   private List<String> refContainerReplicationPolicyValues;
   private List<Boolean> refContainerTtlRequiredValues;
   private List<Long> refContainerDeleteTriggerTime;
@@ -441,6 +443,7 @@ public class AccountContainerTest {
       boolean updatedPreviouslyEncrypted = updatedEncrypted || container.wasPreviouslyEncrypted();
       boolean updatedCacheable = !container.isCacheable();
       boolean updatedMediaScanDisabled = !container.isMediaScanDisabled();
+      boolean updatedParanoidDurabilityEnabled = !container.isParanoidDurabilityEnabled();
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
       boolean updatedSignedPathRequired = !container.isSecurePathRequired();
@@ -463,6 +466,7 @@ public class AccountContainerTest {
           .setEncrypted(updatedEncrypted)
           .setCacheable(updatedCacheable)
           .setMediaScanDisabled(updatedMediaScanDisabled)
+          .setParanoidDurabilityEnabled(updatedParanoidDurabilityEnabled)
           .setReplicationPolicy(updatedReplicationPolicy)
           .setTtlRequired(updatedTtlRequired)
           .setSecurePathRequired(updatedSignedPathRequired)
@@ -488,6 +492,8 @@ public class AccountContainerTest {
               updatedContainer.wasPreviouslyEncrypted());
           assertEquals("Wrong media scan disabled setting", MEDIA_SCAN_DISABLED_DEFAULT_VALUE,
               updatedContainer.isMediaScanDisabled());
+          assertEquals("Wrong paranoid durability enabled setting", PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE,
+              updatedContainer.isParanoidDurabilityEnabled());
           assertNull("Wrong replication policy", updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, updatedContainer.isTtlRequired());
           assertEquals("Wrong secure required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
@@ -503,6 +509,8 @@ public class AccountContainerTest {
               updatedContainer.wasPreviouslyEncrypted());
           assertEquals("Wrong media scan disabled setting", updatedMediaScanDisabled,
               updatedContainer.isMediaScanDisabled());
+          assertEquals("Wrong paranoid durability enabled setting", updatedParanoidDurabilityEnabled,
+              updatedContainer.isParanoidDurabilityEnabled());
           assertEquals("Wrong replication policy", updatedReplicationPolicy, updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", updatedTtlRequired, updatedContainer.isTtlRequired());
           assertEquals("Wrong secure path required setting", updatedSignedPathRequired,
@@ -578,6 +586,8 @@ public class AccountContainerTest {
         Container.UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, unknownContainer.wasPreviouslyEncrypted());
     assertEquals("Wrong mediaScanDisabled setting for UNKNOWN_CONTAINER",
         Container.UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, unknownContainer.isMediaScanDisabled());
+    assertEquals("Wrong paranoidDurabilityEnabled setting for UNKNOWN_CONTAINER",
+        Container.UNKNOWN_CONTAINER_PARANOID_DURABILITY_SETTING, unknownContainer.isParanoidDurabilityEnabled());
     // DEFAULT_PUBLIC_CONTAINER
     assertEquals("Wrong id for DEFAULT_PUBLIC_CONTAINER", Container.DEFAULT_PUBLIC_CONTAINER_ID,
         unknownPublicContainer.getId());
@@ -598,6 +608,8 @@ public class AccountContainerTest {
         unknownPublicContainer.wasPreviouslyEncrypted());
     assertEquals("Wrong mediaScanDisabled setting for DEFAULT_PUBLIC_CONTAINER",
         Container.DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, unknownPublicContainer.isMediaScanDisabled());
+    assertEquals("Wrong paranoidDurabilityEnabled setting for DEFAULT_PUBLIC_CONTAINER",
+        Container.DEFAULT_PUBLIC_CONTAINER_PARANOID_DURABILITY_SETTING, unknownPublicContainer.isParanoidDurabilityEnabled());
     // DEFAULT_PRIVATE_CONTAINER
     assertEquals("Wrong id for DEFAULT_PRIVATE_CONTAINER", Container.DEFAULT_PRIVATE_CONTAINER_ID,
         unknownPrivateContainer.getId());
@@ -618,6 +630,8 @@ public class AccountContainerTest {
         unknownPrivateContainer.wasPreviouslyEncrypted());
     assertEquals("Wrong mediaScanDisabled setting for DEFAULT_PRIVATE_CONTAINER",
         Container.DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, unknownPrivateContainer.isMediaScanDisabled());
+    assertEquals("Wrong paranoidDurabilityEnabled setting for DEFAULT_PRIVATE_CONTAINER",
+        Container.DEFAULT_PRIVATE_CONTAINER_PARANOID_DURABILITY_SETTING, unknownPrivateContainer.isParanoidDurabilityEnabled());
     // UNKNOWN_ACCOUNT
     assertEquals("Wrong id for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_ID, unknownAccount.getId());
     assertEquals("Wrong name for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_NAME, unknownAccount.getName());
@@ -806,6 +820,7 @@ public class AccountContainerTest {
         .setCacheable(container.isCacheable())
         .setBackupEnabled(container.isBackupEnabled())
         .setMediaScanDisabled(container.isMediaScanDisabled())
+        .setParanoidDurabilityEnabled(container.isParanoidDurabilityEnabled())
         .setReplicationPolicy(container.getReplicationPolicy())
         .setTtlRequired(container.isTtlRequired())
         .setContentTypeWhitelistForFilenamesOnDownload(container.getContentTypeWhitelistForFilenamesOnDownload())
@@ -869,6 +884,8 @@ public class AccountContainerTest {
             container.wasPreviouslyEncrypted());
         assertEquals("Wrong media scan disabled setting", MEDIA_SCAN_DISABLED_DEFAULT_VALUE,
             container.isMediaScanDisabled());
+        assertEquals("Wrong paranoid durability enabled setting", PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE,
+            container.isParanoidDurabilityEnabled());
         assertNull("Wrong replication policy", container.getReplicationPolicy());
         assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, container.isTtlRequired());
         assertEquals("Wrong secure path required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
@@ -883,6 +900,8 @@ public class AccountContainerTest {
             container.wasPreviouslyEncrypted());
         assertEquals("Wrong media scan disabled setting", refContainerMediaScanDisabledValues.get(index),
             container.isMediaScanDisabled());
+        assertEquals("Wrong paranoid durability enabled setting", refContainerParanoidDurabilityEnabledValues.get(index),
+            container.isParanoidDurabilityEnabled());
         assertEquals("Wrong replication policy", refContainerReplicationPolicyValues.get(index),
             container.getReplicationPolicy());
         assertEquals("Wrong ttl required setting", refContainerTtlRequiredValues.get(index), container.isTtlRequired());
@@ -973,7 +992,7 @@ public class AccountContainerTest {
   private void buildContainerWithBadFieldsAndFail(String name, ContainerStatus status, boolean encrypted,
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
-      new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
+      new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, false, null, false,
           false, Collections.emptySet(), false, false, getRandomNamedBlobMode(), (short) 0, System.currentTimeMillis(),
           System.currentTimeMillis(), 0, null, null, null);
     }, null);
@@ -1007,6 +1026,7 @@ public class AccountContainerTest {
     refContainerCachingValues = new ArrayList<>();
     refContainerBackupEnabledValues = new ArrayList<>();
     refContainerMediaScanDisabledValues = new ArrayList<>();
+    refContainerParanoidDurabilityEnabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
     refContainerTtlRequiredValues = new ArrayList<>();
     refContainerDeleteTriggerTime = new ArrayList<>();
@@ -1040,6 +1060,7 @@ public class AccountContainerTest {
       refContainerCachingValues.add(random.nextBoolean());
       refContainerBackupEnabledValues.add(random.nextBoolean());
       refContainerMediaScanDisabledValues.add(random.nextBoolean());
+      refContainerParanoidDurabilityEnabledValues.add(random.nextBoolean());
       if (refContainerReplicationPolicyValues.contains(null)) {
         refContainerReplicationPolicyValues.add(TestUtils.getRandomString(10));
       } else {
@@ -1075,7 +1096,7 @@ public class AccountContainerTest {
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
-          refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
+          refContainerMediaScanDisabledValues.get(i), refContainerParanoidDurabilityEnabledValues.get(i), refContainerReplicationPolicyValues.get(i),
           refContainerTtlRequiredValues.get(i), refContainerSignedPathRequiredValues.get(i),
           refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
           refContainerOverrideAccountAcls.get(i), refContainerNamedBlobModes.get(i), refAccountId,

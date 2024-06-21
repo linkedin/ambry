@@ -43,6 +43,7 @@ public class ContainerBuilder {
   private boolean previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
   private boolean cacheable = CACHEABLE_DEFAULT_VALUE;
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+  private boolean paranoidDurabilityEnabled = PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
   private boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
@@ -77,6 +78,7 @@ public class ContainerBuilder {
     previouslyEncrypted = origin.wasPreviouslyEncrypted();
     cacheable = origin.isCacheable();
     mediaScanDisabled = origin.isMediaScanDisabled();
+    paranoidDurabilityEnabled = origin.isParanoidDurabilityEnabled();
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
@@ -225,6 +227,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the paranoid durability enabled setting of the {@link Container} to build
+   * @param paranoidDurabilityEnabled The paranoid durability enabled setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setParanoidDurabilityEnabled(boolean paranoidDurabilityEnabled) {
+    this.paranoidDurabilityEnabled = paranoidDurabilityEnabled;
+    return this;
+  }
+
+  /**
    * Sets the ttl required setting of the {@link Container}.
    * @param ttlRequired The ttlRequired setting to set.
    * @return This builder.
@@ -347,7 +359,7 @@ public class ContainerBuilder {
       throw new IllegalStateException("Container id or container name is not present");
     }
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
+        mediaScanDisabled, paranoidDurabilityEnabled, replicationPolicy, ttlRequired, securePathRequired,
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
         parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime,
         lastModifiedTime, snapshotVersion, accessControlAllowOrigin, cacheTtlInSecond,
