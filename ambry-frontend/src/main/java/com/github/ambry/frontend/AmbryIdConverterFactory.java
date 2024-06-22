@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
@@ -66,7 +67,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     return new AmbryIdConverter(idSigningService, namedBlobDb, frontendMetrics);
   }
 
-  private static class AmbryIdConverter implements IdConverter {
+  static class AmbryIdConverter implements IdConverter {
     private boolean isOpen = true;
     private final IdSigningService idSigningService;
     private final NamedBlobDb namedBlobDb;
@@ -116,37 +117,97 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           convertedId = "/" + signIdIfRequired(restRequest, input);
         } else {
           CallbackUtils.callCallbackAfter(convertId(input, restRequest, blobInfo),
-              (id, e) -> completeConversion(id, e, future, callback));
+              (id, e) -> completeConverterOperation(id, e, future, callback,
+                  frontendMetrics.idConversionDownstreamCallbackTimeInMs));
         }
       } catch (Exception e) {
         exception = e;
       } finally {
         frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
         if (convertedId != null || exception != null) {
-          completeConversion(convertedId, exception, future, callback);
+          completeConverterOperation(convertedId, exception, future, callback, frontendMetrics.idConversionDownstreamCallbackTimeInMs);
+        }
+      }
+      return future;
+    }
+
+    @Override
+    public Future<Boolean> detectConflict(RestRequest restRequest, Callback<Boolean> callback) {
+      final CompletableFuture<Boolean> future = new CompletableFuture<>();
+      Exception exception = null;
+      frontendMetrics.idConverterDetectConflictRate.mark();
+      long startTimeInMs = System.currentTimeMillis();
+      try {
+        if (!isOpen) {
+          exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
+        } else {
+          CallbackUtils.callCallbackAfter(detectConflict(restRequest),
+              (conflictStatus, e) -> completeConverterOperation(conflictStatus, e, future, callback, frontendMetrics.idConversionDetectConflictDownstreamCallbackTimeInMs));
+        }
+      } catch (Exception e) {
+        exception = e;
+      } finally {
+        frontendMetrics.deleteCallbackProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
+        if (exception != null) {
+          completeConverterOperation(false, exception, future, callback, frontendMetrics.idConversionDetectConflictDownstreamCallbackTimeInMs);
         }
       }
       return future;
     }
 
     /**
-     * Completes the conversion by setting the future and invoking the callback.
-     * @param conversionResult the conversion result.
+     * Detects if the ID in the request can cause a conflict.
+     * @param restRequest @link RestRequest} representing the request.
+     * @return the {@link CompletionStage} that will be completed with the conflict status.
+     * @throws RestServiceException if the operation cannot be performed.
+     */
+    private CompletionStage<Boolean> detectConflict(RestRequest restRequest) throws RestServiceException {
+      final CompletionStage<Boolean> detectionFuture;
+      frontendMetrics.idConverterDetectConflictRate.mark();
+      if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+          .matchesOperation(Operations.NAMED_BLOB) && !RestUtils.isUpsertForNamedBlob(restRequest.getArgs())) {
+        // A named blob put without upsert is allowed only if the named blob does not exist.
+        // If this is a named blob put request without upsert, then we check if a mapping for the name already exists.
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+
+        detectionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+            namedBlobPath.getBlobName(), GetOption.Include_All).thenApply(namedBlobRecord -> {
+          LOGGER.info("A mapping for the namedBlob {} already exists. Original BlobId: {}",
+              namedBlobRecord.getBlobName(), namedBlobRecord.getBlobId());
+          return true;
+        }).exceptionally(e -> {
+          if (e.getCause() instanceof RestServiceException
+              && ((RestServiceException) e.getCause()).getErrorCode() == RestServiceErrorCode.NotFound) {
+            return false;
+          } else {
+            throw new RuntimeException(e);
+          }
+        });
+      } else {
+        detectionFuture = CompletableFuture.completedFuture(false);
+      }
+      return detectionFuture;
+    }
+
+    /**
+     * Completes the operation of this converter by setting the future and invoking the callback.
+     * @param result the conversion result.
      * @param exception any exception that occurred as a part of the conversion.
      * @param completableFuture the {@link CompletableFuture} that must be set.
      * @param callback the {@link Callback} that needs to be invoked. Can be null.
+     * @param downstreamCallbackTimeInMs {@link Histogram} to update the time taken for downstream callback.
      */
-    private <T> void completeConversion(T conversionResult, Exception exception, CompletableFuture<T> completableFuture,
-        Callback<T> callback) {
+    private <T> void completeConverterOperation(T result, Exception exception, CompletableFuture<T> completableFuture,
+        Callback<T> callback, Histogram downstreamCallbackTimeInMs) {
       if (exception == null) {
-        completableFuture.complete(conversionResult);
+        completableFuture.complete(result);
       } else {
         completableFuture.completeExceptionally(exception);
       }
       if (callback != null) {
         long startTime = System.currentTimeMillis();
-        callback.onCompletion(conversionResult, exception);
-        frontendMetrics.idConversionDownstreamCallbackTimeInMs.update(System.currentTimeMillis() - startTime);
+        callback.onCompletion(result, exception);
+        downstreamCallbackTimeInMs.update(System.currentTimeMillis() - startTime);
       }
     }
 

@@ -40,6 +40,7 @@ import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -79,14 +80,17 @@ public class UndeleteHandlerTest {
   }
 
   private final UndeleteHandler undeleteHandler;
-  private final InMemoryRouter router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP);
+  private final MetricRegistry metricRegistry = new MetricRegistry();
+  private final VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+  private final InMemoryRouter router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
   private final FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
-  private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory();
+  private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory(
+      verifiableProperties, metricRegistry, new TestNamedBlobDb(SystemTime.getInstance(), 1000), new AmbryIdSigningService());
   private String blobId;
 
   public UndeleteHandlerTest() {
-    FrontendConfig config = new FrontendConfig(new VerifiableProperties(new Properties()));
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), config);
+    FrontendConfig config = new FrontendConfig(verifiableProperties);
+    FrontendMetrics metrics = new FrontendMetrics(metricRegistry, config);
     AccountAndContainerInjector accountAndContainerInjector =
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     undeleteHandler =
