@@ -882,7 +882,7 @@ public class HelixClusterManager implements ClusterMap {
             partitionIdStr);
         return null;
       }
-      partitionNameToAmbryPartition.putIfAbsent(ambryPartition.toPathString(), ambryPartition);
+      addPartitionIfAbsent(ambryPartition, replicaCapacity);
       AmbryServerReplica replica = new AmbryServerReplica(clusterMapConfig, ambryPartition, disk, true, replicaCapacity,
           ReplicaSealStatus.NOT_SEALED);
       logger.info("Created bootstrap replica {} for Partition {}", replica, partitionIdStr);
