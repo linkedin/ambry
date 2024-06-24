@@ -379,7 +379,7 @@ public class CloudTokenPersistorTest {
           new LatchBasedInMemoryCloudDestination(Collections.emptyList(),
               AzureCloudDestinationFactory.getReplicationFeedType(new VerifiableProperties(props)), clusterMap);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
-      cloudDestination = new AzuriteUtils().getAzuriteClient(props, metricRegistry, clusterMap);
+      cloudDestination = azuriteUtils.getAzuriteClient(props, metricRegistry, clusterMap, null);
     }
 
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));

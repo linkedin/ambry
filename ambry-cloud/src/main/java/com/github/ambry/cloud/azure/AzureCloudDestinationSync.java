@@ -576,11 +576,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
   /**
    * Synchronously update blob metadata
    * @param blobLayout Blob layout
-   * @param metadata Blob metadata
    * @return HTTP response and blob metadata
    */
   protected Response<Void> updateBlobMetadata(AzureBlobLayoutStrategy.BlobLayout blobLayout,
-      BlobProperties blobProperties, Map<String, String> metadata) {
+      BlobProperties blobProperties) {
+    Map<String, String> metadata = blobProperties.getMetadata();
     BlobClient blobClient = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath);
     /**
      * When replicating, we might receive a TTL-UPDATE for a blob from replica-A and a DELETE for the same blob from replica-B.
@@ -595,12 +595,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
     BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch("*");
     Response<Void> response = blobClient.setMetadataWithResponse(metadata, blobRequestConditions,
         Duration.ofMillis(cloudConfig.cloudRequestTimeout), Context.NONE);
-    /**
-     * Must cache only after updating cloud. If we are here, then it means cloud-update succeeded,
-     * and it is safe to update thread-local cache. If the cloud-update failed, we will never reach this line
-     * and the thread-local cache will have the previous safe copy of metadata consistent with cloud.
-     */
-    getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new AzureBlobProperties(blobProperties));
     return response;
   }
 
@@ -676,7 +670,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
     try {
-      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+      if (cloudUpdateValidator != null &&
+          !cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
         // lifeVersion must always be present
         short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
         if (cloudlifeVersion > lifeVersion) {
@@ -698,7 +693,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
     try {
       logger.trace("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
-      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateDeleteTimeSuccessRate.mark();
       logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
@@ -747,7 +742,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     // Don't rely on the CloudBlobStore.recentCache to do the "right" thing.
     // Below is the correct behavior. For ref, look at BlobStore::undelete and ReplicaThread::applyUndelete
     try {
-      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+      if (cloudUpdateValidator != null &&
+          !cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
         /*
           If we are here, it means the cloudLifeVersion >= replicaLifeVersion.
           Cloud is either ahead of server or caught up.
@@ -783,7 +779,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     try {
       logger.trace("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
-      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUndeleteSucessRate.mark();
       logger.trace("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
@@ -862,7 +858,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     try {
       // preTtlUpdateValidation doesn't use the updateFields arg
-      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, null)) {
+      if (cloudUpdateValidator != null &&
+          !cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, null)) {
         /*
           Legacy cloudBlobStore does not expect an exception. However, below is the correct behavior.
           For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
@@ -904,7 +901,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     try {
       logger.trace("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
-      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateTTLSucessRate.mark();
       logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
