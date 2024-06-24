@@ -89,7 +89,7 @@ public class CloudConfig {
   public static final int DEFAULT_COMPACTION_PURGE_LIMIT = 10000;
   public static final int DEFAULT_COMPACTION_LOOKBACK_DAYS = 364; // Multiple of 7
   public static final int DEFAULT_COMPACTION_TIMEOUT = 10;
-  public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
+  public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 128;
   public static final int DEFAULT_MAX_ATTEMPTS = 3;
   public static final int DEFAULT_RETRY_DELAY_VALUE = 50;
   public static final int DEFAULT_CLOUD_REQUEST_TIMEOUT = 120000; // ms
@@ -307,7 +307,7 @@ public class CloudConfig {
    * The max size of recently-accessed blob cache in each cloud blob store.
    */
   @Config(CLOUD_RECENT_BLOB_CACHE_LIMIT)
-  @Default("10000")
+  @Default("128")
   public final int recentBlobCacheLimit;
 
   /**
