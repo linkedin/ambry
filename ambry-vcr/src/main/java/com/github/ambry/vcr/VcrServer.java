@@ -27,6 +27,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
@@ -106,6 +107,7 @@ public class VcrServer {
   private CloudDestination cloudDestination;
   private ServerSecurityService serverSecurityService;
   private ServerMetrics serverMetrics;
+  private NettyInternalMetrics nettyInternalMetrics;
 
   /**
    * VcrServer constructor.
@@ -155,6 +157,8 @@ public class VcrServer {
       logger.info("Initialized clusterMap");
       registry = clusterMap.getMetricRegistry();
       serverMetrics = new ServerMetrics(registry, VcrServer.class, VcrServer.class);
+      nettyInternalMetrics = new NettyInternalMetrics(registry, new NettyConfig(properties));
+      nettyInternalMetrics.start();
 
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
@@ -316,6 +320,9 @@ public class VcrServer {
       }
       if (cloudDestination != null) {
         cloudDestination.close();
+      }
+      if (nettyInternalMetrics != null) {
+        nettyInternalMetrics.stop();
       }
       logger.info("VCR shutdown completed");
     } catch (Exception e) {

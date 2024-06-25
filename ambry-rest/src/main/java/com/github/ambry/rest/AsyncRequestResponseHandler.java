@@ -299,10 +299,19 @@ class AsyncRequestWorker implements Runnable {
           } else {
             break;
           }
-        } catch (Exception e) {
+        } catch (Throwable e) {
+          if (!(e instanceof Exception)) {
+            metrics.requestProcessingThrowableError.inc();
+            if (requestInfo != null) {
+              logger.error("Throwable only while processing the requests" + requestInfo.restRequest, e);
+            } else {
+              logger.error("Throwable only while processing the requests", e);
+            }
+            e = new Exception(e);
+          }
           metrics.requestProcessingError.inc();
           if (requestInfo != null) {
-            onProcessingFailure(requestInfo.restRequest, requestInfo.restResponseChannel, e);
+            onProcessingFailure(requestInfo.restRequest, requestInfo.restResponseChannel, (Exception) e);
           } else {
             logger.error("Unexpected exception while processing requests", e);
           }

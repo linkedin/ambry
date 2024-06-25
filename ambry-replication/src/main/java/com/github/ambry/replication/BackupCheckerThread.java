@@ -19,20 +19,29 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.BlobMatchStatus;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Time;
+import io.netty.buffer.ByteBuf;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,16 +76,18 @@ public class BackupCheckerThread extends ReplicaThread {
   protected final BackupCheckerFileManager fileManager;
   protected final ReplicationConfig replicationConfig;
   private final ReplicationMetrics metrics;
+  private final StoreKeyFactory storeKeyFactory;
   protected HashMap<String, MessageInfo> azureBlobMap;
   public static final String DR_Verifier_Keyword = "dr";
   public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
   public static final String REPLICA_STATUS_FILE = "server_replica_token";
   protected AtomicInteger numBlobScanned;
+  protected long partitionBackedUpUntil = -1;
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      StoreKeyConverter storeKeyConverter, StoreKeyFactory storeKeyFactory, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
@@ -85,6 +96,7 @@ public class BackupCheckerThread extends ReplicaThread {
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     this.replicationConfig = replicationConfig;
+    this.storeKeyFactory = storeKeyFactory;
     azureBlobMap = new HashMap<>();
     metrics = new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList());
     // Reset these counters if re-using the same thread object
@@ -100,12 +112,13 @@ public class BackupCheckerThread extends ReplicaThread {
     return this.fileManager;
   }
 
-  public void setAzureBlobMap(HashMap<String, MessageInfo> azureBlobMap) {
+  public void setAzureBlobInfo(HashMap<String, MessageInfo> azureBlobMap, long partitionBackedUpUntil) {
     if (azureBlobMap == null) {
       logger.error("Azure blob map cannot be null");
       return;
     }
     this.azureBlobMap = azureBlobMap;
+    this.partitionBackedUpUntil = partitionBackedUpUntil;
   }
 
   /**
@@ -165,6 +178,37 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
+   * Re-check by fetching the local blob
+   * @param replica
+   * @param serverBlob
+   * @param azureBlob
+   * @return
+   */
+  Set<BlobMatchStatus> recheck(RemoteReplicaInfo replica, MessageInfo serverBlob, MessageInfo azureBlob,
+      Set<BlobMatchStatus> status) {
+    BlobStore store = (BlobStore) replica.getLocalStore();
+    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+        StoreGetOptions.Store_Include_Expired);
+    MessageReadSet rdset = null;
+    try {
+      StoreInfo stinfo = store.get(Collections.singletonList(azureBlob.getStoreKey()), storeGetOptions);
+      rdset = stinfo.getMessageReadSet();
+      rdset.doPrefetch(0, 0, rdset.sizeInBytes(0));
+      ByteBuf bytebuf = rdset.getPrefetchedData(0);
+      MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(bytebuf), storeKeyFactory);
+      return Collections.singleton(BLOB_INTACT_IN_AZURE);
+    } catch (Throwable e) {
+      logger.error("Failed to deserialize blob due to ", e);
+      status.add(BLOB_CORRUPT_IN_AZURE);
+    } finally {
+      if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
+        rdset.getPrefetchedData(0).release();
+      }
+    }
+    return status;
+  }
+
+  /**
    * Checks each blob from server with its counterpart in cloud backup.
    * There are 4 cases.
    * server-blob : cloud-blob
@@ -197,9 +241,39 @@ public class BackupCheckerThread extends ReplicaThread {
                 MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey().getID());
                 Set<BlobMatchStatus> status = azureBlob == null ? Collections.singleton(BLOB_ABSENT_IN_AZURE)
                     : serverBlob.isEqual(azureBlob);
+                // if size mismatch, then re-check.
+                // this is the only workaround due to different versions on serialization.
+                if (status.contains(BLOB_STATE_SIZE_MISMATCH)) {
+                  status = recheck(replica, serverBlob, azureBlob, status);
+                }
                 return new ImmutableTriple(serverBlob, azureBlob, status);
               })
-              .filter(tuple -> !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
+              .filter(tuple -> {
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that are intact in Azure, despite a state mismatch between server and cloud
+                return !status.contains(BLOB_INTACT_IN_AZURE);
+              })
+              .filter(tuple -> {
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that match between server and azure
+                return !status.contains(BLOB_STATE_MATCH);
+              })
+              .filter(tuple -> {
+                MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that are deleted or expired on server and absent in azure
+                // Blob can be absent in azure for 3 reasons:
+                // 1. backups haven't caught up
+                // 2. cloud compaction executed before server compaction
+                // 3. replication ignored such blobs and did not upload them to azure
+                return !((serverBlob.isDeleted() || serverBlob.isExpired()) && status.contains(BLOB_ABSENT_IN_AZURE));
+              })
+              .filter(tuple -> {
+                MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that are yet to be backed up
+                return !(serverBlob.getOperationTimeMs() > partitionBackedUpUntil && status.contains(BLOB_ABSENT_IN_AZURE));
+              })
               .forEach(tuple -> {
                 MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
                 MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
@@ -254,13 +328,18 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   public void printKeysAbsentInServer(RemoteReplicaInfo rinfo) {
     String output = getFilePath(rinfo, BLOB_STATE_MISMATCHES_FILE);
-    azureBlobMap.values().forEach(azureBlob -> {
-      String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+    azureBlobMap.values().stream()
+        .filter(azureBlob -> {
+          // ignore blobs absent in server and have expired/obsolete in azure
+          return !(azureBlob.isExpired() || azureBlob.isDeleted());
+        })
+        .forEach(azureBlob -> {
+          String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
           BLOB_ABSENT_IN_SERVER.name(),
           MessageInfo.toText(null), MessageInfo.toText(azureBlob),
           "\n");
-      fileManager.appendToFile(output, msg);
-      metrics.backupIntegrityError.inc();
+          fileManager.appendToFile(output, msg);
+          metrics.backupIntegrityError.inc();
     });
     azureBlobMap.clear();
   }

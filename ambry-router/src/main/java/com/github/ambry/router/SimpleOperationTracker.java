@@ -81,9 +81,9 @@ class SimpleOperationTracker implements OperationTracker {
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
   protected final NonBlockingRouterMetrics routerMetrics;
   private final OpTrackerIterator otIterator;
-  private final RouterOperation routerOperation;
-  private final PartitionId partitionId;
-  private final RouterConfig routerConfig;
+  protected final RouterOperation routerOperation;
+  protected final PartitionId partitionId;
+  protected final RouterConfig routerConfig;
   protected int inflightCount = 0;
   protected int replicaSuccessCount = 0;
   protected List<ReplicaId> successReplica = new ArrayList<>();
@@ -93,10 +93,10 @@ class SimpleOperationTracker implements OperationTracker {
   protected int originatingDcNotFoundCount = 0;
   protected int totalNotFoundCount = 0;
   protected ReplicaId lastReturnedByIterator = null;
-  private Iterator<ReplicaId> replicaIterator;
-  private final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
+  protected Iterator<ReplicaId> replicaIterator;
+  protected final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
   private final int originatingDcTotalReplicaCount;
-  private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
+  protected final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
   private final BlobId blobId;
   // is that possible to run the offline repair?
   private boolean possibleRunOfflineRepair;
@@ -575,7 +575,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param states a set of {@link ReplicaState}(s) that replicas should match.
    * @return a list of eligible replicas that are in specified states.
    */
-  private List<ReplicaId> getEligibleReplicas(String dcName, EnumSet<ReplicaState> states) {
+  protected List<ReplicaId> getEligibleReplicas(String dcName, EnumSet<ReplicaState> states) {
     Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(dcName, states);
     List<ReplicaId> eligibleReplicas = new ArrayList<>();
     for (List<ReplicaId> replicas : replicasByState.values()) {
@@ -775,7 +775,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param downReplicas Replicas added to downReplicas.
    * @param routerOperation The operation type associated with current operation tracker.
    */
-  private static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
+  protected static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
       List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas,
       RouterOperation routerOperation) {
     StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
@@ -820,7 +820,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param replicaId The replica id
    * @return Replica state for replica id.
    */
-  private ReplicaState getReplicaState(ReplicaId replicaId) {
+  protected ReplicaState getReplicaState(ReplicaId replicaId) {
     for (Map.Entry<ReplicaState, List<ReplicaId>> entry : allDcReplicasByState.entrySet()) {
       if (entry.getValue().contains(replicaId)) {
         return entry.getKey();

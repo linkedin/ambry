@@ -31,6 +31,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,6 +124,13 @@ public class PostDatasetsHandler {
           if (datasetToUpdate == null) {
             throw new RestServiceException("The dataset is null after deserialize from given InputStream",
                 RestServiceErrorCode.BadRequest);
+          }
+          if (Objects.equals(datasetToUpdate.getRetentionCount(), 0) || Objects.equals(
+              datasetToUpdate.getRetentionTimeInSeconds(), 0L)) {
+            throw new RestServiceException("The dataset" + datasetToUpdate.getDatasetName()
+                + "'s retentionCount or retentionTimeInSeconds should not be 0, " + "retentionCount: "
+                + datasetToUpdate.getRetentionCount() + " retentionTime: "
+                + datasetToUpdate.getRetentionTimeInSeconds(), RestServiceErrorCode.BadRequest);
           }
           accountAndContainerInjector.injectAccountAndContainerUsingDatasetBody(restRequest, datasetToUpdate);
           // Start the callback chain by performing request security processing.

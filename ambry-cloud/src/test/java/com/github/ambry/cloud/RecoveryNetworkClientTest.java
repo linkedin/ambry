@@ -13,10 +13,16 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.core.http.rest.PagedResponse;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
+import com.azure.storage.blob.models.ListBlobsOptions;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzureMetrics;
@@ -25,6 +31,7 @@ import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.CloudServiceDataNode;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
@@ -150,7 +157,7 @@ public class RecoveryNetworkClientTest {
         new Container(CONTAINER_ID, "testContainer", Container.ContainerStatus.ACTIVE,
             "Test Container", false,
             false, false,
-            false, null, false,
+            false, false, null, false,
             false, Collections.emptySet(),
             false, false, Container.NamedBlobMode.DISABLED, ACCOUNT_ID, 0,
             0, 0, "",
@@ -184,14 +191,10 @@ public class RecoveryNetworkClientTest {
     remoteStore =
         new RemoteReplicaInfo(cloudReplica, mockPartitionId.getReplicaIds().get(0), localStore, new RecoveryToken(),
             Long.MAX_VALUE, SystemTime.getInstance(), new Port(cloudServiceDataNode.getPort(), PortType.PLAINTEXT));
-    // Mark test partition for compaction
-    AccountService accountService = Mockito.mock(AccountService.class);
-    Mockito.lenient().when(accountService.getContainersByStatus(any()))
-        .thenReturn(Collections.singleton(testContainer));
     // Clear the partition
     AzureCloudDestinationSync azuriteClient = azuriteUtils.getAzuriteClient(
-        properties, mockClusterMap.getMetricRegistry(),    null, accountService);
-    azuriteClient.compactPartition(mockPartitionId.toPathString());
+        properties, mockClusterMap.getMetricRegistry(),    null, null);
+    azuriteUtils.clearContainer(mockPartitionId, azuriteClient, verifiableProperties);
     // Add NUM_BLOBS of size BLOB_SIZE
     azureBlobs = new HashMap<>();
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();

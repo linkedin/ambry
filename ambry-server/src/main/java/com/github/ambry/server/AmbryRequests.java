@@ -33,6 +33,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatMetrics;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -78,6 +79,7 @@ import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
+import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
@@ -85,6 +87,7 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -692,6 +695,27 @@ public class AmbryRequests implements RequestAPI {
                     replicaPath);
             logger.trace("{} Time used to find entry since: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
+
+            // Compute CRC for backup recovery and verification
+            if (replicaMetadataRequestInfo.getReplicaPath().startsWith(BackupCheckerThread.DR_Verifier_Keyword)) {
+              List<MessageInfo> newMessageInfos = new ArrayList<>();
+              // for-each blob
+              findInfo.getMessageEntries().stream().forEach(minfo -> {
+                MessageInfo newMsgInfo = minfo;
+                if (!(minfo.isDeleted() || minfo.isExpired())) {
+                  try {
+                    Long crc = store.getBlobContentCRC(minfo);
+                    newMsgInfo = new MessageInfo(minfo, crc);
+                  } catch (Throwable e) {
+                    logger.error("Failed to get CRC for blob {} due to {}", minfo.getStoreKey().getID(), e);
+                  }
+                }
+                newMessageInfos.add(newMsgInfo);
+              });
+              // Create new list of responses
+              findInfo = new FindInfo(newMessageInfos, findInfo.getFindToken());
+            }
+
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             long totalBytesRead = findInfo.getFindToken().getBytesRead();

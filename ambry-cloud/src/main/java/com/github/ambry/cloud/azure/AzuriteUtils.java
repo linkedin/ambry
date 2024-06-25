@@ -13,9 +13,15 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.core.http.rest.PagedResponse;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
+import com.azure.storage.blob.models.ListBlobsOptions;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.Properties;
@@ -96,5 +102,41 @@ public class AzuriteUtils {
     properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING,
         AzuriteUtils.AZURITE_TABLE_CONNECTION_STRING);
     return properties;
+  }
+
+  /**
+   * FOR TESTS ONLY !!
+   * Clears all blobs in an Azure container
+   * @param testPartitionId
+   * @param azureCloudDestinationSync
+   * @param verifiableProperties
+   */
+  public void clearContainer(PartitionId testPartitionId, AzureCloudDestinationSync azureCloudDestinationSync,
+      VerifiableProperties verifiableProperties) {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    AzureBlobLayoutStrategy
+        azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName,
+        new AzureCloudConfig(verifiableProperties));
+    String blobContainerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(
+        String.valueOf(testPartitionId.getId()));
+    BlobContainerClient blobContainerClient = azureCloudDestinationSync.getBlobStore(blobContainerName);
+    if (blobContainerClient == null) {
+      logger.info("Blob container {} does not exist", blobContainerName);
+      return;
+    }
+    ListBlobsOptions listBlobsOptions =
+        new ListBlobsOptions().setDetails(new BlobListDetails().setRetrieveMetadata(true));
+    String continuationToken = null;
+    for (PagedResponse<BlobItem> blobItemPagedResponse :
+        blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
+      continuationToken = blobItemPagedResponse.getContinuationToken();
+      for (BlobItem blobItem : blobItemPagedResponse.getValue()) {
+        blobContainerClient.getBlobClient(blobItem.getName()).delete();
+      }
+      if (continuationToken == null) {
+        logger.info("Reached end-of-partition as Azure blob storage continuationToken is null");
+        break;
+      }
+    }
   }
 }

@@ -1406,7 +1406,14 @@ class PutOperation {
       OperationTracker operationTracker;
       String trackerType = routerConfig.routerPutOperationTrackerType;
       String originatingDcName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
-      if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
+
+      Pair<Account, Container> accountContainer = RouterUtils.getAccountContainer(accountService,
+          passedInBlobProperties.getAccountId(),
+          passedInBlobProperties.getContainerId());
+
+      if(routerConfig.routerParanoidDurabilityEnabled && accountContainer.getSecond().isParanoidDurabilityEnabled()) {
+        operationTracker = new ParanoidDurabilityOperationTracker(routerConfig, partitionId, originatingDcName, routerMetrics);
+      } else if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
         operationTracker =
             new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, originatingDcName, true,
                 routerMetrics);

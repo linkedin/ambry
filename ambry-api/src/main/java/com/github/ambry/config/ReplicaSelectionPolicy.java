@@ -11,23 +11,14 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.store;
+package com.github.ambry.config;
 
 /**
- * Status code blob-state match operation
+ * Specifies how the backup-node must select server replicas to back up.
+ * FIXED: The backup-node will select the same server replica each time for a partition
+ * ROUND_ROBIN: The backup-node will cycle through all replicas of a partition
  */
-public enum BlobMatchStatus {
-  BLOB_INTACT_IN_AZURE,
-  BLOB_CORRUPT_IN_AZURE,
-  BLOB_STATE_MATCH,
-  BLOB_ABSENT,
-  BLOB_ABSENT_IN_AZURE,
-  BLOB_ABSENT_IN_SERVER,
-  BLOB_STATE_CLASS_MISMATCH,
-  BLOB_STATE_KEY_MISMATCH,
-  BLOB_STATE_SIZE_MISMATCH,
-  BLOB_STATE_EXPIRY_MISMATCH,
-  BLOB_STATE_OBSOLETE_MISMATCH,
-  BLOB_STATE_CRC_MISMATCH,
-  BLOB_STATE_VERSION_MISMATCH
+public enum ReplicaSelectionPolicy {
+  FIXED,
+  ROUND_ROBIN
 }
