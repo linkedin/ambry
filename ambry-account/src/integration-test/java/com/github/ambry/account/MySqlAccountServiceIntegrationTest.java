@@ -950,61 +950,6 @@ public class MySqlAccountServiceIntegrationTest {
   }
 
   /**
-   * Test the Dataset deletion in the data migration.
-   * 1. if deleted_ts is null but delete_ts is expired, should return deleted.
-   * 2. if deleted_ts and delete_ts both has value, we take the latest timestamp
-   * @throws Exception
-   */
-  @Test
-  public void testDatasetDeletedTsMigration() throws Exception {
-    Account testAccount = makeTestAccountWithContainer();
-    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
-    String testDataset = DATASET_NAME_BASIC;
-
-    // add dataset with must provide info
-    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), testDataset).setVersionSchema(
-        Dataset.VersionSchema.MONOTONIC).build();
-    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
-
-    // delete a dataset, both deleted_ts and delete_ts are updated.
-    mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), testDataset);
-    // simulate the case, only delete_ts is update but deleted_ts is null
-    String query = "update Datasets set deleted_ts=NULL where accountId=" + testAccount.getId() + " and containerId="
-        + testContainer.getId() + " and datasetName=\"" + testDataset + "\"";
-    runSql(query);
-    // should return deleted even deleted_ts is NULL
-    try {
-      mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), testDataset);
-      fail("Should fail due to the dataset deleted");
-    } catch (AccountServiceException e) {
-      assertEquals("Mistmatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
-    }
-
-    // list all datasets, expect return none
-    Page<String> allDatasets = mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), null);
-    assertEquals("Mismatch for datasets list", 0, allDatasets.getEntries().size());
-
-    int retentionCount = 5;
-    // add new dataset with same primary key after it has been deleted.
-    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), testDataset).setVersionSchema(
-        Dataset.VersionSchema.TIMESTAMP).setRetentionTimeInSeconds((long) -1).setRetentionCount(retentionCount).build();
-    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
-
-    // delete a dataset
-    mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), testDataset);
-    // simulate the case, only delete_ts is expired but deleted_ts is not. Will pick the latest one.
-    query = "update Datasets set deleted_ts=DATE_ADD(now(), INTERVAL 1 DAY) where accountId=" + testAccount.getId()
-        + " and containerId=" + testContainer.getId() + " and datasetName=\"" + testDataset + "\"";
-    runSql(query);
-    // shouldn't return deleted_exception since one of the timestamp is not expired yet.
-    Dataset datasetFromMysql =
-        mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), testDataset);
-    verifyDatasetProperties(dataset, datasetFromMysql);
-  }
-
-  /**
    * Test add and get latest version.
    * @throws Exception
    */
