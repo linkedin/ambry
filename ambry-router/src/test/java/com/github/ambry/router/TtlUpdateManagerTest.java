@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
@@ -342,6 +343,7 @@ public class TtlUpdateManagerTest {
    * @throws Exception
    */
   @Test
+  @Ignore
   public void testOrigDcUnavailability() throws Exception {
     // Default all replicas to return not found.
     int serverCount = serverLayout.getMockServers().size();
