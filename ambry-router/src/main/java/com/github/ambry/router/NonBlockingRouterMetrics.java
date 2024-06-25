@@ -227,7 +227,7 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobGetCount;
   public final Counter rawBlobGetCount;
 
-  // SimpleOperationTracker and AdaptiveOperationTracker metrics
+  // SimpleOperationTracker, AdaptiveOperationTracker and ParanoidDurabilityOperationTracker metrics
   public final CachedHistogram getBlobLocalDcLatencyMs;
   public final CachedHistogram getBlobCrossDcLatencyMs;
   public final Counter getBlobPastDueCount;
@@ -245,6 +245,12 @@ public class NonBlockingRouterMetrics {
   public final Counter failedMaybeDueToTotalOfflineReplicasCount;
   public final Counter failedMaybeDueToUnavailableReplicasCount;
   public final Counter metadataChunkCreationCount;
+
+  // Number of paranoid durability write failures
+  public final Counter paranoidDurabilityFailureCount;
+  // Number of times there are not enough replicas available to satisfy paranoid durability write requirements
+  public final Counter paranoidDurabilityNotEnoughReplicasCount;
+
 
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
@@ -612,6 +618,13 @@ public class NonBlockingRouterMetrics {
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToUnavailableReplicasCount"));
     metadataChunkCreationCount = metricRegistry.counter(
         MetricRegistry.name(PutOperation.class, "MetadataChunkCreationCount"));
+
+    // ParanoidDurabilityOperationTracker metrics
+    paranoidDurabilityFailureCount =
+        metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilityFailureCount"));
+    paranoidDurabilityNotEnoughReplicasCount =
+        metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilityNotEnoughReplicasCount"));
+
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");

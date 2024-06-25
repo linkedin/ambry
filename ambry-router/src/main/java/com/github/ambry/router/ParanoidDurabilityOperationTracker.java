@@ -205,12 +205,14 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     if (localReplicas.size() < localReplicaSuccessTarget) {
       logger.error("Not enough replicas in local data center for partition " + partitionId
           + " to satisfy paranoid durability requirements " + "(wanted " + localReplicaSuccessTarget + ", but found " + localReplicas.size() + ")");
+      routerMetrics.paranoidDurabilityNotEnoughReplicasCount.inc();
       return false;
     }
 
     if (remoteReplicas.size() < remoteReplicaSuccessTarget) {
       logger.error("Not enough replicas in remote data centers for partition " + partitionId
           + " to satisfy paranoid durability requirements " + "(wanted " + remoteReplicaSuccessTarget + ", but found " + remoteReplicas.size() + ")");
+      routerMetrics.paranoidDurabilityNotEnoughReplicasCount.inc();
       return false;
     }
     return true;
@@ -327,7 +329,12 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    * succeed, false otherwise.
    */
   private boolean hasFailedRemotely() {
-    return (remoteReplicaSuccessCount + remoteInflightCount + remoteReplicas.size()) < remoteReplicaSuccessTarget;
+    if ((remoteReplicaSuccessCount + remoteInflightCount + remoteReplicas.size()) < remoteReplicaSuccessTarget) {
+      logger.error("Paranoid durability PUT failed in remote data centers for partition " + partitionId);
+      routerMetrics.paranoidDurabilityFailureCount.inc();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -336,8 +343,13 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    * succeed, false otherwise.
    */
   private boolean hasFailedLocally() {
-    return hasFailedDynamically() || // The dynamic failure mode only applies in the local colo.
-           ((localReplicaSuccessCount + localInflightCount + localReplicas.size()) < localReplicaSuccessTarget);
+    if (hasFailedDynamically() || // The dynamic failure mode only applies in the local colo.
+        ((localReplicaSuccessCount + localInflightCount + localReplicas.size()) < localReplicaSuccessTarget)) {
+      logger.error("Paranoid durability PUT failed in local data center (" + datacenterName + ") for partition " + partitionId);
+      routerMetrics.paranoidDurabilityFailureCount.inc();
+      return true;
+    }
+    return false;
   }
 
 
