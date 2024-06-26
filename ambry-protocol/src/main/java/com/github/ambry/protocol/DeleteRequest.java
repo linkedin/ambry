@@ -36,7 +36,7 @@ public class DeleteRequest extends RequestOrResponse {
   protected static final int FORCE_DELETE_FLAG_SIZE = 1;
 
   /**
-   * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_3}
+   * Constructs {@link DeleteRequest} in current version
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request
@@ -50,7 +50,7 @@ public class DeleteRequest extends RequestOrResponse {
   }
 
   /**
-   * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
+   * Constructs {@link DeleteRequest} in current version
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request
