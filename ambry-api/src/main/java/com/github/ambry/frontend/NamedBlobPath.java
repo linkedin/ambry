@@ -35,11 +35,11 @@ public class NamedBlobPath {
 
   static final String PREFIX_PARAM = "prefix";
   static final String PAGE_PARAM = "page";
-  static final String MARKER = "marker";
-  static final String CONTINUATION_TOKEN = "continuation-token";
+  public static final String MARKER = "marker";
+  public static final String CONTINUATION_TOKEN = "continuation-token";
   static final int MAX_BLOB_NAME_LENGTH = 350;
-  static final String LIST_TYPE = "list-type";
-  static final String LIST_TYPE_VERSION_2 = "2";
+  public static final String LIST_TYPE = "list-type";
+  public static final String LIST_TYPE_VERSION_2 = "2";
 
   /**
    * Parse the input path if it's a named blob request.

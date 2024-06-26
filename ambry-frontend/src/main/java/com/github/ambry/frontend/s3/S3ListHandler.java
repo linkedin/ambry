@@ -41,6 +41,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.NamedBlobPath.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 import static com.github.ambry.rest.RestUtils.*;
 
@@ -100,7 +101,9 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     String delimiter = getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
     String encodingType = getHeader(restRequest.getArgs(), ENCODING_TYPE_PARAM_NAME, false);
     String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
-    //By default S3 list returns up to 1000 key names.
+    String marker = getHeader(restRequest.getArgs(), MARKER, false);
+    String continuationToken = getHeader(restRequest.getArgs(), CONTINUATION_TOKEN, false);
+        //By default S3 list returns up to 1000 key names.
     int maxKeysValue = maxKeys == null ? DEFAULT_MAX_KEY_VALUE : Integer.parseInt(maxKeys);
     // Iterate through list of blob names.
     List<Contents> contentsList = new ArrayList<>();
@@ -114,12 +117,23 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
         break;
       }
     }
-    ListBucketResult result =
-        new ListBucketResult(restRequest.getPath(), prefix, maxKeysValue, keyCount, delimiter, contentsList,
-            encodingType);
-    LOGGER.debug("Sending response for S3 ListObjects {}", result);
-    // Serialize xml
-    xmlMapper.writeValue(outputStream, result);
+    if (LIST_TYPE_VERSION_2.equals(getHeader(restRequest.getArgs(), LIST_TYPE, false))) {
+      ListBucketResultV2 resultV2 =
+          new ListBucketResultV2(restRequest.getPath(), prefix, maxKeysValue, keyCount, delimiter, contentsList,
+              encodingType, continuationToken, namedBlobRecordPage.getNextPageToken(),
+              namedBlobRecordPage.getNextPageToken() != null);
+      LOGGER.debug("Sending response for S3 ListObjects {}", resultV2);
+      // Serialize xml
+      xmlMapper.writeValue(outputStream, resultV2);
+    } else {
+      ListBucketResult result =
+          new ListBucketResult(restRequest.getPath(), prefix, maxKeysValue, keyCount, delimiter, contentsList,
+              encodingType, marker, namedBlobRecordPage.getNextPageToken(),
+              namedBlobRecordPage.getNextPageToken() != null);
+      LOGGER.debug("Sending response for S3 ListObjects {}", result);
+      // Serialize xml
+      xmlMapper.writeValue(outputStream, result);
+    }
     return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
   }
 }
