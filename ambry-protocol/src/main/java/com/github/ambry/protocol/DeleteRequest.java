@@ -189,7 +189,7 @@ public class DeleteRequest extends RequestOrResponse {
       BlobId id = new BlobId(stream, map);
       long deletionTimeInMs = stream.readLong();
       boolean isForceDelete = stream.readByte() == 1;
-      return new DeleteRequest(correlationId, clientId, id, deletionTimeInMs, isForceDelete);
+      return new DeleteRequest(correlationId, clientId, id, deletionTimeInMs, DELETE_REQUEST_VERSION_3, isForceDelete);
     }
   }
 }
