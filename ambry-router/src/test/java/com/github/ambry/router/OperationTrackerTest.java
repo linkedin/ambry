@@ -1080,7 +1080,8 @@ public class OperationTrackerTest {
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
     assertFalse("Operation should not succeed", ot.hasSucceeded());
     assertTrue("Operation should fail on NOT_FOUND since all replicas return NOT_FOUND", ot.hasFailedOnNotFound());
-    assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
+    // Should not be considered as unavailable since there are no down replicas
+    assertFalse("Operation should not have unavailability", ot.hasSomeUnavailability());
     assertTrue("Operation should be done", ot.isDone());
 
     // Case 2.1: Search minimum needed replicas - first 2 not found responses are from standby replicas.
@@ -1160,7 +1161,8 @@ public class OperationTrackerTest {
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
     assertFalse("Operation should not succeed", ot.hasSucceeded());
     assertTrue("Operation should fail on NOT_FOUND since all replicas return NOT_FOUND", ot.hasFailedOnNotFound());
-    assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
+    // Should not be considered as unavailable since there are no down replicas
+    assertFalse("Operation should have some unavailability", ot.hasSomeUnavailability());
     assertTrue("Operation should be done", ot.isDone());
   }
 
@@ -1196,6 +1198,7 @@ public class OperationTrackerTest {
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
     assertFalse("Operation should not succeed", ot.hasSucceeded());
     assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    // Should be considered as unavailable since there is 1 down (error) replica
     assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
     assertTrue("Operation should be done", ot.isDone());
 

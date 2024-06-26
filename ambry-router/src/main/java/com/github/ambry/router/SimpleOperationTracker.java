@@ -30,7 +30,6 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,8 +94,10 @@ class SimpleOperationTracker implements OperationTracker {
   protected ReplicaId lastReturnedByIterator = null;
   protected Iterator<ReplicaId> replicaIterator;
   protected final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
+  protected final Set<ReplicaId> originatingDcBootstrapReplicas;
   private final int originatingDcTotalReplicaCount;
   protected final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
+  protected final Map<ReplicaState, List<ReplicaId>> originatingDcReplicasByState;
   private final BlobId blobId;
   // is that possible to run the offline repair?
   private boolean possibleRunOfflineRepair;
@@ -278,6 +279,11 @@ class SimpleOperationTracker implements OperationTracker {
         .count();
     originatingDcLeaderOrStandbyReplicas = new HashSet<>(
         getEligibleReplicas(this.originatingDcName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)));
+    originatingDcBootstrapReplicas =
+        new HashSet<>(getEligibleReplicas(this.originatingDcName, EnumSet.of(ReplicaState.BOOTSTRAP)));
+    originatingDcReplicasByState = Collections.unmodifiableMap(
+        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(EnumSet.allOf(ReplicaState.class),
+            originatingDcName));
     int dynamicNotFoundFailureThreshold = routerConfig.routerOperationTrackerRequireTwoNotFound ? 2
         : Math.max(originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1, 0);
     originatingDcNotFoundFailureThreshold =
@@ -453,10 +459,10 @@ class SimpleOperationTracker implements OperationTracker {
     if (originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) {
       // If we get sufficient not found responses in originating DC, we can confirm that blob is not present in Ambry.
       logger.info("Terminating {} on {} due to Not_Found failure in originating DC {}, "
-              + "NotFoundCount: {}, FailureThreshold: {}, TotalReplicaCount: {}, LeaderStandbyCount: {}, {}",
+              + "NotFoundCount: {}, FailureThreshold: {}, TotalReplicaCount: {}, LeaderStandbyCount: {}, ReplicasByState: {}, {}",
           routerOperation.name(), partitionId, originatingDcName, originatingDcNotFoundCount,
           originatingDcNotFoundFailureThreshold, originatingDcTotalReplicaCount,
-          originatingDcLeaderOrStandbyReplicas.size(), getBlobIdLog());
+          originatingDcLeaderOrStandbyReplicas.size(), originatingDcReplicasByState, getBlobIdLog());
       routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
     }
@@ -473,11 +479,12 @@ class SimpleOperationTracker implements OperationTracker {
 
   @Override
   public boolean hasSomeUnavailability() {
-    if (originatingDcName != null && originatingDcLeaderOrStandbyReplicas.size() < originatingDcTotalReplicaCount) {
+    if (originatingDcName != null && originatingDcLeaderOrStandbyReplicas.size() + originatingDcBootstrapReplicas.size()
+        < originatingDcTotalReplicaCount) {
       logger.info("{} on {} has some replicas unavailable in originating DC {}, TotalReplicaCount: {},"
-              + "LeaderStandbyCount: {}, ReplicasByState: {}, {}", routerOperation.name(), partitionId, originatingDcName,
-          originatingDcTotalReplicaCount, originatingDcLeaderOrStandbyReplicas.size(), allDcReplicasByState,
-          getBlobIdLog());
+              + "LeaderStandbyCount: {}, BootstrapCount: {}, ReplicasByState: {}, {}", routerOperation.name(), partitionId,
+          originatingDcName, originatingDcTotalReplicaCount, originatingDcLeaderOrStandbyReplicas.size(),
+          originatingDcBootstrapReplicas.size(), originatingDcReplicasByState, getBlobIdLog());
       routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
       return true;
     }
