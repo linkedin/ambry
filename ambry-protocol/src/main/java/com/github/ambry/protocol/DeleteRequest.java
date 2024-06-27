@@ -126,6 +126,10 @@ public class DeleteRequest extends RequestOrResponse {
     return deletionTimeInMs;
   }
 
+  public boolean shouldForceDelete() {
+    return isForceDelete;
+  }
+
   @Override
   public long sizeInBytes() {
     // header + blobId
