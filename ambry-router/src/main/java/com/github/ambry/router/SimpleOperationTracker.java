@@ -681,11 +681,8 @@ class SimpleOperationTracker implements OperationTracker {
       if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && hasFailedOnNotFound()) {
         return true;
       }
-      // if there is no possible way to use the remaining replicas to meet the success target,
-      // deem the operation a failure.
-      // For Delete, even there is not enough quorum, if offline repair is enabled, continue to run it.
-      if (possibleRunOfflineRepair) {
-        logger.trace("RepairRequest: continue to run as long as we have replicas {}", blobId);
+      //For Delete and TtlUpdate continue to run as long as we have replicas.
+      if (routerOperation == RouterOperation.DeleteOperation || routerOperation == RouterOperation.TtlUpdateOperation) {
         return replicaInPoolOrFlightCount <= 0;
       } else {
         return replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget;
