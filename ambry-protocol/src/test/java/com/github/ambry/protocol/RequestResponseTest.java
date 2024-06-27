@@ -1360,7 +1360,7 @@ public class RequestResponseTest {
      * @param blobId blobId of the delete request
      */
     private DeleteRequestV1(int correlationId, String clientId, BlobId blobId) {
-      super(correlationId, clientId, blobId, Utils.Infinite_Time, DeleteRequest.DELETE_REQUEST_VERSION_1);
+      super(correlationId, clientId, blobId, Utils.Infinite_Time, DeleteRequest.DELETE_REQUEST_VERSION_1, false);
     }
   }
 
