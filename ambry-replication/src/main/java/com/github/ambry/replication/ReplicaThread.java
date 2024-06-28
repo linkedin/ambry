@@ -69,6 +69,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -129,6 +130,17 @@ public class ReplicaThread implements Runnable {
 
   private volatile ExchangeMetadataListener exchangeMetadataListener = null;
 
+
+  private int maxConsiderationsPerReplicaInCycle;
+
+  private int shouldEndCurrentCycle;
+// g1, g2, g3, g4 ....gn  {}
+  //y
+ //  r1 - 1, r2- 1
+  //gn+1
+// 1 - r1, r10
+  // g1,
+  //bandwith by replication
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyConverter storeKeyConverter,
@@ -348,6 +360,92 @@ public class ReplicaThread implements Runnable {
     return replicas;
   }
 
+
+  public List<RemoteReplicaGroup> pollRemoteReplicaGroups(Integer offsetRemoteReplicaGroupId,
+      List<RemoteReplicaGroup> inFlightRemoteReplicaGroups, Map<RemoteReplicaInfo, Integer> remoteReplicaConsiderationsCount){
+
+
+
+    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
+    List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
+    int remoteReplicaGroupId = offsetRemoteReplicaGroupId+1;
+
+
+    Map<ReplicaId, Integer> considerationsPerReplica = new HashMap<>();
+
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
+      DataNodeId remoteNode = entry.getKey();
+      List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
+      List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
+      List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+      filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode,
+          standbyReplicasWithNoProgress, considerationsPerReplica);
+
+      if (activeReplicasPerNode.size() > 0) {
+        List<List<RemoteReplicaInfo>> activeReplicaSubLists =
+            maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
+                : Collections.singletonList(activeReplicasPerNode);
+        for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
+          RemoteReplicaGroup group =
+              new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
+          remoteReplicaGroups.add(group);
+        }
+      }
+      if (standbyReplicasWithNoProgress.size() > 0) {
+        List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
+            getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
+        if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
+          RemoteReplicaGroup group =
+              new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
+          remoteReplicaGroups.add(group);
+        }
+      }
+    }
+    offsetRemoteReplicaGroupId = remoteReplicaGroupId;
+    return remoteReplicaGroups;
+  }
+
+  public void processReplicaGroups(Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup, Map<Integer, RequestInfo> correlationIdToRequestInfo, List<RemoteReplicaGroup> remoteReplicaGroups){
+
+    List<RequestInfo> requestInfos =
+        pollRemoteReplicaGroups(remoteReplicaGroups, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+    List<ResponseInfo> responseInfosForTimedOutRequests =
+        filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
+    Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
+        .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
+        .collect(Collectors.toSet());
+    if (!requestsToDrop.isEmpty()) {
+      replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
+          datacenterName);
+    }
+    final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
+    List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
+    // Add response for dropped request because there is no guarantee that sendAndPoll would return a response for
+    // dropped requests. Even if the network client returns response infos for dropped requests, onResponse should
+    // still be able to handle duplicate response infos for the same request.
+    responseInfos.addAll(responseInfosForTimedOutRequests);
+    onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+
+  }
+
+  public void replicateNew(){
+    List<RemoteReplicaGroup> inFlightRemoteReplicaGroups = new LinkedList<>();
+    Map<RemoteReplicaInfo, Integer> remoteReplicaConsiderationsCount = new HashMap<>();
+    Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
+    Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+
+    while(true) {
+      Integer offsetRemoteReplicaGroupId = -1;
+      List<RemoteReplicaGroup> remoteReplicaGroups = pollRemoteReplicaGroups(offsetRemoteReplicaGroupId, inFlightRemoteReplicaGroups, remoteReplicaConsiderationsCount);
+      if (remoteReplicaGroups.isEmpty()) return;
+
+      processReplicaGroups(correlationIdToReplicaGroup, correlationIdToRequestInfo, remoteReplicaGroups);
+    }
+  }
+
+  // g1, g2, g3, g4   r1, r2, --r20
+  //
+
   /**
    * Do replication for replicas grouped by {@link DataNodeId}
    * A replication cycle between two replicas involves the following steps:
@@ -382,13 +480,18 @@ public class ReplicaThread implements Runnable {
       // Before each cycle of replication, we clean up the cache in key converter.
       storeKeyConverter.dropCache();
       Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
+
+      int maxConsiderationsPerReplica = 1;
+
+      Map<ReplicaId, Integer> considerationsPerReplica = new HashMap<>();
+
       for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
         DataNodeId remoteNode = entry.getKey();
         List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
         List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
         List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
         filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode,
-            standbyReplicasWithNoProgress);
+            standbyReplicasWithNoProgress, considerationsPerReplica);
 
         if (activeReplicasPerNode.size() > 0) {
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
@@ -640,7 +743,8 @@ public class ReplicaThread implements Runnable {
    *                                      previous ReplicaMetadataRequest.
    */
   void filterRemoteReplicasToReplicate(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress) {
+      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress,
+      Map<ReplicaId, Integer> considerationsPerReplica) {
     // Get a list of active replicas that needs be included for this replication cycle
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
