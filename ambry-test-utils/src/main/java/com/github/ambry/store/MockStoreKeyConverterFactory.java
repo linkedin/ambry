@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
