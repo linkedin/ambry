@@ -94,7 +94,7 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
     }
 
     @Override
-    public Map<StoreKey, StoreKey> convertKeys(Collection<? extends StoreKey> input) throws Exception {
+    protected Map<StoreKey, StoreKey> convertKeys(Collection<? extends StoreKey> input) throws Exception {
       if (exception != null) {
         throw exception;
       }
@@ -112,7 +112,7 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
     }
 
     @Override
-    StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping) {
+    protected StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping) {
       if (exception != null) {
         throw new IllegalStateException(exception);
       } else if (!isKeyPresent) {

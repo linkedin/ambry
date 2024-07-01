@@ -81,5 +81,5 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
 
   protected abstract Map<StoreKey, StoreKey> convertKeys(Collection<? extends StoreKey> input) throws Exception;
 
-  abstract StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping);
+  protected abstract StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping);
 }
