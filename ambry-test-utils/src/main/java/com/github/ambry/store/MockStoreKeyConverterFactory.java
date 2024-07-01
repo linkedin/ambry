@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -77,9 +78,8 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
   /**
    * A mock implementation of {@link StoreKeyConverter}.
    */
-  public class MockStoreKeyConverter implements StoreKeyConverter {
+  public class MockStoreKeyConverter extends AbstractStoreKeyConverter {
 
-    private Map<StoreKey, StoreKey> lastConverted = new HashMap<>();
     private Map<StoreKey, StoreKey> conversionMap;
 
     private MockStoreKeyConverter(Map<StoreKey, StoreKey> conversionMap) {
@@ -95,7 +95,7 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
     }
 
     @Override
-    public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
+    public Map<StoreKey, StoreKey> convertKeys(Collection<? extends StoreKey> input) throws Exception {
       if (exception != null) {
         throw exception;
       }
@@ -109,28 +109,17 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
           }
         }
       }
-      //conversion gets added to cache
-      if (lastConverted == null) {
-        lastConverted = output;
-      } else {
-        lastConverted.putAll(output);
-      }
       return output;
     }
 
     @Override
-    public StoreKey getConverted(StoreKey storeKey) {
+    StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping) {
       if (exception != null) {
         throw new IllegalStateException(exception);
-      } else if (!lastConverted.containsKey(storeKey)) {
+      } else if (!isKeyPresent) {
         throw new IllegalStateException(storeKey + " has not been converted");
       }
-      return lastConverted.get(storeKey);
-    }
-
-    @Override
-    public void dropCache() {
-      lastConverted = null;
+      return cachedMapping;
     }
   }
 }

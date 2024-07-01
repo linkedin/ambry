@@ -46,6 +46,11 @@ public interface StoreKeyConverter {
    */
   StoreKey getConverted(StoreKey storeKey);
 
+
+  default void remove(Collection<? extends  StoreKey> storeKeys) {};
+
+
+
   /**
    * Drops the cache reference used by {@link StoreKeyConverter}
    */
