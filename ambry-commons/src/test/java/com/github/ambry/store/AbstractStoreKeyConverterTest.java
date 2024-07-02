@@ -85,7 +85,7 @@ public class AbstractStoreKeyConverterTest {
     convertedMap = storeKeyConverter.convert(list);
     assertEquals("Size of keys in input and output is different", list.size(), convertedMap.size());
 
-    storeKeyConverter.remove(list);
+    storeKeyConverter.tryDropCache(list);
 
     try {
       StoreKey storeKey0Res = storeKeyConverter.getConverted(storeKey0);
@@ -94,7 +94,7 @@ public class AbstractStoreKeyConverterTest {
       fail("Exception thrown while storeKey0 is present");
     }
 
-    storeKeyConverter.remove(list);
+    storeKeyConverter.tryDropCache(list);
     try {
       storeKeyConverter.getConverted(storeKey0);
       fail("Get succeeded after cache is cleared");

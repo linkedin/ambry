@@ -45,12 +45,11 @@ public interface StoreKeyConverter {
    * @return the previously converted storeKey
    */
   StoreKey getConverted(StoreKey storeKey);
-
-
-  default void remove(Collection<? extends  StoreKey> storeKeys) {};
-
-
-
+  /**
+   * Removes the given storeKeys From cache
+   * @param storeKeys storeKeys you want to remove from cache
+   */
+  default void tryDropCache(Collection<? extends  StoreKey> storeKeys) {};
   /**
    * Drops the cache reference used by {@link StoreKeyConverter}
    */
