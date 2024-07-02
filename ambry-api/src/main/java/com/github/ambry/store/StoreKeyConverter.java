@@ -44,14 +44,17 @@ public interface StoreKeyConverter {
    *                 IllegalStateException
    * @return the previously converted storeKey
    */
+
   StoreKey getConverted(StoreKey storeKey);
   /**
    * Removes the given storeKeys From cache
    * @param storeKeys storeKeys you want to remove from cache
    */
+
   default void tryDropCache(Collection<? extends  StoreKey> storeKeys) {};
   /**
    * Drops the cache reference used by {@link StoreKeyConverter}
    */
+
   void dropCache();
 }
