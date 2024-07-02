@@ -260,7 +260,7 @@ public class ReplicationMetrics {
     intraColoOneCycleReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoOneCycleReplicationTime"));
     intraColoFastestSlowestReplicaPerCycleTimeDifference =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoFastestSlowestReplicaTimeDifference"));
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoFastestSlowestReplicaPerCycleTimeDifference"));
     plainTextIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoTotalReplicationTime"));
     sslIntraColoTotalReplicationTime =
