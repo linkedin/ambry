@@ -21,7 +21,6 @@ import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
-import com.github.ambry.store.StoreKeyConverterImplNoOp;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
