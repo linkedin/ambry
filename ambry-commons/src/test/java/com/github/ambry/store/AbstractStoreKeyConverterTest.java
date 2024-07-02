@@ -24,21 +24,38 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
+/**
+ * Test for {@link AbstractStoreKeyConverter}
+ */
 public class AbstractStoreKeyConverterTest {
   private final StoreKeyConverter storeKeyConverter;
 
+  /**
+   * Using {@link com.github.ambry.store.MockStoreKeyConverterFactory.MockStoreKeyConverter}
+   * as it implements {@link AbstractStoreKeyConverter}
+   */
   public AbstractStoreKeyConverterTest() {
     storeKeyConverter = new MockStoreKeyConverterFactory(null, null).setConversionMap(new HashMap<>())
         .setReturnInputIfAbsent(true)
         .getStoreKeyConverter();
   }
 
+  /**
+   * Ensures that {@link #storeKeyConverter} implements {@link AbstractStoreKeyConverter}
+   * @throws Exception
+   */
   @Test
   public void testClassImplementation() throws Exception {
     assertTrue("storeKeyConverter is not inheriting AbstractStoreKeyConverter",
         storeKeyConverter instanceof AbstractStoreKeyConverter);
   }
 
+  /**
+   * Test conversion of keys by  first try getting keys without converting,
+   * then converting two keys try getting them ,
+   * and then clearing cache and again try getting keys
+   * @throws Exception
+   */
   @Test
   public void testBasicOperations() throws Exception {
     StoreKey storeKey0 = mock(StoreKey.class);
@@ -59,7 +76,7 @@ public class AbstractStoreKeyConverterTest {
     try {
       StoreKey storeKey0Res = storeKeyConverter.getConverted(storeKey0);
       assertNotNull("Conversion of storeKey0 should not be null", storeKey0Res);
-    }catch (Exception e){
+    } catch (Exception e) {
       fail("Exception thrown while storeKey0 is present");
     }
 
@@ -72,6 +89,12 @@ public class AbstractStoreKeyConverterTest {
     }
   }
 
+  /**
+   * Testing caching logic by calling convert two time on a list of keys,
+   * then try getting one of keys, then try removing these keys from cache,
+   * then try getting these keys and then removing these keys again and try getting again
+   * @throws Exception
+   */
   @Test
   public void testCachingOperations() throws Exception {
     StoreKey storeKey0 = mock(StoreKey.class);
@@ -90,7 +113,7 @@ public class AbstractStoreKeyConverterTest {
     try {
       StoreKey storeKey0Res = storeKeyConverter.getConverted(storeKey0);
       assertNotNull("Conversion of storeKey0 should not be null", storeKey0Res);
-    }catch (Exception e){
+    } catch (Exception e) {
       fail("Exception thrown while storeKey0 is present");
     }
 
