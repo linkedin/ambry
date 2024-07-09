@@ -1370,10 +1370,18 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       if (value == null) {
         throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
       } else if (value.isDelete()) {
-        if (!getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
-          throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
-        } else {
+        // Blob is deleted, as long as
+        // 1. get option includes Compaction_Ready blob
+        // 2. or get option includes Deleted blob and the blob is deleted no more than retention window time.
+        // we return the blob back to frontend
+        long deleteOperationTime = value.getOperationTimeInMs();
+        if (getOptions.contains(StoreGetOptions.Store_Include_Compaction_Ready) || (
+            getOptions.contains(StoreGetOptions.Store_Include_Deleted)
+                && deleteOperationTime + TimeUnit.MILLISECONDS.toMillis(config.storeDeletedMessageRetentionMinutes)
+                >= time.milliseconds())) {
           readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
+        } else {
+          throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
         }
       } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
         throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);

@@ -33,7 +33,6 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatMetrics;
-import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -87,7 +86,6 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -1499,7 +1497,7 @@ public class AmbryRequests implements RequestAPI {
       storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
     }
     if (getRequest.getGetOption() == GetOption.Include_All) {
-      storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
+      storeGetOptions = EnumSet.allOf(StoreGetOptions.class);
     }
     return storeGetOptions;
   }
