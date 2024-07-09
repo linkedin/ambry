@@ -224,7 +224,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    * @return true if we have received enough successful responses from both local and remote replicas, false otherwise.
    */
   public boolean hasSucceeded() {
-    return hasSucceededLocally() && hasSucceededRemotely();
+    if (hasSucceededLocally() && hasSucceededRemotely()) {
+      logger.info("Paranoid durability PUT succeeded for partition " + partitionId);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -307,7 +311,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    * @return true if we have received enough failed responses from both local and remote replicas, false otherwise.
    */
   public boolean hasFailed() {
-      return hasFailedLocally() || hasFailedRemotely();
+    return hasFailedLocally() || hasFailedRemotely();
   }
 
   /**
