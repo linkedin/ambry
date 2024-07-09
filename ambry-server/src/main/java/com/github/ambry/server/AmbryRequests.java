@@ -456,21 +456,8 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found && deleteRequest.shouldForceDelete()) {
-        try {
-          // If frontend forces a delete operation, place a tombstone even though blob is not present
-          Objects.requireNonNull(storeToDelete).forceDelete(Collections.singletonList(info));
-        } catch (StoreException ex) {
-          if (ex.getErrorCode() == StoreErrorCodes.Already_Exist) {
-            // Blob was not present originally but was replicated while we were force deleting it. Try normal delete now
-            try {
-              Objects.requireNonNull(storeToDelete).delete(Collections.singletonList(info));
-            } catch (StoreException exc) {
-              serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
-            }
-          } else {
-            serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
-          }
-        }
+        // If frontend forces a delete operation, place a tombstone even though blob is not present
+        serverErrorCode = maybeForceDelete(info, storeToDelete);
       } else {
         serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
@@ -967,6 +954,26 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs, metrics.replicateBlobSendTimeInMs,
             metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  private ServerErrorCode maybeForceDelete(MessageInfo info, Store store) {
+    ServerErrorCode serverErrorCode = ServerErrorCode.No_Error;
+    try {
+      MessageInfo deleteRecord = new MessageInfo.Builder(info).lifeVersion((short) 0).build();
+      store.forceDelete(Collections.singletonList(deleteRecord));
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+        try {
+          // Blob might have been replicated while we were force deleting it. Try normal delete now
+          store.delete(Collections.singletonList(info));
+        } catch (StoreException ex) {
+          serverErrorCode = ErrorMapping.getStoreErrorMapping(ex.getErrorCode());
+        }
+      } else {
+        serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
+      }
+    }
+    return serverErrorCode;
   }
 
   /**
