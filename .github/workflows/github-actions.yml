@@ -27,7 +27,7 @@ jobs:
         uses: actions/setup-java@v2
         with:
           java-version: '11'
-          distribution: 'adopt'
+          distribution: 'temurin'
 
       - name: Set up MySQL
         run: |
@@ -73,7 +73,7 @@ jobs:
         uses: actions/setup-java@v2
         with:
           java-version: '11'
-          distribution: 'adopt'
+          distribution: 'temurin'
 
       - uses: burrunan/gradle-cache-action@v1
         name: Run unit tests for ambry-store
@@ -100,7 +100,7 @@ jobs:
         uses: actions/setup-java@v2
         with:
           java-version: '11'
-          distribution: 'adopt'
+          distribution: 'temurin'
 
       - name: Set up MySQL
         run: |
@@ -146,7 +146,7 @@ jobs:
         uses: actions/setup-java@v2
         with:
           java-version: '11'
-          distribution: 'adopt'
+          distribution: 'temurin'
 
       - name: Set up MySQL
         run: |
@@ -197,7 +197,7 @@ jobs:
         uses: actions/setup-java@v2
         with:
           java-version: '11'
-          distribution: 'adopt'
+          distribution: 'temurin'
 
       - uses: burrunan/gradle-cache-action@v1
         name: Build artifacts and create pom files
