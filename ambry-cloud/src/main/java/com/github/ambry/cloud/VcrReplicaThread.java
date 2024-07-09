@@ -67,6 +67,7 @@ public class VcrReplicaThread extends ReplicaThread {
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
   protected int numReplIter;
+  protected final int maxIterationsPerGroupPerCycle;
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -80,6 +81,7 @@ public class VcrReplicaThread extends ReplicaThread {
         new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList()), notification,
         storeKeyConverter, transformer, clusterMap.getMetricRegistry(), replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+    this.maxIterationsPerGroupPerCycle = 1;
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);

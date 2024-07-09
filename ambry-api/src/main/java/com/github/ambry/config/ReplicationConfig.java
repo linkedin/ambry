@@ -102,6 +102,17 @@ public class ReplicationConfig {
   public final long replicationInterReplicaThreadThrottleSleepDurationMs;
 
   /**
+   *
+   */
+  @Config("replicationIntraMaxIterationsPerReplicationGroupPerCycle")
+  @Default("1")
+  public final int replicationIntraMaxIterationsPerReplicationGroupPerCycle;
+
+  @Config("replicationInterMaxIterationsPerReplicationGroupPerCycle")
+  @Default("1")
+  public final int replicationInterMaxIterationsPerReplicationGroupPerCycle;
+
+  /**
    * The time (in ms) to sleep between replication cycles when the replica thread is not doing any useful work
    */
   @Config("replication.replica.thread.idle.sleep.duration.ms")
@@ -343,6 +354,10 @@ public class ReplicationConfig {
     replicationInterReplicaThreadThrottleSleepDurationMs =
         verifiableProperties.getLongInRange("replication.inter.replica.thread.throttle.sleep.duration.ms", 0, 0,
             Long.MAX_VALUE);
+    replicationIntraMaxIterationsPerReplicationGroupPerCycle =
+        verifiableProperties.getIntInRange("replication.intra.max.iterations.per.replication.group.per.cycle", 1, 1, Integer.MAX_VALUE);
+    replicationInterMaxIterationsPerReplicationGroupPerCycle =
+        verifiableProperties.getIntInRange("replication.inter.max.iterations.per.replication.group.per.cycle", 1, 1, Integer.MAX_VALUE);
     replicationReplicaThreadIdleSleepDurationMs =
         verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationSyncedReplicaBackoffDurationMs =

@@ -83,6 +83,7 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String REPLICA_STATUS_FILE = "server_replica_token";
   protected AtomicInteger numBlobScanned;
   protected long partitionBackedUpUntil = -1;
+  protected final int maxIterationsPerGroupPerCycle;
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -95,6 +96,7 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
+    this.maxIterationsPerGroupPerCycle = 1;
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
     azureBlobMap = new HashMap<>();

@@ -54,6 +54,7 @@ public class RecoveryThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
   protected final AmbryCache fileDescriptorCache;
   protected final RecoveryManager recoveryManager;
+  protected final int maxIterationsPerGroupPerCycle;
 
   protected class FileDescriptor implements AmbryCacheEntry {
 
@@ -78,6 +79,7 @@ public class RecoveryThread extends ReplicaThread {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+    this.maxIterationsPerGroupPerCycle = 1;
     this.fileDescriptorCache = new AmbryCache(String.format("%s-FDCache", threadName), true,
         replicationConfig.maxBackupCheckerReportFd, metricRegistry);
     this.recoveryManager = recoveryManager;
