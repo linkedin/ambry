@@ -211,6 +211,7 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+    shouldTerminateCurrentCycle = true;
   }
 
   /**
@@ -299,6 +300,7 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+    shouldTerminateCurrentCycle = true;
     logger.trace("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
   }
 
@@ -324,6 +326,7 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+    shouldTerminateCurrentCycle = true;
     logger.trace("RemoteReplicaInfo {} is added to ReplicaThread {}. Now working on {} dataNodeIds.", remoteReplicaInfo,
         threadName, replicasToReplicateGroupedByNode.keySet().size());
   }
@@ -374,23 +377,35 @@ public class ReplicaThread implements Runnable {
     }
   }
 
-  private void generateRemoteReplicaGroup(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
+  private void generateRemoteReplicaGroups(
+      Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
       Map<DataNodeId, Integer> dataNodeIdStandbyReplicasNoProgressReplicaGroupId,
-      Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup, Map<Integer, Integer> groupIdIterationCountMap,
-      MutableBoolean allReplicasCaughtUpEarly, MutableBoolean maxIterationsReached) {
+      Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup,
+      Map<DataNodeId, Set<RemoteReplicaInfo>> dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
+      Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill,
+      Map<Integer, Integer> groupIdIterationCountMap,
+      MutableBoolean allReplicasCaughtUpEarly,
+      MutableBoolean maxIterationsReached
+  ){
 
     Iterator<Map.Entry<Integer, RemoteReplicaGroup>> inflightRemoteReplicaGroupIterator =
         inflightRemoteReplicaGroup.entrySet().iterator();
+
     while (inflightRemoteReplicaGroupIterator.hasNext()) {
       Map.Entry<Integer, RemoteReplicaGroup> entry = inflightRemoteReplicaGroupIterator.next();
       RemoteReplicaGroup remoteReplicaGroup = entry.getValue();
 
       if (remoteReplicaGroup.isDone()) {
+        long currentTime = time.milliseconds();
+        long throttledTill = currentTime + threadThrottleDurationMs;
+        remoteReplicaGroup.remoteReplicaInfos.forEach(remoteReplicaInfo -> {
+          remoteReplicaToThrottledTill.put(remoteReplicaInfo, throttledTill);
+        });
         inflightRemoteReplicaGroupIterator.remove();
       }
     }
 
-    if (shouldTerminateCurrentCycle) {
+    if (!running || shouldTerminateCurrentCycle) {
       return;
     }
 
@@ -411,30 +426,41 @@ public class ReplicaThread implements Runnable {
       return;
     }
 
-    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeIdStandByReplicasTimedOutOnNoProgress = new HashMap<>();
-
     for (Map.Entry<Integer, List<RemoteReplicaInfo>> entry : groupIdToRemoteReplicaMap.entrySet()) {
       Integer groupId = entry.getKey();
       List<RemoteReplicaInfo> remoteReplicas = entry.getValue();
       DataNodeId remoteNode = remoteReplicas.get(0).getReplicaId().getDataNodeId();
 
-      if (inflightRemoteReplicaGroup.containsKey(groupId) && !inflightRemoteReplicaGroup.get(groupId).isDone()) {
-        continue;
+      Integer standbyReplicasNoProgressReplicaGroupId = dataNodeIdStandbyReplicasNoProgressReplicaGroupId.get(remoteNode);
+
+      Set<RemoteReplicaInfo> nonIteratingNonPendingRemoteReplicas = new LinkedHashSet<>(remoteReplicas);
+
+      remoteReplicas.forEach(remoteReplicaInfo -> {
+        if(remoteReplicaToThrottledTill.containsKey(remoteReplicaInfo) && remoteReplicaToThrottledTill.get(remoteReplicaInfo) > time.milliseconds()){
+          nonIteratingNonPendingRemoteReplicas.remove(remoteReplicaInfo);
+          throttleCount.inc();
+        }
+      });
+
+      if(inflightRemoteReplicaGroup.containsKey(groupId)){
+        nonIteratingNonPendingRemoteReplicas.removeAll(inflightRemoteReplicaGroup.get(groupId).remoteReplicaInfos);
+      }
+
+      if(inflightRemoteReplicaGroup.containsKey(standbyReplicasNoProgressReplicaGroupId)) {
+        nonIteratingNonPendingRemoteReplicas.removeAll(inflightRemoteReplicaGroup.get(standbyReplicasNoProgressReplicaGroupId).remoteReplicaInfos);
       }
 
       List<RemoteReplicaInfo> activeReplicas = new ArrayList<>();
       List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
 
-      filterRemoteReplicasToReplicate(remoteReplicas, activeReplicas, standbyReplicasWithNoProgress);
+      filterRemoteReplicasToReplicate(new ArrayList<>(nonIteratingNonPendingRemoteReplicas), activeReplicas, standbyReplicasWithNoProgress);
 
-      if (!activeReplicas.isEmpty()) {
-        RemoteReplicaGroup groupForActiveReplicas = new RemoteReplicaGroup(activeReplicas, remoteNode, false, groupId);
-        inflightRemoteReplicaGroup.put(groupId, groupForActiveReplicas);
-      }
-      groupIdIterationCountMap.put(groupId, groupIdIterationCountMap.getOrDefault(groupId, 0) + 1);
-
-      if (standbyReplicasWithNoProgress.isEmpty()) {
-        continue;
+      if (!inflightRemoteReplicaGroup.containsKey(groupId)) {
+        if (!activeReplicas.isEmpty()) {
+          RemoteReplicaGroup groupForActiveReplicas = new RemoteReplicaGroup(activeReplicas, remoteNode, false, groupId);
+          inflightRemoteReplicaGroup.put(groupId, groupForActiveReplicas);
+          groupIdIterationCountMap.put(groupId, groupIdIterationCountMap.getOrDefault(groupId, 0) + 1);
+        }
       }
 
       List<RemoteReplicaInfo> standByReplicasTimedOutOnNoProgress =
@@ -444,89 +470,32 @@ public class ReplicaThread implements Runnable {
         continue;
       }
 
-      List<RemoteReplicaInfo> standByReplicasTimedOutOnNoProgressForDataNode =
-          dataNodeIdStandByReplicasTimedOutOnNoProgress.getOrDefault(remoteNode, new ArrayList<>());
-      standByReplicasTimedOutOnNoProgressForDataNode.addAll(standByReplicasTimedOutOnNoProgress);
-      dataNodeIdStandByReplicasTimedOutOnNoProgress.put(remoteNode, standByReplicasTimedOutOnNoProgressForDataNode);
+      dataNodeIdToPendingReplicasMarkedForStandByNoProgress.putIfAbsent(remoteNode, new HashSet<>());
+      dataNodeIdToPendingReplicasMarkedForStandByNoProgress.get(remoteNode).addAll(standByReplicasTimedOutOnNoProgress);
     }
 
-    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeIdStandByReplicasTimedOutOnNoProgress.entrySet()) {
+    for(Map.Entry<DataNodeId, Set<RemoteReplicaInfo>> entry : dataNodeIdToPendingReplicasMarkedForStandByNoProgress.entrySet()){
       DataNodeId remoteNode = entry.getKey();
-      List<RemoteReplicaInfo> remoteReplicas = entry.getValue();
-
       Integer groupId = dataNodeIdStandbyReplicasNoProgressReplicaGroupId.get(remoteNode);
 
-      if (inflightRemoteReplicaGroup.containsKey(groupId) && !inflightRemoteReplicaGroup.get(groupId).isDone()) {
+      if(inflightRemoteReplicaGroup.containsKey(groupId))
         continue;
-      }
 
-      RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(remoteReplicas, remoteNode, true, groupId);
+
+      List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>(entry.getValue());
+      if(remoteReplicaInfos.isEmpty())
+        continue;
+
+      RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(remoteReplicaInfos, remoteNode, true, groupId);
       inflightRemoteReplicaGroup.put(groupId, remoteReplicaGroup);
       groupIdIterationCountMap.put(groupId, groupIdIterationCountMap.getOrDefault(groupId, 0) + 1);
+
+      dataNodeIdToPendingReplicasMarkedForStandByNoProgress.get(remoteNode).clear();
     }
 
     if (inflightRemoteReplicaGroup.isEmpty()) {
       allReplicasCaughtUpEarly.setTrue();
     }
-  }
-
-  public void replicateNew() {
-    exchangeMetadataResponsesInEachCycle = new HashMap<>();
-    Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap = new HashMap<>();
-    Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId = new HashMap<>();
-
-    generateGroupIdsForReplicas(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId);
-
-    Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup = new HashMap<>();
-    Map<Integer, Integer> groupIdIterationCountMap = new HashMap<>();
-
-    Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
-    Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
-
-    MutableBoolean allReplicasCaughtUpEarly = new MutableBoolean(false);
-    MutableBoolean maxIterationsReached = new MutableBoolean(false);
-
-    do {
-      generateRemoteReplicaGroup(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
-          inflightRemoteReplicaGroup, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
-
-      List<RequestInfo> requestInfos =
-          pollRemoteReplicaGroups(new ArrayList<>(inflightRemoteReplicaGroup.values()), correlationIdToRequestInfo,
-              correlationIdToReplicaGroup);
-
-      List<ResponseInfo> responseInfosForTimedOutRequests =
-          filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
-      Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
-          .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
-          .collect(Collectors.toSet());
-
-      if (!requestsToDrop.isEmpty()) {
-        replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
-            datacenterName);
-      }
-
-      final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
-
-      List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
-      responseInfos.addAll(responseInfosForTimedOutRequests);
-      onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
-
-      inflightRemoteReplicaGroup.values().stream()
-          .filter(g -> g.isDone() && g.getExchangeMetadataResponseList() != null)
-          .forEach(//TODO fix this
-              g -> exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
-                  .addAll(g.getExchangeMetadataResponseList()));
-
-      inflightRemoteReplicaGroup.values().stream()
-          .filter(g ->  g.isDone() && g.getException() != null)
-          .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
-              g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
-
-    } while (!inflightRemoteReplicaGroup.isEmpty());
-
-    logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
-
-    maybeSleepAfterReplication(allReplicasCaughtUpEarly.isTrue());
   }
 
   /**
@@ -553,9 +522,92 @@ public class ReplicaThread implements Runnable {
    *
    */
   public void replicate() {
-    replicateNew();
-    /*
+    shouldTerminateCurrentCycle = false;
+
+    long oneRoundStartTimeMs =  time.milliseconds();
+
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
+    Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
+
+    MutableBoolean allReplicasCaughtUpEarly = new MutableBoolean(false);
+    Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap = new HashMap<>();
+
+    try {
+      Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId = new HashMap<>();
+
+      generateGroupIdsForReplicas(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId);
+
+      Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup = new HashMap<>();
+      Map<Integer, Integer> groupIdIterationCountMap = new HashMap<>();
+      Map<DataNodeId, Set<RemoteReplicaInfo>> dataNodeIdToPendingReplicasMarkedForStandByNoProgress = new HashMap<>();
+      Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill = new HashMap<>();
+
+      Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
+      Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+
+      MutableBoolean maxIterationsReached = new MutableBoolean(false);
+
+      do {
+        generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
+            inflightRemoteReplicaGroup, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
+            remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
+
+        List<RequestInfo> requestInfos =
+            pollRemoteReplicaGroups(new ArrayList<>(inflightRemoteReplicaGroup.values()), correlationIdToRequestInfo,
+                correlationIdToReplicaGroup);
+
+        List<ResponseInfo> responseInfosForTimedOutRequests =
+            filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
+        Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
+            .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
+            .collect(Collectors.toSet());
+
+        if (!requestsToDrop.isEmpty()) {
+          replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
+              datacenterName);
+        }
+
+        final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
+
+        List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
+        responseInfos.addAll(responseInfosForTimedOutRequests);
+        onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+
+        inflightRemoteReplicaGroup.values()
+            .stream()
+            .filter(g -> !groupsAddedToExchangeMetadatResponse.contains(g.id) && g.isDone()
+                && g.getExchangeMetadataResponseList() != null)
+            .forEach(g -> {
+              exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
+                  .addAll(g.getExchangeMetadataResponseList());
+              groupsAddedToExchangeMetadatResponse.add(g.id);
+            });
+
+        inflightRemoteReplicaGroup.values()
+            .stream()
+            .filter(g -> g.isDone() && g.getException() != null)
+            .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
+                g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
+      } while (!inflightRemoteReplicaGroup.isEmpty());
+
+      logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
+    }catch (Exception e){
+      logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
+    }finally {
+      replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
+          replicatingFromRemoteColo, datacenterName);
+    }
+
+    int allProcessedReplicasCount = groupIdToRemoteReplicaMap.values().stream().mapToInt(List::size).sum();
+    maybeSleepAfterReplication(allReplicasCaughtUpEarly.isTrue(), allProcessedReplicasCount);
+  }
+
+
+ /* public void replicate() {
+
+    replicateNew();
+
+ /*   exchangeMetadataResponsesInEachCycle = new HashMap<>();
     long oneRoundStartTimeMs = time.milliseconds();
     logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
     List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
@@ -638,10 +690,12 @@ public class ReplicaThread implements Runnable {
       replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
           replicatingFromRemoteColo, datacenterName);
     }
-    maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
+    maybeSleepAfterReplication(remoteReplicaGroups.isEmpty(), 1);
 
-     */
-  }
+
+  }*/
+
+
 
   void setExchangeMetadataListener(ExchangeMetadataListener exchangeMetadataListener) {
     this.exchangeMetadataListener = exchangeMetadataListener;
@@ -794,14 +848,14 @@ public class ReplicaThread implements Runnable {
    * shows we should sleep, then sleep for a while so we can save some CPU.
    * @param allCaughtUp True when all replicas are caught up.
    */
-  private void maybeSleepAfterReplication(boolean allCaughtUp) {
+  private void maybeSleepAfterReplication(boolean allCaughtUp, int throttledReplicaCount) {
     long sleepDurationMs = 0;
     if (allCaughtUp && replicationConfig.replicationReplicaThreadIdleSleepDurationMs > 0) {
       sleepDurationMs = replicationConfig.replicationReplicaThreadIdleSleepDurationMs;
       idleCount.inc();
     } else if (threadThrottleDurationMs > 0) {
       sleepDurationMs = threadThrottleDurationMs;
-      throttleCount.inc();
+      throttleCount.inc(throttledReplicaCount);
     }
 
     if (running && sleepDurationMs > 0) {
@@ -2051,6 +2105,7 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+    shouldTerminateCurrentCycle = true;
     if (networkClient != null) {
       networkClient.close();
     }
@@ -2121,6 +2176,7 @@ public class ReplicaThread implements Runnable {
     private long getRequestStartTimeMs;
     private long exchangeMetadataStartTimeInMs;
     private long fixMissingStoreKeysStartTimeInMs;
+    private final Set<StoreKey> storeKeysUsed = new HashSet<>();
 
     /**
      * Constructor of {@link RemoteReplicaGroup}.
