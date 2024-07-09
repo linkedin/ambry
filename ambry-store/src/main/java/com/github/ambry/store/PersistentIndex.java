@@ -1377,7 +1377,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
         long deleteOperationTime = value.getOperationTimeInMs();
         if (getOptions.contains(StoreGetOptions.Store_Include_Compaction_Ready) || (
             getOptions.contains(StoreGetOptions.Store_Include_Deleted)
-                && deleteOperationTime + TimeUnit.MILLISECONDS.toMillis(config.storeDeletedMessageRetentionMinutes)
+                && deleteOperationTime + TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes)
                 >= time.milliseconds())) {
           readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
         } else {
