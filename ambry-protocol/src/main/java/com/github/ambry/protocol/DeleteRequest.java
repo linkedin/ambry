@@ -71,7 +71,7 @@ public class DeleteRequest extends RequestOrResponse {
    * @param isForceDelete    {@code true} if we should insert a Delete tombstone even if blob is missing on server.
    *                         Else {@code false}.
    */
-  protected DeleteRequest(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs, short version,
+  public DeleteRequest(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs, short version,
       boolean isForceDelete) {
     super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);
     this.blobId = blobId;
@@ -102,10 +102,10 @@ public class DeleteRequest extends RequestOrResponse {
   protected void prepareBuffer() {
     super.prepareBuffer();
     bufferToSend.writeBytes(blobId.toBytes());
-    if (versionId == DELETE_REQUEST_VERSION_2) {
+    if (versionId >= DELETE_REQUEST_VERSION_2) {
       bufferToSend.writeLong(deletionTimeInMs);
     }
-    if (versionId == DELETE_REQUEST_VERSION_3) {
+    if (versionId >= DELETE_REQUEST_VERSION_3) {
       bufferToSend.writeByte(isForceDelete ? (byte) 1 : (byte) 0);
     }
   }
@@ -134,11 +134,11 @@ public class DeleteRequest extends RequestOrResponse {
   public long sizeInBytes() {
     // header + blobId
     long sizeInBytes = super.sizeInBytes() + blobId.sizeInBytes();
-    if (versionId == DELETE_REQUEST_VERSION_2) {
+    if (versionId >= DELETE_REQUEST_VERSION_2) {
       // deletion time
       sizeInBytes += DELETION_TIME_FIELD_SIZE_IN_BYTES;
     }
-    if (versionId == DELETE_REQUEST_VERSION_3) {
+    if (versionId >= DELETE_REQUEST_VERSION_3) {
       // Force delete request flag size
       sizeInBytes += FORCE_DELETE_FLAG_SIZE;
     }
