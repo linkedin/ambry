@@ -2198,6 +2198,9 @@ public class ReplicaThread implements Runnable {
      * @param message The message to log out
      */
     private void setException(Exception e, String message) {
+      if (!(e instanceof ReplicationException)) {
+        replicationMetrics.incrementReplicationErrorCount(replicatingFromRemoteColo, datacenterName);
+      }
       if (e instanceof ReplicationException
           && ((ReplicationException) e).getServerErrorCode() == ServerErrorCode.Retry_After_Backoff) {
         replicationMetrics.incrementRetryAfterBackoffErrorCount(replicatingFromRemoteColo, datacenterName);

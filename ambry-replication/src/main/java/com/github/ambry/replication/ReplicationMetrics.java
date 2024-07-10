@@ -651,12 +651,24 @@ public class ReplicationMetrics {
     }
   }
 
+  /**
+   * This is not used anywhere.
+   * @param sslEnabled
+   */
   public void incrementReplicationErrors(boolean sslEnabled) {
     replicationErrors.inc();
     if (sslEnabled) {
       sslReplicationErrors.inc();
     } else {
       plainTextReplicationErrors.inc();
+    }
+  }
+
+  public void incrementReplicationErrorCount(boolean remoteColo, String datacenter) {
+    if (remoteColo) {
+      dcToReplicationError.get(datacenter).inc();
+    } else {
+      intraColoReplicationErrorCount.inc();
     }
   }
 
