@@ -134,6 +134,8 @@ public class NonBlockingRouterMetrics {
   public final Counter offlineRepairOnDeleteErrorCount;
   public final Counter offlineRepairOnTtlUpdateCount;
   public final Counter offlineRepairOnTtlUpdateErrorCount;
+  public final Counter forceDeleteBlobCount;
+  public final Counter forceDeleteBlobErrorCount;
   public final Counter backgroundDeleterNotFoundCount;
   public final Counter backgroundDeleterExceptionCount;
   public final Counter operationAbortCount;
@@ -501,6 +503,9 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnTtlUpdateCount"));
     offlineRepairOnTtlUpdateErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnTtlUpdateErrorCount"));
+    forceDeleteBlobCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ForceDeleteBlobCount"));
+    forceDeleteBlobErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ForceDeleteBlobErrorCount"));
     backgroundDeleterNotFoundCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNotFoundCount"));
     backgroundDeleterExceptionCount =
