@@ -33,6 +33,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
 import java.util.Collections;
@@ -69,7 +70,9 @@ public class GetSignedUrlHandlerTest {
   private final FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
   private final FrontendTestUrlSigningServiceFactory urlSigningServiceFactory =
       new FrontendTestUrlSigningServiceFactory();
-  private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory();
+  private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory(
+      new VerifiableProperties(new Properties()), new MetricRegistry(), new TestNamedBlobDb(SystemTime.getInstance(),
+      1000), new AmbryIdSigningService());
   private final GetSignedUrlHandler getSignedUrlHandler;
 
   public GetSignedUrlHandlerTest() {

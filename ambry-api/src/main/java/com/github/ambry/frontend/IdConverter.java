@@ -64,6 +64,14 @@ public interface IdConverter extends Closeable {
   }
 
   /**
+   * Detect if an ID in the request can cause a conflict during conversion.
+   * @param restRequest {@link RestRequest} representing the request.
+   * @param callback the {@link Callback} to invoke once the converted ID is available. Can be null.
+   * @return a {@link Future} that will eventually contain a boolean indicating whether the ID can cause a conflict.
+   */
+  Future<Boolean> detectConflict(RestRequest restRequest, Callback<Boolean> callback);
+
+  /**
    * Converts an ID.
    * @param restRequest {@link RestRequest} representing the request.
    * @param input the ID that needs to be converted.

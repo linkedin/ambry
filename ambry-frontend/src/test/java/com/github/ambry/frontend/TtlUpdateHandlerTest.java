@@ -39,6 +39,7 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -57,6 +58,8 @@ import static org.junit.Assert.*;
  * Tests for {@link TtlUpdateHandler}.
  */
 public class TtlUpdateHandlerTest {
+  private final VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+  private final MetricRegistry metricRegistry = new MetricRegistry();
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final Account REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -81,11 +84,12 @@ public class TtlUpdateHandlerTest {
   private final String blobId;
   private final InMemoryRouter router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP);
   private final FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
-  private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory();
+  private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory(
+      verifiableProperties, metricRegistry, new TestNamedBlobDb(SystemTime.getInstance(), 1000), new AmbryIdSigningService());
 
   public TtlUpdateHandlerTest() throws Exception {
-    FrontendConfig config = new FrontendConfig(new VerifiableProperties(new Properties()));
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), config);
+    FrontendConfig config = new FrontendConfig(verifiableProperties);
+    FrontendMetrics metrics = new FrontendMetrics(metricRegistry, config);
     AccountAndContainerInjector accountAndContainerInjector =
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     ttlUpdateHandler =
