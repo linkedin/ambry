@@ -226,8 +226,7 @@ public class BackupIntegrityMonitor implements Runnable {
        * the replica. Metadata scans, being lighter than full data scans, ensure faster iteration. To ensure timely
        * termination, we must increase replicationFetchSizeInBytes significantly to 128MB or 256MB, from its
        * default of 4MB. This adjustment allows us to advance through the log faster.
-       * TODO: Consider implementing a metric to monitor the time taken to scan a peer replica to prevent potential
-       * TODO: infinite looping.
+       * TODO: Consider implementing a metric to monitor and prevent infinite loop.
        */
       while (!newDiskToken.equals(oldDiskToken)) {
         serverScanner.replicate();
