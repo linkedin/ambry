@@ -224,7 +224,7 @@ public class BackupIntegrityMonitor implements Runnable {
        * the progress of the scan. The loop stops if this token remains unchanged between successive calls to the
        * replicate() function. The essential requirement is that our scanning process must outpace the growth rate of
        * the replica. Metadata scans, being lighter than full data scans, ensure faster iteration. To ensure timely
-       * termination, we've increased `replicationFetchSizeInBytes` significantly, such as to 128MB or 256MB, from its
+       * termination, we've increased replicationFetchSizeInBytes significantly, such as to 128MB or 256MB, from its
        * default of 4MB. This adjustment allows us to advance through the log in larger steps.
        * TODO: Consider implementing a metric to monitor the time taken to scan a peer replica to prevent potential
        * TODO: infinite looping.
