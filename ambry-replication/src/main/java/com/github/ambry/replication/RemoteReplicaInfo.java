@@ -186,7 +186,7 @@ public class RemoteReplicaInfo {
     }
   }
 
-  long getLocalLagFromRemoteInBytes() {
+  public long getLocalLagFromRemoteInBytes() {
     return localLagFromRemoteStore;
   }
 
