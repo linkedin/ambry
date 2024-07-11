@@ -39,6 +39,8 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClient;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -59,6 +61,7 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -126,7 +129,7 @@ public class Http2NetworkClientTest {
   }
 
   @Test
-  public void putGetTest() throws Exception {
+  public void putGetDeleteTest() throws Exception {
     MockClusterMap clusterMap = http2Cluster.getClusterMap();
     DataNodeId dataNodeId = http2Cluster.getGeneralDataNode();
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
@@ -213,6 +216,89 @@ public class Http2NetworkClientTest {
     // verify content
     byte[] actualBlobData = getBlobData(blobAll.getBlobData());
     assertArrayEquals("Content mismatch.", data, actualBlobData);
+    responseInfos.get(0).release();
+
+    // Delete the blob
+    DeleteRequest deleteRequest =
+        new DeleteRequest(2, "http2-clientid", blobId1, SystemTime.getInstance().milliseconds());
+    request =
+        new RequestInfo(dataNodeId.getHostname(), new Port(dataNodeId.getHttp2Port(), PortType.HTTP2), deleteRequest,
+            clusterMap.getReplicaIds(dataNodeId).get(0), null);
+    responseInfos = networkClient.sendAndPoll(Collections.singletonList(request), new HashSet<>(), 300);
+    startTime = SystemTime.getInstance().milliseconds();
+    while (responseInfos.size() == 0) {
+      responseInfos = networkClient.sendAndPoll(Collections.EMPTY_LIST, new HashSet<>(), 300);
+      if (SystemTime.getInstance().milliseconds() - startTime >= 3000) {
+        fail("Network Client no response and timeout.");
+      }
+      Thread.sleep(30);
+    }
+    assertEquals("Should be only one response", 1, responseInfos.size());
+    dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
+    DeleteResponse deleteResponse = DeleteResponse.readFrom(dis);
+    assertEquals("No error expected", ServerErrorCode.No_Error, deleteResponse.getError());
+    responseInfos.get(0).release();
+  }
+
+  /**
+   * Tests writing delete tombstone to server when blob is missing
+   */
+  @Test
+  public void forceDeleteTest() throws IOException, InterruptedException, GeneralSecurityException {
+    MockClusterMap clusterMap = http2Cluster.getClusterMap();
+    DataNodeId dataNodeId = http2Cluster.getGeneralDataNode();
+    SSLFactory sslFactory = new NettySslHttp2Factory(clientSSLConfig);
+    Http2NetworkClient networkClient = new Http2NetworkClient(new Http2ClientMetrics(new MetricRegistry()),
+        new Http2ClientConfig(new VerifiableProperties(new Properties())), sslFactory, eventLoopGroup);
+    BlobProperties properties = new BlobProperties(1024, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), false);
+    List<? extends PartitionId> partitionIds =
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+        properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
+
+    // Delete a non-existent blob without enabling force delete. We should receive blob_not_found error
+    DeleteRequest deleteRequest =
+        new DeleteRequest(2, "http2-clientid", blobId, SystemTime.getInstance().milliseconds());
+    RequestInfo request =
+        new RequestInfo(dataNodeId.getHostname(), new Port(dataNodeId.getHttp2Port(), PortType.HTTP2), deleteRequest,
+            clusterMap.getReplicaIds(dataNodeId).get(0), null);
+    List<ResponseInfo> responseInfos =
+        networkClient.sendAndPoll(Collections.singletonList(request), new HashSet<>(), 300);
+    long startTime = SystemTime.getInstance().milliseconds();
+    while (responseInfos.size() == 0) {
+      responseInfos = networkClient.sendAndPoll(Collections.EMPTY_LIST, new HashSet<>(), 300);
+      if (SystemTime.getInstance().milliseconds() - startTime >= 3000) {
+        fail("Network Client no response and timeout.");
+      }
+      Thread.sleep(30);
+    }
+    NettyByteBufDataInputStream dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
+    DeleteResponse deleteResponse = DeleteResponse.readFrom(dis);
+    assertEquals("Should receive blob_not_found error", ServerErrorCode.Blob_Not_Found, deleteResponse.getError());
+    responseInfos.get(0).release();
+
+    // Delete a non-existent blob with enabling force delete. We should not receive any error
+    // Enable force delete by setting 'isForceDelete' flag to true
+    deleteRequest =
+        new DeleteRequest(2, "http2-clientid", blobId, SystemTime.getInstance().milliseconds(), (short) 3, true);
+    request =
+        new RequestInfo(dataNodeId.getHostname(), new Port(dataNodeId.getHttp2Port(), PortType.HTTP2), deleteRequest,
+            clusterMap.getReplicaIds(dataNodeId).get(0), null);
+    responseInfos = networkClient.sendAndPoll(Collections.singletonList(request), new HashSet<>(), 300);
+    startTime = SystemTime.getInstance().milliseconds();
+    while (responseInfos.size() == 0) {
+      responseInfos = networkClient.sendAndPoll(Collections.EMPTY_LIST, new HashSet<>(), 300);
+      if (SystemTime.getInstance().milliseconds() - startTime >= 3000) {
+        fail("Network Client no response and timeout.");
+      }
+      Thread.sleep(30);
+    }
+    dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
+    deleteResponse = DeleteResponse.readFrom(dis);
+    assertEquals("Should not receive any error", ServerErrorCode.No_Error, deleteResponse.getError());
     responseInfos.get(0).release();
   }
 
