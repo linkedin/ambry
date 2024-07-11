@@ -233,8 +233,8 @@ public class BackupIntegrityMonitor implements Runnable {
         serverScanner.replicate();
         oldDiskToken = newDiskToken;
         newDiskToken = (StoreFindToken) serverReplica.getToken();
-        logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {}, lag = {}",
-            serverScanner.getNumBlobScanned(), serverReplica, serverReplica.getLocalLagFromRemoteInBytes());
+        logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {}",
+            serverScanner.getNumBlobScanned(), serverReplica);
       }
       logger.info("[BackupIntegrityMonitor] Completed scanning {} num_server_blobs from peer server replica {}",
           serverScanner.getNumBlobScanned(), serverReplica);
