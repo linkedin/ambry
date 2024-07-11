@@ -33,7 +33,6 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatMetrics;
-import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -87,7 +86,6 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -112,6 +110,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -435,64 +434,73 @@ public class AmbryRequests implements RequestAPI {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
-    DeleteResponse response = null;
+    DeleteResponse response;
+    MessageInfo info = null;
+    StoreKey convertedStoreKey = null;
+    Store storeToDelete = null;
+    ServerErrorCode serverErrorCode = ServerErrorCode.No_Error;
     try {
-      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(deleteRequest.getBlobId())).get(0);
-      ServerErrorCode error =
+      convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(deleteRequest.getBlobId())).get(0);
+      serverErrorCode =
           validateRequest(deleteRequest.getBlobId().getPartition(), RequestOrResponseType.DeleteRequest, false);
-      if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
-        response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
+      if (serverErrorCode != ServerErrorCode.No_Error) {
+        logger.error("Validating delete request failed with error {} for request {}", serverErrorCode, deleteRequest);
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
-        MessageInfo info = new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
+        info = new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
             convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs()).isDeleted(true)
             .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
             .build();
-        Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
+        storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(Collections.singletonList(info));
-        response =
-            new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
-        if (notification != null) {
-          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
-              BlobReplicaSourceType.PRIMARY);
-        }
       }
     } catch (StoreException e) {
-      boolean logInErrorLevel = false;
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        metrics.idNotFoundError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        metrics.ttlExpiredError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        metrics.idDeletedError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
-        metrics.deleteAuthorizationFailure.inc();
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found && deleteRequest.shouldForceDelete()) {
+        // If frontend forces a delete operation, place a tombstone even though blob is not present
+        serverErrorCode = maybeForceDelete(info, storeToDelete);
       } else {
-        logInErrorLevel = true;
-        metrics.unExpectedStoreDeleteError.inc();
+        serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
-      if (logInErrorLevel) {
-        logger.error("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
-            e);
-      } else {
-        logger.trace("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
-            e);
+      if (serverErrorCode != ServerErrorCode.No_Error) {
+        boolean logInErrorLevel = false;
+        if (serverErrorCode == ServerErrorCode.Blob_Not_Found) {
+          metrics.idNotFoundError.inc();
+        } else if (serverErrorCode == ServerErrorCode.Blob_Expired) {
+          metrics.ttlExpiredError.inc();
+        } else if (serverErrorCode == ServerErrorCode.Blob_Deleted) {
+          metrics.idDeletedError.inc();
+        } else if (serverErrorCode == ServerErrorCode.Blob_Authorization_Failure) {
+          metrics.deleteAuthorizationFailure.inc();
+        } else {
+          logInErrorLevel = true;
+          metrics.unExpectedStoreDeleteError.inc();
+        }
+        if (logInErrorLevel) {
+          logger.error("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
+              e);
+        } else {
+          logger.trace("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
+              e);
+        }
       }
-      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
-          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
       logger.error("Unknown exception for delete request {}", deleteRequest, e);
-      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
-          ServerErrorCode.Unknown_Error);
+      serverErrorCode = ServerErrorCode.Unknown_Error;
       metrics.unExpectedStoreDeleteError.inc();
     } finally {
+      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), serverErrorCode);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", deleteRequest, response, processingTime);
       // Update request metrics.
       RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
       deleteRequest.accept(metricsUpdater);
+      if (serverErrorCode == ServerErrorCode.No_Error) {
+        if (notification != null) {
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
+              Objects.requireNonNull(convertedStoreKey).getID(), BlobReplicaSourceType.PRIMARY);
+        }
+      }
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
@@ -946,6 +954,26 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs, metrics.replicateBlobSendTimeInMs,
             metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  private ServerErrorCode maybeForceDelete(MessageInfo info, Store store) {
+    ServerErrorCode serverErrorCode = ServerErrorCode.No_Error;
+    try {
+      MessageInfo deleteRecord = new MessageInfo.Builder(info).lifeVersion((short) 0).build();
+      store.forceDelete(Collections.singletonList(deleteRecord));
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+        try {
+          // Blob might have been replicated while we were force deleting it. Try normal delete now
+          store.delete(Collections.singletonList(info));
+        } catch (StoreException ex) {
+          serverErrorCode = ErrorMapping.getStoreErrorMapping(ex.getErrorCode());
+        }
+      } else {
+        serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
+      }
+    }
+    return serverErrorCode;
   }
 
   /**

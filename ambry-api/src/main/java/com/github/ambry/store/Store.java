@@ -72,7 +72,9 @@ public interface Store {
   void purge(List<MessageInfo> infosToPurge) throws StoreException;
 
   /**
-   * Force to write delete record for all the messages in the list when the Put record doesn't exist.
+   * Force to write delete record for all the messages in the list when the Put record doesn't exist. Please note that
+   * the message infos of the blobs should have valid life version (i.e not -1). For requests from frontend, set life
+   * version to 0 before calling this method.
    * @param infosToDelete The list of messages that need to be deleted.
    * @throws StoreException
    */
