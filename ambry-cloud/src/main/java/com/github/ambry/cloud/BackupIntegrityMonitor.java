@@ -219,13 +219,15 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Starting scanning peer server replica [{}]", serverReplica);
       StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
       /**
-       * This loop scans the remote peer server replica for metadata of all blobs since the beginning till present time.
-       * The termination condition is that the token from peer, which records the progress of the scan,
-       * remains unchanged between successive calls to replicate(). The fundamental requirement for this
-       * is that we scan __faster__ than the replica grows. Metadata scans are always faster than full data scans.
-       * To further ensure termination, we use a large value for replicationFetchSizeInBytes like 128MB or 256MB,
-       * instead of the default 4MB so that we step faster in larger step sizes through the log.
-       * TODO: There could be a metric to track time to scan a peer replica to ensure we don't loop infinitely.
+       * This loop iterates through the remote peer server replica to retrieve metadata for all blobs from the
+       * beginning to the current time. The termination condition relies on the token from the peer, which indicates
+       * the progress of the scan. The loop stops if this token remains unchanged between successive calls to the
+       * replicate() function. The essential requirement is that our scanning process must outpace the growth rate of
+       * the replica. Metadata scans, being lighter than full data scans, ensure faster iteration. To ensure timely
+       * termination, we've increased `replicationFetchSizeInBytes` significantly, such as to 128MB or 256MB, from its
+       * default of 4MB. This adjustment allows us to advance through the log in larger steps.
+       * TODO: Consider implementing a metric to monitor the time taken to scan a peer replica to prevent potential
+       * TODO: infinite looping.
        */
       while (!newDiskToken.equals(oldDiskToken)) {
         serverScanner.replicate();
