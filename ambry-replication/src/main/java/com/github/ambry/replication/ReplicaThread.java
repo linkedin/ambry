@@ -368,6 +368,15 @@ public class ReplicaThread implements Runnable {
     return replicas;
   }
 
+  /**
+   * Generates group ids for active iteration for replicas, all replicas are mapped to one group id only
+   * Generates group ids for all datanodes for standby no progress groups
+   * All group ids are unique
+   * All replicas are mapped to particular group id and each datanode has one stand by group id
+   * so we make less number of parallel calls to remote hosts
+   * @param groupIdToRemoteReplicaMap {@link Map} this map will be populated with group ids to replicas map
+   * @param remoteHostToStandbyNoProgressReplicaGroupId {@link Map}  this map will be populated with datanode to standby group id
+   */
   protected void generateGroupIdsForReplicas(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap, Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId) {
     Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
 
@@ -391,6 +400,17 @@ public class ReplicaThread implements Runnable {
     }
   }
 
+  /**
+   * Generates groups
+   * @param groupIdToRemoteReplicaMap {@link Map}
+   * @param dataNodeIdStandbyReplicasNoProgressReplicaGroupId {@link Map}
+   * @param inflightRemoteReplicaGroup {@link Map}
+   * @param dataNodeIdToPendingReplicasMarkedForStandByNoProgress {@link Map}
+   * @param remoteReplicaToThrottledTill {@link Map}
+   * @param groupIdIterationCountMap {@link Map}
+   * @param allReplicasCaughtUpEarly {@link MutableBoolean}
+   * @param maxIterationsReached {@link MutableBoolean}
+   */
   protected void generateRemoteReplicaGroups(
       Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
       Map<DataNodeId, Integer> dataNodeIdStandbyReplicasNoProgressReplicaGroupId,
