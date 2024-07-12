@@ -377,7 +377,9 @@ public class ReplicaThread implements Runnable {
    * @param groupIdToRemoteReplicaMap {@link Map} this map will be populated with group ids to replicas map
    * @param remoteHostToStandbyNoProgressReplicaGroupId {@link Map}  this map will be populated with datanode to standby group id
    */
-  protected void generateGroupIdsForReplicas(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap, Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId) {
+  void generateGroupIdsForReplicas(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
+      Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId) {
+
     Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
 
     int groupId = 0;
@@ -411,7 +413,7 @@ public class ReplicaThread implements Runnable {
    * @param allReplicasCaughtUpEarly {@link MutableBoolean}
    * @param maxIterationsReached {@link MutableBoolean}
    */
-  protected void generateRemoteReplicaGroups(
+  void generateRemoteReplicaGroups(
       Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
       Map<DataNodeId, Integer> dataNodeIdStandbyReplicasNoProgressReplicaGroupId,
       Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup,
