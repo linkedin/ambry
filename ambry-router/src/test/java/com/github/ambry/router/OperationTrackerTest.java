@@ -1358,6 +1358,79 @@ public class OperationTrackerTest {
   }
 
   @Test
+  public void originatingDcNotFoundWithTwoBootstrapReplicasForDeleteAndTtlUpdate() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
+    initialize();
+    originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
+
+    mockPartition.setReplicaState(mockPartition.replicaIds.get(3), ReplicaState.BOOTSTRAP);
+    mockPartition.setReplicaState(mockPartition.replicaIds.get(7), ReplicaState.BOOTSTRAP);
+    mockPartition.setReplicaState(mockPartition.replicaIds.get(11), ReplicaState.STANDBY);
+
+    for (RouterOperation operation : EnumSet.of(RouterOperation.DeleteOperation, RouterOperation.TtlUpdateOperation)) {
+      repetitionTracker.clear();
+
+      OperationTracker ot;
+
+      if(operation == RouterOperation.DeleteOperation){
+        ot = getOperationTrackerForDelete(true, 2, 3, operation, true, false);
+      } else{
+        ot = getOperationTrackerForTtl(true, 2, 3, operation, true);
+      }
+
+      sendRequests(ot, 3, false);
+      assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replica = inflightReplicas.poll();
+        // fail first 3 requests to local replicas
+        assertEquals("Should be local DC name", localDcName, replica.getDataNodeId().getDatacenterName());
+        ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+      }
+      assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+      assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+      assertFalse("Operation should not be done", ot.isDone());
+
+      sendRequests(ot, 3, false);
+      assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+      // Send three not found response from originating dc, it should not terminate the operation.
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replica = inflightReplicas.poll();
+        // fail first 3 requests to originating dc replicas
+        ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+        assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
+      }
+      assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+      assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+      assertFalse("Operation should not be done", ot.isDone());
+
+      // fail next 6 requests to non local/originating dc replicas
+      sendRequests(ot, 3, false);
+      assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replica = inflightReplicas.poll();
+        ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+      }
+      assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+      assertFalse("Operation should not have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+      assertFalse("Operation should not be done", ot.isDone());
+
+      sendRequests(ot, 3, false);
+      assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replica = inflightReplicas.poll();
+        ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+      }
+
+      // Operation should be done now and hasFailedOnNotFound() should have returned true.
+      assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+      assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
+      assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
+      assertTrue("Operation should be done", ot.isDone());
+
+    }
+  }
+
+  @Test
   public void originatingDcNotFoundWithMoreThanThreeReplicas() {
     assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER) && replicasStateEnabled);
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));

@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
@@ -348,24 +349,14 @@ public class TtlUpdateManagerTest {
     List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
-    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    // Set 1 replica to disk unavailable originating dc
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
       if (mockServer.getDataCenter().equals(localDc)) {
         serversInLocalDc.add(mockServer);
       }
     });
-    for (String blob : blobIds) {
-      BlobId blobId = RouterUtils.getBlobIdFromString(blob, clusterMap);
-      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
-      ReplicaId boostrapReplica = partitionId.replicaIds.stream()
-          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
-          .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
-          .findFirst()
-          .get();
-      partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
-    }
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
     serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
     serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
     executeOpAndVerify(blobIds, RouterErrorCode.AmbryUnavailable, false, true, true, false, false);

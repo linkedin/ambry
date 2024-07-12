@@ -374,6 +374,7 @@ public class ReplicaThread implements Runnable {
   public void replicate() {
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     long oneRoundStartTimeMs = time.milliseconds();
+    Long fastestReplicaFinishTime = null;
     logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
     List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
     int remoteReplicaGroupId = 0;
@@ -414,10 +415,16 @@ public class ReplicaThread implements Runnable {
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
       // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
       Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+
       while (remoteReplicaGroups.size() > 0 && !remoteReplicaGroups.stream().allMatch(RemoteReplicaGroup::isDone)) {
         if (!running) {
           break;
         }
+
+        if((fastestReplicaFinishTime == null) && remoteReplicaGroups.stream().anyMatch(RemoteReplicaGroup::isDone)){
+          fastestReplicaFinishTime = time.milliseconds();
+        }
+
         List<RequestInfo> requestInfos =
             pollRemoteReplicaGroups(remoteReplicaGroups, correlationIdToRequestInfo, correlationIdToReplicaGroup);
         List<ResponseInfo> responseInfosForTimedOutRequests =
@@ -454,6 +461,10 @@ public class ReplicaThread implements Runnable {
     } finally {
       replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
           replicatingFromRemoteColo, datacenterName);
+      if (fastestReplicaFinishTime != null) {
+        replicationMetrics.updateFastestSlowestReplicaPerCycleTimeDifference(
+            time.milliseconds() - fastestReplicaFinishTime, replicatingFromRemoteColo, datacenterName);
+      }
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
   }
@@ -2187,6 +2198,9 @@ public class ReplicaThread implements Runnable {
      * @param message The message to log out
      */
     private void setException(Exception e, String message) {
+      if (!(e instanceof ReplicationException)) {
+        replicationMetrics.incrementReplicationErrorCount(replicatingFromRemoteColo, datacenterName);
+      }
       if (e instanceof ReplicationException
           && ((ReplicationException) e).getServerErrorCode() == ServerErrorCode.Retry_After_Backoff) {
         replicationMetrics.incrementRetryAfterBackoffErrorCount(replicatingFromRemoteColo, datacenterName);
