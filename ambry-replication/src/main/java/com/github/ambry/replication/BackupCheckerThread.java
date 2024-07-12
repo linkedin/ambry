@@ -230,8 +230,7 @@ public class BackupCheckerThread extends ReplicaThread {
           metadata.getMessageInfoList().stream()
               .map(serverBlob -> {
                 numBlobScanned.incrementAndGet();
-                replica.setReplicatedUntilTime(Math.max(replica.getReplicatedUntilTime(),
-                    serverBlob.getOperationTimeMs()));
+                replica.setReplicatedUntilTime(serverBlob.getOperationTimeMs());
                 return mapBlob(serverBlob);
               })
               .filter(serverBlob -> serverBlob.getStoreKey() != null)
