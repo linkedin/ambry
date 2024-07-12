@@ -54,6 +54,7 @@ public class RecoveryThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
   protected final AmbryCache fileDescriptorCache;
   protected final RecoveryManager recoveryManager;
+
   protected class FileDescriptor implements AmbryCacheEntry {
 
     SeekableByteChannel _seekableByteChannel;
