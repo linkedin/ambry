@@ -1669,7 +1669,7 @@ public class ReplicationTest extends ReplicationTestHelper {
           replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All DELETE_IN_PROGRESS blobs qualified with retention time should be skipped during replication", 0,
           remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }
@@ -1693,7 +1693,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       assertEquals(
           "All DELETE_IN_PROGRESS blobs not qualified with retention time should not be skipped during replication", 2,
           remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }
@@ -1714,7 +1714,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       Set<MessageInfo> remoteMissingStoreKeys =
           replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All INACTIVE blobs should be skipped during replication", 0, remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }
@@ -1736,7 +1736,7 @@ public class ReplicationTest extends ReplicationTestHelper {
           replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All non-deprecated blobs should not be skipped during replication", 2,
           remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }

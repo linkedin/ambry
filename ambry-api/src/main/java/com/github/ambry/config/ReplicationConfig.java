@@ -104,11 +104,11 @@ public class ReplicationConfig {
   /**
    *
    */
-  @Config("replicationIntraMaxIterationsPerReplicationGroupPerCycle")
+  @Config("replication.intra.max.iterations.per.replication.group.per.cycle")
   @Default("1")
   public final int replicationIntraMaxIterationsPerReplicationGroupPerCycle;
 
-  @Config("replicationInterMaxIterationsPerReplicationGroupPerCycle")
+  @Config("replication.inter.max.iterations.per.replication.group.per.cycle")
   @Default("1")
   public final int replicationInterMaxIterationsPerReplicationGroupPerCycle;
 
@@ -355,9 +355,9 @@ public class ReplicationConfig {
         verifiableProperties.getLongInRange("replication.inter.replica.thread.throttle.sleep.duration.ms", 0, 0,
             Long.MAX_VALUE);
     replicationIntraMaxIterationsPerReplicationGroupPerCycle =
-        verifiableProperties.getIntInRange("replication.intra.max.iterations.per.replication.group.per.cycle", 1, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("replication.intra.max.iterations.per.replication.group.per.cycle", 1, 1, 100000);
     replicationInterMaxIterationsPerReplicationGroupPerCycle =
-        verifiableProperties.getIntInRange("replication.inter.max.iterations.per.replication.group.per.cycle", 1, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("replication.inter.max.iterations.per.replication.group.per.cycle", 1, 1, 100000);
     replicationReplicaThreadIdleSleepDurationMs =
         verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationSyncedReplicaBackoffDurationMs =

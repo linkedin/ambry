@@ -124,7 +124,7 @@ public class ReplicaThread implements Runnable {
   private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
-  protected final int maxIterationsPerGroupPerCycle;
+  private int maxIterationsPerGroupPerCycle;
   private volatile boolean shouldTerminateCurrentCycle = false;
 
   // This is used in the test cases
@@ -233,6 +233,18 @@ public class ReplicaThread implements Runnable {
    */
   NetworkClient getNetworkClient() {
     return networkClient;
+  }
+
+  /**
+   * Only used in test.
+   * @param value
+   */
+  protected void shouldTerminateCurrentCycle(boolean value){
+    shouldTerminateCurrentCycle = value;
+  }
+
+  protected void setMaxIterationsPerGroupPerCycle(int value){
+    maxIterationsPerGroupPerCycle = value;
   }
 
   /**
@@ -356,7 +368,7 @@ public class ReplicaThread implements Runnable {
     return replicas;
   }
 
-  private void generateGroupIdsForReplicas(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap, Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId) {
+  protected void generateGroupIdsForReplicas(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap, Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId) {
     Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
 
     int groupId = 0;
@@ -379,7 +391,7 @@ public class ReplicaThread implements Runnable {
     }
   }
 
-  private void generateRemoteReplicaGroups(
+  protected void generateRemoteReplicaGroups(
       Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
       Map<DataNodeId, Integer> dataNodeIdStandbyReplicasNoProgressReplicaGroupId,
       Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup,
@@ -403,6 +415,7 @@ public class ReplicaThread implements Runnable {
         remoteReplicaGroup.remoteReplicaInfos.forEach(remoteReplicaInfo -> {
           remoteReplicaToThrottledTill.put(remoteReplicaInfo, throttledTill);
         });
+        storeKeyConverter.tryDropCache(remoteReplicaGroup.getStoreKeysConversionLog());
         inflightRemoteReplicaGroupIterator.remove();
       }
     }
@@ -524,9 +537,11 @@ public class ReplicaThread implements Runnable {
    *
    */
   public void replicate() {
+    long oneRoundStartTimeMs =  time.milliseconds();
+
     shouldTerminateCurrentCycle = false;
 
-    long oneRoundStartTimeMs =  time.milliseconds();
+    storeKeyConverter.dropCache();
 
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
@@ -602,6 +617,14 @@ public class ReplicaThread implements Runnable {
 
     int allProcessedReplicasCount = groupIdToRemoteReplicaMap.values().stream().mapToInt(List::size).sum();
     maybeSleepAfterReplication(allReplicasCaughtUpEarly.isTrue(), allProcessedReplicasCount);
+  }
+
+
+  Map<StoreKey, StoreKey> convertStoreKeys(Collection<StoreKey> storeKeysToConvert, List<StoreKey> storeKeysConversionLog)
+      throws Exception {
+    Map<StoreKey, StoreKey> conversionMap =  this.storeKeyConverter.convert(storeKeysToConvert);
+    storeKeysConversionLog.addAll( new ArrayList<>(conversionMap.keySet()));
+    return conversionMap;
   }
 
   void setExchangeMetadataListener(ExchangeMetadataListener exchangeMetadataListener) {
@@ -823,14 +846,15 @@ public class ReplicaThread implements Runnable {
    * @param response The {@link ReplicaMetadataResponse}.
    * @param replicasToReplicatePerNode
    * @param remoteNode The remote {@link DataNodeId}.
+   * @param storeKeysConversionLog list to store storeKeys that were converted
    * @return A list of {@link ExchangeMetadataResponse}.
    * @throws IOException
    */
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode) throws Exception {
+      List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode, List<StoreKey> storeKeysConversionLog) throws Exception {
     long startTimeInMs = time.milliseconds();
     List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<>();
-    Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response);
+    Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response, storeKeysConversionLog);
 
     for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
@@ -1243,7 +1267,8 @@ public class ReplicaThread implements Runnable {
    * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
-  Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response) throws Exception {
+  Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response,
+      List<StoreKey> storeKeysConversionLog) throws Exception {
     List<StoreKey> storeKeysToConvert = new ArrayList<>();
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
       if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
@@ -1253,7 +1278,7 @@ public class ReplicaThread implements Runnable {
         }
       }
     }
-    return storeKeyConverter.convert(storeKeysToConvert);
+    return convertStoreKeys(storeKeysToConvert, storeKeysConversionLog);
   }
 
   /**
@@ -2083,7 +2108,7 @@ public class ReplicaThread implements Runnable {
     private long getRequestStartTimeMs;
     private long exchangeMetadataStartTimeInMs;
     private long fixMissingStoreKeysStartTimeInMs;
-    private final Set<StoreKey> storeKeysUsed = new HashSet<>();
+    private final List<StoreKey> storeKeysConversionLog;
 
     /**
      * Constructor of {@link RemoteReplicaGroup}.
@@ -2100,6 +2125,7 @@ public class ReplicaThread implements Runnable {
       this.remoteDataNode = dataNodeId;
       this.isNonProgressStandbyReplicaGroup = isNonProgressStandbyReplicaGroup;
       this.id = id;
+      this.storeKeysConversionLog =  new ArrayList<>();
       if (isNonProgressStandbyReplicaGroup) {
         exchangeMetadataResponseList = remoteReplicaInfos.stream()
             .map(remoteReplicaInfo -> new ExchangeMetadataResponse(remoteReplicaInfo.getExchangeMetadataResponse()))
@@ -2111,7 +2137,7 @@ public class ReplicaThread implements Runnable {
         remoteReplicaInfosToSend = this.remoteReplicaInfos;
         exchangeMetadataResponseListToProcess = exchangeMetadataResponseList;
         try {
-          storeKeyConverter.convert(storeKeysToConvert);
+          convertStoreKeys(storeKeysToConvert, storeKeysConversionLog);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
         } catch (Exception e) {
           setException(e, "Failed to convert storeKeys");
@@ -2142,6 +2168,14 @@ public class ReplicaThread implements Runnable {
 
     public int getId() {
       return id;
+    }
+
+    public List<StoreKey> getStoreKeysConversionLog(){
+      return storeKeysConversionLog;
+    }
+
+    public boolean isNonProgressStandbyReplicaGroup(){
+      return isNonProgressStandbyReplicaGroup;
     }
 
     public List<ExchangeMetadataResponse> getExchangeMetadataResponseList() {
@@ -2253,7 +2287,7 @@ public class ReplicaThread implements Runnable {
                 response.getError());
           }
           exchangeMetadataResponseList =
-              ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode);
+              ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode, storeKeysConversionLog);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
           logger.trace(
               "Remote node: {} Thread name: {} RemoteReplicaGroup {} Handled ReplicaMetadataResponse for correlation id {}, set state to {}",

@@ -23,20 +23,6 @@ import java.util.Map;
  * Typical usage will be to map b/w different formats of keys that refer to the same blob. The input/output
  * formats are expected to be set when the converter is constructed.
  */
-// limit -100, time - 5 minutes
-  /*
-   it1 - list keys
-   it2 - list keys
-
-   p1 - h1, p1 - h2
-   p1
-
-
-
-  convert()
-  removeKeys (plain delete)
-  getKeys() -
-  * */
 public interface StoreKeyConverter {
 
   /**
