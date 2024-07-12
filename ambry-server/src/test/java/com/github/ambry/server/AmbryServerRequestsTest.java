@@ -958,6 +958,59 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   }
 
   /**
+   *  Tests that delete operation on a non-existent blob fails with Blob_Not_Found error when 'isForceDelete' flag is
+   *  disabled in 'DeleteRequest'
+   */
+  @Test
+  public void forceDeleteDisabledTest() throws StoreException, IOException, InterruptedException {
+    assumeFalse(this.validateRequestOnStoreState);
+    MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
+    RequestOrResponse request =
+        new DeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds(), false);
+    BlobStore mockStore = Mockito.mock(BlobStore.class);
+    storageManager.overrideStoreToReturn = mockStore;
+    doThrow(new StoreException("Blob is not found", StoreErrorCodes.ID_Not_Found)).when(mockStore).delete(anyList());
+    // Operation should fail with Blob_Not_Found error code
+    sendRequestGetResponse(request, ServerErrorCode.Blob_Not_Found);
+    // Verify forceDelete() is not called
+    Mockito.verify(mockStore, never()).forceDelete(anyList());
+    storageManager.overrideStoreToReturn = null;
+  }
+
+  /**
+   *  Tests that delete operation on a non-existent blob succeeds when 'isForceDelete' flag is
+   *  enabled in 'DeleteRequest'
+   */
+  @Test
+  public void forceDeleteEnabledTest() throws StoreException, IOException, InterruptedException {
+    assumeFalse(this.validateRequestOnStoreState);
+    MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
+    RequestOrResponse request =
+        new DeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds(), (short) 3, true);
+    BlobStore mockStore = Mockito.mock(BlobStore.class);
+    storageManager.overrideStoreToReturn = mockStore;
+    mockStore.setCurrentState(ReplicaState.STANDBY);
+    doThrow(new StoreException("Blob is not found", StoreErrorCodes.ID_Not_Found)).when(mockStore).delete(anyList());
+    doNothing().when(mockStore).forceDelete(anyList());
+    // Operation should succeed
+    sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    // Verify delete and forceDelete are called
+    Mockito.verify(mockStore, atLeastOnce()).delete(anyList());
+    Mockito.verify(mockStore, atLeastOnce()).forceDelete(anyList());
+    storageManager.overrideStoreToReturn = null;
+  }
+
+  /**
    * Tests success case for ReplicateBlobRequest.
    * Should replicate the PutBlob from the remote host.
    */
@@ -1467,7 +1520,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     crcbuf.release();
     verifyCRCInMetadata(id, BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString(),
         datanode, new Long(crc));
-    
+
     // Delete blob and get metadata again
     RequestOrResponse del_request = new DeleteRequest(TestUtils.RANDOM.nextInt(), clientId, blobId,
         SystemTime.getInstance().milliseconds());

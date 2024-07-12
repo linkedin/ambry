@@ -558,10 +558,9 @@ public class ReplicaThread implements Runnable {
    */
   public void replicate() {
     long oneRoundStartTimeMs =  time.milliseconds();
-
     shouldTerminateCurrentCycle = false;
 
-    storeKeyConverter.dropCache();
+    logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
 
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
@@ -570,6 +569,7 @@ public class ReplicaThread implements Runnable {
     Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap = new HashMap<>();
 
     try {
+      storeKeyConverter.dropCache();
       Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId = new HashMap<>();
 
       generateGroupIdsForReplicas(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId);
@@ -2390,6 +2390,9 @@ public class ReplicaThread implements Runnable {
      * @param message The message to log out
      */
     private void setException(Exception e, String message) {
+      if (!(e instanceof ReplicationException)) {
+        replicationMetrics.incrementReplicationErrorCount(replicatingFromRemoteColo, datacenterName);
+      }
       if (e instanceof ReplicationException
           && ((ReplicationException) e).getServerErrorCode() == ServerErrorCode.Retry_After_Backoff) {
         replicationMetrics.incrementRetryAfterBackoffErrorCount(replicatingFromRemoteColo, datacenterName);
