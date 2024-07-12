@@ -197,6 +197,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // The thread that creates this client object is not the thread that uploads blobs to Azure,
       // So we need this fn to create thread-specific caches
       String cacheName = "thread-local-mdcache-" + Thread.currentThread().getName();
+      // Enable cache ifd size > 0, else disable
       threadLocalMdCache.set(new AmbryCache(cacheName, cloudConfig.recentBlobCacheLimit > 0,
           cloudConfig.recentBlobCacheLimit, metrics));
       logger.info("Created AmbryCache {}", threadLocalMdCache.get().toString());
