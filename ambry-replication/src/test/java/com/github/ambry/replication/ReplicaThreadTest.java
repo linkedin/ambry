@@ -372,6 +372,11 @@ public class ReplicaThreadTest extends ReplicationTestHelper {
     System.out.println("done!");
   }
 
+  /**
+   * Tests for whether standby replica group logic is working as expected.
+   * Tested on crossColo replica thread
+   * @throws Exception
+   */
   @Test
   public void testRemoteReplicaStandByGroupGenerationCrossColo() throws Exception {
     ReplicaThread replicaThread = crossColoReplicaThread;
