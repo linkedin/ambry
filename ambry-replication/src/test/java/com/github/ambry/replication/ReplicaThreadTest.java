@@ -410,7 +410,7 @@ public class ReplicaThreadTest extends ReplicationTestHelper {
       dataNodeIdToPendingReplicasMarkedForStandByNoProgress.get(dataNodeId).add(remoteReplica);
     }));
 
-    //after this call, standby replicas
+    //after this call, standby replicas will be added to inflight groups
     replicaThread.generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
         inflightRemoteReplicaGroups, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
         remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
@@ -423,6 +423,32 @@ public class ReplicaThreadTest extends ReplicationTestHelper {
       assertEquals("datanode must be correct", dataNodeId, inflightRemoteReplicaGroups.get(standByGroupId).getRemoteDataNode());
     });
 
-    System.out.println("Done");
+    //mark all non standby groups as done
+    inflightRemoteReplicaGroups.forEach((groupId, remoteReplicaGroup) -> {
+      if(!remoteReplicaGroup.isNonProgressStandbyReplicaGroup())
+        remoteReplicaGroup.setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
+    });
+
+    replicaThread.generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
+        inflightRemoteReplicaGroups, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
+        remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
+
+    //move time forward till throttling limit
+    time.setCurrentMilliseconds(
+        time.milliseconds() + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs + 1);
+
+    //after this call new remote replica groups will be created and added to inflight groups
+    replicaThread.generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
+        inflightRemoteReplicaGroups, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
+        remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
+
+
+    //verify if standby replicas are not added to a group again, i.e all replicas should be unique
+    Set<RemoteReplicaInfo> remoteReplicaInfoSet = new HashSet<>();
+    inflightRemoteReplicaGroups.forEach((groupId, remoteReplicaGroup) -> {
+      remoteReplicaGroup.getRemoteReplicaInfos().forEach(remoteReplicaInfo -> {
+        assertFalse("Remote replicas should not be repeated", remoteReplicaInfoSet.contains(remoteReplicaInfo));
+      });
+    });
   }
 }
