@@ -403,15 +403,18 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Generates groups
-   * @param groupIdToRemoteReplicaMap {@link Map}
-   * @param dataNodeIdStandbyReplicasNoProgressReplicaGroupId {@link Map}
-   * @param inflightRemoteReplicaGroup {@link Map}
-   * @param dataNodeIdToPendingReplicasMarkedForStandByNoProgress {@link Map}
-   * @param remoteReplicaToThrottledTill {@link Map}
-   * @param groupIdIterationCountMap {@link Map}
-   * @param allReplicasCaughtUpEarly {@link MutableBoolean}
-   * @param maxIterationsReached {@link MutableBoolean}
+   * Generates groups and standby groups and adds these to inflightRemoteReplicaGroup. Removes groups that are done from the
+   * inflightRemoteReplicaGroup. It will generate new groups until shouldTerminateCurrentCycle is false running is true and
+   * maxIterationsPerGroupPerCycle limit is not reached by any iteration count of any group. Replicas will only be added
+   * in the group in groupIdToRemoteReplicaMap and for stand by group in dataNodeIdStandbyReplicasNoProgressReplicaGroupId.
+   * @param groupIdToRemoteReplicaMap {@link Map} mapping of group id to remote replicas
+   * @param dataNodeIdStandbyReplicasNoProgressReplicaGroupId {@link Map} mapping of data node id to standby group id
+   * @param inflightRemoteReplicaGroup {@link Map} map of inflight group id to remote replica groups
+   * @param dataNodeIdToPendingReplicasMarkedForStandByNoProgress {@link Map} map of data node id to standby replicas to pick up
+   * @param remoteReplicaToThrottledTill {@link Map} map of remote replica to time until which it is throttled
+   * @param groupIdIterationCountMap {@link Map} map of group id to number of iterations
+   * @param allReplicasCaughtUpEarly {@link MutableBoolean} stores whether all replicas have caught up early
+   * @param maxIterationsReached {@link MutableBoolean} stores whether max iterations reached
    */
   void generateRemoteReplicaGroups(
       Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
@@ -537,6 +540,9 @@ public class ReplicaThread implements Runnable {
 
   /**
    * Do replication for replicas grouped by {@link DataNodeId}
+   * We will keep trying to generate groups until we do not get any groups by calling generateRemoteReplicaGroups.
+   * We will generate requests and then process responses when received for these groups.
+   *
    * A replication cycle between two replicas involves the following steps:
    *    1. Exchange metadata : fetch the metadata of blobs added to remote replica since the last synchronization point
    *    and filter the ones missing in local store.
@@ -641,7 +647,14 @@ public class ReplicaThread implements Runnable {
     maybeSleepAfterReplication(allReplicasCaughtUpEarly.isTrue(), allProcessedReplicasCount);
   }
 
-
+  /**
+   * We should call this method to convert store keys, This will convert the keys and add the keys which were
+   * converted to the list.
+   * @param storeKeysToConvert store keys to convert
+   * @param storeKeysConversionLog list to store which keys were converted
+   * @return Map
+   * @throws Exception
+   */
   Map<StoreKey, StoreKey> convertStoreKeys(Collection<StoreKey> storeKeysToConvert, List<StoreKey> storeKeysConversionLog)
       throws Exception {
     Map<StoreKey, StoreKey> conversionMap =  this.storeKeyConverter.convert(storeKeysToConvert);
@@ -799,6 +812,7 @@ public class ReplicaThread implements Runnable {
    * Maybe sleep for a while after one round of replication. If all the replicas are caught up and the configuration
    * shows we should sleep, then sleep for a while so we can save some CPU.
    * @param allCaughtUp True when all replicas are caught up.
+   * @param throttledReplicaCount total replicas which are getting throttled
    */
   private void maybeSleepAfterReplication(boolean allCaughtUp, int throttledReplicaCount) {
     long sleepDurationMs = 0;
