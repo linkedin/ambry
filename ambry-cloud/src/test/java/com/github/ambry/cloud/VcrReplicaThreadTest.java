@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzureMetrics;
@@ -47,7 +46,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
