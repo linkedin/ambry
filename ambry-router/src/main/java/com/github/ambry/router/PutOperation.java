@@ -1876,6 +1876,13 @@ class PutOperation {
           logger.trace("{}: Cross colo request successful for remote replica in {} ", loggingContext,
               requestInfo.getReplicaId().getDataNodeId().getDatacenterName());
           routerMetrics.crossColoSuccessCount.inc();
+
+          // We use a separate metric to the latency of remote vs local writes (such requests are routed through
+          // ParanoidDurabilityOperationTracker).
+          routerMetrics.routerPutRequestRemoteLatencyMs.update(requestLatencyMs);
+        }
+        else {
+          routerMetrics.routerPutRequestLocalLatencyMs.update(requestLatencyMs);
         }
       } else {
         onErrorResponse(requestInfo.getReplicaId(), putRequestFinalState);
