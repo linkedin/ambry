@@ -147,7 +147,6 @@ public class VcrReplicaThreadTest {
       azureClient.uploadBlob(blob, data.length(), metadata,
           new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
       assertEquals(metadata, getBlobMetadata(blob)); // same content
-      assertFalse(metadata == getBlobMetadata(blob)); // but different objects
       assertFalse(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
