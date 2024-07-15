@@ -82,7 +82,6 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
   public static final String REPLICA_STATUS_FILE = "server_replica_token";
   protected AtomicInteger numBlobScanned;
-  protected long partitionBackedUpUntil = -1;
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -113,13 +112,12 @@ public class BackupCheckerThread extends ReplicaThread {
     return this.fileManager;
   }
 
-  public void setAzureBlobInfo(HashMap<String, MessageInfo> azureBlobMap, long partitionBackedUpUntil) {
+  public void setAzureBlobInfo(HashMap<String, MessageInfo> azureBlobMap) {
     if (azureBlobMap == null) {
       logger.error("Azure blob map cannot be null");
       return;
     }
     this.azureBlobMap = azureBlobMap;
-    this.partitionBackedUpUntil = partitionBackedUpUntil;
   }
 
   /**
@@ -233,8 +231,7 @@ public class BackupCheckerThread extends ReplicaThread {
           metadata.getMessageInfoList().stream()
               .map(serverBlob -> {
                 numBlobScanned.incrementAndGet();
-                replica.setReplicatedUntilTime(Math.max(replica.getReplicatedUntilTime(),
-                    serverBlob.getOperationTimeMs()));
+                replica.setReplicatedUntilTime(serverBlob.getOperationTimeMs());
                 return mapBlob(serverBlob, storeKeysConversionLog);
               })
               .filter(serverBlob -> serverBlob.getStoreKey() != null)
@@ -268,12 +265,6 @@ public class BackupCheckerThread extends ReplicaThread {
                 // 2. cloud compaction executed before server compaction
                 // 3. replication ignored such blobs and did not upload them to azure
                 return !((serverBlob.isDeleted() || serverBlob.isExpired()) && status.contains(BLOB_ABSENT_IN_AZURE));
-              })
-              .filter(tuple -> {
-                MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
-                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
-                // ignore blobs that are yet to be backed up
-                return !(serverBlob.getOperationTimeMs() > partitionBackedUpUntil && status.contains(BLOB_ABSENT_IN_AZURE));
               })
               .forEach(tuple -> {
                 MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
