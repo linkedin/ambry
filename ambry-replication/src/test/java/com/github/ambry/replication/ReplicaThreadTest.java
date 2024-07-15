@@ -448,6 +448,7 @@ public class ReplicaThreadTest extends ReplicationTestHelper {
     inflightRemoteReplicaGroups.forEach((groupId, remoteReplicaGroup) -> {
       remoteReplicaGroup.getRemoteReplicaInfos().forEach(remoteReplicaInfo -> {
         assertFalse("Remote replicas should not be repeated", remoteReplicaInfoSet.contains(remoteReplicaInfo));
+        remoteReplicaInfoSet.add(remoteReplicaInfo);
       });
     });
   }
