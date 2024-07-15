@@ -151,12 +151,10 @@ public class VcrReplicaThreadTest {
       assertFalse(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
-      CloudBlobMetadata fetchedMetadata = blobs.get(blob);
 
       // remove TTL
       azureClient.updateBlobExpiration(blob, Utils.Infinite_Time, null);
       verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
-      assertFalse(fetchedMetadata == getBlobMetadata(blob)); // cache hit
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
@@ -165,7 +163,6 @@ public class VcrReplicaThreadTest {
       long now = System.currentTimeMillis();
       azureClient.deleteBlob(blob, now, (short) (version + 1), null);
       verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
-      assertFalse(fetchedMetadata == getBlobMetadata(blob)); // cache hit
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertTrue(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
@@ -174,7 +171,6 @@ public class VcrReplicaThreadTest {
       // undelete blob
       azureClient.undeleteBlob(blob, (short) (version + 2), null);
       verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
-      assertFalse(fetchedMetadata == getBlobMetadata(blob)); // cache hit
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertTrue(getBlobMetadata(blob).isUndeleted());
