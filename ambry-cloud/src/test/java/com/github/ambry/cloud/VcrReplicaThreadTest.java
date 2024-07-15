@@ -47,6 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -61,6 +62,7 @@ public class VcrReplicaThreadTest {
   private final MetricRegistry metrics;
   private final AzureMetrics azureMetrics;
   private final AzuriteUtils azuriteUtils;
+  private final AzureCloudConfig azureCloudConfig;
   protected AzureCloudDestinationSync azureClient;
   protected MockClusterMap clustermap;
   public static final int NUM_NODES = 5; // Also num_replicas
@@ -75,6 +77,7 @@ public class VcrReplicaThreadTest {
     azureMetrics = new AzureMetrics(metrics);
     azureClient = azuriteUtils.getAzuriteClient(props, metrics, clusterMap, null);
     properties = new VerifiableProperties(props);
+    azureCloudConfig = new AzureCloudConfig(properties);
     // Create test cluster MAP
     clustermap = new MockClusterMap(false, false, NUM_NODES,
         1, NUM_PARTITIONS, true, false,
@@ -117,6 +120,17 @@ public class VcrReplicaThreadTest {
     return md.get();
   }
 
+  boolean verifyConstantMetadataFields(CloudBlobMetadata original, CloudBlobMetadata received) {
+    assertEquals(original.getId(), received.getId());
+    assertEquals(original.getPartitionId(), received.getPartitionId());
+    assertEquals(original.getAccountId(), received.getAccountId());
+    assertEquals(original.getContainerId(), received.getContainerId());
+    assertEquals(original.getSize(), received.getSize());
+    assertEquals(original.getCreationTime(), received.getCreationTime());
+    assertEquals(original.getNameSchemeVersion(), azureCloudConfig.azureNameSchemeVersion);
+    return true;
+  }
+
   /**
    * Tests thread-local metadata cache by fetching blob metadata from azure
    * @throws CloudStorageException
@@ -129,18 +143,20 @@ public class VcrReplicaThreadTest {
     for (BlobId blob : blobs.keySet()) {
       CloudBlobMetadata metadata = blobs.get(blob);
       short version = metadata.getLifeVersion();
-
       // put blob
       azureClient.uploadBlob(blob, data.length(), metadata,
           new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
-      assertEquals(metadata, getBlobMetadata(blob));
+      assertEquals(metadata, getBlobMetadata(blob)); // same content
+      assertFalse(metadata == getBlobMetadata(blob)); // but different objects
       assertFalse(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
+      CloudBlobMetadata fetchedMetadata = blobs.get(blob);
 
-      // remove blob TTL
+      // remove TTL
       azureClient.updateBlobExpiration(blob, Utils.Infinite_Time, null);
-      assertNotEquals(metadata, getBlobMetadata(blob));
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      assertFalse(fetchedMetadata == getBlobMetadata(blob)); // cache hit
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
@@ -148,7 +164,8 @@ public class VcrReplicaThreadTest {
       // delete blob
       long now = System.currentTimeMillis();
       azureClient.deleteBlob(blob, now, (short) (version + 1), null);
-      assertNotEquals(metadata, getBlobMetadata(blob));
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      assertFalse(fetchedMetadata == getBlobMetadata(blob)); // cache hit
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertTrue(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
@@ -156,11 +173,13 @@ public class VcrReplicaThreadTest {
 
       // undelete blob
       azureClient.undeleteBlob(blob, (short) (version + 2), null);
-      assertNotEquals(metadata, getBlobMetadata(blob));
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      assertFalse(fetchedMetadata == getBlobMetadata(blob)); // cache hit
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertTrue(getBlobMetadata(blob).isUndeleted());
 
+      // fetch metadata per blob _exactly_ once, all other calls should hit cache
       assertEquals(iter+1, azureMetrics.blobGetPropertiesSuccessRate.getCount());
       iter += 1;
     }
