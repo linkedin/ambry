@@ -451,14 +451,18 @@ public class AzureCloudConfig {
 
   public static final String AZURE_RETRY_DELAY_MS = "azure.retry.delay.ms";
   public static final Long DEFAULT_AZURE_RETRY_DELAY_MS = Long.valueOf(4); // Defaults from RequestRetryOptions
-  @Config(AZURE_RETRY_POLICY)
+  @Config(AZURE_RETRY_DELAY_MS)
   public final Long azureRetryDelayInMs;
 
   public static final String AZURE_RETRY_DELAY_MAX_MS = "azure.retry.delay.max.ms";
   public static final Long DEFAULT_AZURE_RETRY_DELAY_MAX_MS = Long.valueOf(120); // Defaults from RequestRetryOptions
-  @Config(AZURE_RETRY_POLICY)
+  @Config(AZURE_RETRY_DELAY_MAX_MS)
   public final Long azureMaxRetryDelayInMs;
 
+  public static final String AZURE_MAX_TRIES = "azure.max.tries";
+  public static final int DEFAULT_AZURE_MAX_TRIES = 4; // Defaults from RequestRetryOptions
+  @Config(AZURE_MAX_TRIES)
+  public final int azureMaxTries;
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     // 5000 is the default size of Azure blob storage
     azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000);
@@ -473,12 +477,10 @@ public class AzureCloudConfig {
     cosmosKey = verifiableProperties.getString(COSMOS_KEY, "");
     cosmosKeySecretName = verifiableProperties.getString(COSMOS_KEY_SECRET_NAME, "");
     cosmosVaultUrl = verifiableProperties.getString(COSMOS_VAULT_URL, "");
-    azureRetryPolicy =
-        verifiableProperties.getEnum(AZURE_RETRY_POLICY, RetryPolicyType.class, DEFAULT_AZURE_RETRY_POLICY);
-    azureRetryDelayInMs =
-        verifiableProperties.getLong(AZURE_RETRY_DELAY_MS, DEFAULT_AZURE_RETRY_DELAY_MS);
-    azureMaxRetryDelayInMs =
-        verifiableProperties.getLong(AZURE_RETRY_DELAY_MAX_MS, DEFAULT_AZURE_RETRY_DELAY_MAX_MS);
+    azureMaxRetryDelayInMs = verifiableProperties.getLong(AZURE_RETRY_DELAY_MAX_MS, DEFAULT_AZURE_RETRY_DELAY_MAX_MS);
+    azureRetryPolicy = verifiableProperties.getEnum(AZURE_RETRY_POLICY, RetryPolicyType.class, DEFAULT_AZURE_RETRY_POLICY);
+    azureRetryDelayInMs = verifiableProperties.getLong(AZURE_RETRY_DELAY_MS, DEFAULT_AZURE_RETRY_DELAY_MS);
+    azureMaxTries = verifiableProperties.getInt(AZURE_MAX_TRIES, DEFAULT_AZURE_MAX_TRIES);
     azureStorageAccountInfo = parseStorageAccountInfo(verifiableProperties.getString(AZURE_STORAGE_ACCOUNT_INFO, ""));
     azureStorageAuthority = verifiableProperties.getString(AZURE_STORAGE_AUTHORITY, "");
     azureStorageClientId = verifiableProperties.getString(AZURE_STORAGE_CLIENTID, "");

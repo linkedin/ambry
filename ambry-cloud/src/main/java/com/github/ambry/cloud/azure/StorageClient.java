@@ -441,7 +441,7 @@ public abstract class StorageClient implements AzureStorageClient {
       Integer tryTimeoutInSeconds =
           Math.toIntExact(Math.max(1, TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout)));
       RequestRetryOptions retryOptions =
-          new RequestRetryOptions(azureCloudConfig.azureRetryPolicy, null, tryTimeoutInSeconds,
+          new RequestRetryOptions(azureCloudConfig.azureRetryPolicy, azureCloudConfig.azureMaxTries, tryTimeoutInSeconds,
               azureCloudConfig.azureRetryDelayInMs, azureCloudConfig.azureMaxRetryDelayInMs, null);
       return buildBlobServiceSyncClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
     } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
