@@ -101,7 +101,7 @@ public class ReplicationTestHelper {
   protected final AccountService accountService;
 
   public ReplicationTestHelper(short requestVersion, short responseVersion, boolean enableAcyclicReplication) {
-    System.out.println("The request version: " + requestVersion + " ResponseVersion: " + responseVersion);
+    System.out.println("The request version: " + requestVersion + " ResponseVersion: " + responseVersion + " enableAcyclicReplication: " + enableAcyclicReplication);
     List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);

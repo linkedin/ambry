@@ -1959,6 +1959,83 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Testing for put blobs in case of multiple iterations per replication cycle
+   * @throws Exception
+   */
+  @Test
+  public void testAcyclicPutReplication() throws Exception{
+    if(!replicationConfig.replicationEnableAcyclicReplication)
+      return;
+
+    properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
+    properties.setProperty("replication.max.partition.count.per.request", Integer.toString(3));
+    verifiableProperties = new VerifiableProperties(properties);
+    replicationConfig = new ReplicationConfig(verifiableProperties);
+
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    storeKeyConverter.setConversionMap(conversionMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+
+    List<MockHost> remoteHostOnly = Collections.singletonList(remoteHost);
+    List<MockHost> localHostOnly = Collections.singletonList(localHost);
+    List<MockHost> allHosts = Arrays.asList(localHost, remoteHost);
+
+    for (PartitionId pid : partitionIds) {
+      // add 3 put messages to both hosts (also add to expectedLocal)
+      List<StoreKey> ids = addPutMessagesToReplicasOfPartition(pid, allHosts, 3);
+
+      ids.addAll(addPutMessagesToReplicasOfPartition(pid, remoteHostOnly, 3));
+      ids.addAll(addPutMessagesToReplicasOfPartition(pid, localHostOnly, 2));
+    }
+
+    // After the for loop above, we have records in hosts just like below
+    // L|id0|id1|id2|   |   |   |id6|id7|
+    // R|id0|id1|id2|id3|id4|id5|   |   |
+
+
+    //in every metadata request we will only fetch 1 blob id
+    int batchSize = 1;
+
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null, null,
+            remoteHost);
+
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    Map<PartitionId, List<ByteBuffer>> missingBuffers =
+        remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    // We can see from the table in the comments above, Local has 3 records less than remote host.
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+      assertEquals("Missing buffers count mismatch", 3, entry.getValue().size());
+    }
+
+    //after 6th iteration all partitions should be caught up.
+    replicaThread.setMaxIterationsPerGroupPerCycle(6);
+
+    replicaThread.replicate();
+
+    Map<PartitionId, List<ByteBuffer>> missingBuffersAfterReplication =
+        remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    //all partitions should be caught up now
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffersAfterReplication.entrySet()) {
+      assertEquals("Missing buffers count mismatch", 0, entry.getValue().size());
+    }
+  }
+
+  /**
    * Test the case where a blob gets deleted after a replication metadata exchange completes and identifies the blob as
    * a candidate. The subsequent GetRequest should succeed as Replication makes a Include_All call and succeed without
    * exceptions. The blob should not be put locally.
