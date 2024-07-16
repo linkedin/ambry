@@ -74,8 +74,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
   /**
    * Constructor to set the configs
    */
-  public LeaderBasedReplicationTest(short requestVersion, short responseVersion) throws IOException {
-    super(requestVersion, responseVersion);
+  public LeaderBasedReplicationTest(short requestVersion, short responseVersion, boolean enableAcyclicReplication) throws IOException {
+    super(requestVersion, responseVersion, enableAcyclicReplication);
     setUp();
   }
 
@@ -89,8 +89,10 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
   public static List<Object[]> data() {
     //@formatter:off
     return Arrays.asList(new Object[][]{
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5},
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, true},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, true},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, false},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, false}
     });
     //@formatter:on
   }

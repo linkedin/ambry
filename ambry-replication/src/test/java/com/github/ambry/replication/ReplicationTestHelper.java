@@ -100,7 +100,7 @@ public class ReplicationTestHelper {
   protected ReplicationConfig replicationConfig;
   protected final AccountService accountService;
 
-  public ReplicationTestHelper(short requestVersion, short responseVersion) {
+  public ReplicationTestHelper(short requestVersion, short responseVersion, boolean enableAcyclicReplication) {
     System.out.println("The request version: " + requestVersion + " ResponseVersion: " + responseVersion);
     List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
@@ -119,6 +119,7 @@ public class ReplicationTestHelper {
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
     properties.setProperty("replication.track.local.from.remote.per.partition.lag", "true");
+    properties.setProperty("replication.enable.acyclic.replication", String.valueOf(enableAcyclicReplication));
     properties.setProperty("replication.max.partition.count.per.request", Integer.toString(0));
     properties.setProperty("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     properties.setProperty(ReplicationConfig.BACKUP_CHECKER_FILE_MANAGER_TYPE,

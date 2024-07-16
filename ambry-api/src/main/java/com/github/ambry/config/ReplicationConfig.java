@@ -101,6 +101,9 @@ public class ReplicationConfig {
   @Default("0")
   public final long replicationInterReplicaThreadThrottleSleepDurationMs;
 
+  @Config("replication.enable.acyclic.replication")
+  @Default("false")
+  public final boolean replicationEnableAcyclicReplication;
   /**
    * The max number of times a replication group will be considered for iteration in a cycle
    * in an intra colo replica thread
@@ -359,6 +362,7 @@ public class ReplicationConfig {
     replicationInterReplicaThreadThrottleSleepDurationMs =
         verifiableProperties.getLongInRange("replication.inter.replica.thread.throttle.sleep.duration.ms", 0, 0,
             Long.MAX_VALUE);
+    replicationEnableAcyclicReplication = verifiableProperties.getBoolean("replication.enable.acyclic.replication", false);
     replicationIntraMaxIterationsPerReplicationGroupPerCycle =
         verifiableProperties.getIntInRange("replication.intra.max.iterations.per.replication.group.per.cycle", 1, 1, 100000);
     replicationInterMaxIterationsPerReplicationGroupPerCycle =

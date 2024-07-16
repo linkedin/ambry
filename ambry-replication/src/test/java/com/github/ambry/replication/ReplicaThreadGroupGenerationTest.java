@@ -45,17 +45,17 @@ import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
-
+//TODO rename group generation
 @RunWith(Parameterized.class)
-public class ReplicaThreadTest extends ReplicationTestHelper {
+public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
   ReplicaThread intraColoReplicaThread;
 
   ReplicaThread crossColoReplicaThread;
 
   StorageManager storageManager;
 
-  public ReplicaThreadTest(short requestVersion, short responseVersion) throws Exception {
-    super(requestVersion, responseVersion);
+  public ReplicaThreadGroupGenerationTest(short requestVersion, short responseVersion) throws Exception {
+    super(requestVersion, responseVersion, true);
     setUp();
   }
 
