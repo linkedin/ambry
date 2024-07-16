@@ -445,7 +445,7 @@ public class AzureCloudConfig {
 
 
   public static final String AZURE_RETRY_POLICY = "azure.retry.policy";
-  public static final RetryPolicyType DEFAULT_AZURE_RETRY_POLICY = RetryPolicyType.EXPONENTIAL;
+  public static final RetryPolicyType DEFAULT_AZURE_RETRY_POLICY = RetryPolicyType.FIXED;
   @Config(AZURE_RETRY_POLICY)
   public final RetryPolicyType azureRetryPolicy;
 
