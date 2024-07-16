@@ -450,12 +450,12 @@ public class AzureCloudConfig {
   public final RetryPolicyType azureRetryPolicy;
 
   public static final String AZURE_RETRY_DELAY_MS = "azure.retry.delay.ms";
-  public static final Long DEFAULT_AZURE_RETRY_DELAY_MS = null;
+  public static final Long DEFAULT_AZURE_RETRY_DELAY_MS = null; // Defaults to 4ms for EXP and 30ms for FIXED
   @Config(AZURE_RETRY_POLICY)
   public final Long azureRetryDelayInMs;
 
   public static final String AZURE_RETRY_DELAY_MAX_MS = "azure.retry.delay.max.ms";
-  public static final Long DEFAULT_AZURE_RETRY_DELAY_MAX_MS = null;
+  public static final Long DEFAULT_AZURE_RETRY_DELAY_MAX_MS = null; // Defaults to 120ms
   @Config(AZURE_RETRY_POLICY)
   public final Long azureMaxRetryDelayInMs;
 
