@@ -101,6 +101,7 @@ public class BackupCheckerThread extends ReplicaThread {
     // Reset these counters if re-using the same thread object
     numBlobScanned = new AtomicInteger(0);
     setMaxIterationsPerGroupPerCycle(1);
+    enableAcyclicReplication(false);
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 

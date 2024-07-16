@@ -249,6 +249,10 @@ public class ReplicaThread implements Runnable {
     maxIterationsPerGroupPerCycle = value;
   }
 
+  protected void enableAcyclicReplication(boolean value){
+    enableAcyclicReplication = value;
+  }
+
   /**
    * Logs replication progress of local node against some remote node
    * @param remoteReplicaInfo remote replica information

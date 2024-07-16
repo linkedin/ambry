@@ -82,6 +82,7 @@ public class RecoveryThread extends ReplicaThread {
         replicationConfig.maxBackupCheckerReportFd, metricRegistry);
     this.recoveryManager = recoveryManager;
     setMaxIterationsPerGroupPerCycle(1);
+    enableAcyclicReplication(false);
   }
 
   /**

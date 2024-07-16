@@ -89,6 +89,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.numReplIter = 0;
     comparator = new ReplicaComparator();
     setMaxIterationsPerGroupPerCycle(1);
+    enableAcyclicReplication(false);
   }
 
   class ReplicaComparator implements Comparator<RemoteReplicaInfo> {
