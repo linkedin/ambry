@@ -632,7 +632,8 @@ public class HardDeleter implements Runnable {
    */
   private void performHardDeletes(List<MessageInfo> messageInfoList) throws StoreException {
     try {
-      EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
+      EnumSet<StoreGetOptions> getOptions =
+          EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Compaction_Ready);
       List<BlobReadOptions> readOptionsList = new ArrayList<BlobReadOptions>(messageInfoList.size());
 
       /* First create the readOptionsList */
