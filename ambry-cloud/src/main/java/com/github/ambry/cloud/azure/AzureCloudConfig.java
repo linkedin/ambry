@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.storage.common.policy.RetryPolicyType;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
@@ -442,6 +443,22 @@ public class AzureCloudConfig {
   @Config(AZURE_STORAGE_CLIENT_REFRESH_FACTOR)
   public double azureStorageClientRefreshFactor;
 
+
+  public static final String AZURE_RETRY_POLICY = "azure.retry.policy";
+  public static final RetryPolicyType DEFAULT_AZURE_RETRY_POLICY = RetryPolicyType.EXPONENTIAL;
+  @Config(AZURE_RETRY_POLICY)
+  public final RetryPolicyType azureRetryPolicy;
+
+  public static final String AZURE_RETRY_DELAY_MS = "azure.retry.delay.ms";
+  public static final Long DEFAULT_AZURE_RETRY_DELAY_MS = null;
+  @Config(AZURE_RETRY_POLICY)
+  public final Long azureRetryDelayInMs;
+
+  public static final String AZURE_RETRY_DELAY_MAX_MS = "azure.retry.delay.max.ms";
+  public static final Long DEFAULT_AZURE_RETRY_DELAY_MAX_MS = null;
+  @Config(AZURE_RETRY_POLICY)
+  public final Long azureMaxRetryDelayInMs;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     // 5000 is the default size of Azure blob storage
     azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000);
@@ -456,6 +473,12 @@ public class AzureCloudConfig {
     cosmosKey = verifiableProperties.getString(COSMOS_KEY, "");
     cosmosKeySecretName = verifiableProperties.getString(COSMOS_KEY_SECRET_NAME, "");
     cosmosVaultUrl = verifiableProperties.getString(COSMOS_VAULT_URL, "");
+    azureRetryPolicy =
+        verifiableProperties.getEnum(AZURE_RETRY_POLICY, RetryPolicyType.class, DEFAULT_AZURE_RETRY_POLICY);
+    azureRetryDelayInMs =
+        verifiableProperties.getLong(AZURE_RETRY_DELAY_MS, DEFAULT_AZURE_RETRY_DELAY_MS);
+    azureMaxRetryDelayInMs =
+        verifiableProperties.getLong(AZURE_RETRY_DELAY_MAX_MS, DEFAULT_AZURE_RETRY_DELAY_MAX_MS);
     azureStorageAccountInfo = parseStorageAccountInfo(verifiableProperties.getString(AZURE_STORAGE_ACCOUNT_INFO, ""));
     azureStorageAuthority = verifiableProperties.getString(AZURE_STORAGE_AUTHORITY, "");
     azureStorageClientId = verifiableProperties.getString(AZURE_STORAGE_CLIENTID, "");
