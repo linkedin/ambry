@@ -28,6 +28,8 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.utils.SystemTime;
@@ -37,6 +39,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -48,12 +51,15 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
+@RunWith(Parameterized.class)
 public class VcrReplicaThreadTest {
   protected final VerifiableProperties properties;
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThreadTest.class);
@@ -64,11 +70,13 @@ public class VcrReplicaThreadTest {
   public static final int NUM_NODES = 5; // Also num_replicas
   public static final int NUM_PARTITIONS = 10;
   protected ClusterMap clusterMap;
-  public VcrReplicaThreadTest() throws IOException, ReflectiveOperationException {
+  public VcrReplicaThreadTest(boolean isAcyclicReplicationEnabled) throws IOException, ReflectiveOperationException {
     clusterMap = new MockClusterMap();
     Properties props = new AzuriteUtils().getAzuriteConnectionProperties();
     props.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, String.valueOf(1));
     props.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION.name());
+    props.setProperty("replication.enable.acyclic.replication", String.valueOf(isAcyclicReplicationEnabled));
+
     metrics = new MetricRegistry();
     azureMetrics = new AzureMetrics(metrics);
     azureClient = new AzuriteUtils().getAzuriteClient(props, metrics, clusterMap);
@@ -77,6 +85,15 @@ public class VcrReplicaThreadTest {
     clustermap = new MockClusterMap(false, false, NUM_NODES,
         1, NUM_PARTITIONS, true, false,
         "localhost");
+  }
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    //@formatter:off
+    return Arrays.asList(new Object[][]{
+        {false}, {true},
+    });
+    //@formatter:on
   }
 
   HashMap<BlobId, CloudBlobMetadata> createBlob(String data) {

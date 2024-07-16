@@ -124,7 +124,7 @@ public class ReplicaThread implements Runnable {
   private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
-  private final boolean enableAcyclicReplication;
+  private boolean enableAcyclicReplication;
   private int maxIterationsPerGroupPerCycle;
   private volatile boolean shouldTerminateCurrentCycle = false;
 

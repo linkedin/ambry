@@ -1963,16 +1963,21 @@ public class ReplicationTest extends ReplicationTestHelper {
    * @throws Exception
    */
   @Test
-  public void testAcyclicPutReplication() throws Exception{
+  public void putsAcyclicReplicationTest() throws Exception{
     if(!replicationConfig.replicationEnableAcyclicReplication)
       return;
 
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
+    //
     properties.setProperty("replication.max.partition.count.per.request", Integer.toString(3));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
 
-    MockClusterMap clusterMap = new MockClusterMap();
+    // setting number of mount points to partition limit so each node can have replicas higher that limit so multiple groups get created
+    MockClusterMap clusterMap =
+        new MockClusterMap(false, true, 9, replicationConfig.replicationMaxPartitionCountPerRequest +1 , 3, false, false,
+            null);
+
     Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     MockHost localHost = localAndRemoteHosts.getFirst();
     MockHost remoteHost = localAndRemoteHosts.getSecond();
@@ -2033,6 +2038,14 @@ public class ReplicationTest extends ReplicationTestHelper {
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffersAfterReplication.entrySet()) {
       assertEquals("Missing buffers count mismatch", 0, entry.getValue().size());
     }
+  }
+
+  @Test
+  public void putTTLUpdateDeletesAcyclicReplicationTest(){
+    if(!replicationConfig.replicationEnableAcyclicReplication)
+      return;
+
+
   }
 
   /**
