@@ -639,7 +639,9 @@ public class ReplicationMetrics {
     String getRequestErrorMetricName =
         remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
             + remoteReplica.getPartitionId().toString() + "-getRequestError";
-    getRequestErrorMap.get(getRequestErrorMetricName).inc();
+    if (getRequestErrorMap.containsKey(getRequestErrorMetricName)) {
+      getRequestErrorMap.get(getRequestErrorMetricName).inc();
+    }
   }
 
   public void updateLocalStoreError(ReplicaId remoteReplica) {
