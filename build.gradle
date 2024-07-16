@@ -197,17 +197,6 @@ project(':ambry-utils') {
         compile "org.json:json:$jsonVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile "io.netty:netty-all:$nettyVersion"
-
-        // use compile to include these jars during compile-time and make it avlb for ambry-tools
-        // https://mvnrepository.com/artifact/com.azure/azure-sdk-bom
-        compile platform("com.azure:azure-sdk-bom:$azureSdkBom")
-        compile "com.azure:azure-cosmos"
-        compile "com.azure:azure-data-tables"
-        compile "com.azure:azure-identity"
-        compile "com.azure:azure-security-keyvault-secrets"
-        compile "com.azure:azure-storage-blob"
-        compile "com.azure:azure-storage-blob-batch"
-
         testCompile project(":ambry-test-utils")
         testCompile "io.netty:netty-transport-native-epoll:$nettyVersion"
     }
@@ -505,6 +494,16 @@ project(':ambry-cloud') {
             project(':ambry-account'),
             project(':ambry-replication'),
             project(':ambry-rest')
+
+        // use compile to include these jars during compile-time and make it avlb for ambry-tools
+        // https://mvnrepository.com/artifact/com.azure/azure-sdk-bom
+        compile platform("com.azure:azure-sdk-bom:$azureSdkBom")
+        compile "com.azure:azure-cosmos"
+        compile "com.azure:azure-data-tables"
+        compile "com.azure:azure-identity"
+        compile "com.azure:azure-security-keyvault-secrets"
+        compile "com.azure:azure-storage-blob"
+        compile "com.azure:azure-storage-blob-batch"
 
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
