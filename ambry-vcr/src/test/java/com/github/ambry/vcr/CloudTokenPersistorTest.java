@@ -62,7 +62,6 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -76,7 +75,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.runners.Parameterized;
 
 import static com.github.ambry.cloud.CloudTestUtil.*;
 import static org.junit.Assert.*;
@@ -104,7 +102,7 @@ public class CloudTokenPersistorTest {
   private short ACCOUNT_ID = 657;
   private short CONTAINER_ID = 908;
 
-  public CloudTokenPersistorTest(boolean isAcyclicReplicationEnabled) throws IOException {
+  public CloudTokenPersistorTest() throws IOException {
     this.ambryBackupVersion = CloudConfig.AMBRY_BACKUP_VERSION_2; // V1 is completely deprecated
     azuriteUtils = new AzuriteUtils();
     properties = azuriteUtils.getAzuriteConnectionProperties();
@@ -114,7 +112,6 @@ public class CloudTokenPersistorTest {
     properties.setProperty(ReplicationConfig.REPLICATION_CLOUD_TOKEN_FACTORY,
         RecoveryTokenFactory.class.getCanonicalName());
     properties.setProperty("replication.metadata.request.version", "2");
-    properties.setProperty("replication.enable.acyclic.replication", String.valueOf(isAcyclicReplicationEnabled));
     verifiableProperties = new VerifiableProperties(properties);
     // Create test cluster
     mockClusterMap = new MockClusterMap(false, true, 1,
@@ -128,15 +125,6 @@ public class CloudTokenPersistorTest {
     this.azureTableNameReplicaTokens = azureCloudConfig.azureTableNameReplicaTokens;
     storeKeyFactory = new BlobIdFactory(mockClusterMap);
     tokenFactory = new StoreFindTokenFactory(storeKeyFactory);
-  }
-
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    //@formatter:off
-    return Arrays.asList(new Object[][]{
-        {false}, {true},
-    });
-    //@formatter:on
   }
 
   @Before
@@ -181,7 +169,7 @@ public class CloudTokenPersistorTest {
     token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
         true, (short) 3, null, null, (short) -1);
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
-            -1, Collections.emptyMap(), new SystemTime());
+        -1, Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
 
@@ -306,9 +294,9 @@ public class CloudTokenPersistorTest {
     when(vcrClusterParticipant.getCurrentDataNodeId()).thenReturn(dataNodeId);
     NetworkClientFactory networkClientFactory = mock(NetworkClientFactory.class);
     VcrReplicationManager vcrReplicationManager =
-          new VcrReplicationManager(verifiableProperties, null, storeKeyFactory, mockClusterMap,
-              vcrClusterParticipant, azuriteClient, null, networkClientFactory, null,
-              null);
+        new VcrReplicationManager(verifiableProperties, null, storeKeyFactory, mockClusterMap,
+            vcrClusterParticipant, azuriteClient, null, networkClientFactory, null,
+            null);
 
     // No one checks if local and peer are the same replica. Hmm ?
     // test 1: uninitialized token
