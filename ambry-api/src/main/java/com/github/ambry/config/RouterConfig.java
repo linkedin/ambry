@@ -141,6 +141,7 @@ public class RouterConfig {
   public static final String ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED = "router.ttlupdate.offline.repair.enabled";
   // offline repair partially failed delete request
   public static final String ROUTER_DELETE_OFFLINE_REPAIR_ENABLED = "router.delete.offline.repair.enabled";
+  public static final String ROUTER_FORCE_DELETE_ENABLED = "router.force.delete.enabled";
   // offline repair db factory
   public static final String ROUTER_REPAIR_REQUESTS_DB_FACTORY = "router.repair.requests.db.factory";
   public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
@@ -681,6 +682,15 @@ public class RouterConfig {
   public final boolean routerDeleteOfflineRepairEnabled;
 
   /**
+   * If this config is set to {@code true}, then when a delete operation failed, it will send a force delete request to
+   * its replicas to place a delete tombstone in blob store. Enable force delete would help frontend return success
+   * back to client instead of 503 when client is trying to delete a blob that doesn't exist but we have too many
+   * unavailable replicas to be sure of its nonexistence.
+   */
+  @Config(ROUTER_FORCE_DELETE_ENABLED)
+  public final boolean routerForceDeleteEnabled;
+
+  /**
    * Specify the RepairRequestsDBFactory we use for the background repair.
    */
   @Config(ROUTER_REPAIR_REQUESTS_DB_FACTORY)
@@ -888,6 +898,7 @@ public class RouterConfig {
         : verifiableProperties.getBoolean(ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED, false);
     routerDeleteOfflineRepairEnabled = routerRepairRequestsDbFactory == null ? false
         : verifiableProperties.getBoolean(ROUTER_DELETE_OFFLINE_REPAIR_ENABLED, false);
+    routerForceDeleteEnabled = verifiableProperties.getBoolean(ROUTER_FORCE_DELETE_ENABLED, false);
 
     routerGetBlobRetryLimitInSec = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, 0, 0,
         ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX);

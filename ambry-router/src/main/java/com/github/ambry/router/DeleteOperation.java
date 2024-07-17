@@ -81,6 +81,8 @@ class DeleteOperation {
   private final OperationQuotaCharger operationQuotaCharger;
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
+  // When this variable is true, create DeleteRequest with force delete to be true.
+  private boolean enableForceDeleteInRequest = false;
 
   private final NonBlockingRouter nonBlockingRouter;
   private ReplicateBlobCallback replicateBlobCallback;
@@ -174,8 +176,13 @@ class DeleteOperation {
    * @return The DeleteRequest.
    */
   private DeleteRequest createDeleteRequest() {
-    return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-        blobId, deletionTimeMs);
+    if (!enableForceDeleteInRequest) {
+      return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+          blobId, deletionTimeMs);
+    } else {
+      return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+          blobId, deletionTimeMs, DeleteRequest.DELETE_REQUEST_VERSION_3, true);
+    }
   }
 
   /**
@@ -387,7 +394,7 @@ class DeleteOperation {
     return (routerConfig.routerRepairWithReplicateBlobOnDeleteEnabled && operationTracker.hasNotFound()
         && operationTracker.getSuccessCount() > 0
         && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable)
-        && (serviceId == null || !serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX)));
+        && !isServiceBackgroundDeleter());
     // @formatter:on
   }
 
@@ -407,7 +414,38 @@ class DeleteOperation {
         && routerConfig.routerDeleteOfflineRepairEnabled
         && operationTracker.getSuccessCount() > 0
         && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable)
-        && (serviceId == null || !serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX)));
+        && !isServiceBackgroundDeleter());
+    // @formatter:on
+  }
+
+  private boolean shouldIssueForceDelete() {
+    // The conditions to issue force delete to replicas
+    // 1. the feature is enabled
+    // 2. there is no successful replica. If we have success replicas, we should try on demand replication and retry
+    // 3. error code precedence is over AmbryUnavailable. We don't do force delete if the error is BlobExpired or TooManyRequests.
+    // 4. error code is not BlobDoesNotExist, when a blob doesn't exist, we shouldn't try to force delete
+    // 5. it's not a delete request from BackgroundDeleter.
+
+    // What does it mean? Here are the cases where we would need to force delete
+    // 1. 2 or 3 originating replicas return unavailable, including replica unavailable, disk unavailable, retry_after_backoff, io_error, network error...
+    // 2. we have 1 leader, 1 bootstrap, 1 offline replica in originating dc. They all return BlobNotFound
+    // 3. we have 1 leader, 1 standby, 1 bootstrap, 1 offline replica in originating dc. They all return BlobNotFound.
+    // These three cases won't return NOT_FOUND and won't trigger on demand replication and offline repair. But force delete
+    // might be able to help.
+    // Force delete shouldn't interfere with on demand replication and offline repair. But when force delete fails, it might
+    // trigger on demand replication.
+
+    // If the operationException is null, then this is a successful delete operation. don't try to issue force delete
+    if (operationException.get() == null) {
+      return false;
+    }
+    RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
+    // @formatter:off
+    return (routerConfig.routerForceDeleteEnabled
+        && operationTracker.getSuccessCount() == 0
+        && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable)
+        && errorCode != RouterErrorCode.BlobDoesNotExist
+        && !isServiceBackgroundDeleter());
     // @formatter:on
   }
 
@@ -420,6 +458,11 @@ class DeleteOperation {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
       } else {
+        if (enableForceDeleteInRequest) {
+          // We don't expect force delete to fail. Something is not right with servers
+          logger.error("ForceDelete : failed to force delete blob {}", blobId, operationException.get());
+          routerMetrics.forceDeleteBlobErrorCount.inc();
+        }
         // the operation is failed, try to recover with ReplicateBlob
         if (shouldReplicateBlobAndRetry()) {
           // if retryWithReplicateBlob returns true, it's under retry. operation is not completed yet. so return.
@@ -461,8 +504,7 @@ class DeleteOperation {
         }
 
         // Handle the exceptions of the background deleter
-        if (serviceId != null && serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX)
-            && operationException.get() != null) {
+        if (isServiceBackgroundDeleter() && operationException.get() != null) {
           RouterErrorCode code = ((RouterException) operationException.get()).getErrorCode();
           if (code == RouterErrorCode.BlobDoesNotExist) {
             // NOT_FOUND is not an error for the background deleter.
@@ -477,6 +519,26 @@ class DeleteOperation {
           }
           operationException.set(null);
         }
+
+        // Check if we should issue force delete for this operation.
+        // enableForceDeleteInRequest by default is false, it will be set to true only once here, which means, if it's
+        // already true, then we already enabled force delete but somehow it still failed.
+        if (!enableForceDeleteInRequest && shouldIssueForceDelete()) {
+          // Retry this delete operation with force delete
+          logger.info("Enabling force delete for blob: {}", blobId);
+          routerMetrics.forceDeleteBlobCount.inc();
+          enableForceDeleteInRequest = true;
+          // Reset the operation exception and the operation tracker
+          // Next time if we call operationTracker.isDone, it will return false. And it only returns true when force delete
+          // finishes.
+          operationException.set(null);
+          operationTracker =
+              new SimpleOperationTracker(routerConfig, RouterOperation.DeleteOperation, blobId.getPartition(),
+                  originatingDcName, false, routerMetrics, blobId);
+          deleteRequestInfos.clear();
+          // return here, so we don't have to change quota or set the operationCompleted to true.
+          return;
+        }
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
@@ -488,6 +550,10 @@ class DeleteOperation {
       }
       operationCompleted = true;
     }
+  }
+
+  private boolean isServiceBackgroundDeleter() {
+    return serviceId != null && serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX);
   }
 
   /**
