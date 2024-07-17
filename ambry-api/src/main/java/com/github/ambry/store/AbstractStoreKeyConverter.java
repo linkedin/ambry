@@ -42,6 +42,10 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
    */
   @Override
   public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
+    if (input == null) {
+      return new HashMap<>();
+    }
+
     List<StoreKey> alreadyPresentStoreKeys = new ArrayList<>();
     List<StoreKey> storeKeysTobeConverted = new ArrayList<>();
 
