@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.http.HttpClient;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
+import com.azure.core.http.policy.ExponentialBackoffOptions;
 import com.azure.core.http.policy.FixedDelayOptions;
 import com.azure.core.http.policy.RetryOptions;
 import com.azure.core.http.rest.Response;
@@ -61,7 +62,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -461,10 +461,23 @@ public abstract class StorageClient implements AzureStorageClient {
       logger.info("No vcrProxyHost provided");
     }
     HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
-    Integer tryTimeoutInSeconds =
-        Math.toIntExact(Math.max(1, TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout)));
-    RetryOptions retryOptions =
-        new RetryOptions(new FixedDelayOptions(cloudConfig.cloudMaxAttempts, Duration.ofSeconds(tryTimeoutInSeconds)));
+    RetryOptions retryOptions;
+    switch (azureCloudConfig.azureRetryPolicy) {
+      case FIXED:
+        retryOptions =
+            new RetryOptions(new FixedDelayOptions(azureCloudConfig.azureMaxTries,
+                Duration.ofSeconds(azureCloudConfig.azureRetryDelayInSec)));
+        break;
+      case EXPONENTIAL:
+        ExponentialBackoffOptions exponentialBackoffOptions = new ExponentialBackoffOptions();
+        exponentialBackoffOptions.setBaseDelay(Duration.ofSeconds(azureCloudConfig.azureMaxRetryDelayInSec));
+        exponentialBackoffOptions.setMaxDelay(Duration.ofSeconds(azureCloudConfig.azureMaxRetryDelayInSec));
+        exponentialBackoffOptions.setMaxRetries(azureCloudConfig.azureMaxTries);
+        retryOptions = new RetryOptions(exponentialBackoffOptions);
+        break;
+      default:
+        throw new RuntimeException(String.format("Invalid azureRetryPolicy %s", azureCloudConfig.azureRetryPolicy));
+    }
     try {
       return buildTableServiceClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
     } catch (Exception e) {
