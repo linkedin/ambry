@@ -441,8 +441,7 @@ public abstract class StorageClient implements AzureStorageClient {
        maxRetryDelayInMs – null defaults to 120ms
        */
       RequestRetryOptions retryOptions =
-          new RequestRetryOptions(azureCloudConfig.azureRetryPolicy, azureCloudConfig.azureMaxTries, null,
-              azureCloudConfig.azureRetryDelayInSec, azureCloudConfig.azureMaxRetryDelayInSec, null);
+          new RequestRetryOptions(RetryPolicyType.EXPONENTIAL, 3, null, 10L, 300L, null);
       return buildBlobServiceSyncClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
     } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
       logger.error("Error building ABS blob service client: {}", ex.getMessage());
@@ -462,22 +461,11 @@ public abstract class StorageClient implements AzureStorageClient {
     }
     HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
     RetryOptions retryOptions;
-    switch (azureCloudConfig.azureRetryPolicy) {
-      case FIXED:
-        retryOptions =
-            new RetryOptions(new FixedDelayOptions(azureCloudConfig.azureMaxTries,
-                Duration.ofSeconds(azureCloudConfig.azureRetryDelayInSec)));
-        break;
-      case EXPONENTIAL:
-        ExponentialBackoffOptions exponentialBackoffOptions = new ExponentialBackoffOptions();
-        exponentialBackoffOptions.setBaseDelay(Duration.ofSeconds(azureCloudConfig.azureMaxRetryDelayInSec));
-        exponentialBackoffOptions.setMaxDelay(Duration.ofSeconds(azureCloudConfig.azureMaxRetryDelayInSec));
-        exponentialBackoffOptions.setMaxRetries(azureCloudConfig.azureMaxTries);
-        retryOptions = new RetryOptions(exponentialBackoffOptions);
-        break;
-      default:
-        throw new RuntimeException(String.format("Invalid azureRetryPolicy %s", azureCloudConfig.azureRetryPolicy));
-    }
+    ExponentialBackoffOptions exponentialBackoffOptions = new ExponentialBackoffOptions();
+    exponentialBackoffOptions.setBaseDelay(Duration.ofSeconds(300));
+    exponentialBackoffOptions.setMaxDelay(Duration.ofSeconds(10));
+    exponentialBackoffOptions.setMaxRetries(3);
+    retryOptions = new RetryOptions(exponentialBackoffOptions);
     try {
       return buildTableServiceClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
     } catch (Exception e) {
