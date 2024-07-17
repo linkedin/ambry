@@ -120,5 +120,5 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
    * @param cachedMapping convertedMapping that is stored in cache. Will be null if if key is not present in cache.
    * @return
    */
-  protected abstract StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping);
+  protected abstract StoreKey getConvertedKey(StoreKey storeKey, boolean isKeyPresent, StoreKey cachedMapping);
 }

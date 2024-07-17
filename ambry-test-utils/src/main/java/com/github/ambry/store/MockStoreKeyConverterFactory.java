@@ -112,7 +112,7 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
     }
 
     @Override
-    protected StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping) {
+    protected StoreKey getConvertedKey(StoreKey storeKey, boolean isKeyPresent, StoreKey cachedMapping) {
       if (exception != null) {
         throw new IllegalStateException(exception);
       } else if (!isKeyPresent) {

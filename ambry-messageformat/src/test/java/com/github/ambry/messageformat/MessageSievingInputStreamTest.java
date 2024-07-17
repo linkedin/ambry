@@ -1052,7 +1052,7 @@ class RandomKeyConverter extends AbstractStoreKeyConverter {
   }
 
   @Override
-  protected StoreKey getConvertedKey(StoreKey storeKey, Boolean isKeyPresent, StoreKey cachedMapping) {
+  protected StoreKey getConvertedKey(StoreKey storeKey, boolean isKeyPresent, StoreKey cachedMapping) {
     return cachedMapping;
   }
 }
