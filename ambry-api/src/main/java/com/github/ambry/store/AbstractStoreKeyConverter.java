@@ -95,8 +95,9 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
   }
 
   /**
-   * This method will be called for the keys which are not present in cache
+   * This method will be called for all the keys called for converting
    * @param input StoreKeys to be converted
+   * @return {@link Map} map of storeKey to converted storeKey , this map will be cached
    */
   protected abstract Map<StoreKey, StoreKey> convertKeys(Collection<? extends StoreKey> input) throws Exception;
 
@@ -105,7 +106,7 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
    * @param storeKey  StoreKey that was queried
    * @param isKeyPresent whether key is present in cache
    * @param cachedMapping convertedMapping that is stored in cache. Will be null if if key is not present in cache.
-   * @return
+   * @return {@link StoreKey}
    */
   protected abstract StoreKey getConvertedKey(StoreKey storeKey, boolean isKeyPresent, StoreKey cachedMapping);
 }
