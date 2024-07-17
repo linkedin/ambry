@@ -125,4 +125,39 @@ public class AbstractStoreKeyConverterTest {
       //expected
     }
   }
+
+  /**
+   * Testing overriding cache logic by calling convert on a list of keys
+   * then adding a different mapping and trying conversion again and check if mapping is changed
+   * @throws Exception
+   */
+  @Test
+  public void testOverrideCacheOperation() throws Exception {
+    StoreKey storeKey0 = mock(StoreKey.class);
+    StoreKey storeKey1 = mock(StoreKey.class);
+    assertNotSame("storeKeys should not be equal", storeKey0, storeKey1);
+    List<StoreKey> list = Arrays.asList(storeKey0, storeKey1);
+
+    Map<StoreKey, StoreKey> convertedMap = storeKeyConverter.convert(list);
+
+    MockStoreKeyConverterFactory.MockStoreKeyConverter mockStoreKeyConverter =
+        (MockStoreKeyConverterFactory.MockStoreKeyConverter) storeKeyConverter;
+
+    assertEquals("storeKey should be mapped to itself", storeKey0, convertedMap.get(storeKey0));
+    assertEquals("storeKey should be mapped to itself", storeKey1, convertedMap.get(storeKey1));
+    assertEquals("storeKey should be mapped to itself", storeKey0, storeKeyConverter.getConverted(storeKey0));
+    assertEquals("storeKey should be mapped to itself", storeKey1, storeKeyConverter.getConverted(storeKey1));
+    ;
+
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    conversionMap.put(storeKey0, storeKey1);
+    conversionMap.put(storeKey1, storeKey0);
+    mockStoreKeyConverter.setConversionMap(conversionMap);
+
+    convertedMap = storeKeyConverter.convert(list);
+    assertEquals("storeKey0 should be mapped to storeKey1", storeKey1, convertedMap.get(storeKey0));
+    assertEquals("storeKey1 should be mapped to storeKey0", storeKey0, convertedMap.get(storeKey1));
+    assertEquals("storeKey0 should be mapped to storeKey1", storeKey1, storeKeyConverter.getConverted(storeKey0));
+    assertEquals("storeKey1 should be mapped to storeKey0", storeKey0, storeKeyConverter.getConverted(storeKey1));
+  }
 }

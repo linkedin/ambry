@@ -13,11 +13,9 @@
  */
 package com.github.ambry.store;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 
@@ -34,7 +32,8 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
   private final Map<StoreKey, Integer> cachedKeyCount = new HashMap<>();
 
   /**
-   * Even if any key is present in cache, conversion will be attempted for all the keys
+   * Even if any key is present in cache, conversion will be attempted for
+   * all the keys and result will be stored in cache
    * @param input the {@link StoreKey}s that need to be converted.
    * @return {@link Map} map of storeKeys to converted keys
    * @throws Exception
