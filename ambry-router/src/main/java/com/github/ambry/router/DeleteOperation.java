@@ -181,7 +181,7 @@ class DeleteOperation {
           blobId, deletionTimeMs);
     } else {
       return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          blobId, deletionTimeMs, DeleteRequest.DELETE_REQUEST_VERSION_3, enableForceDeleteInRequest);
+          blobId, deletionTimeMs, DeleteRequest.DELETE_REQUEST_VERSION_3, true);
     }
   }
 
@@ -422,7 +422,7 @@ class DeleteOperation {
     // The conditions to issue force delete to replicas
     // 1. the feature is enabled
     // 2. there is no successful replica. If we have success replicas, we should try on demand replication and retry
-    // 3. error code precedence is over AmbryUnavailable. We don't do replication if the error is BlobExpired or TooManyRequests.
+    // 3. error code precedence is over AmbryUnavailable. We don't do force delete if the error is BlobExpired or TooManyRequests.
     // 4. error code is not BlobDoesNotExist, when a blob doesn't exist, we shouldn't try to force delete
     // 5. it's not a delete request from BackgroundDeleter.
 
