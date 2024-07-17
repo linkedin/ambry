@@ -14,6 +14,7 @@
 package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.store.AbstractStoreKeyConverter;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockId;
@@ -1028,11 +1029,9 @@ public class MessageSievingInputStreamTest {
  * be of length less than, equal to, or greater than the size of the input key. Additionally, a set of "invalid" keys
  * can be provided while instantiating, and for these keys a null mapping will be provided.
  */
-class RandomKeyConverter implements StoreKeyConverter {
+class RandomKeyConverter extends AbstractStoreKeyConverter {
 
   Collection<? extends StoreKey> invalids = Collections.emptyList();
-  Map<StoreKey, StoreKey> onceConverted = new HashMap<>();
-
   /**
    * Add invalid mappings.
    * @param invalids the keys for which no mapping will be generated during conversion.
@@ -1042,29 +1041,19 @@ class RandomKeyConverter implements StoreKeyConverter {
   }
 
   @Override
-  public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) {
+  protected Map<StoreKey, StoreKey> convertKeys(Collection<? extends StoreKey> input) throws Exception {
     Map<StoreKey, StoreKey> output = new HashMap<>();
     input.forEach(inKey -> {
-      if (onceConverted.containsKey(inKey)) {
-        output.put(inKey, onceConverted.get(inKey));
-      } else {
         StoreKey replaceMent = invalids.contains(inKey) ? null : new MockId(
             inKey.getID().substring(0, inKey.getID().length() / 2) + Integer.toString(RANDOM.nextInt(1000)));
-        onceConverted.put(inKey, replaceMent);
         output.put(inKey, replaceMent);
-      }
     });
     return output;
   }
 
   @Override
-  public StoreKey getConverted(StoreKey storeKey) {
-    return onceConverted.get(storeKey);
-  }
-
-  @Override
-  public void dropCache() {
-    onceConverted = null;
+  protected StoreKey getConvertedKey(StoreKey storeKey, boolean isKeyPresent, StoreKey cachedMapping) {
+    return cachedMapping;
   }
 }
 
