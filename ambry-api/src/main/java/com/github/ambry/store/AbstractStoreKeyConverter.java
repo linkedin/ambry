@@ -34,8 +34,7 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
   private final Map<StoreKey, Integer> cachedKeyCount = new HashMap<>();
 
   /**
-   * if any key is present in cache cached result will be returned.
-   * For the remaining keys conversion will be attempted.
+   * Even if any key is present in cache, conversion will be attempted for all the keys
    * @param input the {@link StoreKey}s that need to be converted.
    * @return {@link Map} map of storeKeys to converted keys
    * @throws Exception
@@ -46,22 +45,7 @@ public abstract class AbstractStoreKeyConverter implements StoreKeyConverter {
       return new HashMap<>();
     }
 
-    List<StoreKey> alreadyPresentStoreKeys = new ArrayList<>();
-    List<StoreKey> storeKeysTobeConverted = new ArrayList<>();
-
-    input.forEach((storeKey) -> {
-      if (conversionCache.containsKey(storeKey)) {
-        alreadyPresentStoreKeys.add(storeKey);
-      } else {
-        storeKeysTobeConverted.add(storeKey);
-      }
-    });
-
-    Map<StoreKey, StoreKey> map = convertKeys(storeKeysTobeConverted);
-
-    alreadyPresentStoreKeys.forEach((storeKey -> {
-      map.put(storeKey, conversionCache.get(storeKey));
-    }));
+    Map<StoreKey, StoreKey> map = convertKeys(input);
 
     map.forEach((storeKey, convertedStoreKey) -> {
       cachedKeyCount.put(storeKey, cachedKeyCount.getOrDefault(storeKey, 0) + 1);
