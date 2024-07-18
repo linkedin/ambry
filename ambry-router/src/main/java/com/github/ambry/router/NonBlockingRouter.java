@@ -22,7 +22,6 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
@@ -717,6 +716,13 @@ public class NonBlockingRouter implements Router {
         resource.close();
       } catch (IOException e) {
         logger.error("Exception thrown on closing {}", resource.getClass().getName());
+      }
+    }
+    if (repairRequestsDb != null) {
+      try {
+        repairRequestsDb.close();
+      } catch (Exception e) {
+        logger.error("Exception thrown on closing repair requests db", e);
       }
     }
     // close router metrics

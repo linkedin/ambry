@@ -106,6 +106,8 @@ public class NonBlockingRouterMetrics {
   public final Histogram updateBlobTtlOperationLatencyMs;
   public final Histogram replicateBlobOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
+  public final Histogram routerPutRequestLocalLatencyMs;
+  public final Histogram routerPutRequestRemoteLatencyMs;
   public final Histogram responseReceiveToHandleLatencyMs;
   public final Histogram getDataChunkLatencyMs;
   public final Histogram getMetadataChunkLatencyMs;
@@ -132,6 +134,8 @@ public class NonBlockingRouterMetrics {
   public final Counter offlineRepairOnDeleteErrorCount;
   public final Counter offlineRepairOnTtlUpdateCount;
   public final Counter offlineRepairOnTtlUpdateErrorCount;
+  public final Counter forceDeleteBlobCount;
+  public final Counter forceDeleteBlobErrorCount;
   public final Counter backgroundDeleterNotFoundCount;
   public final Counter backgroundDeleterExceptionCount;
   public final Counter operationAbortCount;
@@ -248,6 +252,9 @@ public class NonBlockingRouterMetrics {
 
   // Number of paranoid durability write failures
   public final Counter paranoidDurabilityFailureCount;
+  // Number of paranoid durability write successes
+  public final Counter paranoidDurabilitySuccessCount;
+
   // Number of times there are not enough replicas available to satisfy paranoid durability write requirements
   public final Counter paranoidDurabilityNotEnoughReplicasCount;
 
@@ -395,6 +402,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationLatencyMs"));
     routerRequestLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "RouterRequestLatencyMs"));
+    routerPutRequestLocalLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "RouterPutRequestLocalLatencyMs"));
+    routerPutRequestRemoteLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "RouterPutRequestRemoteLatencyMs"));
     responseReceiveToHandleLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "ResponseReceiveToHandleLatencyMs"));
     getDataChunkLatencyMs =
@@ -492,6 +503,9 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnTtlUpdateCount"));
     offlineRepairOnTtlUpdateErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnTtlUpdateErrorCount"));
+    forceDeleteBlobCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ForceDeleteBlobCount"));
+    forceDeleteBlobErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ForceDeleteBlobErrorCount"));
     backgroundDeleterNotFoundCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNotFoundCount"));
     backgroundDeleterExceptionCount =
@@ -622,6 +636,8 @@ public class NonBlockingRouterMetrics {
     // ParanoidDurabilityOperationTracker metrics
     paranoidDurabilityFailureCount =
         metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilityFailureCount"));
+    paranoidDurabilitySuccessCount =
+        metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilitySuccessCount"));
     paranoidDurabilityNotEnoughReplicasCount =
         metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilityNotEnoughReplicasCount"));
 

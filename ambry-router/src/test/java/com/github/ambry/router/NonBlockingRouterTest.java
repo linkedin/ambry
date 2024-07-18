@@ -19,6 +19,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -78,6 +79,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -163,10 +165,11 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
    * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
    * @param enableODR enable On demand replication
    * @param enableOfflineRepair enable the offline repair
+   * @param enableForceDelete enable force delete for delete operations
    * @return the created VerifiableProperties instance.
    */
   protected Properties getNonBlockingRouterPropertiesForRepairRequests(String routerDataCenter, boolean enableODR,
-      boolean enableOfflineRepair) {
+      boolean enableOfflineRepair, boolean enableForceDelete) {
     Properties properties =
         super.getNonBlockingRouterProperties(routerDataCenter, PUT_REQUEST_PARALLELISM, DELETE_REQUEST_PARALLELISM);
     properties.setProperty("router.operation.controller", "com.github.ambry.router.QuotaAwareOperationController");
@@ -190,6 +193,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // enable offline repair for delete and ttlupdate
       properties.setProperty("router.delete.offline.repair.enabled", "true");
       properties.setProperty("router.ttlupdate.offline.repair.enabled", "true");
+    }
+    if (enableForceDelete) {
+      properties.setProperty(RouterConfig.ROUTER_FORCE_DELETE_ENABLED, "true");
     }
 
     return properties;
@@ -2547,8 +2553,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       boolean enableOfflineRepair) throws Exception {
     String updateServiceId = "update-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
-        new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
+        layout, new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -2672,7 +2678,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
           new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
@@ -2725,7 +2731,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
           new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
@@ -2774,7 +2780,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
@@ -2828,7 +2834,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
@@ -2882,7 +2888,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
@@ -2929,7 +2935,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
@@ -2968,8 +2974,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
-        new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
+        layout, new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3091,7 +3097,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
     String compositeBlobId =
@@ -3147,7 +3153,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair), layout,
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -3238,7 +3244,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
     String compositeBlobId =
@@ -3299,8 +3305,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
-        new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
+        layout, new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3390,7 +3396,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair), layout,
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -3479,8 +3485,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
-        new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
+        layout, new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3534,7 +3540,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -3582,7 +3588,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       // Ensure there are 2 chunks.
       maxPutChunkSize = PUT_CONTENT_SIZE / 2;
-      Properties props = getNonBlockingRouterPropertiesForRepairRequests("DC3", enableODR, enableOfflineRepair);
+      Properties props = getNonBlockingRouterPropertiesForRepairRequests("DC3", enableODR, enableOfflineRepair, false);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       RouterConfig routerConfig = new RouterConfig(verifiableProperties);
       MockClusterMap mockClusterMap = new MockClusterMap();
@@ -3710,7 +3716,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = null;
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -3747,6 +3753,265 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       RouterException r = (RouterException) e.getCause();
       Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
     } finally {
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  @Test
+  public void testForceDeleteForSimpleBlobSuccess() throws Exception {
+    String serviceID = "delete-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, true, true), layout,
+        new LoggingNotificationSystem());
+    // Create a random id that doesn't exist
+    List<PartitionId> mockPartitions = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    PartitionId partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
+    String blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
+
+    List<MockServer> localServers = new ArrayList<>();
+    for (MockServer server : layout.getMockServers()) {
+      if (server.getDataCenter().equals(localDcName)) {
+        localServers.add(server);
+        server.setServerErrors(Collections.singletonList(ServerErrorCode.Replica_Unavailable));
+      } else {
+        server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      }
+    }
+    // After set server errors, we would see
+    // 1. when issuing regular delete requests, we have three originating replicas returning unavailable, and others return NOT_FOUND
+    //    this would result in unavailable and would trigger force delete
+    // 2. when force delete, all servers return No Error.
+    //    delete parallelism is 3, so 3 originating replicas would have delete tombstones
+
+    long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+    } catch (Exception e) {
+      fail("Expecting force delete to work");
+    } finally {
+      assertEquals(forceDeleteCountBefore + 1, routerMetrics.forceDeleteBlobCount.getCount());
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      for (MockServer server : localServers) {
+        StoredBlob sblob = server.getBlobs().get(blobId);
+        assertNotNull(sblob);
+        assertTrue(sblob.isDeleted());
+        assertTrue(sblob.isDeleteTombstone());
+      }
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  @Test
+  public void testForceDeleteForSimpleBlobSuccessOnRemote() throws Exception {
+    String serviceID = "delete-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, true, true), layout,
+        new LoggingNotificationSystem());
+    // Create a random id that doesn't exist
+    List<PartitionId> mockPartitions = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    PartitionId partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
+    String blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
+
+    List<MockServer> localServers = new ArrayList<>();
+    List<MockServer> remoteServers = new ArrayList<>();
+    for (MockServer server : layout.getMockServers()) {
+      if (server.getDataCenter().equals(localDcName)) {
+        localServers.add(server);
+        server.setServerErrorForAllRequests(
+            ServerErrorCode.Replica_Unavailable); // originating replicas rejects all delete requests
+      } else {
+        server.setServerErrors(Collections.singletonList(
+            ServerErrorCode.Blob_Not_Found)); // remote replicas reject first delete request, but accept force delete
+        remoteServers.add(server);
+      }
+    }
+    // After set server errors, we would see
+    // 1. when issuing regular delete requests, we have three originating replicas returning unavailable, and others return NOT_FOUND
+    //    this would result in unavailable and would trigger force delete
+    // 2. when force delete, originating replicas still return unavailable, not remote replicas return No_Error
+    //    delete parallelism is 3, so 3 remote replicas would have delete tombstones
+
+    long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+    } catch (Exception e) {
+      fail("Expecting force delete to work");
+    } finally {
+      assertEquals(forceDeleteCountBefore + 1, routerMetrics.forceDeleteBlobCount.getCount());
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      for (MockServer server : localServers) {
+        StoredBlob sblob = server.getBlobs().get(blobId);
+        assertNull(sblob);
+      }
+      int numTombstone = 0;
+      for (MockServer server : remoteServers) {
+        StoredBlob sblob = server.getBlobs().get(blobId);
+        if (sblob != null) {
+          assertTrue(sblob.isDeleted());
+          assertTrue(sblob.isDeleteTombstone());
+          numTombstone++;
+        }
+      }
+      assertEquals(DELETE_REQUEST_PARALLELISM, numTombstone);
+
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  @Test
+  public void testForceDeleteForSimpleBlobFailure() throws Exception {
+    String serviceID = "delete-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, true, true), layout,
+        new LoggingNotificationSystem());
+    // Create a random id that doesn't exist
+    List<PartitionId> mockPartitions = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    PartitionId partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
+    String blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
+
+    for (MockServer server : layout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable); // replicas rejects all delete requests
+    }
+
+    long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
+    long forceDeleteErrorCountBefore = routerMetrics.forceDeleteBlobErrorCount.getCount();
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+    } finally {
+      assertEquals(forceDeleteCountBefore + 1, routerMetrics.forceDeleteBlobCount.getCount());
+      assertEquals(forceDeleteErrorCountBefore + 1, routerMetrics.forceDeleteBlobErrorCount.getCount());
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  @Test
+  public void testForceDeleteIgnoreBackgroundDeleter() throws Exception {
+    String serviceID = BackgroundDeleteRequest.SERVICE_ID_PREFIX + "service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, true, true), layout,
+        new LoggingNotificationSystem());
+    // Create a random id that doesn't exist
+    List<PartitionId> mockPartitions = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    PartitionId partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
+    String blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
+
+    for (MockServer server : layout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable); // replicas rejects all delete requests
+    }
+
+    long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+    } finally {
+      assertEquals(forceDeleteCountBefore, routerMetrics.forceDeleteBlobCount.getCount());
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  @Test
+  public void testForceDeleteIgnoreSuccessResponse() throws Exception {
+    String serviceID = "delete-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, false, false, true), layout,
+        new LoggingNotificationSystem());
+    // Create a random id that doesn't exist
+    List<PartitionId> mockPartitions = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    PartitionId partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
+    String blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
+
+    boolean setSuccess = false;
+    for (MockServer server : layout.getMockServers()) {
+      if (!setSuccess) {
+        server.setServerErrorForAllRequests(ServerErrorCode.No_Error); // one replica to return success
+        setSuccess = true;
+      } else {
+        server.setServerErrorForAllRequests(
+            ServerErrorCode.Replica_Unavailable); // replicas rejects all delete requests
+      }
+    }
+    // We have only one success, and we disabled ODR and offline repair, however, we shouldn't do force delete
+
+    long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+    } finally {
+      assertEquals(forceDeleteCountBefore, routerMetrics.forceDeleteBlobCount.getCount());
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  @Test
+  public void testForceDeleteIgnoreNotFound() throws Exception {
+    String serviceID = "delete-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, false, false, true), layout,
+        new LoggingNotificationSystem());
+    // Create a random id that doesn't exist
+    List<PartitionId> mockPartitions = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    PartitionId partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
+    String blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
+
+    for (MockServer server : layout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found); // replicas returns not found
+    }
+
+    long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDoesNotExist, r.getErrorCode());
+    } finally {
+      assertEquals(forceDeleteCountBefore, routerMetrics.forceDeleteBlobCount.getCount());
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
       router.getNotFoundCache().invalidateAll();
       if (router != null) {

@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.http.HttpClient;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
+import com.azure.core.http.policy.ExponentialBackoffOptions;
 import com.azure.core.http.policy.FixedDelayOptions;
 import com.azure.core.http.policy.RetryOptions;
 import com.azure.core.http.rest.Response;
@@ -61,7 +62,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -434,15 +434,15 @@ public abstract class StorageClient implements AzureStorageClient {
       /*
        retryPolicyType – null defaults to EXPONENTIAL
        maxTries – null defaults to 4
-       tryTimeoutInSeconds – null defaults to Integer.MAX_VALUE seconds, so set to cloudRequestTimeout. Should be between 1 and 2147483647
+       tryTimeoutInSeconds –
+       - null defaults to Integer.MAX_VALUE seconds.
+       - Azure SDK disregards MAX_VALUE and does not sleep. We are using sync-calls that block for a specified duration.
        retryDelayInMs – null defaults to 4ms when retryPolicyType is EXPONENTIAL
        maxRetryDelayInMs – null defaults to 120ms
        */
-      Integer tryTimeoutInSeconds =
-          Math.toIntExact(Math.max(1, TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout)));
       RequestRetryOptions retryOptions =
-          new RequestRetryOptions(RetryPolicyType.FIXED, null, tryTimeoutInSeconds,
-              null, null, null);
+          new RequestRetryOptions(azureCloudConfig.azureRetryPolicy, azureCloudConfig.azureMaxTries, null,
+              azureCloudConfig.azureRetryDelayInSec, azureCloudConfig.azureMaxRetryDelayInSec, null);
       return buildBlobServiceSyncClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
     } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
       logger.error("Error building ABS blob service client: {}", ex.getMessage());
@@ -461,10 +461,23 @@ public abstract class StorageClient implements AzureStorageClient {
       logger.info("No vcrProxyHost provided");
     }
     HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
-    Integer tryTimeoutInSeconds =
-        Math.toIntExact(Math.max(1, TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout)));
-    RetryOptions retryOptions =
-        new RetryOptions(new FixedDelayOptions(cloudConfig.cloudMaxAttempts, Duration.ofSeconds(tryTimeoutInSeconds)));
+    RetryOptions retryOptions;
+    switch (azureCloudConfig.azureRetryPolicy) {
+      case FIXED:
+        retryOptions =
+            new RetryOptions(new FixedDelayOptions(azureCloudConfig.azureMaxTries,
+                Duration.ofSeconds(azureCloudConfig.azureRetryDelayInSec)));
+        break;
+      case EXPONENTIAL:
+        ExponentialBackoffOptions exponentialBackoffOptions = new ExponentialBackoffOptions();
+        exponentialBackoffOptions.setBaseDelay(Duration.ofSeconds(azureCloudConfig.azureMaxRetryDelayInSec));
+        exponentialBackoffOptions.setMaxDelay(Duration.ofSeconds(azureCloudConfig.azureMaxRetryDelayInSec));
+        exponentialBackoffOptions.setMaxRetries(azureCloudConfig.azureMaxTries);
+        retryOptions = new RetryOptions(exponentialBackoffOptions);
+        break;
+      default:
+        throw new RuntimeException(String.format("Invalid azureRetryPolicy %s", azureCloudConfig.azureRetryPolicy));
+    }
     try {
       return buildTableServiceClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
     } catch (Exception e) {

@@ -226,6 +226,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   public boolean hasSucceeded() {
     if (hasSucceededLocally() && hasSucceededRemotely()) {
       logger.info("Paranoid durability PUT succeeded for partition " + partitionId);
+      routerMetrics.paranoidDurabilitySuccessCount.inc();
       return true;
     }
     return false;

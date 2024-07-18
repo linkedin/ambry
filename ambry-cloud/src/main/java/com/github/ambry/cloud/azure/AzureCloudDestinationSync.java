@@ -965,7 +965,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         // Unknown error, increment the generic metric in azureMetrics
         String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
         logger.error(error);
-        throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+        throw AzureCloudDestination.toCloudStorageException(error, t, null);
       }
     }
     return cloudBlobMetadataMap;

@@ -578,6 +578,10 @@ class MockServer {
     StoredBlob blob = blobs.get(deleteRequest.getBlobId().getID());
     if (blob != null) {
       blob.markAsDeleted(deleteRequest.getDeletionTimeInMs());
+    } else {
+      if (deleteRequest.shouldForceDelete()) {
+        blobs.put(deleteRequest.getBlobId().getID(), new StoredBlob(deleteRequest));
+      }
     }
   }
 
@@ -747,6 +751,7 @@ class StoredBlob {
   private boolean deleted = false;
   private boolean ttlUpdated = false;
   private boolean undeleted = false;
+  private boolean isDeleteTombstone = false;
 
   StoredBlob(PutRequest putRequest, ClusterMap clusterMap) throws IOException {
     serializedSentPutRequest = ByteBuffer.allocate((int) putRequest.sizeInBytes());
@@ -766,6 +771,16 @@ class StoredBlob {
     expiresAt = Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
   }
 
+  StoredBlob(DeleteRequest deleteRequest) {
+    id = deleteRequest.getBlobId().getID();
+    type = BlobType.DataBlob; // fake type
+    properties = null;
+    serializedSentPutRequest = null;
+    deleteAt = deleteRequest.getDeletionTimeInMs();
+    deleted = true;
+    isDeleteTombstone = true;
+  }
+
   boolean isDeleted() {
     return deleted;
   }
@@ -780,6 +795,10 @@ class StoredBlob {
 
   boolean hasExpired() {
     return expiresAt != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > expiresAt;
+  }
+
+  boolean isDeleteTombstone() {
+    return isDeleteTombstone;
   }
 
   void markAsDeleted(long deleteAt) {
