@@ -129,6 +129,12 @@ public class ReplicaThread implements Runnable {
 
   private volatile ExchangeMetadataListener exchangeMetadataListener = null;
 
+  long numBlobsReceived = 0;
+  long numBlobsAbsent = 0;
+  long numBlobsPresent = 0;
+  long numMetadataOpsForBlobsPresent = 0;
+  long numMetadataOpsForBlobsAbsent = 0;
+
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyConverter storeKeyConverter,
@@ -374,8 +380,9 @@ public class ReplicaThread implements Runnable {
   public void replicate() {
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     long oneRoundStartTimeMs = time.milliseconds();
+    int numPartitions = 0;
     Long fastestReplicaFinishTime = null;
-    logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
+    logger.error("[snkt] Thread name: {} Start RemoteReplicaGroup replication", threadName);
     List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
     int remoteReplicaGroupId = 0;
 
@@ -399,6 +406,7 @@ public class ReplicaThread implements Runnable {
             RemoteReplicaGroup group =
                 new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
             remoteReplicaGroups.add(group);
+            numPartitions += replicaSubList.size();
           }
         }
         if (standbyReplicasWithNoProgress.size() > 0) {
@@ -408,6 +416,7 @@ public class ReplicaThread implements Runnable {
             RemoteReplicaGroup group =
                 new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
             remoteReplicaGroups.add(group);
+            numPartitions += standbyReplicasTimedOutOnNoProgress.size();
           }
         }
       }
@@ -450,7 +459,14 @@ public class ReplicaThread implements Runnable {
           .forEach(
               g -> exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
                   .addAll(g.getExchangeMetadataResponseList()));
-
+      logger.error("[snkt] num_partitions = {}, num_blobs_rcvd = {}, num_blobs_present = {}, num_blobs_absent = {}, num_md_per_blob_present = {}, num_red_ttl_update = {}",
+          numPartitions, numBlobsReceived, numBlobsPresent, numBlobsAbsent, numMetadataOpsForBlobsPresent,
+          numMetadataOpsForBlobsAbsent);
+      numBlobsReceived = 0;
+      numBlobsPresent = 0;
+      numBlobsAbsent = 0;
+      numMetadataOpsForBlobsPresent = 0;
+      numMetadataOpsForBlobsAbsent = 0;
       // Print out the exceptions.
       remoteReplicaGroups.stream()
           .filter(g -> g.isDone() && g.getException() != null)
@@ -976,6 +992,9 @@ public class ReplicaThread implements Runnable {
       DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap) throws StoreException {
     long startTime = time.milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
+    numBlobsReceived += messageInfoList.size();
+    numBlobsAbsent += missingRemoteStoreMessages.size();
+    numBlobsPresent += messageInfoList.size() - missingRemoteStoreMessages.size();
     for (MessageInfo messageInfo : messageInfoList) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       if (remoteReplicaInfo.getLocalReplicaId().getPartitionId().compareTo(blobId.getPartition()) != 0) {
@@ -1042,6 +1061,7 @@ public class ReplicaThread implements Runnable {
    */
   public void applyUpdatesToBlobInLocalStore(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo,
       BlobId localKey) throws StoreException {
+    numMetadataOpsForBlobsPresent += 1; // findkey is 1 metadata call, if no cache
     MessageInfo localMessageInfo = remoteReplicaInfo.getLocalStore().findKey(localKey);
     boolean deletedLocally = localMessageInfo.isDeleted();
     boolean ttlUpdatedLocally = localMessageInfo.isTtlUpdated();
@@ -1058,9 +1078,11 @@ public class ReplicaThread implements Runnable {
             .containerId(localKey.getContainerId())
             .build();
         if (messageInfo.isTtlUpdated() && !ttlUpdatedLocally) {
+          numMetadataOpsForBlobsPresent += 1;
           applyTtlUpdate(info, remoteReplicaInfo);
         }
         if (messageInfo.isDeleted()) {
+          numMetadataOpsForBlobsPresent += 1;
           applyDelete(info, remoteReplicaInfo);
         }
       }
@@ -1083,8 +1105,10 @@ public class ReplicaThread implements Runnable {
           // we can reuse the lifeVersion for undelete and ttl update, since the delete would be the final state of
           // this lifeVersion.
           if (deletedLocally) {
+            numMetadataOpsForBlobsPresent += 1;
             applyUndelete(info, remoteReplicaInfo);
           }
+          numMetadataOpsForBlobsPresent += 1;
           applyTtlUpdate(info, remoteReplicaInfo);
         } else {
           // if final state is not delete, then to bump lifeVersion in local store to remote lifeVersion, we have to
@@ -1095,10 +1119,13 @@ public class ReplicaThread implements Runnable {
 
       // if we are here, then the ttl update is matched
       if (messageInfo.isDeleted()) {
+        numMetadataOpsForBlobsPresent += 1;
         applyDelete(info, remoteReplicaInfo);
       } else {
+        numMetadataOpsForBlobsPresent += 1;
         applyUndelete(info, remoteReplicaInfo);
         if (shouldInsertTtlUpdate) {
+          numMetadataOpsForBlobsPresent += 1;
           applyTtlUpdate(info, remoteReplicaInfo);
         }
       }
@@ -1284,6 +1311,7 @@ public class ReplicaThread implements Runnable {
                 // messageInfo is the Blob final state and the operation time is the blob creation time.
                 // So the applyTtlUpdate will use the creation time as the Ttl operation time.
                 if (messageInfo.isTtlUpdated()) {
+                  numMetadataOpsForBlobsAbsent += (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time) ? 1 : 0;
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }
                 StoreKey key = messageInfo.getStoreKey();

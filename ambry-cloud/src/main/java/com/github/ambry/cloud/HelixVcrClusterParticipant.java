@@ -120,8 +120,8 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
             // use this condition to capture all potential exceptions.
             logger.warn("AddPartition for {} failed after retry: ", partitionIdStr, exception);
           } else {
-            logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
-                vcrInstanceName, assignedPartitionIds.size());
+            // logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
+            //    vcrInstanceName, assignedPartitionIds.size());
           }
         });
   }
