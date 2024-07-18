@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzureMetrics;
@@ -26,6 +25,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replication.RemoteReplicaInfo;
@@ -59,6 +59,8 @@ public class VcrReplicaThreadTest {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThreadTest.class);
   private final MetricRegistry metrics;
   private final AzureMetrics azureMetrics;
+  private final AzuriteUtils azuriteUtils;
+  private final AzureCloudConfig azureCloudConfig;
   protected AzureCloudDestinationSync azureClient;
   protected MockClusterMap clustermap;
   public static final int NUM_NODES = 5; // Also num_replicas
@@ -66,40 +68,71 @@ public class VcrReplicaThreadTest {
   protected ClusterMap clusterMap;
   public VcrReplicaThreadTest() throws IOException, ReflectiveOperationException {
     clusterMap = new MockClusterMap();
-    Properties props = new AzuriteUtils().getAzuriteConnectionProperties();
-    props.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, String.valueOf(1));
-    props.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION.name());
+    azuriteUtils = new AzuriteUtils();
+    Properties props = azuriteUtils.getAzuriteConnectionProperties();
+    props.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(1));
     metrics = new MetricRegistry();
     azureMetrics = new AzureMetrics(metrics);
-    azureClient = new AzuriteUtils().getAzuriteClient(props, metrics, clusterMap);
+    azureClient = azuriteUtils.getAzuriteClient(props, metrics, clusterMap, null);
     properties = new VerifiableProperties(props);
+    azureCloudConfig = new AzureCloudConfig(properties);
     // Create test cluster MAP
     clustermap = new MockClusterMap(false, false, NUM_NODES,
         1, NUM_PARTITIONS, true, false,
         "localhost");
   }
 
-  HashMap<BlobId, CloudBlobMetadata> createBlob(String data) {
+  HashMap<BlobId, CloudBlobMetadata> createBlob(String data, int numBlobs) {
     HashMap<BlobId, CloudBlobMetadata> blobs = new HashMap<>();
     PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
-        partitionId, false, BlobId.BlobDataType.DATACHUNK);
-    HashMap<String, String> map = new HashMap<>();
-    long now = System.currentTimeMillis();
-    // Required fields
-    map.put(CloudBlobMetadata.FIELD_ID, blobId.getID());
-    map.put(CloudBlobMetadata.FIELD_PARTITION_ID, String.valueOf(blobId.getPartition().getId()));
-    map.put(CloudBlobMetadata.FIELD_ACCOUNT_ID, String.valueOf(blobId.getAccountId()));
-    map.put(CloudBlobMetadata.FIELD_CONTAINER_ID, String.valueOf(blobId.getContainerId()));
-    map.put(CloudBlobMetadata.FIELD_SIZE, String.valueOf(data.length()));
-    map.put(CloudBlobMetadata.FIELD_CREATION_TIME, String.valueOf(now));
-    map.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(now));
-    map.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(now));
-    blobs.put(blobId, CloudBlobMetadata.fromMap(map));
+    IntStream.range(0, numBlobs).forEach(i -> {
+      BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
+          accountId, containerId, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      HashMap<String, String> map = new HashMap<>();
+      long now = System.currentTimeMillis();
+      // Required fields
+      map.put(CloudBlobMetadata.FIELD_ID, blobId.getID());
+      map.put(CloudBlobMetadata.FIELD_PARTITION_ID, String.valueOf(blobId.getPartition().getId()));
+      map.put(CloudBlobMetadata.FIELD_ACCOUNT_ID, String.valueOf(blobId.getAccountId()));
+      map.put(CloudBlobMetadata.FIELD_CONTAINER_ID, String.valueOf(blobId.getContainerId()));
+      map.put(CloudBlobMetadata.FIELD_SIZE, String.valueOf(data.length()));
+      map.put(CloudBlobMetadata.FIELD_CREATION_TIME, String.valueOf(now));
+      map.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(now));
+      blobs.put(blobId, CloudBlobMetadata.fromMap(map));
+    });
     return blobs;
+  }
+
+  CloudBlobMetadata getBlobMetadata(BlobId blob) {
+    AtomicReference<CloudBlobMetadata> md = new AtomicReference<>();
+    IntStream.range(0,5).forEach(i -> {
+      try {
+        md.set(azureClient.getBlobMetadata(Collections.singletonList(blob)).get(blob.getID()));
+      } catch (CloudStorageException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    return md.get();
+  }
+
+  boolean verifyConstantMetadataFields(CloudBlobMetadata original, CloudBlobMetadata received) {
+    assertEquals(original.getId(), received.getId());
+    assertEquals(original.getPartitionId(), received.getPartitionId());
+    assertEquals(original.getAccountId(), received.getAccountId());
+    assertEquals(original.getContainerId(), received.getContainerId());
+    assertEquals(original.getSize(), received.getSize());
+    assertEquals(original.getCreationTime(), received.getCreationTime());
+    assertEquals(original.getNameSchemeVersion(), azureCloudConfig.azureNameSchemeVersion);
+    // these fields are unused but check them any ways
+    assertEquals(original.getEncryptionOrigin(), received.getEncryptionOrigin());
+    assertEquals(original.getVcrKmsContext(), received.getVcrKmsContext());
+    assertEquals(original.getCryptoAgentFactory(), received.getCryptoAgentFactory());
+    assertEquals(original.getEncryptedSize(), received.getEncryptedSize());
+    assertEquals(original.getUploadTime(), received.getUploadTime());
+    return true;
   }
 
   /**
@@ -109,25 +142,50 @@ public class VcrReplicaThreadTest {
   @Test
   public void testThreadLocalMetadataCache() throws CloudStorageException {
     String data = "hello world!";
-    HashMap<BlobId, CloudBlobMetadata> blobs = createBlob(data);
-    BlobId blob = blobs.keySet().stream().collect(Collectors.toList()).get(0);
-    CloudBlobMetadata metadata = blobs.values().stream().collect(Collectors.toList()).get(0);
-    azureClient.uploadBlob(blob, data.length(), metadata,
-        new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
-    AtomicReference<CloudBlobMetadata> md = new AtomicReference<>();
-    IntStream.range(0,5).forEach(i -> {
-      try {
-        md.set(azureClient.getBlobMetadata(Collections.singletonList(blob)).get(blob.getID()));
-      } catch (CloudStorageException e) {
-        throw new RuntimeException(e);
-      }
-    });
-    assertEquals(1, azureMetrics.blobGetPropertiesSuccessRate.getCount()); // get-blob-properties must be called once
-    assertEquals(metadata, md.get());
+    HashMap<BlobId, CloudBlobMetadata> blobs = createBlob(data, 5);
+    int iter = 0;
+    for (BlobId blob : blobs.keySet()) {
+      CloudBlobMetadata metadata = blobs.get(blob);
+      short version = metadata.getLifeVersion();
+      // put blob
+      azureClient.uploadBlob(blob, data.length(), metadata,
+          new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
+      assertEquals(metadata, getBlobMetadata(blob)); // same content
+      assertFalse(getBlobMetadata(blob).isTtlUpdated());
+      assertFalse(getBlobMetadata(blob).isDeleted());
+      assertFalse(getBlobMetadata(blob).isUndeleted());
+
+      // remove TTL
+      azureClient.updateBlobExpiration(blob, Utils.Infinite_Time, null);
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      assertTrue(getBlobMetadata(blob).isTtlUpdated());
+      assertFalse(getBlobMetadata(blob).isDeleted());
+      assertFalse(getBlobMetadata(blob).isUndeleted());
+
+      // delete blob
+      long now = System.currentTimeMillis();
+      azureClient.deleteBlob(blob, now, (short) (version + 1), null);
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      assertTrue(getBlobMetadata(blob).isTtlUpdated());
+      assertTrue(getBlobMetadata(blob).isDeleted());
+      assertFalse(getBlobMetadata(blob).isUndeleted());
+      assertEquals(now, getBlobMetadata(blob).getDeletionTime());
+
+      // undelete blob
+      azureClient.undeleteBlob(blob, (short) (version + 2), null);
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      assertTrue(getBlobMetadata(blob).isTtlUpdated());
+      assertFalse(getBlobMetadata(blob).isDeleted());
+      assertTrue(getBlobMetadata(blob).isUndeleted());
+
+      // fetch metadata per blob _exactly_ once, all other calls should hit cache
+      assertEquals(iter+1, azureMetrics.blobGetPropertiesSuccessRate.getCount());
+      iter += 1;
+    }
   }
 
   @Test
-  public void testSelectReplicas() throws IOException {
+  public void testSelectReplicas() {
     // Give hosts a name
     AtomicInteger ai = new AtomicInteger(0);
     int Z = 'Z';

@@ -22,7 +22,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.Properties;
 import org.slf4j.Logger;
@@ -69,24 +71,7 @@ public class AzuriteUtils {
   public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry,
       ClusterMap clusterMap, AccountService accountService)
       throws ReflectiveOperationException {
-    // V2 does not use cosmos
-    properties.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "does_not_matter");
-    properties.setProperty(AzureCloudConfig.COSMOS_DATABASE, "does_not_matter");
-    properties.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "does_not_matter");
-    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
-    properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING, AzuriteUtils.AZURITE_TABLE_CONNECTION_STRING);
     return new AzureCloudDestinationSync(new VerifiableProperties(properties), metricRegistry,  clusterMap, accountService);
-  }
-
-  /**
-   * Returns a client to connect to Azurite
-   * @param metricRegistry Metrics
-   * @param clusterMap Cluster map
-   * @return Sync client to connect to Azurite
-   */
-  public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap)
-      throws ReflectiveOperationException {
-    return getAzuriteClient(properties, metricRegistry, clusterMap, null);
   }
 
   public Properties getAzuriteConnectionProperties() {
@@ -101,6 +86,12 @@ public class AzuriteUtils {
     properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
     properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING,
         AzuriteUtils.AZURITE_TABLE_CONNECTION_STRING);
+    properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, String.valueOf(1)); // always 1 for vcr-2.0
+    properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY,
+        AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION.name()); // always PARTITION for vcr-2.0
+    properties.setProperty(ServerConfig.SERVER_MESSAGE_TRANSFORMER, ""); // not using for backups
+    properties.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1"); // 1 for testing
+    properties.setProperty(AzureCloudConfig.AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, String.valueOf(1)); // 1 for testing
     return properties;
   }
 
