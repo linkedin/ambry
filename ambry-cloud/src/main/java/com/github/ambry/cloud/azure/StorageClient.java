@@ -462,8 +462,8 @@ public abstract class StorageClient implements AzureStorageClient {
     HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
     RetryOptions retryOptions;
     ExponentialBackoffOptions exponentialBackoffOptions = new ExponentialBackoffOptions();
-    exponentialBackoffOptions.setBaseDelay(Duration.ofSeconds(300));
-    exponentialBackoffOptions.setMaxDelay(Duration.ofSeconds(10));
+    exponentialBackoffOptions.setBaseDelay(Duration.ofSeconds(10));
+    exponentialBackoffOptions.setMaxDelay(Duration.ofSeconds(300));
     exponentialBackoffOptions.setMaxRetries(3);
     retryOptions = new RetryOptions(exponentialBackoffOptions);
     try {
