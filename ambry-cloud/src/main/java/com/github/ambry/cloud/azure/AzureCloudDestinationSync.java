@@ -432,6 +432,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME).equals(String.valueOf(Utils.Infinite_Time))) {
       metadata.remove(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
     }
+    metadata.remove(CloudBlobMetadata.FIELD_UPLOAD_TIME); // unused field
     return metadata;
   }
 
