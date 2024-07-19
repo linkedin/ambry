@@ -92,7 +92,6 @@ public class CloudBlobStore implements Store {
   private final boolean requireEncryption;
   // Distinguishes between VCR and live serving mode
   private final boolean isVcr;
-  private boolean started;
   private volatile ReplicaState currentState = ReplicaState.OFFLINE;
   private CloudConfig cloudConfig;
 
@@ -141,7 +140,6 @@ public class CloudBlobStore implements Store {
   @Override
   public void start() {
     currentState = ReplicaState.STANDBY;
-    started = true;
     logger.debug("Started store: {}", this);
   }
 
@@ -1388,19 +1386,16 @@ public class CloudBlobStore implements Store {
       recentBlobCache.clear();
     }
     currentState = ReplicaState.OFFLINE;
-    started = false;
     logger.info("Stopped store: {}", this.toString());
   }
 
   @Override
   public boolean isStarted() {
-    return started;
+    return true;
   }
 
   private void checkStarted() throws StoreException {
-    if (!started) {
-      throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
-    }
+    // There is no concept of start/stop Azure cloud partition
   }
 
   /**
