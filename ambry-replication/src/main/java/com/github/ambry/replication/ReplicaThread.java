@@ -1283,7 +1283,7 @@ public class ReplicaThread implements Runnable {
                 }
                 // messageInfo is the Blob final state and the operation time is the blob creation time.
                 // So the applyTtlUpdate will use the creation time as the Ttl operation time.
-                if (isTtlUpdatedNeededAfterPut(messageInfo)) {
+                if (isTtlUpdateNeededAfterPut(messageInfo)) {
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }
                 StoreKey key = messageInfo.getStoreKey();
@@ -1397,7 +1397,7 @@ public class ReplicaThread implements Runnable {
    * @param messageInfo
    * @return
    */
-  protected boolean isTtlUpdatedNeededAfterPut(MessageInfo messageInfo) {
+  protected boolean isTtlUpdateNeededAfterPut(MessageInfo messageInfo) {
     return messageInfo.isTtlUpdated();
   }
 
