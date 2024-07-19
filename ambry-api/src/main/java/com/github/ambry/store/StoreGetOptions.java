@@ -25,12 +25,8 @@ public enum StoreGetOptions {
   Store_Include_Expired,
   /**
    * This option indicates that the store needs to return the message even if it has been
-   * marked for deletion as long as the message is still in delete retention window
+   * marked for deletion as long as the message has not been physically deleted from the
+   * store.
    */
-  Store_Include_Deleted,
-  /**
-   * This option indicates that the store needs to return the message as long as the message
-   * has not been physically deleted from the store.
-   */
-  Store_Include_Compaction_Ready
+  Store_Include_Deleted
 }
