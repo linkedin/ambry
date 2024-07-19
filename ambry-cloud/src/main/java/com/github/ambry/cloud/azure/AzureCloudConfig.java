@@ -470,9 +470,8 @@ public class AzureCloudConfig {
   public final AzureBlobDeletePolicy azureBlobDeletePolicy;
 
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
-    // 5000 is the default size of Azure blob storage
     azureBlobDeletePolicy = verifiableProperties.getEnum(AZURE_BLOB_DELETE_POLICY, AzureBlobDeletePolicy.class, DEFAULT_AZURE_BLOB_DELETE_POLICY);
-    azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000);
+    azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000); // 5000 is the default size of Azure blob storage
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     azureTableConnectionString = verifiableProperties.getString(AZURE_TABLE_CONNECTION_STRING, "");
     azureTableNameCorruptBlobs = verifiableProperties.getString(AZURE_TABLE_NAME_CORRUPT_BLOBS, DEFAULT_AZURE_TABLE_NAME_CORRUPT_BLOBS);
