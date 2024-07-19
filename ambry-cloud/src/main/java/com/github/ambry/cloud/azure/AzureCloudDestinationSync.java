@@ -970,12 +970,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
         isErased = true;
         break;
       case HttpStatus.SC_NOT_FOUND:
-        // If you're trying to delete a blob, it must exist. If it doesn't, then there is something wrong in the code.
+        // If you're trying to delete a blob, then it must exist.
+        // If it doesn't, then there is something wrong in the code. Go figure it out !
       default:
         // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
         azureMetrics.blobCompactionErrorCount.inc();
-        logger.error("[ERASE] Failed to erase blob {}/{} from Azure blob storage with status {}",
-            blobClient.getContainerName(), blobClient.getBlobName(), response.getStatusCode());
+        logger.error("[ERASE] Failed to erase blob {}/{} from Azure blob storage, reason = {}, status {}",
+            blobClient.getContainerName(), blobClient.getBlobName(), eraseReason, response.getStatusCode());
     }
     return isErased;
   }
