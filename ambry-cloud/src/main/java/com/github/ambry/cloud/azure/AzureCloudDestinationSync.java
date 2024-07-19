@@ -206,7 +206,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     }
     AmbryCache cache = threadLocalMdCache.get();
     cacheOps += 1;
-    if (cacheOps > 10000) {
+    if (cacheOps > 100) {
       // print hit rate every N ops
       cacheOps = 0;
       cache.printCacheStats();
