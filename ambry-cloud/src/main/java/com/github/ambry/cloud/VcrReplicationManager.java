@@ -398,7 +398,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
       throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
-    if (numPartitionsAdded.get() >= 100) {
+    if (numPartitionsAdded.get() >= 20) {
       return;
     }
     ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());

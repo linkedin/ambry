@@ -1310,7 +1310,7 @@ public class ReplicaThread implements Runnable {
                 }
                 // messageInfo is the Blob final state and the operation time is the blob creation time.
                 // So the applyTtlUpdate will use the creation time as the Ttl operation time.
-                if (messageInfo.isTtlUpdated()) {
+                if (isTtlUpdatedNeeded(messageInfo)) {
                   numMetadataOpsForBlobsAbsent += (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time) ? 1 : 0;
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }
@@ -1416,6 +1416,10 @@ public class ReplicaThread implements Runnable {
    */
   protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
     // no-op. Inheritor can override.
+  }
+
+  protected boolean isTtlUpdatedNeeded(MessageInfo messageInfo) {
+    return messageInfo.isTtlUpdated();
   }
 
   /**

@@ -170,6 +170,13 @@ public class AmbryCache {
     return result;
   }
 
+  public void printCacheStats() {
+    double hitRate = ambryCache.stats().requestCount() == 0 ? 0 : ((100f * ambryCache.stats().hitCount())/ambryCache.stats().requestCount());
+    double evictionRate = ambryCache.stats().requestCount() == 0 ? 0 : ((100f * ambryCache.stats().evictionCount())/ambryCache.stats().requestCount());
+    long numEntries = ambryCache.estimatedSize();
+    logger.info("[snkt] hit rate = {}, eviction rate = {}, size = {}", hitRate, evictionRate, numEntries);
+  }
+
   /**
    * Initialize metrics for this instance of AmbryCache
    */

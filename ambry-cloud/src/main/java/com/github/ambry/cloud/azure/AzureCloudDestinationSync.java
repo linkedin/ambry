@@ -107,6 +107,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
   ThreadLocal<AmbryCache> threadLocalMdCache;
+  private int cacheOps = 0;
+
   protected class AzureBlobProperties implements AmbryCacheEntry {
 
     private final BlobProperties properties;
@@ -202,7 +204,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
           cloudConfig.recentBlobCacheLimit, metrics));
       logger.info("Created AmbryCache {}", threadLocalMdCache.get().toString());
     }
-    return threadLocalMdCache.get();
+    AmbryCache cache = threadLocalMdCache.get();
+    cacheOps += 1;
+    if (cacheOps > 10000) {
+      // print hit rate every N ops
+      cacheOps = 0;
+      cache.printCacheStats();
+    }
+    return cache;
   }
 
   /**
@@ -426,6 +435,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
           absence as 0 and confusing the reader.
        */
       metadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, "0");
+    }
+    // If permanent blob, then just remove the expiry = -1
+    if (metadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME) &&
+        metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME).equals(String.valueOf(Utils.Infinite_Time))) {
+      metadata.remove(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
     }
     return metadata;
   }

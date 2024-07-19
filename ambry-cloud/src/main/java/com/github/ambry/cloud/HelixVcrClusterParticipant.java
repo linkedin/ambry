@@ -94,8 +94,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
-    List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
-    logger.info("All partitions from clusterMap: {}.", allPartitions);
+    logger.info("[snkt] numPartitions in clusterMap = {}.", clusterMap.getAllPartitionIds(null).size());
     vcrClusterName = cloudConfig.vcrClusterName;
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
