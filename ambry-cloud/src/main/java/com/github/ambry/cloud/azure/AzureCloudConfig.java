@@ -463,8 +463,15 @@ public class AzureCloudConfig {
   public static final int DEFAULT_AZURE_MAX_TRIES = 4; // Defaults from RequestRetryOptions
   @Config(AZURE_MAX_TRIES)
   public final int azureMaxTries;
+
+  public static final String AZURE_BLOB_DELETE_POLICY = "azure.blob.delete.policy";
+  public final AzureBlobDeletePolicy DEFAULT_AZURE_BLOB_DELETE_POLICY = AzureBlobDeletePolicy.EVENTUAL;
+  @Config(AZURE_BLOB_DELETE_POLICY)
+  public final AzureBlobDeletePolicy azureBlobDeletePolicy;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     // 5000 is the default size of Azure blob storage
+    azureBlobDeletePolicy = verifiableProperties.getEnum(AZURE_BLOB_DELETE_POLICY, AzureBlobDeletePolicy.class, DEFAULT_AZURE_BLOB_DELETE_POLICY);
     azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000);
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     azureTableConnectionString = verifiableProperties.getString(AZURE_TABLE_CONNECTION_STRING, "");
