@@ -107,7 +107,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
   ThreadLocal<AmbryCache> threadLocalMdCache;
-  private int cacheOps = 0;
 
   protected class AzureBlobProperties implements AmbryCacheEntry {
 
@@ -204,14 +203,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           cloudConfig.recentBlobCacheLimit, metrics));
       logger.info("Created AmbryCache {}", threadLocalMdCache.get().toString());
     }
-    AmbryCache cache = threadLocalMdCache.get();
-    cacheOps += 1;
-    if (cacheOps > 10000) {
-      // print hit rate every N ops
-      cacheOps = 0;
-      cache.printCacheStats();
-    }
-    return cache;
+    return threadLocalMdCache.get();
   }
 
   /**

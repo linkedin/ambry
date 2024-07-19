@@ -122,7 +122,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   public static final String REPLICATED_UNITL_UTC = "replicatedUntilUTC";
   public static final String BINARY_TOKEN = "binaryToken";
   public static final String DATE_FORMAT = "yyyy_MMM_dd_HH_mm_ss";
-  AtomicInteger numPartitionsAdded = new AtomicInteger(0);
 
   public VcrReplicationManager(VerifiableProperties properties, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
@@ -398,9 +397,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
       throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
-    if (numPartitionsAdded.get() >= 20) {
-      return;
-    }
+
     ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());
     if (!storeManager.addBlobStore(cloudReplica)) {
       logger.error("Can't start cloudstore for replica {}", cloudReplica);
@@ -436,8 +433,6 @@ public class VcrReplicationManager extends ReplicationEngine {
 
         // Add remoteReplicaInfos to {@link ReplicaThread}.
         addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-        logger.info("[snkt] Backing up partition-{}, total partitions added = {}", partitionId.getId(),
-            numPartitionsAdded.incrementAndGet());
         if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
           replicationMetrics.addLagMetricForPartition(partitionId, true);
         }
