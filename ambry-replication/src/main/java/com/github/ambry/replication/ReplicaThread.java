@@ -382,7 +382,7 @@ public class ReplicaThread implements Runnable {
     long oneRoundStartTimeMs = time.milliseconds();
     int numPartitions = 0;
     Long fastestReplicaFinishTime = null;
-    logger.error("[snkt] Thread name: {} Start RemoteReplicaGroup replication", threadName);
+    logger.info("Thread name: {} Start RemoteReplicaGroup replication", threadName);
     List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
     int remoteReplicaGroupId = 0;
 
@@ -459,9 +459,11 @@ public class ReplicaThread implements Runnable {
           .forEach(
               g -> exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
                   .addAll(g.getExchangeMetadataResponseList()));
-      logger.error("[snkt] num_partitions = {}, num_blobs_rcvd = {}, num_blobs_present = {}, num_blobs_absent = {}, num_md_per_blob_present = {}, num_red_ttl_update = {}",
-          numPartitions, numBlobsReceived, numBlobsPresent, numBlobsAbsent, numMetadataOpsForBlobsPresent,
-          numMetadataOpsForBlobsAbsent);
+      if (false && numPartitions > 0) {
+        logger.error("[snkt] num_partitions = {}, num_blobs_rcvd = {}, num_blobs_present = {}, num_blobs_absent = {}, num_md_per_blob_present = {}, num_red_ttl_update = {}",
+            numPartitions, numBlobsReceived, numBlobsPresent, numBlobsAbsent, numMetadataOpsForBlobsPresent,
+            numMetadataOpsForBlobsAbsent);
+      }
       numBlobsReceived = 0;
       numBlobsPresent = 0;
       numBlobsAbsent = 0;

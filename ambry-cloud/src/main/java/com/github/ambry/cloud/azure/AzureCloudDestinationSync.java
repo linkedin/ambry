@@ -83,6 +83,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
@@ -107,7 +108,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
   ThreadLocal<AmbryCache> threadLocalMdCache;
-  private int cacheOps = 0;
+  private AtomicInteger cacheOps = new AtomicInteger(0);
 
   protected class AzureBlobProperties implements AmbryCacheEntry {
 
@@ -205,10 +206,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.info("Created AmbryCache {}", threadLocalMdCache.get().toString());
     }
     AmbryCache cache = threadLocalMdCache.get();
-    cacheOps += 1;
-    if (cacheOps > 100) {
+    if (cacheOps.incrementAndGet() > 100000) {
       // print hit rate every N ops
-      cacheOps = 0;
+      cacheOps.set(0);
       cache.printCacheStats();
     }
     return cache;
