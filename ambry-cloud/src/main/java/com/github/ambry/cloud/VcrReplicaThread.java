@@ -160,7 +160,7 @@ public class VcrReplicaThread extends ReplicaThread {
                 .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath())));
   }
 
-  protected boolean isTtlUpdatedNeeded(MessageInfo messageInfo) {
+  protected boolean isTtlUpdatedNeededAfterPut(MessageInfo messageInfo) {
     return messageInfo.isTtlUpdated() && messageInfo.getExpirationTimeInMs() != Utils.Infinite_Time;
   }
 
