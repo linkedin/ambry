@@ -276,7 +276,7 @@ public class BlobStoreTest {
   // A list of keys grouped by the log segment that they belong to
   private final List<Set<MockId>> idsByLogSegment = new ArrayList<>();
   // Set of all deleted keys
-  private final Map<MockId, Long> deletedKeys = new ConcurrentHashMap<MockId, Long>();
+  private final Set<MockId> deletedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // Set of all expired keys
   private final Set<MockId> expiredKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // Set of all keys that are not deleted/expired
@@ -657,27 +657,13 @@ public class BlobStoreTest {
     checkStoreInfo(storeInfo, liveKeys);
 
     MockMessageStoreHardDelete hd = (MockMessageStoreHardDelete) hardDelete;
-    for (MockId id : deletedKeys.keySet()) {
+    for (MockId id : deletedKeys) {
       // cannot get without StoreGetOptions
       verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
 
       // with StoreGetOptions.Store_Include_Deleted
-      storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Compaction_Ready));
+      storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
       checkStoreInfo(storeInfo, Collections.singleton(id));
-
-      long operationTimeMs = deletedKeys.get(id);
-      if (operationTimeMs + TimeUnit.MINUTES.toMillis(CuratedLogIndexState.deleteRetentionHour * 60)
-          >= time.milliseconds()) {
-        storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
-        checkStoreInfo(storeInfo, Collections.singleton(id));
-      } else {
-        try {
-          store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
-          fail("Should not be able to GET " + id);
-        } catch (StoreException e) {
-          assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
-        }
-      }
 
       // with all StoreGetOptions
       storeInfo = store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
@@ -1242,7 +1228,7 @@ public class BlobStoreTest {
     info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
         addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), lifeVersion);
     store.delete(Collections.singletonList(info));
-    deletedKeys.put(addedId, time.milliseconds());
+    deletedKeys.add(addedId);
     undeletedKeys.remove(addedId);
     liveKeys.remove(addedId);
     StoreInfo storeInfo = store.get(Arrays.asList(addedId), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
@@ -1287,7 +1273,7 @@ public class BlobStoreTest {
     info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
         addedId.getAccountId(), addedId.getContainerId(), time.milliseconds(), MessageInfo.LIFE_VERSION_FROM_FRONTEND);
     store.delete(Collections.singletonList(info));
-    deletedKeys.put(addedId, time.milliseconds());
+    deletedKeys.add(addedId);
     undeletedKeys.remove(addedId);
     liveKeys.remove(addedId);
     storeInfo = store.get(Arrays.asList(addedId), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
@@ -1437,7 +1423,7 @@ public class BlobStoreTest {
   @Test
   public void deleteErrorCasesTest() throws StoreException {
     // ID that is already deleted
-    verifyDeleteFailure(deletedKeys.keySet().iterator().next(), StoreErrorCodes.ID_Deleted);
+    verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
     // ID that does not exist
     verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
     MockId id = getUniqueId();
@@ -1569,12 +1555,12 @@ public class BlobStoreTest {
     inNoTtlUpdatePeriodTest();
     // ID that is already updated
     for (MockId ttlUpdated : ttlUpdatedKeys) {
-      if (!deletedKeys.containsKey(ttlUpdated)) {
+      if (!deletedKeys.contains(ttlUpdated)) {
         verifyTtlUpdateFailure(ttlUpdated, Utils.Infinite_Time, StoreErrorCodes.Already_Updated);
       }
     }
     // ID that is already deleted
-    for (MockId deleted : deletedKeys.keySet()) {
+    for (MockId deleted : deletedKeys) {
       verifyTtlUpdateFailure(deleted, Utils.Infinite_Time, StoreErrorCodes.ID_Deleted);
     }
     // Attempt to set expiry time to anything other than infinity
@@ -1802,7 +1788,7 @@ public class BlobStoreTest {
   @Test
   public void isKeyDeletedTest() throws StoreException {
     for (MockId id : allKeys.keySet()) {
-      assertEquals("Returned state is not as expected", deletedKeys.containsKey(id), store.isKeyDeleted(id));
+      assertEquals("Returned state is not as expected", deletedKeys.contains(id), store.isKeyDeleted(id));
     }
     for (MockId id : deletedAndShouldBeCompactedKeys) {
       assertTrue("Returned state is not as expected", store.isKeyDeleted(id));
@@ -3021,7 +3007,7 @@ public class BlobStoreTest {
       store.forceDelete(Collections.singletonList(info));
     }
 
-    deletedKeys.put(idToDelete, operationTimeMs);
+    deletedKeys.add(idToDelete);
     undeletedKeys.remove(idToDelete);
     liveKeys.remove(idToDelete);
     return info;
@@ -3095,7 +3081,7 @@ public class BlobStoreTest {
       assertEquals("ContainerId mismatch", expectedInfo.getContainerId(), messageInfo.getContainerId());
       assertEquals("OperationTime mismatch", expectedInfo.getOperationTimeMs(), messageInfo.getOperationTimeMs());
       assertEquals("isTTLUpdated not as expected", ttlUpdatedKeys.contains(id), messageInfo.isTtlUpdated());
-      assertEquals("isDeleted not as expected", deletedKeys.containsKey(id), messageInfo.isDeleted());
+      assertEquals("isDeleted not as expected", deletedKeys.contains(id), messageInfo.isDeleted());
       assertEquals("isUndeleted not as expected", undeletedKeys.contains(id), messageInfo.isUndeleted());
       if (IndexValue.hasLifeVersion(lifeVersion)) {
         assertEquals("lifeVersion not as expected", lifeVersion, messageInfo.getLifeVersion());
@@ -3195,6 +3181,8 @@ public class BlobStoreTest {
       deletes++;
       idsByLogSegment.get(2).add(idToDelete);
       // 1 DELETE for the PUT in the same segment
+      deletedKeys.add(addedId);
+      liveKeys.remove(addedId);
       delete(addedId);
       deletes++;
 
@@ -3377,6 +3365,7 @@ public class BlobStoreTest {
       // 1 DELETE for the expired PUT
       delete(id);
       deletedKeyCount++;
+      deletedKeys.add(id);
       expiredKeys.remove(id);
       idsGroupedByIndexSegment.add(idsInIndexSegment);
       idsInLogSegment.addAll(idsInIndexSegment);
@@ -3512,6 +3501,8 @@ public class BlobStoreTest {
     if (deleteCandidate == null) {
       throw new IllegalStateException("Could not find a key to delete in set: " + ids);
     }
+    deletedKeys.add(deleteCandidate);
+    liveKeys.remove(deleteCandidate);
     return deleteCandidate;
   }
 
@@ -3635,7 +3626,7 @@ public class BlobStoreTest {
         } catch (ExecutionException e) {
           StoreException storeException = (StoreException) e.getCause();
           StoreErrorCodes expectedCode = StoreErrorCodes.ID_Not_Found;
-          if (deletedKeys.containsKey(id)) {
+          if (deletedKeys.contains(id)) {
             expectedCode = StoreErrorCodes.ID_Deleted;
           } else if (expiredKeys.contains(id)) {
             expectedCode = StoreErrorCodes.TTL_Expired;

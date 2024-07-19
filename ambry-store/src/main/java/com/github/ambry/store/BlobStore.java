@@ -343,7 +343,7 @@ public class BlobStore implements Store {
         StoreGetOptions.Store_Include_Expired);
     MessageReadSet rdset = null;
     try {
-      StoreInfo stinfo = get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
+      StoreInfo stinfo = this.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
       rdset = stinfo.getMessageReadSet();
       MessageInfo minfo = stinfo.getMessageReadSetInfo().get(0);
       rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,

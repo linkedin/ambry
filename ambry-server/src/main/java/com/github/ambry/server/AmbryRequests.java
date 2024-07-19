@@ -1527,7 +1527,7 @@ public class AmbryRequests implements RequestAPI {
       storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
     }
     if (getRequest.getGetOption() == GetOption.Include_All) {
-      storeGetOptions = EnumSet.allOf(StoreGetOptions.class);
+      storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
     }
     return storeGetOptions;
   }
