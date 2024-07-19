@@ -673,6 +673,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUpdateDeleteTimeLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
+
+    if (azureCloudConfig.azureBlobDeletePolicy.equals(AzureBlobDeletePolicy.IMMEDIATE)) {
+      return eraseBlob(createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath),
+          "CUSTOMER_DELETE_REQUEST");
+    }
+
+
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
@@ -948,6 +955,31 @@ public class AzureCloudDestinationSync implements CloudDestination {
     throw new UnsupportedOperationException("findEntriesSince will not be implemented for AzureCloudDestinationSync");
   }
 
+  protected boolean eraseBlob(BlobClient blobClient, String eraseReason) {
+    Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
+    BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch("*");
+    Response<Void> response = blobClient.deleteWithResponse(DeleteSnapshotsOptionType.INCLUDE,
+        blobRequestConditions, Duration.ofMillis(cloudConfig.cloudRequestTimeout), Context.NONE);
+    boolean isErased = false;
+    storageTimer.stop();
+    switch (response.getStatusCode()) {
+      case HttpStatus.SC_ACCEPTED:
+        logger.trace("[ERASE] Erased blob {} from Azure blob storage, reason = {}, status = {}", blobClient.getBlobName(),
+            eraseReason, response.getStatusCode());
+        azureMetrics.blobCompactionSuccessRate.mark();
+        isErased = true;
+        break;
+      case HttpStatus.SC_NOT_FOUND:
+        // If you're trying to delete a blob, it must exist. If it doesn't, then there is something wrong in the code.
+      default:
+        // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
+        azureMetrics.blobCompactionErrorCount.inc();
+        logger.error("[ERASE] Failed to erase blob {} from Azure blob storage with status {}", blobClient.getBlobName(),
+            response.getStatusCode());
+    }
+    return isErased;
+  }
+
   /**
    * Erases blobs from a given list of blobs in cloud
    * @param blobItemList List of blobs in a container
@@ -994,24 +1026,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           logger.trace("[DRY-RUN][COMPACT] Can erase blob {} from Azure blob storage because {}", blobItem.getName(), eraseReason);
           numBlobsPurged += 1;
         } else {
-          Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
-          Response<Void> response = blobContainerClient.getBlobClient(blobItem.getName())
-              .deleteWithResponse(DeleteSnapshotsOptionType.INCLUDE, null, null, null);
-          storageTimer.stop();
-          switch (response.getStatusCode()) {
-            case HttpStatus.SC_ACCEPTED:
-              logger.trace("[COMPACT] Erased blob {} from Azure blob storage, reason = {}, status = {}", blobItem.getName(),
-                  eraseReason, response.getStatusCode());
-              numBlobsPurged += 1;
-              azureMetrics.blobCompactionSuccessRate.mark();
-              break;
-            case HttpStatus.SC_NOT_FOUND:
-            default:
-              // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
-              azureMetrics.blobCompactionErrorCount.inc();
-              logger.error("[COMPACT] Failed to erase blob {} from Azure blob storage with status {}", blobItem.getName(),
-                  response.getStatusCode());
-          }
+          numBlobsPurged += eraseBlob(blobContainerClient.getBlobClient(blobItem.getName()), eraseReason) ? 1 : 0;
         }
       } else {
         logger.trace("[COMPACT] Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);
