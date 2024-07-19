@@ -107,7 +107,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
   ThreadLocal<AmbryCache> threadLocalMdCache;
-
   protected class AzureBlobProperties implements AmbryCacheEntry {
 
     private final BlobProperties properties;
