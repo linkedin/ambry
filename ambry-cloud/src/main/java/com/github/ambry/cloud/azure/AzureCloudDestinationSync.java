@@ -995,8 +995,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     storageTimer.stop();
     switch (response.getStatusCode()) {
       case HttpStatus.SC_ACCEPTED:
-        logger.trace("[ERASE] Erased blob {} from Azure blob storage, reason = {}, status = {}", blobClient.getBlobName(),
-            eraseReason, response.getStatusCode());
+        logger.trace("[ERASE] Erased blob {}/{} from Azure blob storage, reason = {}, status = {}",
+            blobClient.getContainerName(), blobClient.getBlobName(), eraseReason, response.getStatusCode());
         azureMetrics.blobCompactionSuccessRate.mark();
         isErased = true;
         break;
@@ -1005,8 +1005,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
       default:
         // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
         azureMetrics.blobCompactionErrorCount.inc();
-        logger.error("[ERASE] Failed to erase blob {} from Azure blob storage with status {}", blobClient.getBlobName(),
-            response.getStatusCode());
+        logger.error("[ERASE] Failed to erase blob {}/{} from Azure blob storage with status {}",
+            blobClient.getContainerName(), blobClient.getBlobName(), response.getStatusCode());
     }
     return isErased;
   }
