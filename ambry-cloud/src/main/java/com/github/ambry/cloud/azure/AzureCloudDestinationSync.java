@@ -986,19 +986,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
     throw new UnsupportedOperationException("findEntriesSince will not be implemented for AzureCloudDestinationSync");
   }
 
+  /**
+   * Erases a blob permanently, including all snapshots of it from Azure Storage.
+   * @param blobClient Client for the blob
+   * @param eraseReason Reason to delete
+   * @return True if blob deleted, else false.
+   */
   protected boolean eraseBlob(BlobClient blobClient, String eraseReason) {
     Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
     BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch("*");
     Response<Void> response = blobClient.deleteWithResponse(DeleteSnapshotsOptionType.INCLUDE,
         blobRequestConditions, Duration.ofMillis(cloudConfig.cloudRequestTimeout), Context.NONE);
-    boolean isErased = false;
     storageTimer.stop();
     switch (response.getStatusCode()) {
       case HttpStatus.SC_ACCEPTED:
         logger.trace("[ERASE] Erased blob {}/{} from Azure blob storage, reason = {}, status = {}",
             blobClient.getContainerName(), blobClient.getBlobName(), eraseReason, response.getStatusCode());
         azureMetrics.blobCompactionSuccessRate.mark();
-        isErased = true;
         break;
       case HttpStatus.SC_NOT_FOUND:
         // If you're trying to delete a blob, then it must exist.
@@ -1009,7 +1013,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.error("[ERASE] Failed to erase blob {}/{} from Azure blob storage, reason = {}, status {}",
             blobClient.getContainerName(), blobClient.getBlobName(), eraseReason, response.getStatusCode());
     }
-    return isErased;
+    return response.getStatusCode() == HttpStatus.SC_ACCEPTED;
   }
 
   /**
