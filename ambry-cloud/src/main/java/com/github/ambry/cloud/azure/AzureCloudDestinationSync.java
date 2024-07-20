@@ -669,7 +669,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           "CUSTOMER_DELETE_REQUEST");
     }
 
-
+    // AzureBlobDeletePolicy.EVENTUAL
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
