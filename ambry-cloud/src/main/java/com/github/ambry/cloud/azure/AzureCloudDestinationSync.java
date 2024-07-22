@@ -855,7 +855,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     String blobIdStr = blobLayout.blobFilePath;
     BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
-
+    // lifeVersion must always be present because we add it explicitly before PUT
+    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
     try {
       // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
       // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
@@ -872,23 +873,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.Already_Updated);
       }
-    } catch (StoreException e) {
-      // Auth error from validator
-      azureMetrics.blobUpdateTTLErrorCount.inc();
-      String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw toCloudStorageException(error, e);
-    }
-
-    /**
-      Just remove the expiration time, instead of setting it to -1.
-      It just leads to two cases in code later in compaction and recovery, for permanent blobs.
-     */
-    cloudMetadata.remove(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
-
-    // lifeVersion must always be present because we add it explicitly before PUT
-    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
-
-    try {
+      // Just remove the expiration time, instead of setting it to -1.
+      // It just leads to two cases in code later in compaction and recovery, for permanent blobs.
+      cloudMetadata.remove(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
       logger.trace("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
@@ -896,6 +883,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return cloudlifeVersion;
+    } catch (StoreException e) {
+      // Auth error from validator
+      azureMetrics.blobUpdateTTLErrorCount.inc();
+      String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
+      throw toCloudStorageException(error, e);
     } catch (Throwable t) {
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
