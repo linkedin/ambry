@@ -852,8 +852,33 @@ public class AzureCloudDestinationSync implements CloudDestination {
       throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    String blobIdStr = blobLayout.blobFilePath;
     BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
+
+    try {
+      // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+      // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
+      // It is absorbed by applyTtlUpdate::L1395.
+      // The validator doesn't check for this, perhaps another gap in legacy code.
+      if (isDeleted(cloudMetadata)) {
+        // Replication must first undelete the deleted blob, and then update-TTL.
+        String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
+        logger.trace(error);
+        throw new StoreException(error, StoreErrorCodes.ID_Deleted);
+      }
+
+      if (!cloudMetadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
+        String error = String.format("Unable to update TTL of %s as its TTL is already updated cloud", blobIdStr);
+        logger.trace(error);
+        throw new StoreException(error, StoreErrorCodes.Already_Updated);
+      }
+    } catch (StoreException e) {
+      // Auth error from validator
+      azureMetrics.blobUpdateTTLErrorCount.inc();
+      String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
+      throw toCloudStorageException(error, e);
+    }
 
     /**
       Just remove the expiration time, instead of setting it to -1.
@@ -872,18 +897,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return cloudlifeVersion;
-    } catch (BlobStorageException bse) {
-      String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
-      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        /*
-          If we are here, it just means that two threads tried to update-ttl concurrently. This is ok.
-         */
-        logger.trace(error);
-        return cloudlifeVersion;
-      }
-      azureMetrics.blobUpdateTTLErrorCount.inc();
-      logger.error(error);
-      throw toCloudStorageException(error, bse);
     } catch (Throwable t) {
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
