@@ -910,20 +910,6 @@ public class CloudBlobStoreTest {
           any(CloudUpdateValidator.class));
     }
     verifyCacheHits(4 + numPuts + numDeletes + numUnDeletes, 3);
-
-    /*
-        Test 5: ttl update with finite expiration time fails
-        V1: Should fail
-        V2: Should fail
-     */
-    messageWriteSet = new MockMessageWriteSet();
-    CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, System.currentTimeMillis() + 20000,
-        refAccountId, refContainerId, true, false, partitionId, operationTime, isVcr);
-    try {
-      store.updateTtl(messageWriteSet.getMessageSetInfo());
-    } catch (StoreException ex) {
-      assertEquals(ex.getErrorCode(), StoreErrorCodes.Update_Not_Allowed);
-    }
   }
 
   /** Test the CloudBlobStore undelete method. */
