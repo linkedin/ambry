@@ -714,20 +714,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return true;
-    } catch (BlobStorageException bse) {
-      String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
-      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        /*
-          If we are here, it just means that two threads tried to delete concurrently. This is ok.
-         */
-        logger.trace(error);
-        return true;
-      }
-      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
-      logger.error(error);
-      throw toCloudStorageException(error, bse);
     } catch (Throwable t) {
-      // Unknown error
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
