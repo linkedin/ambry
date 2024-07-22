@@ -674,12 +674,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     }
 
     // AzureBlobDeletePolicy.EVENTUAL
-    Map<String, Object> newMetadata = new HashMap<>();
-    newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
-    newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
-
     try {
       // lifeVersion must always be present
       short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
@@ -689,19 +685,20 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.Life_Version_Conflict);
       }
-
       if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.ID_Deleted);
       }
-
     } catch (StoreException e) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
       throw toCloudStorageException(error, e);
     }
 
+    Map<String, Object> newMetadata = new HashMap<>();
+    newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
+    newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
     try {
       logger.trace("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
