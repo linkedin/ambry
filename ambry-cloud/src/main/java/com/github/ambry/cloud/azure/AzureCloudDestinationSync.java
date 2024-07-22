@@ -695,16 +695,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
           String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
               blobIdStr, cloudlifeVersion, lifeVersion);
           logger.trace(error);
-          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), null);
+          throw new StoreException(error, StoreErrorCodes.Life_Version_Conflict);
         }
         String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
         logger.trace(error);
-        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), null);
+        throw new StoreException(error, StoreErrorCodes.ID_Deleted);
       }
     } catch (StoreException e) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw AzureCloudDestination.toCloudStorageException(error, e, null);
+      throw toCloudStorageException(error, e);
     }
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
@@ -727,13 +727,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
       }
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, bse, null);
+      throw toCloudStorageException(error, bse);
     } catch (Throwable t) {
       // Unknown error
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, null);
+      throw toCloudStorageException(error, t);
     } finally {
       storageTimer.stop();
     } // try-catch
