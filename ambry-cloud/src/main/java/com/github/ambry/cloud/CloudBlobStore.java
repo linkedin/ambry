@@ -859,8 +859,7 @@ public class CloudBlobStore implements Store {
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
     try {
       for (MessageInfo msg : infos) {
-        cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time,
-            this::preTtlUpdateValidation);
+        cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time, null);
       }
     } catch (CloudStorageException cse) {
       if (cse.getCause() instanceof StoreException) {

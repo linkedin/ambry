@@ -848,11 +848,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public short
-  updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
+  updateBlobExpiration(BlobId blobId, long unused, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
-    String blobIdStr = blobLayout.blobFilePath;
     BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
