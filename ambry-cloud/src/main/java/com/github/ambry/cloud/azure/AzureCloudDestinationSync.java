@@ -663,7 +663,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
-      CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
+      CloudUpdateValidator unused) throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobUpdateDeleteTimeLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
@@ -681,20 +681,21 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
     try {
-      if (cloudUpdateValidator != null &&
-          !cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
-        // lifeVersion must always be present
-        short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
-        if (cloudlifeVersion > lifeVersion) {
-          String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
-              blobIdStr, cloudlifeVersion, lifeVersion);
-          logger.trace(error);
-          throw new StoreException(error, StoreErrorCodes.Life_Version_Conflict);
-        }
+      // lifeVersion must always be present
+      short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+      if (cloudlifeVersion > lifeVersion) {
+        String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
+            blobIdStr, cloudlifeVersion, lifeVersion);
+        logger.trace(error);
+        throw new StoreException(error, StoreErrorCodes.Life_Version_Conflict);
+      }
+
+      if (cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.ID_Deleted);
       }
+
     } catch (StoreException e) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());

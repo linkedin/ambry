@@ -638,8 +638,7 @@ public class CloudBlobStore implements Store {
   public void delete(List<MessageInfo> infos) throws StoreException {
     try {
       for (MessageInfo msg : infos) {
-        cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(),
-            this::preDeleteValidation);
+        cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(), null);
       }
     } catch (CloudStorageException cse) {
       if (cse.getCause() instanceof StoreException) {
