@@ -857,30 +857,16 @@ public class CloudBlobStore implements Store {
    */
   @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
-    // TODO: Remove the duplicate code by calling updateTtlAsync() method.
-    checkStarted();
-    // Note: We skipped uploading the blob on PUT record if the TTL was below threshold (threshold should be 0 for non DR cases).
     try {
-      for (MessageInfo msgInfo : infos) {
-        if (msgInfo.getExpirationTimeInMs() != Utils.Infinite_Time) {
-          throw new StoreException("CloudBlobStore only supports removing the expiration time",
-              StoreErrorCodes.Update_Not_Allowed);
-        }
-        if (msgInfo.isTtlUpdated()) {
-          BlobId blobId = (BlobId) msgInfo.getStoreKey();
-          requestAgent.doWithRetries(() -> updateTtlIfNeeded(blobId), "UpdateTtl", partitionId.toPathString());
-        } else {
-          logger.error("updateTtl() is called but msgInfo.isTtlUpdated is not set. msgInfo: {}", msgInfo);
-          vcrMetrics.updateTtlNotSetError.inc();
-        }
+      for (MessageInfo msg : infos) {
+        cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time,
+            this::preTtlUpdateValidation);
       }
-    } catch (CloudStorageException ex) {
-      if (ex.getCause() instanceof StoreException) {
-        throw (StoreException) ex.getCause();
+    } catch (CloudStorageException cse) {
+      if (cse.getCause() instanceof StoreException) {
+        throw (StoreException) cse.getCause();
       }
-      StoreErrorCodes errorCode =
-          (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
-      throw new StoreException(ex, errorCode);
+      throw new StoreException(cse,  StoreErrorCodes.IOError);
     }
   }
 

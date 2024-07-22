@@ -663,6 +663,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
     }
   }
 
+  CloudStorageException toCloudStorageException(String msg, Throwable t) {
+    return new CloudStorageException(msg, t);
+  }
+
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
       CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
@@ -843,7 +847,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
+  public short
+  updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
@@ -851,18 +856,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
     BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
 
-    // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
-    // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
-    // It is absorbed by applyTtlUpdate::L1395.
-    // The validator doesn't check for this, perhaps another gap in legacy code.
-    if (isDeleted(cloudMetadata)) {
-      // Replication must first undelete the deleted blob, and then update-TTL.
-      String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
-      logger.trace(error);
-      throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), null);
-    }
-
     try {
+      // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+      // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
+      // It is absorbed by applyTtlUpdate::L1395.
+      // The validator doesn't check for this, perhaps another gap in legacy code.
+      if (isDeleted(cloudMetadata)) {
+        // Replication must first undelete the deleted blob, and then update-TTL.
+        String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
+        logger.trace(error);
+        throw new StoreException(error, StoreErrorCodes.ID_Deleted);
+      }
+
       // preTtlUpdateValidation doesn't use the updateFields arg
       if (cloudUpdateValidator != null &&
           !cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, null)) {
@@ -887,13 +892,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
           Throw Already_Updated and the caller will handle it at applyTtlUpdate::L1395.
           Don't rely on the recentBlobCache as it could experience an eviction.
          */
-        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Already_Updated), null);
+        throw new StoreException(error, StoreErrorCodes.Already_Updated);
       }
     } catch (StoreException e) {
       // Auth error from validator
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw AzureCloudDestination.toCloudStorageException(error, e, null);
+      throw toCloudStorageException(error, e);
     }
 
     /*
@@ -924,12 +929,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
       }
       azureMetrics.blobUpdateTTLErrorCount.inc();
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, bse, null);
+      throw toCloudStorageException(error, bse);
     } catch (Throwable t) {
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, null);
+      throw toCloudStorageException(error, t);
     } finally {
       storageTimer.stop();
     } // try-catch
