@@ -866,7 +866,7 @@ public class CloudBlobStore implements Store {
       if (cse.getCause() instanceof StoreException) {
         throw (StoreException) cse.getCause();
       }
-      throw new StoreException(cse,  StoreErrorCodes.IOError);
+      throw new StoreException(cse.getCause(),  StoreErrorCodes.IOError);
     }
   }
 
