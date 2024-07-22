@@ -867,7 +867,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.ID_Deleted);
       }
-
       if (!cloudMetadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
         String error = String.format("Unable to update TTL of %s as its TTL is already updated cloud", blobIdStr);
         logger.trace(error);
