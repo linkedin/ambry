@@ -1879,7 +1879,6 @@ public class ReplicationTest extends ReplicationTestHelper {
     // R|id0|id1|id2|    |    |id3|id4|id4T|id3T|id2T|id1T|id0T|id1D|id3D|idT|idD|b0 |b1 |b2 |b3|b0T |b1T |b2T | b3T|
     // E|id0|id1|id2|id0D|id1T|   |id4|id4T|    |id2T|    |    |id1D|    |   |   |b0p|b1p|b2p|  |b0pT|b1pT|b2pT|    |
 
-    //TODO look here
     int[] missingKeysCounts = {0, 1, 0, 0, 1, 0};
     int[] missingBuffersCount = {5, 3, 3, 2, 0, 0};
     int expectedIndex = 0;
