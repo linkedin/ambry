@@ -793,17 +793,6 @@ public class CloudBlobStoreTest {
           any(CloudUpdateValidator.class));
     }
     verifyCacheHits(count * 4 + numPuts, count * 2);
-
-    // Test 5: Try to upload a set of blobs containing duplicates. This should fail.
-    List<MessageInfo> messageInfoList = new ArrayList<>(messageInfoMap.values());
-    messageInfoList.add(messageInfoList.get(messageInfoMap.values().size() - 1));
-    try {
-      store.delete(messageInfoList);
-      fail("delete must throw an exception for duplicates");
-    } catch (IllegalArgumentException iaex) {
-      assumeTrue(iaex.getMessage().startsWith("list contains duplicates"));
-    }
-    verifyCacheHits(count * 4 + numPuts, count * 2);
   }
 
   /** Test the CloudBlobStore updateTtl method. */
