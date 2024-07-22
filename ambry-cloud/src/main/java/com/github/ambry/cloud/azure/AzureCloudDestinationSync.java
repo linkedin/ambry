@@ -696,7 +696,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         throw new StoreException(error, StoreErrorCodes.Life_Version_Conflict);
       }
 
-      if (cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
+      if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.ID_Deleted);
