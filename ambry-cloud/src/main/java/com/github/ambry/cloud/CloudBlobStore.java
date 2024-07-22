@@ -636,24 +636,16 @@ public class CloudBlobStore implements Store {
 
   @Override
   public void delete(List<MessageInfo> infos) throws StoreException {
-    // TODO: Remove the duplicate code by calling deleteAsync() method.
-    checkStarted();
-    checkDuplicates(infos);
-
     try {
-      for (MessageInfo msgInfo : infos) {
-        BlobId blobId = (BlobId) msgInfo.getStoreKey();
-        // If the cache has been updated by another thread, retry may be avoided
-        requestAgent.doWithRetries(() -> deleteIfNeeded(blobId, msgInfo.getOperationTimeMs(), msgInfo.getLifeVersion()),
-            "Delete", partitionId.toPathString());
+      for (MessageInfo msg : infos) {
+        cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(),
+            this::preDeleteValidation);
       }
-    } catch (CloudStorageException ex) {
-      if (ex.getCause() instanceof StoreException) {
-        throw (StoreException) ex.getCause();
+    } catch (CloudStorageException cse) {
+      if (cse.getCause() instanceof StoreException) {
+        throw (StoreException) cse.getCause();
       }
-      StoreErrorCodes errorCode =
-          (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
-      throw new StoreException(ex, errorCode);
+      throw new StoreException(cse.getCause(), StoreErrorCodes.IOError);
     }
   }
 
