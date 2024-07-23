@@ -55,7 +55,7 @@ public class BatchDeleteRequest extends RequestOrResponse {
    */
   protected BatchDeleteRequest(int correlationId, String clientId,
       List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfos, long deletionTimeInMs, short version) {
-    super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);
+    super(RequestOrResponseType.BatchDeleteRequest, version, correlationId, clientId);
     this.batchDeletePartitionRequestInfos = batchDeletePartitionRequestInfos;
     if (batchDeletePartitionRequestInfos == null) {
       throw new IllegalArgumentException("No partition info specified in BatchDeleteRequest");
