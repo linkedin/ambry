@@ -511,7 +511,7 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
         inflightRemoteReplicaGroups, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
         remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
 
-    assertFalse("There should be no inflight groups", inflightRemoteReplicaGroups.isEmpty());
+    assertTrue("There should be no inflight groups", inflightRemoteReplicaGroups.isEmpty());
     assertFalse("Max iterations did not reach", maxIterationsReached.booleanValue());
     assertFalse("All replicas haven't caught up early", allReplicasCaughtUpEarly.booleanValue());
   }
