@@ -126,6 +126,9 @@ public class ReplicaThread implements Runnable {
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
   private boolean enableAcyclicReplication;
   private int maxIterationsPerGroupPerCycle;
+
+  //if this is set to true, we will exit from current replicate method as soon as
+  //previous groups get finished i.e. we will not create any new groups
   private volatile boolean shouldTerminateCurrentCycle = false;
 
   // This is used in the test cases
