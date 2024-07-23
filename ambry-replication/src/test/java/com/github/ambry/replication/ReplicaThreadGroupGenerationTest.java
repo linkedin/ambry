@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -452,5 +453,66 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
         remoteReplicaInfoSet.add(remoteReplicaInfo);
       });
     });
+  }
+
+  /**
+   * Testing if setting shouldTerminateCurrentCycle, results in termination of group generation
+   * Testing on intraColo thread, as behaviour will be same in crossColo
+   */
+  @Test
+  public void testTerminateCycle() {
+    ReplicaThread replicaThread = intraColoReplicaThread;
+    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToReplicaMap = intraColoReplicaThread.getRemoteReplicaInfos();
+
+    Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap = new HashMap<>();
+    Map<DataNodeId, Integer> remoteHostToStandbyNoProgressReplicaGroupId = new HashMap<>();
+
+    replicaThread.generateGroupIdsForReplicas(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId);
+
+    Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroups = new HashMap<>();
+    Map<Integer, Integer> groupIdIterationCountMap = new HashMap<>();
+    Map<DataNodeId, Set<RemoteReplicaInfo>> dataNodeIdToPendingReplicasMarkedForStandByNoProgress = new HashMap<>();
+    Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill = new HashMap<>();
+    MutableBoolean maxIterationsReached = new MutableBoolean(false);
+    MutableBoolean allReplicasCaughtUpEarly = new MutableBoolean(false);
+
+    replicaThread.shouldTerminateCurrentCycle(false);
+    //set max iteration limit to 3
+    replicaThread.setMaxIterationsPerGroupPerCycle(3);
+
+    //after 1st call whether all inflight remote replica have first iteration running and there will be inflight groups
+    replicaThread.generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
+        inflightRemoteReplicaGroups, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
+        remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
+
+    assertFalse("There should be inflight replica groups", inflightRemoteReplicaGroups.isEmpty());
+
+    //now we will signal that cycle should be terminated
+    replicaThread.shouldTerminateCurrentCycle(true);
+
+    //now any new groups should not be generated
+
+    //make all groups in done state
+    inflightRemoteReplicaGroups.forEach((groupId, remoteReplicaGroup) -> {
+      remoteReplicaGroup.setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
+    });
+
+    //after this call all groups will be throttled
+    replicaThread.generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
+        inflightRemoteReplicaGroups, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
+        remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
+
+    //move time forward till throttling limit
+    time.setCurrentMilliseconds(
+        time.milliseconds() + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs + 1);
+
+    //limit is 3 , but no new groups should be create after this call
+    replicaThread.generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, remoteHostToStandbyNoProgressReplicaGroupId,
+        inflightRemoteReplicaGroups, dataNodeIdToPendingReplicasMarkedForStandByNoProgress,
+        remoteReplicaToThrottledTill, groupIdIterationCountMap, allReplicasCaughtUpEarly, maxIterationsReached);
+
+    assertFalse("There should be no inflight groups", inflightRemoteReplicaGroups.isEmpty());
+    assertFalse("Max iterations did not reach", maxIterationsReached.booleanValue());
+    assertFalse("All replicas haven't caught up early", allReplicasCaughtUpEarly.booleanValue());
   }
 }
