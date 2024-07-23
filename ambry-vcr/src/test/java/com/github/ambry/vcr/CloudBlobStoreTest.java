@@ -917,7 +917,7 @@ public class CloudBlobStoreTest {
     if (mockingDetails(dest).isMock()) {
       when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class)))
           .thenThrow(new CloudStorageException("absent blob",
-              new StoreException("absent blob", StoreErrorCodes.ID_Not_Found), CloudBlobStore.STATUS_NOT_FOUND, false, null));
+              new StoreException("absent blob", StoreErrorCodes.ID_Not_Found), HttpStatus.SC_NOT_FOUND, false, null));
     }
     try {
       store.undelete(messageInfo);
@@ -1170,7 +1170,6 @@ public class CloudBlobStoreTest {
     List<StoreKey> blobIdList = new ArrayList<>();
     for (int j = 0; j < cacheSize; j++) {
       blobIdList.add(getUniqueId(refAccountId, refContainerId, false, partitionId));
-      store.addToCache(blobIdList.get(j).getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
     }
 
     // findMissingKeys should stay in cache
@@ -1194,7 +1193,6 @@ public class CloudBlobStoreTest {
     // put 5 more blobs
     for (int j = cacheSize; j < cacheSize + delta; j++) {
       blobIdList.add(getUniqueId(refAccountId, refContainerId, false, partitionId));
-      store.addToCache(blobIdList.get(j).getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
     }
     // get same 1-5 which should be still cached.
     store.findMissingKeys(blobIdList.subList(0, delta));
@@ -1370,7 +1368,6 @@ public class CloudBlobStoreTest {
     assertEquals("Unexpected retry count", expectedRetries, vcrMetrics.retryCount.getCount());
     assertEquals("Unexpected wait time", expectedRetries * retryDelay, vcrMetrics.retryWaitTimeMsec.getCount());
     verifyCacheHits(expectedCacheLookups, 0);
-    verify(exStore, times(expectedCacheRemoves)).removeFromCache(eq(blobId.getID()));
 
     // Rerun the first three, should all skip due to cache hit
     messageWriteSet.resetBuffers();
@@ -1381,10 +1378,8 @@ public class CloudBlobStoreTest {
       assertEquals(ex.getErrorCode(), StoreErrorCodes.Already_Exist);
     }
     expectedCacheHits++;
-    exStore.addToCache(blobId.getID(), (short) 0, CloudBlobStore.BlobState.TTL_UPDATED);
     exStore.updateTtl(messageWriteSet.getMessageSetInfo());
     expectedCacheHits++;
-    exStore.addToCache(blobId.getID(), (short) 0, CloudBlobStore.BlobState.DELETED);
     try {
       exStore.delete(messageWriteSet.getMessageSetInfo());
     } catch (StoreException ex) {

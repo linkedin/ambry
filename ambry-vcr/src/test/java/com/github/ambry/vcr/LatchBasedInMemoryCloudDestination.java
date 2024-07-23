@@ -60,6 +60,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -279,7 +280,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     } else {
       throw new CloudStorageException(
           String.format("Cannot update lifeversion as blob %s is not found.", blobId.getID()), null,
-          CloudBlobStore.STATUS_NOT_FOUND, false, null);
+          HttpStatus.SC_NOT_FOUND, false, null);
     }
   }
 
