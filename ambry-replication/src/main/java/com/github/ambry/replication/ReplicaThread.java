@@ -657,7 +657,7 @@ public class ReplicaThread implements Runnable {
   public void replicate() {
     if (enableAcyclicReplication) {
       logger.trace("Thread name: {}, starting acyclic replication", threadName);
-      replicateAcyclic();
+      replicateLimitedAcyclic();
     } else {
       logger.trace("Thread name: {}, starting cyclic replication", threadName);
       replicateCyclic();
@@ -813,7 +813,7 @@ public class ReplicaThread implements Runnable {
    *     Standby: | metadata and data |  metadata and data  | metadata only     |   metadata only
    *
    */
-  public void replicateAcyclic() {
+  public void replicateLimitedAcyclic() {
     long oneRoundStartTimeMs = time.milliseconds();
     shouldTerminateCurrentCycle = false;
 
