@@ -51,6 +51,7 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BatchDeleteRequest;
 import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
@@ -1858,6 +1859,11 @@ public class AmbryRequests implements RequestAPI {
         metrics.deleteBlobDroppedRate.mark();
         metrics.totalRequestDroppedRate.mark();
       }
+    }
+
+    @Override
+    public void visit(BatchDeleteRequest deleteRequest) {
+      
     }
 
     @Override
