@@ -1031,6 +1031,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
         getRemoteLeaderReplicasWithLeaderPartitionsOnLocalNode(clusterMap, replicationManager.dataNodeId,
             remoteNodeInRemoteDC);
 
+    //set iteration limit such that even if any group finishes in one step,
+    // all group will have numOfMessagesOnRemoteNodeInRemoteDC iterations
     crossColoReplicaThread.setMaxIterationsPerGroupPerCycle(
         numOfMessagesOnRemoteNodeInRemoteDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
     // replicate with remote node in remote DC
@@ -1048,6 +1050,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
       }
     }
 
+    //set iteration limit such that even if any group finishes in one step,
+    // all group will have at least numOfMessagesOnRemoteNodeInLocalDC iterations
     intraColoReplicaThread.setMaxIterationsPerGroupPerCycle(
         numOfMessagesOnRemoteNodeInLocalDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
     //Replicate with remote node in local dc
@@ -1089,6 +1093,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
     // Attempt replication with remoteNodeInRemoteDC, we should not see any replication attempt for standby replicas
     // and their remote token stays as 0.
+    //set iteration limit such that even if any group finishes in one step,
+    // all group will have at least numOfMessagesOnRemoteNodeInRemoteDC iterations
     crossColoReplicaThread.setMaxIterationsPerGroupPerCycle(
         numOfMessagesOnRemoteNodeInRemoteDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
     crossColoReplicaThread.replicate();
@@ -1114,6 +1120,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
             crossColoReplicaThread.getRemoteStandbyReplicasTimedOutOnNoProgress(remoteReplicaInfosForRemoteDC)),
         allStandbyReplicas);
 
+    //set iteration limit such that even if any group finishes in one step,
+    // all group will have at least numOfMessagesOnRemoteNodeInRemoteDC iterations
     crossColoReplicaThread.setMaxIterationsPerGroupPerCycle(
         numOfMessagesOnRemoteNodeInRemoteDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
     crossColoReplicaThread.replicate();

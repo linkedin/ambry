@@ -1962,9 +1962,10 @@ public class ReplicationTest extends ReplicationTestHelper {
    * @throws Exception
    */
   @Test
-  public void putsAcyclicReplicationTest() throws Exception{
-    if(!replicationConfig.replicationEnableAcyclicReplication)
+  public void putsAcyclicReplicationTest() throws Exception {
+    if (!replicationConfig.replicationEnableAcyclicReplication) {
       return;
+    }
 
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
     //
@@ -1974,8 +1975,8 @@ public class ReplicationTest extends ReplicationTestHelper {
 
     // setting number of mount points to partition limit so each node can have replicas higher that limit so multiple groups get created
     MockClusterMap clusterMap =
-        new MockClusterMap(false, true, 9, replicationConfig.replicationMaxPartitionCountPerRequest +1 , 3, false, false,
-            null);
+        new MockClusterMap(false, true, 9, replicationConfig.replicationMaxPartitionCountPerRequest + 1, 3, false,
+            false, null);
 
     Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     MockHost localHost = localAndRemoteHosts.getFirst();
@@ -2009,7 +2010,6 @@ public class ReplicationTest extends ReplicationTestHelper {
     // L|id0|id1|id2|   |   |   |id6|id7|
     // R|id0|id1|id2|id3|id4|id5|   |   |
 
-
     //in every metadata request we will only fetch 1 blob id
     int batchSize = 1;
 
@@ -2019,8 +2019,7 @@ public class ReplicationTest extends ReplicationTestHelper {
 
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
-    Map<PartitionId, List<ByteBuffer>> missingBuffers =
-        remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
     // We can see from the table in the comments above, Local has 3 records less than remote host.
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
       assertEquals("Missing buffers count mismatch", 3, entry.getValue().size());
