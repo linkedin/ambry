@@ -94,7 +94,12 @@ public class S3MultipartUploadPartHandler {
     NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
     String accountName = namedBlobPath.getAccountName();
     restRequest.setArg(Headers.SERVICE_ID, accountName);
-    restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+    //Setting default content-type if not provide by S3 client
+    if (restRequest.getArgs().get(Headers.CONTENT_TYPE) == null) {
+      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, RestUtils.OCTET_STREAM_CONTENT_TYPE);
+    } else {
+      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+    }
     restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
 
     // 2. Set the internal headers session id and chunk-upload. They are used during for multipart part uploads
