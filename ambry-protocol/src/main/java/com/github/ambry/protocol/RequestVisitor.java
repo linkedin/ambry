@@ -43,6 +43,12 @@ public interface RequestVisitor {
   void visit(DeleteRequest deleteRequest);
 
   /**
+   * Performs any actions related to Batch Delete request.
+   * @param deleteRequest to visit.
+   */
+  void visit(BatchDeleteRequest deleteRequest);
+
+  /**
    * Performs any actions related to Un-delete request.
    * @param undeleteRequest to visit.
    */
