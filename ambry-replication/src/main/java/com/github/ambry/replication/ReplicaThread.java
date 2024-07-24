@@ -789,8 +789,8 @@ public class ReplicaThread implements Runnable {
         }
       } else {
         replicationMetrics.updateMetadataRequestError(remoteReplicaInfo.getReplicaId());
-        logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
-            remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
+        logger.error("Remote node: {} Thread name: {} Remote replica: {} Server metadata-response error: {}",
+            remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
         exchangeMetadataResponseList.add(new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError()));
       }
 
@@ -1354,8 +1354,8 @@ public class ReplicaThread implements Runnable {
                 exchangeMetadataResponse.getMissingStoreKeys());
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
-            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
-                remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
+            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server get-response error: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           }
         }
       }
