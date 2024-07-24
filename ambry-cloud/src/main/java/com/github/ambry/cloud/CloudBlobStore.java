@@ -92,7 +92,6 @@ public class CloudBlobStore implements Store {
   private final boolean requireEncryption;
   // Distinguishes between VCR and live serving mode
   private final boolean isVcr;
-  private boolean started;
   private volatile ReplicaState currentState = ReplicaState.OFFLINE;
   private CloudConfig cloudConfig;
 
@@ -141,7 +140,6 @@ public class CloudBlobStore implements Store {
   @Override
   public void start() {
     currentState = ReplicaState.STANDBY;
-    started = true;
     logger.debug("Started store: {}", this);
   }
 
@@ -859,30 +857,15 @@ public class CloudBlobStore implements Store {
    */
   @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
-    // TODO: Remove the duplicate code by calling updateTtlAsync() method.
-    checkStarted();
-    // Note: We skipped uploading the blob on PUT record if the TTL was below threshold (threshold should be 0 for non DR cases).
     try {
-      for (MessageInfo msgInfo : infos) {
-        if (msgInfo.getExpirationTimeInMs() != Utils.Infinite_Time) {
-          throw new StoreException("CloudBlobStore only supports removing the expiration time",
-              StoreErrorCodes.Update_Not_Allowed);
-        }
-        if (msgInfo.isTtlUpdated()) {
-          BlobId blobId = (BlobId) msgInfo.getStoreKey();
-          requestAgent.doWithRetries(() -> updateTtlIfNeeded(blobId), "UpdateTtl", partitionId.toPathString());
-        } else {
-          logger.error("updateTtl() is called but msgInfo.isTtlUpdated is not set. msgInfo: {}", msgInfo);
-          vcrMetrics.updateTtlNotSetError.inc();
-        }
+      for (MessageInfo msg : infos) {
+        cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time, null);
       }
-    } catch (CloudStorageException ex) {
-      if (ex.getCause() instanceof StoreException) {
-        throw (StoreException) ex.getCause();
+    } catch (CloudStorageException cse) {
+      if (cse.getCause() instanceof StoreException) {
+        throw (StoreException) cse.getCause();
       }
-      StoreErrorCodes errorCode =
-          (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
-      throw new StoreException(ex, errorCode);
+      throw new StoreException(cse.getCause(),  StoreErrorCodes.IOError);
     }
   }
 
@@ -1388,19 +1371,16 @@ public class CloudBlobStore implements Store {
       recentBlobCache.clear();
     }
     currentState = ReplicaState.OFFLINE;
-    started = false;
     logger.info("Stopped store: {}", this.toString());
   }
 
   @Override
   public boolean isStarted() {
-    return started;
+    return true;
   }
 
   private void checkStarted() throws StoreException {
-    if (!started) {
-      throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
-    }
+    // There is no concept of start/stop Azure cloud partition
   }
 
   /**

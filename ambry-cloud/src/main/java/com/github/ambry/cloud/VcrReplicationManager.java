@@ -306,7 +306,6 @@ public class VcrReplicationManager extends ReplicationEngine {
         }
         try {
           addReplica(partitionId);
-          logger.info("Partition {} added to {}", partitionId, dataNodeId);
         } catch (ReplicationException e) {
           vcrMetrics.addPartitionErrorCount.inc();
           logger.error("Exception on adding Partition {} to {}: ", partitionId, dataNodeId, e);

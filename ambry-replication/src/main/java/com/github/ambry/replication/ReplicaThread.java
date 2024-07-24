@@ -1283,7 +1283,7 @@ public class ReplicaThread implements Runnable {
                 }
                 // messageInfo is the Blob final state and the operation time is the blob creation time.
                 // So the applyTtlUpdate will use the creation time as the Ttl operation time.
-                if (messageInfo.isTtlUpdated()) {
+                if (isTtlUpdateNeededAfterPut(messageInfo)) {
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }
                 StoreKey key = messageInfo.getStoreKey();
@@ -1388,6 +1388,17 @@ public class ReplicaThread implements Runnable {
    */
   protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
     // no-op. Inheritor can override.
+  }
+
+  /**
+   * Returns true if TTL must be updated, else false.
+   * For server-server replication, it doesn't really matter as disk updates are cheap.
+   * For server-azure replication, it matters as an update to Azure is at least 2 network calls.
+   * @param messageInfo
+   * @return
+   */
+  protected boolean isTtlUpdateNeededAfterPut(MessageInfo messageInfo) {
+    return messageInfo.isTtlUpdated();
   }
 
   /**

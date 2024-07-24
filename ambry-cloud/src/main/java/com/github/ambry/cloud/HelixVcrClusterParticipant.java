@@ -94,8 +94,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
-    List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
-    logger.info("All partitions from clusterMap: {}.", allPartitions);
+    logger.info("Number of partitions in clusterMap = {}.", clusterMap.getAllPartitionIds(null).size());
     vcrClusterName = cloudConfig.vcrClusterName;
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -120,8 +119,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
             // use this condition to capture all potential exceptions.
             logger.warn("AddPartition for {} failed after retry: ", partitionIdStr, exception);
           } else {
-            logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
-                vcrInstanceName, assignedPartitionIds.size());
+            // pass; too many logs
           }
         });
   }

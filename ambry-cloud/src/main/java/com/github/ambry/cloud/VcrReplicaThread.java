@@ -160,6 +160,10 @@ public class VcrReplicaThread extends ReplicaThread {
                 .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath())));
   }
 
+  protected boolean isTtlUpdateNeededAfterPut(MessageInfo messageInfo) {
+    return messageInfo.isTtlUpdated() && messageInfo.getExpirationTimeInMs() != Utils.Infinite_Time;
+  }
+
   /**
    * Persists token to cloud in each replication cycle
    * @param remoteReplicaInfo Remote replica info object
