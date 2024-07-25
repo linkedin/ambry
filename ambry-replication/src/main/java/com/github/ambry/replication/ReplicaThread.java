@@ -378,283 +378,6 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Generates group ids for active iteration for replicas, all replicas are mapped to one group id only
-   * Generates group ids for all datanodes for standby no progress groups
-   * All group ids are unique
-   * All replicas are mapped to particular group id and each datanode has one stand by remote replica group id
-   * so we make less number of parallel calls to remote hosts
-   * @param groupIdToRemoteReplicaMap {@link Map} this map will be populated with group ids to replicas map
-   * @param standByNoProgressGroupId {@link Map}  this map will be populated with datanode to standby group id
-   */
-  void generateGroupIdsForReplicas(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
-      Map<DataNodeId, Integer> standByNoProgressGroupId) {
-
-    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
-
-    int groupId = 0;
-
-    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
-      DataNodeId remoteHost = entry.getKey();
-      List<RemoteReplicaInfo> remoteReplicasPerNode = entry.getValue();
-
-      //for this data node break a larger array of remote replicas to smaller multiple arrays of predefined size given in config
-      List<List<RemoteReplicaInfo>> remoteReplicaSegregatedList =
-          maxReplicaCountPerRequest > 0 ? Utils.partitionList(remoteReplicasPerNode, maxReplicaCountPerRequest)
-              : Collections.singletonList(remoteReplicasPerNode);
-
-      //for each of smaller array of remote replicas update with current group id and add to groupId map
-      for (List<RemoteReplicaInfo> remoteReplicaInfos : remoteReplicaSegregatedList) {
-        groupIdToRemoteReplicaMap.put(groupId, remoteReplicaInfos);
-        logger.trace("Thread name: {} Assigned groupId {} to replicas {}", threadName, groupId, remoteReplicaInfos);
-        groupId++;
-      }
-
-      //now, for this data node add one stand by group id for standby remote replicas
-      standByNoProgressGroupId.put(remoteHost, groupId);
-      logger.trace("Thread name: {} Assigned groupId for standBy groups {} to remoteHost {}", threadName, groupId,
-          remoteHost);
-      groupId++;
-    }
-  }
-
-  /**
-   * Removes finished groups from inflight remote replica groups, drops cached keys from storeKeyConverter
-   * For finished groups adds time until which replicas are throttled
-   * @param inflightRemoteReplicaGroup {@link Map}
-   * @param remoteReplicaToThrottledTill {@link Map}
-   */
-  private void processFinishedGroups(Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup,
-      Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill) {
-
-    Iterator<Map.Entry<Integer, RemoteReplicaGroup>> inflightRemoteReplicaGroupIterator =
-        inflightRemoteReplicaGroup.entrySet().iterator();
-
-    while (inflightRemoteReplicaGroupIterator.hasNext()) {
-      Map.Entry<Integer, RemoteReplicaGroup> entry = inflightRemoteReplicaGroupIterator.next();
-      RemoteReplicaGroup remoteReplicaGroup = entry.getValue();
-
-      if (remoteReplicaGroup.isDone()) {
-        long currentTime = time.milliseconds();
-        long throttledTill = currentTime + threadThrottleDurationMs;
-        remoteReplicaGroup.remoteReplicaInfos.forEach(remoteReplicaInfo -> {
-          remoteReplicaToThrottledTill.put(remoteReplicaInfo, throttledTill);
-          logger.trace("Thread name: {} Remote Replica {} is throttled till {} in replica", threadName,
-              remoteReplicaInfo, throttledTill);
-        });
-        storeKeyConverter.tryDropCache(remoteReplicaGroup.getStoreKeysConversionLog());
-        inflightRemoteReplicaGroupIterator.remove();
-        logger.trace("Thread name: {} Group Id {} removed from inflight groups", threadName, entry.getKey());
-      }
-    }
-  }
-
-  /**
-   * checks if any signal to terminate cycle is received,
-   * checks whether any group has reached max iteration count and sets maxIterationsReached to true if limit reached
-   * allReplicasCaughtUpEarly will be set to true, if max iteration limit reached and there are no inflight groups
-   * (added this logic to have mandatory sleep as we will not try to create new groups after this and will not check
-   * if all replicas are caught up)
-   * @param inflightRemoteReplicaGroup {@link Map}
-   * @param groupIdIterationCountMap {@link Map}
-   * @param allReplicasCaughtUpEarly {@link MutableBoolean}
-   * @param maxIterationsReached {@link MutableBoolean} will be set to true if max iteration limit reached
-   * @return {@link boolean} returns true if new groups can be created, false otherwise
-   */
-  private boolean shouldCreateNewRemoteReplicaGroups(Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup,
-      Map<Integer, Integer> groupIdIterationCountMap, MutableBoolean allReplicasCaughtUpEarly,
-      MutableBoolean maxIterationsReached) {
-
-    //check if thread is in shutdown or cycle termination is received
-    if (!running || shouldTerminateCurrentCycle) {
-      logger.trace(
-          "Thread name: {} not creating new groups as thread is in shutdown mode {} or terminate cycle received {}",
-          threadName, !running, shouldTerminateCurrentCycle);
-      return false;
-    }
-
-    //get max iterations by any remote replica group
-    int maxIterationCount = 0;
-    for (Map.Entry<Integer, Integer> entry : groupIdIterationCountMap.entrySet()) {
-      maxIterationCount = Integer.max(maxIterationCount, entry.getValue());
-    }
-
-    //check if any replica reached max iteration count
-    if (maxIterationCount == maxIterationsPerGroupPerCycle) {
-      if (maxIterationsReached.isFalse()) {
-        maxIterationsReached.setTrue();
-        if (inflightRemoteReplicaGroup.isEmpty()) {
-          allReplicasCaughtUpEarly.setTrue();
-          logger.trace("Thread name: {} All replicas marked to caught up early", threadName);
-        }
-      }
-      logger.trace("Thread name: {} not creating new groups as iteration limit {} reached", threadName,
-          maxIterationsPerGroupPerCycle);
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * Generates active and stand by replicas with no progress,
-   * checks and filters replicas which are throttled and are present in any iteration group
-   * @param activeReplicas {@link List}
-   * @param standbyReplicasWithNoProgress {@link List}
-   * @param remoteReplicas {@link List}
-   * @param remoteReplicaToThrottledTill {@link Map}
-   * @param standbyReplicasNoProgressReplicaGroupId {@link Integer}
-   * @param groupId {@link Integer}
-   * @param inflightRemoteReplicaGroup {@link Map}
-   */
-  private void getActiveAndStandByNoProgressReplicas(List<RemoteReplicaInfo> activeReplicas,
-      List<RemoteReplicaInfo> standbyReplicasWithNoProgress, List<RemoteReplicaInfo> remoteReplicas,
-      Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill, Integer standbyReplicasNoProgressReplicaGroupId,
-      Integer groupId, Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup) {
-    //this will contain all replicas which are available for iteration
-    Set<RemoteReplicaInfo> nonIteratingNonPendingRemoteReplicas = new LinkedHashSet<>(remoteReplicas);
-
-    //remove all throttled replicas
-    remoteReplicas.forEach(remoteReplicaInfo -> {
-      if (remoteReplicaToThrottledTill.containsKey(remoteReplicaInfo)
-          && remoteReplicaToThrottledTill.get(remoteReplicaInfo) > time.milliseconds()) {
-        nonIteratingNonPendingRemoteReplicas.remove(remoteReplicaInfo);
-        throttleCount.inc();
-      }
-    });
-
-    //remove all replicas of corresponding group id if group is in iteration
-    if (inflightRemoteReplicaGroup.containsKey(groupId)) {
-      logger.trace("Thread name: {} group {} is in iteration", threadName, groupId);
-      nonIteratingNonPendingRemoteReplicas.removeAll(inflightRemoteReplicaGroup.get(groupId).remoteReplicaInfos);
-    }
-
-    //remove all replicas of corresponding standby group if group is in iteration
-    if (inflightRemoteReplicaGroup.containsKey(standbyReplicasNoProgressReplicaGroupId)) {
-      logger.trace("Thread name: {} stand by group {} is in iteration", threadName,
-          standbyReplicasNoProgressReplicaGroupId);
-      nonIteratingNonPendingRemoteReplicas.removeAll(
-          inflightRemoteReplicaGroup.get(standbyReplicasNoProgressReplicaGroupId).remoteReplicaInfos);
-    }
-
-    //filter active and stand by replicas
-    filterRemoteReplicasToReplicate(new ArrayList<>(nonIteratingNonPendingRemoteReplicas), activeReplicas,
-        standbyReplicasWithNoProgress);
-  }
-
-  /**
-   * Generates groups and standby groups and adds these to inflightRemoteReplicaGroup. Removes groups that are done from the
-   * inflightRemoteReplicaGroup. It will generate new groups until shouldTerminateCurrentCycle is false running is true and
-   * maxIterationsPerGroupPerCycle limit is not reached by any iteration count of any group. Replicas will only be added
-   * in the group in groupIdToRemoteReplicaMap and for stand by group in standByNoProgressGroupIds.
-   * @param groupIdToRemoteReplicaMap {@link Map} mapping of group id to remote replicas
-   * @param standByNoProgressGroupIds {@link Map} mapping of data node id to standby group id
-   * @param inflightRemoteReplicaGroup {@link Map} map of inflight group id to remote replica groups
-   * @param standByNoProgressReplicaQueue {@link Map} map of data node id to standby replicas to pick up
-   * @param remoteReplicaToThrottledTill {@link Map} map of remote replica to time until which it is throttled
-   * @param groupIdIterationCountMap {@link Map} map of group id to number of iterations
-   * @param allReplicasCaughtUpEarly {@link MutableBoolean} stores whether all replicas have caught up early
-   * @param maxIterationsReached {@link MutableBoolean} stores whether max iterations reached
-   */
-  void generateRemoteReplicaGroups(Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap,
-      Map<DataNodeId, Integer> standByNoProgressGroupIds, Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroup,
-      Map<DataNodeId, Set<RemoteReplicaInfo>> standByNoProgressReplicaQueue,
-      Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill, Map<Integer, Integer> groupIdIterationCountMap,
-      MutableBoolean allReplicasCaughtUpEarly, MutableBoolean maxIterationsReached) {
-
-    //check and process finished groups
-    processFinishedGroups(inflightRemoteReplicaGroup, remoteReplicaToThrottledTill);
-    logger.trace("Thread name: {} Finished processing finished groups", threadName);
-    //check if we should create new groups, return other wise
-    if (!shouldCreateNewRemoteReplicaGroups(inflightRemoteReplicaGroup, groupIdIterationCountMap,
-        allReplicasCaughtUpEarly, maxIterationsReached)) {
-      logger.trace("Thread name: {} Not creating any new groups", threadName);
-      return;
-    }
-
-    logger.trace("Thread name: {} Trying to create new active groups", threadName);
-    //now we create all active groups and add stand by no progress replicas to queue to be processed later
-    for (Map.Entry<Integer, List<RemoteReplicaInfo>> entry : groupIdToRemoteReplicaMap.entrySet()) {
-      Integer groupId = entry.getKey();
-      logger.trace("Thread name: {} Processing for group id {}", threadName, groupId);
-      List<RemoteReplicaInfo> remoteReplicas = entry.getValue();
-      DataNodeId remoteNode = remoteReplicas.get(0).getReplicaId().getDataNodeId();
-
-      //get stand by group id for the data node
-      Integer standbyReplicasNoProgressReplicaGroupId = standByNoProgressGroupIds.get(remoteNode);
-
-      List<RemoteReplicaInfo> activeReplicas = new ArrayList<>();
-      List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
-
-      //generate active and standby replicas with no progress
-      getActiveAndStandByNoProgressReplicas(activeReplicas, standbyReplicasWithNoProgress, remoteReplicas,
-          remoteReplicaToThrottledTill, standbyReplicasNoProgressReplicaGroupId, groupId, inflightRemoteReplicaGroup);
-      logger.trace("Thread name: {} Active replicas are {}, standby Replicas with no progress are {}", threadName,
-          activeReplicas, standbyReplicasWithNoProgress);
-
-      //if the current group is not in iteration, and there are active replicas, we will start a new group
-      //and increase iteration count if we are able to create
-      if (!inflightRemoteReplicaGroup.containsKey(groupId)) {
-        if (!activeReplicas.isEmpty()) {
-          RemoteReplicaGroup groupForActiveReplicas =
-              new RemoteReplicaGroup(activeReplicas, remoteNode, false, groupId);
-          inflightRemoteReplicaGroup.put(groupId, groupForActiveReplicas);
-          groupIdIterationCountMap.put(groupId, groupIdIterationCountMap.getOrDefault(groupId, 0) + 1);
-          logger.trace("Thread name: {} Created new group for groupId {}, iteration count is {}", threadName, groupId,
-              groupIdIterationCountMap.getOrDefault(groupId, 0));
-        }
-      }
-
-      //get timed out stand by replicas with no progress
-      List<RemoteReplicaInfo> standByReplicasTimedOutOnNoProgress =
-          getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
-
-      if (standByReplicasTimedOutOnNoProgress.isEmpty()) {
-        continue;
-      }
-
-      //add timed out stand by replicas with no progress to queue
-      standByNoProgressReplicaQueue.putIfAbsent(remoteNode, new HashSet<>());
-      standByNoProgressReplicaQueue.get(remoteNode).addAll(standByReplicasTimedOutOnNoProgress);
-      logger.trace("Thread name: {} Added standby no progress replicas {} to queue", threadName,
-          standByReplicasTimedOutOnNoProgress);
-    }
-
-    logger.trace("Thread name: {} Trying to create new standby groups", threadName);
-    //iterate over all data nodes and stand by no progress timed out replica queue and create groups
-    for (Map.Entry<DataNodeId, Set<RemoteReplicaInfo>> entry : standByNoProgressReplicaQueue.entrySet()) {
-      DataNodeId remoteNode = entry.getKey();
-      Integer groupId = standByNoProgressGroupIds.get(remoteNode);
-      logger.trace("Thread name: {} Trying for remoteNode {}, standBy groupId {}}", threadName, remoteNode, groupId);
-
-      //if group is already in iteration, do nothing
-      if (inflightRemoteReplicaGroup.containsKey(groupId)) {
-        continue;
-      }
-
-      List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>(entry.getValue());
-      if (remoteReplicaInfos.isEmpty()) {
-        continue;
-      }
-
-      //create new nonProgress standby replica group
-      RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(remoteReplicaInfos, remoteNode, true, groupId);
-      inflightRemoteReplicaGroup.put(groupId, remoteReplicaGroup);
-      //increase iteration count
-      groupIdIterationCountMap.put(groupId, groupIdIterationCountMap.getOrDefault(groupId, 0) + 1);
-      logger.trace("Thread name: {} Create standBy group with id {} ,iteration count {}", threadName, groupId,
-          groupIdIterationCountMap.getOrDefault(groupId, 0));
-
-      //clear the queue as all replicas are added in the group
-      standByNoProgressReplicaQueue.get(remoteNode).clear();
-    }
-
-    //if we are not able to create any new group and no groups are remaining, all replicas caught up early
-    if (inflightRemoteReplicaGroup.isEmpty()) {
-      allReplicasCaughtUpEarly.setTrue();
-      logger.trace("Thread name: {} All replicas marked to caught up early", threadName);
-    }
-  }
-
-  /**
    * Checks if acyclic replication is enabled and calls appropriate logic for replication
    */
   public void replicate() {
@@ -824,49 +547,34 @@ public class ReplicaThread implements Runnable {
 
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
-
-    MutableBoolean allReplicasCaughtUpEarly = new MutableBoolean(false);
-    Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap = new HashMap<>();
+    boolean allReplicasCaughtEarly = false;
+    int allProcessedReplicaCount = 0;
 
     try {
       storeKeyConverter.dropCache();
-      Map<DataNodeId, Integer> standByNoProgressGroupId = new HashMap<>();
 
-      // Generate group ids and stand by group ids, only these group ids will be used
-      generateGroupIdsForReplicas(groupIdToRemoteReplicaMap, standByNoProgressGroupId);
-      logger.trace("Thread name: {} Generated group ids for replication", threadName);
-
-      Map<Integer, RemoteReplicaGroup> inflightRemoteReplicaGroups = new HashMap<>();
-      Map<Integer, Integer> groupIdIterationCount = new HashMap<>();
-      Map<DataNodeId, Set<RemoteReplicaInfo>> standByNoProgressReplicaQueue = new HashMap<>();
-      Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill = new HashMap<>();
+      List<RemoteReplicaGroup> inflightRemoteReplicaGroups;
 
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
       Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
 
-      MutableBoolean maxIterationsReached = new MutableBoolean(false);
-
-      //we keep generating group ids until we can, i.e. there are no more inflight groups
+      RemoteReplicaGroupPoller poller = new RemoteReplicaGroupPoller();
+      // we keep polling groups until we can, i.e. there are no more inflight groups
       do {
-        //generate remote replica groups
-        generateRemoteReplicaGroups(groupIdToRemoteReplicaMap, standByNoProgressGroupId, inflightRemoteReplicaGroups,
-            standByNoProgressReplicaQueue, remoteReplicaToThrottledTill, groupIdIterationCount,
-            allReplicasCaughtUpEarly, maxIterationsReached);
-        logger.trace("Thread name: {} Remote replica groups {} generated", threadName,
-            inflightRemoteReplicaGroups.keySet());
+        inflightRemoteReplicaGroups = poller.pollGroups();
 
-        //get request infos from all inflight remote replica groups
+        // get request infos from all inflight remote replica groups
         List<RequestInfo> requestInfos =
-            pollRemoteReplicaGroups(new ArrayList<>(inflightRemoteReplicaGroups.values()), correlationIdToRequestInfo,
+            pollRemoteReplicaGroups(inflightRemoteReplicaGroups, correlationIdToRequestInfo,
                 correlationIdToReplicaGroup);
         logger.trace("Thread name: {} Requests generated", threadName);
 
-        //generate responses for requests that are timed out
+        // generate responses for requests that are timed out
         List<ResponseInfo> responseInfosForTimedOutRequests =
             filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
         logger.trace("Thread name: {} Filtered timed out Requests", threadName);
 
-        //mark timed out requests to be dropped by network client
+        // mark timed out requests to be dropped by network client
         Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
             .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
             .collect(Collectors.toSet());
@@ -878,18 +586,17 @@ public class ReplicaThread implements Runnable {
 
         final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
 
-        //submit requests and get response for earlier submitted requests
+        // submit requests and get response for earlier submitted requests
         List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
         logger.trace("Thread name: {} received {} responses from network client", threadName, responseInfos.size());
         responseInfos.addAll(responseInfosForTimedOutRequests);
-        //process responses
+        // process responses
         onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
 
         /* for each data node we are caching the first metadata responses received for remote replica groups.
            this will be used in tests only.
         */
-        inflightRemoteReplicaGroups.values()
-            .stream()
+        inflightRemoteReplicaGroups.stream()
             .filter(g -> !groupsAddedToExchangeMetadatResponse.contains(g.id) && g.isDone()
                 && g.getExchangeMetadataResponseList() != null)
             .forEach(g -> {
@@ -899,14 +606,15 @@ public class ReplicaThread implements Runnable {
             });
 
         //print logs for groups which have error
-        inflightRemoteReplicaGroups.values()
-            .stream()
+        inflightRemoteReplicaGroups.stream()
             .filter(g -> g.isDone() && g.getException() != null)
             .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
                 g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
         logger.trace("Thread name: {} Finish one iteration for RemoteReplicaGroup replication", threadName);
       } while (!inflightRemoteReplicaGroups.isEmpty());
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
+      allReplicasCaughtEarly = poller.allReplicasCaughtUpEarly();
+      allProcessedReplicaCount = poller.allProcessedReplicaCount();
     } catch (Exception e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
@@ -914,10 +622,8 @@ public class ReplicaThread implements Runnable {
           replicatingFromRemoteColo, datacenterName);
     }
 
-    //get count of all remote replicas for which we performed replication in this method
-    int allProcessedReplicasCount = groupIdToRemoteReplicaMap.values().stream().mapToInt(List::size).sum();
-    //check and make thread sleep and publish metrics for throttling
-    maybeSleepAfterReplication(allReplicasCaughtUpEarly.isTrue(), allProcessedReplicasCount);
+    // check and make thread sleep and publish metrics for throttling
+    maybeSleepAfterReplication(allReplicasCaughtEarly, allProcessedReplicaCount);
     logger.trace("Thread name: {} Exiting replication, all iterations Done!", threadName);
   }
 
@@ -2359,12 +2065,310 @@ public class ReplicaThread implements Runnable {
     shutdownLatch.await();
   }
 
+  class RemoteReplicaGroupPoller {
+    private final int maxIterationsPerGroup;
+    private boolean allReplicasCaughtUpEarly;
+    private final Map<Integer, List<RemoteReplicaInfo>> groupIdToRemoteReplicaMap;
+    private final Map<DataNodeId, Integer> standByGroupIds;
+    private final Map<Integer, RemoteReplicaGroup> inflightGroups;
+    private final Map<Integer, Integer> groupIdIterationCountMap;
+    private final Map<DataNodeId, Set<RemoteReplicaInfo>> standByReplicaQueue;
+    private final Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill;
+
+    RemoteReplicaGroupPoller( ) {
+      maxIterationsPerGroup = maxIterationsPerGroupPerCycle;
+      allReplicasCaughtUpEarly = false;
+      groupIdToRemoteReplicaMap = new HashMap<>();
+      standByGroupIds = new HashMap<>();
+      inflightGroups = new HashMap<>();
+      groupIdIterationCountMap = new HashMap<>();
+      standByReplicaQueue = new HashMap<>();
+      remoteReplicaToThrottledTill = new HashMap<>();
+      createGroupIds();
+    }
+
+    boolean allReplicasCaughtUpEarly() {
+      return allReplicasCaughtUpEarly;
+    }
+
+    Map<Integer, List<RemoteReplicaInfo>> getGroupIdToRemoteReplicaMap() {
+      return groupIdToRemoteReplicaMap;
+    }
+
+    Map<DataNodeId, Integer> getStandByGroupIds() {
+      return standByGroupIds;
+    }
+
+    Map<Integer, Integer> getGroupIdIterationCountMap() {
+      return groupIdIterationCountMap;
+    }
+
+    Map<DataNodeId, Set<RemoteReplicaInfo>> getStandByReplicaQueue() {
+      return standByReplicaQueue;
+    }
+
+    Map<RemoteReplicaInfo, Long> getRemoteReplicaToThrottledTill() {
+      return remoteReplicaToThrottledTill;
+    }
+
+    int allProcessedReplicaCount(){
+      return groupIdToRemoteReplicaMap.values().stream().mapToInt(List::size).sum();
+    }
+
+    /**
+     * Generates group ids for active iteration for replicas, all replicas are mapped to one group id only
+     * Generates group ids for all datanodes for standby no progress groups
+     * All group ids are unique
+     * All replicas are mapped to particular group id and each datanode has one stand by remote replica group id
+     * so we make less number of parallel calls to remote hosts
+     * {@link #groupIdToRemoteReplicaMap} this map will be populated with group ids to replicas map
+     * {@link #standByGroupIds}  this map will be populated with datanode to standby group id
+     */
+    private void createGroupIds() {
+      Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
+
+      int groupId = 0;
+
+      for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
+        DataNodeId remoteHost = entry.getKey();
+        List<RemoteReplicaInfo> remoteReplicasPerNode = entry.getValue();
+
+        // for this data node break a larger array of remote replicas to smaller multiple arrays of predefined size given in config
+        List<List<RemoteReplicaInfo>> remoteReplicaSegregatedList =
+            maxReplicaCountPerRequest > 0 ? Utils.partitionList(remoteReplicasPerNode, maxReplicaCountPerRequest)
+                : Collections.singletonList(remoteReplicasPerNode);
+
+        // for each of smaller array of remote replicas update with current group id and add to groupId map
+        for (List<RemoteReplicaInfo> remoteReplicaInfos : remoteReplicaSegregatedList) {
+          groupIdToRemoteReplicaMap.put(groupId, remoteReplicaInfos);
+          logger.trace("Thread name: {} Assigned groupId {} to replicas {}", threadName, groupId, remoteReplicaInfos);
+          groupId++;
+        }
+
+        // now, for this data node add one stand by group id for standby remote replicas
+        standByGroupIds.put(remoteHost, groupId);
+        logger.trace("Thread name: {} Assigned groupId for standBy groups {} to remoteHost {}", threadName, groupId,
+            remoteHost);
+        groupId++;
+      }
+    }
+
+    /**
+     * Removes finished groups from inflight remote replica groups @link {#inflightRemoteReplicaGroup}
+     * drops cached keys from storeKeyConverter.
+     * For finished groups adds time until which replicas are throttled in to @link #{remoteReplicaToThrottledTill}
+     */
+    private void processFinishedGroups() {
+      Iterator<Map.Entry<Integer, RemoteReplicaGroup>> inflightRemoteReplicaGroupIterator =
+          inflightGroups.entrySet().iterator();
+
+      while (inflightRemoteReplicaGroupIterator.hasNext()) {
+        Map.Entry<Integer, RemoteReplicaGroup> entry = inflightRemoteReplicaGroupIterator.next();
+        RemoteReplicaGroup remoteReplicaGroup = entry.getValue();
+
+        if (remoteReplicaGroup.isDone()) {
+          long currentTime = time.milliseconds();
+          long throttledTill = currentTime + threadThrottleDurationMs;
+          remoteReplicaGroup.remoteReplicaInfos.forEach(remoteReplicaInfo -> {
+            remoteReplicaToThrottledTill.put(remoteReplicaInfo, throttledTill);
+            logger.trace("Thread name: {} Remote Replica {} is throttled till {} in replica", threadName,
+                remoteReplicaInfo, throttledTill);
+          });
+          storeKeyConverter.tryDropCache(remoteReplicaGroup.getStoreKeysConversionLog());
+          inflightRemoteReplicaGroupIterator.remove();
+          logger.trace("Thread name: {} Group Id {} removed from inflight groups", threadName, entry.getKey());
+        }
+      }
+
+      logger.trace("Thread name: {} Finished processing finished groups", threadName);
+    }
+
+    /**
+     * checks if any signal to terminate cycle is received,
+     * checks whether any group has reached max iteration count
+     * @return {@link boolean} returns true if new groups can be created, false otherwise
+     */
+    private boolean shouldCreateNewGroups() {
+      // check if thread is in shutdown or cycle termination is received or max iterations reached
+      if (!running || shouldTerminateCurrentCycle) {
+        logger.trace(
+            "Thread name: {} not creating new groups as thread is in shutdown mode {} or terminate cycle received {}",
+            threadName, !running, shouldTerminateCurrentCycle);
+        return false;
+      }
+
+      // get max iterations by any remote replica group
+      int maxIterationCount = groupIdIterationCountMap.values().stream().max(Integer::compareTo).orElse(0);
+
+      // check if any replica reached max iteration count
+      if (maxIterationCount >= maxIterationsPerGroup) {
+        logger.trace("Thread name: {} not creating new groups as iteration limit {} reached", threadName,
+            maxIterationsPerGroup);
+        return false;
+      }
+      return true;
+    }
+
+    /**
+     * Generates active and stand by replicas with no progress,
+     * checks and filters replicas which are throttled and are present in any iteration group
+     * @param activeReplicas {@link List}
+     * @param standbyReplicasWithNoProgress {@link List}
+     * @param remoteReplicas {@link List}
+     * @param standByGroupId {@link int}
+     * @param groupId {@link int}
+     */
+    private void getActiveAndStandByNoProgressReplicas(List<RemoteReplicaInfo> activeReplicas,
+        List<RemoteReplicaInfo> standbyReplicasWithNoProgress, List<RemoteReplicaInfo> remoteReplicas,
+        int standByGroupId, int groupId) {
+      // this will contain all replicas which are available for iteration
+      Set<RemoteReplicaInfo> nonIteratingNonPendingRemoteReplicas = new LinkedHashSet<>(remoteReplicas);
+
+      // remove all throttled replicas
+      remoteReplicas.forEach(remoteReplicaInfo -> {
+        if (remoteReplicaToThrottledTill.containsKey(remoteReplicaInfo)
+            && remoteReplicaToThrottledTill.get(remoteReplicaInfo) > time.milliseconds()) {
+          nonIteratingNonPendingRemoteReplicas.remove(remoteReplicaInfo);
+          throttleCount.inc();
+        }
+      });
+
+      // remove all replicas of corresponding group id if group is in iteration
+      if (inflightGroups.containsKey(groupId)) {
+        logger.trace("Thread name: {} group {} is in iteration", threadName, groupId);
+        nonIteratingNonPendingRemoteReplicas.removeAll(inflightGroups.get(groupId).remoteReplicaInfos);
+      }
+
+      // remove all replicas of corresponding standby group if group is in iteration
+      if (inflightGroups.containsKey(standByGroupId)) {
+        logger.trace("Thread name: {} stand by group {} is in iteration", threadName,
+            standByGroupId);
+        nonIteratingNonPendingRemoteReplicas.removeAll(
+            inflightGroups.get(standByGroupId).remoteReplicaInfos);
+      }
+
+      // filter active and stand by replicas
+      filterRemoteReplicasToReplicate(new ArrayList<>(nonIteratingNonPendingRemoteReplicas), activeReplicas,
+          standbyReplicasWithNoProgress);
+    }
+
+
+    /**
+     * Iterates over {@link #groupIdToRemoteReplicaMap} all potential groups,
+     * tries to create active groups and adds new groups to {@link #inflightGroups}
+     * also adds replicas which have timed out on stand by
+     * to {@link #standByReplicaQueue} for being picked by standby groups
+     */
+    private void createActiveGroups(){
+      logger.trace("Thread name: {} Trying to create new active groups", threadName);
+      for (Map.Entry<Integer, List<RemoteReplicaInfo>> entry : groupIdToRemoteReplicaMap.entrySet()) {
+        int groupId = entry.getKey();
+        logger.trace("Thread name: {} Processing for group id {}", threadName, groupId);
+        List<RemoteReplicaInfo> remoteReplicas = entry.getValue();
+        DataNodeId remoteNode = remoteReplicas.get(0).getReplicaId().getDataNodeId();
+
+        // get stand by group id for the data node
+        int standByGroupId = standByGroupIds.get(remoteNode);
+
+        List<RemoteReplicaInfo> activeReplicas = new ArrayList<>();
+        List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+
+        // generate active and standby replicas with no progress
+        getActiveAndStandByNoProgressReplicas(activeReplicas, standbyReplicasWithNoProgress, remoteReplicas,
+            standByGroupId, groupId);
+        logger.trace("Thread name: {} Active replicas are {}, standby Replicas with no progress are {}", threadName,
+            activeReplicas, standbyReplicasWithNoProgress);
+
+        // if the current group is not in iteration, and there are active replicas, we will start a new group
+        // and increase iteration count if we are able to create
+        if (!inflightGroups.containsKey(groupId)) {
+          if (!activeReplicas.isEmpty()) {
+            RemoteReplicaGroup groupForActiveReplicas =
+                new RemoteReplicaGroup(activeReplicas, remoteNode, false, groupId);
+            inflightGroups.put(groupId, groupForActiveReplicas);
+            groupIdIterationCountMap.put(groupId, groupIdIterationCountMap.getOrDefault(groupId, 0) + 1);
+            logger.trace("Thread name: {} Created new group for groupId {}, iteration count is {}", threadName, groupId,
+                groupIdIterationCountMap.getOrDefault(groupId, 0));
+          }
+        }
+
+        // get timed out stand by replicas with no progress
+        List<RemoteReplicaInfo> standByReplicasTimedOutOnNoProgress =
+            getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
+
+        if (standByReplicasTimedOutOnNoProgress.isEmpty()) {
+          continue;
+        }
+
+        // add timed out stand by replicas with no progress to queue
+        standByReplicaQueue.putIfAbsent(remoteNode, new HashSet<>());
+        standByReplicaQueue.get(remoteNode).addAll(standByReplicasTimedOutOnNoProgress);
+        logger.trace("Thread name: {} Added standby no progress replicas {} to queue", threadName,
+            standByReplicasTimedOutOnNoProgress);
+      }
+    }
+
+    /**
+     * iterate over all data nodes and stand by queue of all data nodes {@link #standByReplicaQueue},
+     * and tries to create standBy Groups and add to {@link #inflightGroups}
+     */
+    private void createStandByGroups(){
+      logger.trace("Thread name: {} Trying to create new standby groups", threadName);
+      for (Map.Entry<DataNodeId, Set<RemoteReplicaInfo>> entry : standByReplicaQueue.entrySet()) {
+        DataNodeId remoteNode = entry.getKey();
+        List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>(entry.getValue());
+        int groupId = standByGroupIds.get(remoteNode);
+        logger.trace("Thread name: {} Trying for remoteNode {}, standBy groupId {}}", threadName, remoteNode, groupId);
+
+        // if group is already in iteration, or there are no replicas in queue do nothing
+        if (inflightGroups.containsKey(groupId) || remoteReplicaInfos.isEmpty()) {
+          continue;
+        }
+
+        // create new nonProgress standby replica group
+        RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(remoteReplicaInfos, remoteNode, true, groupId);
+        inflightGroups.put(groupId, remoteReplicaGroup);
+        // increase iteration count
+        groupIdIterationCountMap.put(groupId, groupIdIterationCountMap.getOrDefault(groupId, 0) + 1);
+        logger.trace("Thread name: {} Create standBy group with id {} ,iteration count {}", threadName, groupId,
+            groupIdIterationCountMap.getOrDefault(groupId, 0));
+
+        // clear the queue as all replicas are added in the group
+        standByReplicaQueue.get(remoteNode).clear();
+      }
+    }
+
+    /**
+     *
+     * @return {@link Map}
+     */
+    List<RemoteReplicaGroup> pollGroups() {
+      processFinishedGroups();
+      // check if we should create new groups, return other wise
+      if (!shouldCreateNewGroups()) {
+        logger.trace("Thread name: {} Not creating any new groups", threadName);
+        return new ArrayList<>(inflightGroups.values());
+      }
+
+      createActiveGroups();
+      createStandByGroups();
+
+      // if we are not able to create any new group and no groups are remaining, all replicas caught up early
+      // as if we reach this point, we would have not reached iteration threshold
+      if (inflightGroups.isEmpty()) {
+        allReplicasCaughtUpEarly = true;
+        logger.trace("Thread name: {} All replicas marked to caught up early", threadName);
+      }
+      return new ArrayList<>(inflightGroups.values());
+    }
+  }
+
   /**
    * ReplicaGroupReplicationState indicates different state of RemoteReplicaGroup in one replication cycle.
    * Each replication cycle, we will break all the replicas in order different groups and each group
    * has to go through these states to finish replication with nonblocking network client.
    */
-  enum ReplicaGroupReplicationState {
+   enum ReplicaGroupReplicationState {
     /**
      * The group is ready to start replication.
      */
