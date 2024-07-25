@@ -78,7 +78,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -2073,7 +2072,7 @@ public class ReplicaThread implements Runnable {
     private final Map<Integer, RemoteReplicaGroup> inflightGroups;
     private final Map<Integer, Integer> groupIdIterationCountMap;
     private final Map<DataNodeId, Set<RemoteReplicaInfo>> standByReplicaQueue;
-    private final Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill;
+    private final Map<RemoteReplicaInfo, Long> replicaToThrottledTill;
 
     RemoteReplicaGroupPoller( ) {
       maxIterationsPerGroup = maxIterationsPerGroupPerCycle;
@@ -2083,7 +2082,7 @@ public class ReplicaThread implements Runnable {
       inflightGroups = new HashMap<>();
       groupIdIterationCountMap = new HashMap<>();
       standByReplicaQueue = new HashMap<>();
-      remoteReplicaToThrottledTill = new HashMap<>();
+      replicaToThrottledTill = new HashMap<>();
       createGroupIds();
     }
 
@@ -2107,8 +2106,8 @@ public class ReplicaThread implements Runnable {
       return standByReplicaQueue;
     }
 
-    Map<RemoteReplicaInfo, Long> getRemoteReplicaToThrottledTill() {
-      return remoteReplicaToThrottledTill;
+    Map<RemoteReplicaInfo, Long> getReplicaToThrottledTill() {
+      return replicaToThrottledTill;
     }
 
     int allProcessedReplicaCount(){
@@ -2154,9 +2153,9 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     * Removes finished groups from inflight remote replica groups @link {#inflightRemoteReplicaGroup}
+     * Removes finished groups from inflight remote replica groups  {@link #inflightGroups}
      * drops cached keys from storeKeyConverter.
-     * For finished groups adds time until which replicas are throttled in to @link #{remoteReplicaToThrottledTill}
+     * For finished groups adds time until which replicas are throttled in to {@link #replicaToThrottledTill}
      */
     private void processFinishedGroups() {
       Iterator<Map.Entry<Integer, RemoteReplicaGroup>> inflightRemoteReplicaGroupIterator =
@@ -2170,7 +2169,7 @@ public class ReplicaThread implements Runnable {
           long currentTime = time.milliseconds();
           long throttledTill = currentTime + threadThrottleDurationMs;
           remoteReplicaGroup.remoteReplicaInfos.forEach(remoteReplicaInfo -> {
-            remoteReplicaToThrottledTill.put(remoteReplicaInfo, throttledTill);
+            replicaToThrottledTill.put(remoteReplicaInfo, throttledTill);
             logger.trace("Thread name: {} Remote Replica {} is throttled till {} in replica", threadName,
                 remoteReplicaInfo, throttledTill);
           });
@@ -2226,8 +2225,8 @@ public class ReplicaThread implements Runnable {
 
       // remove all throttled replicas
       remoteReplicas.forEach(remoteReplicaInfo -> {
-        if (remoteReplicaToThrottledTill.containsKey(remoteReplicaInfo)
-            && remoteReplicaToThrottledTill.get(remoteReplicaInfo) > time.milliseconds()) {
+        if (replicaToThrottledTill.containsKey(remoteReplicaInfo)
+            && replicaToThrottledTill.get(remoteReplicaInfo) > time.milliseconds()) {
           nonIteratingNonPendingRemoteReplicas.remove(remoteReplicaInfo);
           throttleCount.inc();
         }
@@ -2339,7 +2338,8 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     *
+     * Tries to update remote replica groups currently in process and
+     * creates new remote replica groups
      * @return {@link Map}
      */
     List<RemoteReplicaGroup> pollGroups() {

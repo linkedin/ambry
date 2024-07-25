@@ -199,89 +199,88 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
     // set max iteration limit to 3
     replicaThread.setMaxIterationsPerGroupPerCycle(3);
 
-    RemoteReplicaGroupPoller remoteReplicaGroupPoller = replicaThread.new RemoteReplicaGroupPoller();
+    RemoteReplicaGroupPoller poller = replicaThread.new RemoteReplicaGroupPoller();
 
-    Map<Integer, Integer> groupIdIterationCountMap = remoteReplicaGroupPoller.getGroupIdIterationCountMap();
-    Map<RemoteReplicaInfo, Long> remoteReplicaToThrottledTill =
-        remoteReplicaGroupPoller.getRemoteReplicaToThrottledTill();
+    Map<Integer, Integer> groupIdIterationCountMap = poller.getGroupIdIterationCountMap();
+    Map<RemoteReplicaInfo, Long> replicaToThrottledTill = poller.getReplicaToThrottledTill();
 
     // check after 1st call whether all inflight remote replica have first iteration running
-    List<RemoteReplicaGroup> inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    List<RemoteReplicaGroup> inflightGroups = poller.pollGroups();
 
-    inflightRemoteReplicaGroups.forEach((inflightRemoteReplicaGroup) -> {
-      assertEquals("Groups first iteration is going on",
-          groupIdIterationCountMap.get(inflightRemoteReplicaGroup.getId()), (Integer) 1);
+    inflightGroups.forEach((inflightGroup) -> {
+      assertEquals("Groups first iteration is going on", groupIdIterationCountMap.get(inflightGroup.getId()),
+          (Integer) 1);
     });
 
     // make one replica group as done
-    RemoteReplicaGroup remoteReplicaGroupForDone = inflightRemoteReplicaGroups.get(0);
-    remoteReplicaGroupForDone.setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
+    RemoteReplicaGroup groupForDone = inflightGroups.get(0);
+    groupForDone.setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
 
     long startTime = time.milliseconds();
 
     // check if all replicas of replica group in done state are throttled for and group is removed from inflight groups
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
-    assertNotEquals("group with done state should be removed from inflight groups", remoteReplicaGroupForDone,
-        inflightRemoteReplicaGroups.get(remoteReplicaGroupForDone.getId()));
+    assertNotEquals("group with done state should be removed from inflight groups", groupForDone,
+        inflightGroups.get(groupForDone.getId()));
 
     assertTrue("Replica should be throttled till at least value in config",
         startTime + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs
-            <= remoteReplicaToThrottledTill.get(remoteReplicaGroupForDone.getRemoteReplicaInfos().get(0)));
+            <= replicaToThrottledTill.get(groupForDone.getRemoteReplicaInfos().get(0)));
 
     // move time forward till throttling limit
     time.setCurrentMilliseconds(
         time.milliseconds() + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs + 1);
 
     // check if previously throttled replicas are added to same group and iteration count is increased
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
-    assertTrue("New group should be created for the group that is done", inflightRemoteReplicaGroups.stream()
-        .anyMatch(remoteReplicaGroup -> remoteReplicaGroup.getId() == remoteReplicaGroupForDone.getId()));
+    assertTrue("New group should be created for the group that is done",
+        inflightGroups.stream().anyMatch(remoteReplicaGroup -> remoteReplicaGroup.getId() == groupForDone.getId()));
 
     assertEquals("New group should have incremented iteration count", (Integer) 2,
-        groupIdIterationCountMap.get(remoteReplicaGroupForDone.getId()));
+        groupIdIterationCountMap.get(groupForDone.getId()));
 
     // We want to test when iteration limit is reached for any group, new group's iteration is not created
-    // since maxIteration limit is 3, we will make group id with  remoteReplicaGroupForDone group id we stored earlier done 1 more times
-    int groupIdDone = remoteReplicaGroupForDone.getId();
-    inflightRemoteReplicaGroups.stream()
+    // since maxIteration limit is 3, we will make group id with  groupForDone group id we stored earlier done 1 more times
+    int groupIdDone = groupForDone.getId();
+    inflightGroups.stream()
         .filter(g -> g.getId() == groupIdDone)
         .collect(Collectors.toList())
         .get(0)
         .setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
 
     // now the marked group will be throttled and new group will not be created
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
     // move time forward till throttling limit
     time.setCurrentMilliseconds(
         time.milliseconds() + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs + 1);
 
     // now group with id marked should reach iteration limit
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
     // make all other groups  as done
-    inflightRemoteReplicaGroups.stream().filter(group -> (group.getId() != groupIdDone)).forEach((group) -> {
+    inflightGroups.stream().filter(group -> (group.getId() != groupIdDone)).forEach((group) -> {
       group.setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
     });
 
     // now all done groups will be throttled
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
     // move time forward till throttling limit
     time.setCurrentMilliseconds(
         time.milliseconds() + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs + 1);
 
     //now in this call no new groups should be generated
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
-    assertEquals("only 1 group should be inflight", inflightRemoteReplicaGroups.size(), 1);
+    assertEquals("only 1 group should be inflight", inflightGroups.size(), 1);
     assertTrue("marked group id should be inflight",
-        inflightRemoteReplicaGroups.stream().anyMatch(group -> group.getId() == groupIdDone));
+        inflightGroups.stream().anyMatch(group -> group.getId() == groupIdDone));
 
     // now we mark the remaining group as done too
-    inflightRemoteReplicaGroups.stream()
+    inflightGroups.stream()
         .filter(group -> group.getId() == groupIdDone)
         .collect(Collectors.toList())
         .get(0)
@@ -289,10 +288,10 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
 
     // now after this call no inflight groups should be remaining and
     // maxIterationsReached should be true allReplicasCaughtUpEarly should be false
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
-    assertEquals("No inflight groups should be remaining", 0, inflightRemoteReplicaGroups.size());
-    assertFalse("all replicas did not catch up early", remoteReplicaGroupPoller.allReplicasCaughtUpEarly());
+    assertEquals("No inflight groups should be remaining", 0, inflightGroups.size());
+    assertFalse("all replicas did not catch up early", poller.allReplicasCaughtUpEarly());
   }
 
   /**
@@ -309,19 +308,18 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
     // set max iteration limit to 3
     replicaThread.setMaxIterationsPerGroupPerCycle(3);
 
-    RemoteReplicaGroupPoller remoteReplicaGroupPoller = replicaThread.new RemoteReplicaGroupPoller();
+    RemoteReplicaGroupPoller poller = replicaThread.new RemoteReplicaGroupPoller();
 
-    List<RemoteReplicaGroup> inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    List<RemoteReplicaGroup> inflightGroups = poller.pollGroups();
 
     // set all remote replicas groups to done
-    inflightRemoteReplicaGroups.forEach(
-        remoteReplicaGroup -> remoteReplicaGroup.setState(ReplicaThread.ReplicaGroupReplicationState.DONE));
+    inflightGroups.forEach(group -> group.setState(ReplicaThread.ReplicaGroupReplicationState.DONE));
 
     // all groups will be throttled now, no new groups will be created, so all replica will have caught up early
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
-    assertTrue("all replicas should have caught up early", remoteReplicaGroupPoller.allReplicasCaughtUpEarly());
-    assertEquals("no inflight groups should be created", 0, inflightRemoteReplicaGroups.size());
+    assertTrue("all replicas should have caught up early", poller.allReplicasCaughtUpEarly());
+    assertEquals("no inflight groups should be created", 0, inflightGroups.size());
 
     // move time forward till throttling limit
     time.setCurrentMilliseconds(
@@ -334,10 +332,10 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
     });
 
     // all groups will be throttled now, no new groups will be created, so all replica will have caught up early
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
-    assertTrue("all replicas should have caught up early", remoteReplicaGroupPoller.allReplicasCaughtUpEarly());
-    assertEquals("no inflight groups should be created", 0, inflightRemoteReplicaGroups.size());
+    assertTrue("all replicas should have caught up early", poller.allReplicasCaughtUpEarly());
+    assertEquals("no inflight groups should be created", 0, inflightGroups.size());
   }
 
   /**
@@ -354,31 +352,29 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
     // set max iteration limit to 3
     replicaThread.setMaxIterationsPerGroupPerCycle(3);
 
-    RemoteReplicaGroupPoller remoteReplicaGroupPoller = replicaThread.new RemoteReplicaGroupPoller();
-    Map<DataNodeId, Integer> standByGroupIds = remoteReplicaGroupPoller.getStandByGroupIds();
+    RemoteReplicaGroupPoller poller = replicaThread.new RemoteReplicaGroupPoller();
+    Map<DataNodeId, Integer> standByGroupIds = poller.getStandByGroupIds();
 
-    Map<DataNodeId, Set<RemoteReplicaInfo>> standByReplicaQueue = remoteReplicaGroupPoller.getStandByReplicaQueue();
+    Map<DataNodeId, Set<RemoteReplicaInfo>> standByReplicaQueue = poller.getStandByReplicaQueue();
 
     //add replicas for stand by no progress, take one replica from each datanode
-    dataNodeToReplicaMap.entrySet().forEach((dataNodeIdListEntry -> {
-      DataNodeId dataNodeId = dataNodeIdListEntry.getKey();
-      RemoteReplicaInfo remoteReplica = dataNodeIdListEntry.getValue().get(0);
+    dataNodeToReplicaMap.entrySet().forEach((entry -> {
+      DataNodeId dataNodeId = entry.getKey();
+      RemoteReplicaInfo remoteReplica = entry.getValue().get(0);
       standByReplicaQueue.putIfAbsent(dataNodeId, new HashSet<>());
       standByReplicaQueue.get(dataNodeId).add(remoteReplica);
     }));
 
     // after this call, standby replicas will be added to inflight groups
-    List<RemoteReplicaGroup> inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    List<RemoteReplicaGroup> inflightGroups = poller.pollGroups();
 
     // verify if all stand by group ids are created and created correctly
     for (Map.Entry<DataNodeId, Integer> entry : standByGroupIds.entrySet()) {
       DataNodeId dataNodeId = entry.getKey();
       Integer standByGroupId = entry.getValue();
 
-      RemoteReplicaGroup standByGroup = inflightRemoteReplicaGroups.stream()
-          .filter(group -> group.getId() == standByGroupId)
-          .collect(Collectors.toList())
-          .get(0);
+      RemoteReplicaGroup standByGroup =
+          inflightGroups.stream().filter(group -> group.getId() == standByGroupId).collect(Collectors.toList()).get(0);
 
       assertNotNull("standby group id must be in flight", standByGroup);
       assertTrue("standby group should be marked no progress", standByGroup.isNonProgressStandbyReplicaGroup());
@@ -386,24 +382,24 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
     }
 
     // mark all non standby groups as done
-    inflightRemoteReplicaGroups.forEach((remoteReplicaGroup) -> {
+    inflightGroups.forEach((remoteReplicaGroup) -> {
       if (!remoteReplicaGroup.isNonProgressStandbyReplicaGroup()) {
         remoteReplicaGroup.setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
       }
     });
 
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
     // move time forward till throttling limit
     time.setCurrentMilliseconds(
         time.milliseconds() + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs + 1);
 
     // after this call new remote replica groups will be created and added to inflight groups
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
     // verify if standby replicas are not added to a group again, i.e all replicas should be unique
     Set<RemoteReplicaInfo> remoteReplicaInfoSet = new HashSet<>();
-    inflightRemoteReplicaGroups.forEach((remoteReplicaGroup) -> {
+    inflightGroups.forEach((remoteReplicaGroup) -> {
       remoteReplicaGroup.getRemoteReplicaInfos().forEach(remoteReplicaInfo -> {
         assertFalse("Remote replicas should not be repeated", remoteReplicaInfoSet.contains(remoteReplicaInfo));
         remoteReplicaInfoSet.add(remoteReplicaInfo);
@@ -424,11 +420,11 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
     // set max iteration limit to 3
     replicaThread.setMaxIterationsPerGroupPerCycle(3);
 
-    RemoteReplicaGroupPoller remoteReplicaGroupPoller = replicaThread.new RemoteReplicaGroupPoller();
+    RemoteReplicaGroupPoller poller = replicaThread.new RemoteReplicaGroupPoller();
 
-    List<RemoteReplicaGroup> inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    List<RemoteReplicaGroup> inflightGroups = poller.pollGroups();
 
-    assertFalse("There should be inflight replica groups", inflightRemoteReplicaGroups.isEmpty());
+    assertFalse("There should be inflight replica groups", inflightGroups.isEmpty());
 
     // now we will signal that cycle should be terminated
     replicaThread.shouldTerminateCurrentCycle(true);
@@ -436,21 +432,21 @@ public class ReplicaThreadGroupGenerationTest extends ReplicationTestHelper {
     // now any new groups should not be generated
 
     //make all groups in done state
-    inflightRemoteReplicaGroups.forEach((remoteReplicaGroup) -> {
+    inflightGroups.forEach((remoteReplicaGroup) -> {
       remoteReplicaGroup.setState(ReplicaThread.ReplicaGroupReplicationState.DONE);
     });
 
     // after this call all groups will be throttled
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
     // move time forward till throttling limit
     time.setCurrentMilliseconds(
         time.milliseconds() + replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs + 1);
 
     // limit is 3 , but no new groups should be create after this call
-    inflightRemoteReplicaGroups = remoteReplicaGroupPoller.pollGroups();
+    inflightGroups = poller.pollGroups();
 
-    assertTrue("There should be no inflight groups", inflightRemoteReplicaGroups.isEmpty());
-    assertFalse("All replicas haven't caught up early", remoteReplicaGroupPoller.allReplicasCaughtUpEarly());
+    assertTrue("There should be no inflight groups", inflightGroups.isEmpty());
+    assertFalse("All replicas haven't caught up early", poller.allReplicasCaughtUpEarly());
   }
 }
