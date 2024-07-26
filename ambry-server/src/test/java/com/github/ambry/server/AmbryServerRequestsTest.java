@@ -187,10 +187,10 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   private AmbryServerRequests ambryRequests;
   private final StoreKeyFactory storeKeyFactory;
 
-  public AmbryServerRequestsTest(boolean validateRequestOnStoreState, boolean enableAcyclicReplication)
+  public AmbryServerRequestsTest(boolean validateRequestOnStoreState, boolean enableContinuousReplication)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
     super(ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2,
-        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, enableAcyclicReplication);
+        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, enableContinuousReplication);
     this.validateRequestOnStoreState = validateRequestOnStoreState;
     clusterMap = new MockClusterMap();
     localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());

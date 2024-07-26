@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.ReplicaSelectionPolicy;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
@@ -89,7 +88,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.numReplIter = 0;
     comparator = new ReplicaComparator();
     setMaxIterationsPerGroupPerCycle(1);
-    enableAcyclicReplication(false);
+    enableContinuousReplication(false);
   }
 
   class ReplicaComparator implements Comparator<RemoteReplicaInfo> {

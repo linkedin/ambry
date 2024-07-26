@@ -56,8 +56,8 @@ public class BackupCheckerThreadTest extends ReplicationTestHelper {
     //@formatter:on
   }
 
-  public BackupCheckerThreadTest(short requestVersion, short responseVersion, boolean enableAcyclicReplication) {
-    super(requestVersion, responseVersion, enableAcyclicReplication);
+  public BackupCheckerThreadTest(short requestVersion, short responseVersion, boolean enableContinuousReplication) {
+    super(requestVersion, responseVersion, enableContinuousReplication);
   }
 
   @Test

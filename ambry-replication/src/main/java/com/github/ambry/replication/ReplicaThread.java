@@ -123,7 +123,7 @@ public class ReplicaThread implements Runnable {
   private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
-  private boolean enableAcyclicReplication;
+  private boolean enableContinuousReplication;
   private int maxIterationsPerGroupPerCycle;
 
   //if this is set to true, we will exit from current replicate method as soon as
@@ -186,7 +186,7 @@ public class ReplicaThread implements Runnable {
       idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
     }
-    this.enableAcyclicReplication = replicationConfig.replicationEnableAcyclicReplication;
+    this.enableContinuousReplication = replicationConfig.replicationEnableContinuousReplication;
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
   }
@@ -251,8 +251,8 @@ public class ReplicaThread implements Runnable {
     maxIterationsPerGroupPerCycle = value;
   }
 
-  protected void enableAcyclicReplication(boolean value){
-    enableAcyclicReplication = value;
+  protected void enableContinuousReplication(boolean value){
+    enableContinuousReplication = value;
   }
 
   /**
@@ -377,12 +377,12 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Checks if acyclic replication is enabled and calls appropriate logic for replication
+   * Checks if continuous replication is enabled and calls appropriate logic for replication
    */
   public void replicate() {
-    if (enableAcyclicReplication) {
-      logger.trace("Thread name: {}, starting acyclic replication", threadName);
-      replicateLimitedAcyclic();
+    if (enableContinuousReplication) {
+      logger.trace("Thread name: {}, starting continuous replication", threadName);
+      replicateContinuous();
     } else {
       logger.trace("Thread name: {}, starting cyclic replication", threadName);
       replicateCyclic();
@@ -538,7 +538,7 @@ public class ReplicaThread implements Runnable {
    *     Standby: | metadata and data |  metadata and data  | metadata only     |   metadata only
    *
    */
-  public void replicateLimitedAcyclic() {
+  public void replicateContinuous() {
     long oneRoundStartTimeMs = time.milliseconds();
     shouldTerminateCurrentCycle = false;
 

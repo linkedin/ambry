@@ -120,12 +120,12 @@ public class ReplicationTest extends ReplicationTestHelper {
   /**
    * Constructor to set the configs
    */
-  public ReplicationTest(short requestVersion, short responseVersion, boolean enableAcyclicReplication) {
-    super(requestVersion, responseVersion, enableAcyclicReplication);
+  public ReplicationTest(short requestVersion, short responseVersion, boolean enableContinuousReplication) {
+    super(requestVersion, responseVersion, enableContinuousReplication);
   }
 
   /**
-   * Running for the two sets of compatible ReplicaMetadataRequest and ReplicaMetadataResponse,
+   * Running for the two sets of compatible ReplicaMetadataRequest and ReplicaMetadataResponse, and continuous and cyclic replication
    * viz {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V1}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_5}}
    * & {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V2}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_6}}
    * @return an array with both pairs of compatible request and response.
@@ -1962,8 +1962,8 @@ public class ReplicationTest extends ReplicationTestHelper {
    * @throws Exception
    */
   @Test
-  public void putsAcyclicReplicationTest() throws Exception {
-    if (!replicationConfig.replicationEnableAcyclicReplication) {
+  public void putsContinuousReplicationTest() throws Exception {
+    if (!replicationConfig.replicationEnableContinuousReplication) {
       return;
     }
 
@@ -2036,14 +2036,6 @@ public class ReplicationTest extends ReplicationTestHelper {
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffersAfterReplication.entrySet()) {
       assertEquals("Missing buffers count mismatch", 0, entry.getValue().size());
     }
-  }
-
-  @Test
-  public void putTTLUpdateDeletesAcyclicReplicationTest(){
-    if(!replicationConfig.replicationEnableAcyclicReplication)
-      return;
-
-
   }
 
   /**

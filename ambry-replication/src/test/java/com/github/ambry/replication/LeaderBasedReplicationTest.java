@@ -74,8 +74,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
   /**
    * Constructor to set the configs
    */
-  public LeaderBasedReplicationTest(short requestVersion, short responseVersion, boolean enableAcyclicReplication) throws IOException {
-    super(requestVersion, responseVersion, enableAcyclicReplication);
+  public LeaderBasedReplicationTest(short requestVersion, short responseVersion, boolean enableContinuousReplication) throws IOException {
+    super(requestVersion, responseVersion, enableContinuousReplication);
     setUp();
   }
 
@@ -893,8 +893,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
   }
 
   @Test
-  public void replicaThreadLeaderBasedAcyclicReplicationStandByCrossColoFetchTest() throws Exception {
-    if (!replicationConfig.replicationEnableAcyclicReplication) {
+  public void replicaThreadLeaderBasedContinuousReplicationStandByCrossColoFetchTest() throws Exception {
+    if (!replicationConfig.replicationEnableContinuousReplication) {
       return;
     }
 

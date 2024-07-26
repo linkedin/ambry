@@ -29,16 +29,13 @@ import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
-import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -82,7 +79,7 @@ public class RecoveryThread extends ReplicaThread {
         replicationConfig.maxBackupCheckerReportFd, metricRegistry);
     this.recoveryManager = recoveryManager;
     setMaxIterationsPerGroupPerCycle(1);
-    enableAcyclicReplication(false);
+    enableContinuousReplication(false);
   }
 
   /**
