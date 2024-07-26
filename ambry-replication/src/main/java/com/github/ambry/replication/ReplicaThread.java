@@ -2331,8 +2331,8 @@ public class ReplicaThread implements Runnable {
 
         if (!standByReplicasTimedOutOnNoProgress.isEmpty()) {
           // add timed out stand by replicas with no progress to queue
-          standByReplicaQueue.putIfAbsent(remoteNode, new HashSet<>());
-          standByReplicaQueue.get(remoteNode).addAll(standByReplicasTimedOutOnNoProgress);
+          standByReplicaQueue.computeIfAbsent(remoteNode, (r -> new HashSet<>()))
+              .addAll(standByReplicasTimedOutOnNoProgress);
           logger.trace("Thread name: {} Added standby no progress replicas {} to queue", threadName,
               standByReplicasTimedOutOnNoProgress);
         }
