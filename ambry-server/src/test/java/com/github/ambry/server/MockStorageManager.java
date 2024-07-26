@@ -45,11 +45,13 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.MessageErrorInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
@@ -183,6 +185,38 @@ class MockStorageManager extends StorageManager {
       messageWriteSetReceived = writeSet;
       throwExceptionIfRequired();
       checkValidityOfIds(infos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
+    }
+
+    @Override
+    public StoreBatchDeleteInfo batchDelete(List<MessageInfo> infos) throws StoreException {
+      operationReceived = RequestOrResponseType.BatchDeleteRequest;
+      List<MessageInfo> infosToDelete = new ArrayList<>(infos.size());
+      List<InputStream> inputStreams = new ArrayList<>();
+      List<MessageErrorInfo> messageErrorInfos = new ArrayList<>();
+      MessageWriteSet writeSet;
+      try {
+        for (MessageInfo info : infos) {
+          short lifeVersion =
+              info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND ? 0 : info.getLifeVersion();
+          MessageFormatInputStream stream =
+              new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), lifeVersion);
+          infosToDelete.add(new MessageInfo(info.getStoreKey(), stream.getSize(), true, info.isTtlUpdated(), false,
+              info.getExpirationTimeInMs(), null, info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(),
+              lifeVersion));
+          inputStreams.add(stream);
+          messageErrorInfos.add(new MessageErrorInfo(info, null));
+        }
+        writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), infosToDelete,
+                false);
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+      messageWriteSetReceived = writeSet;
+      throwExceptionIfRequired();
+      checkValidityOfIds(infos.stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
+      return new StoreBatchDeleteInfo(this.getReplicaId().getPartitionId(), messageErrorInfos);
     }
 
     @Override

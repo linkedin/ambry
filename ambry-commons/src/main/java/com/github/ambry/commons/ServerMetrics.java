@@ -100,6 +100,10 @@ public class ServerMetrics {
   public final Histogram deleteBlobRequestQueueTimeInMs;
   public final Histogram deleteBlobProcessingTimeInMs;
   public final Histogram deleteBlobResponseQueueTimeInMs;
+
+  public final Histogram batchDeleteBlobRequestQueueTimeInMs;
+  public final Histogram batchDeleteBlobProcessingTimeInMs;
+  public final Histogram batchDeleteBlobResponseQueueTimeInMs;
   public final Histogram purgeBlobResponseQueueTimeInMs;
   public final Histogram deleteBlobSendTimeInMs;
   public final Histogram purgeBlobSendTimeInMs;
@@ -399,6 +403,11 @@ public class ServerMetrics {
     deleteBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobProcessingTime"));
     deleteBlobResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobResponseQueueTime"));
+    batchDeleteBlobRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobRequestQueueTime"));
+    batchDeleteBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobProcessingTime"));
+    batchDeleteBlobResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobResponseQueueTime"));
     purgeBlobResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "PurgeBlobResponseQueueTimeInMs"));
     deleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobSendTime"));
