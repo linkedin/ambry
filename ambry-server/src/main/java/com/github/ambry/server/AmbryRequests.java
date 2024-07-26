@@ -51,6 +51,7 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BatchDeleteRequest;
 import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
@@ -1527,7 +1528,7 @@ public class AmbryRequests implements RequestAPI {
       storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
     }
     if (getRequest.getGetOption() == GetOption.Include_All) {
-      storeGetOptions = EnumSet.allOf(StoreGetOptions.class);
+      storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
     }
     return storeGetOptions;
   }
@@ -1858,6 +1859,11 @@ public class AmbryRequests implements RequestAPI {
         metrics.deleteBlobDroppedRate.mark();
         metrics.totalRequestDroppedRate.mark();
       }
+    }
+
+    @Override
+    public void visit(BatchDeleteRequest deleteRequest) {
+      
     }
 
     @Override

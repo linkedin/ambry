@@ -1150,6 +1150,171 @@ public class RequestResponseTest {
   }
 
   /**
+   * Tests for {@link BatchDeleteRequest} and {@link BatchDeleteResponse}.
+   * @throws IOException
+   */
+  @Test
+  public void testBatchDeleteRequestResponse() throws IOException {
+    final MockClusterMap clusterMap = new MockClusterMap();
+    final short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    final short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    final String clientId = "client";
+    final PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    final BlobId blobId1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+    final BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+    final int correlationId = TestUtils.RANDOM.nextInt();
+    final long deletionTimeInMs = 1L;
+
+    BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo =
+        new BatchDeletePartitionRequestInfo(partitionId, Arrays.asList(blobId1, blobId2));
+    BatchDeleteRequest batchDeleteRequest =
+        new BatchDeleteRequest(correlationId, clientId, Collections.singletonList(batchDeletePartitionRequestInfo),
+            deletionTimeInMs);
+
+    DataInputStream requestStream = serAndPrepForRead(batchDeleteRequest, -1, true);
+    final BatchDeleteRequest deserializedBatchDeleteRequest = BatchDeleteRequest.readFrom(requestStream, clusterMap);
+    //verify the request
+    verifyBatchDeleteRequest(batchDeleteRequest, deserializedBatchDeleteRequest);
+    batchDeleteRequest.release();
+
+    final BatchDeletePartitionResponseInfo batchDeletePartitionResponseInfo =
+        new BatchDeletePartitionResponseInfo(partitionId,
+            Arrays.asList(new BlobDeleteStatus(blobId1, ServerErrorCode.No_Error),
+                new BlobDeleteStatus(blobId2, ServerErrorCode.No_Error)));
+    final BatchDeleteResponse batchDeleteResponse = new BatchDeleteResponse((short) 1, correlationId, clientId,
+        Collections.singletonList(batchDeletePartitionResponseInfo), ServerErrorCode.No_Error);
+    requestStream = serAndPrepForRead(batchDeleteResponse, -1, false);
+    final BatchDeleteResponse deserializedBatchDeleteResponse = BatchDeleteResponse.readFrom(requestStream, clusterMap);
+    //verify the response
+    verifyBatchDeleteResponse(batchDeleteResponse, deserializedBatchDeleteResponse);
+    batchDeleteResponse.release();
+  }
+
+  /**
+   * Tests for {@link BatchDeleteRequest} and {@link BatchDeleteResponse} with multiple partitions.
+   * @throws IOException
+   */
+  @Test
+  public void testBatchDeleteRequestResponseWithMultiplePartitions() throws IOException {
+    final MockClusterMap clusterMap = new MockClusterMap();
+    final short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    final short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    final String clientId = "client";
+    //Partition 0
+    final PartitionId partitionId0 = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    final BlobId blobId1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId0, false, BlobId.BlobDataType.DATACHUNK);
+    final BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId0, false, BlobId.BlobDataType.DATACHUNK);
+
+    //Partition 1
+    final PartitionId partitionId1 = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(1);
+    final BlobId blobId3 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId1, false, BlobId.BlobDataType.DATACHUNK);
+    final BlobId blobId4 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId1, false, BlobId.BlobDataType.DATACHUNK);
+
+    final int correlationId = TestUtils.RANDOM.nextInt();
+    final RequestOrResponseType operationType =
+        RequestOrResponseType.values()[Utils.getRandomShort(TestUtils.RANDOM) % RequestOrResponseType.values().length];
+    final long deletionTimeInMs = 1L;
+
+    //Delete Partition Request Info for Partition 0
+    final BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo0 =
+        new BatchDeletePartitionRequestInfo(partitionId0, Arrays.asList(blobId1, blobId2));
+    //Delete Partition Request Info for Partition 1
+    final BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo1 =
+        new BatchDeletePartitionRequestInfo(partitionId1, Arrays.asList(blobId3, blobId4));
+
+    //Batch Delete Request
+    final BatchDeleteRequest batchDeleteRequest = new BatchDeleteRequest(correlationId, clientId,
+        Arrays.asList(batchDeletePartitionRequestInfo0, batchDeletePartitionRequestInfo1), deletionTimeInMs);
+
+    DataInputStream requestStream = serAndPrepForRead(batchDeleteRequest, -1, true);
+    final BatchDeleteRequest deserializedBatchDeleteRequest = BatchDeleteRequest.readFrom(requestStream, clusterMap);
+    //verify the request
+    verifyBatchDeleteRequest(batchDeleteRequest, deserializedBatchDeleteRequest);
+    batchDeleteRequest.release();
+
+    //Delete Partition Response Info for Partition 0
+    final BatchDeletePartitionResponseInfo batchDeletePartitionResponseInfo0 =
+        new BatchDeletePartitionResponseInfo(partitionId0,
+            Arrays.asList(new BlobDeleteStatus(blobId1, ServerErrorCode.No_Error),
+                new BlobDeleteStatus(blobId2, ServerErrorCode.Blob_Not_Found)));
+    //Delete Partition Response Info for Partition 1
+    final BatchDeletePartitionResponseInfo batchDeletePartitionResponseInfo1 =
+        new BatchDeletePartitionResponseInfo(partitionId1,
+            Arrays.asList(new BlobDeleteStatus(blobId3, ServerErrorCode.Blob_Deleted),
+                new BlobDeleteStatus(blobId4, ServerErrorCode.Blob_Not_Deleted)));
+    //Batch Delete Response
+    final BatchDeleteResponse batchDeleteResponse = new BatchDeleteResponse((short) 1, correlationId, clientId,
+        Arrays.asList(batchDeletePartitionResponseInfo0, batchDeletePartitionResponseInfo1), ServerErrorCode.No_Error);
+    requestStream = serAndPrepForRead(batchDeleteResponse, -1, false);
+    final BatchDeleteResponse deserializedBatchDeleteResponse = BatchDeleteResponse.readFrom(requestStream, clusterMap);
+    //verify the response
+    verifyBatchDeleteResponse(batchDeleteResponse, deserializedBatchDeleteResponse);
+    batchDeleteResponse.release();
+  }
+
+  /**
+   * Verify the two {@link BatchDeleteRequest} are the same
+   * @param orgReq the original {@link BatchDeleteRequest}
+   * @param deserializedReq the deserialized {@link BatchDeleteRequest}
+   */
+  private void verifyBatchDeleteRequest(BatchDeleteRequest orgReq, BatchDeleteRequest deserializedReq) {
+    Assert.assertEquals(orgReq.type, RequestOrResponseType.BatchDeleteRequest);
+    Assert.assertEquals(orgReq.type, deserializedReq.type);
+    Assert.assertEquals(orgReq.getCorrelationId(), deserializedReq.getCorrelationId());
+    Assert.assertEquals(orgReq.getClientId(), deserializedReq.getClientId());
+    Assert.assertEquals(orgReq.getDeletionTimeInMs(), deserializedReq.getDeletionTimeInMs());
+    Assert.assertEquals(orgReq.getPartitionRequestInfoList().size(),
+        deserializedReq.getPartitionRequestInfoList().size());
+    for (int i = 0; i < orgReq.getPartitionRequestInfoList().size(); i++) {
+      BatchDeletePartitionRequestInfo orgPartitionRequestInfo = orgReq.getPartitionRequestInfoList().get(i);
+      BatchDeletePartitionRequestInfo deserializedPartitionRequestInfo =
+          deserializedReq.getPartitionRequestInfoList().get(i);
+      Assert.assertEquals(orgPartitionRequestInfo.getPartition(), deserializedPartitionRequestInfo.getPartition());
+      Assert.assertEquals(orgPartitionRequestInfo.getBlobIds().size(),
+          deserializedPartitionRequestInfo.getBlobIds().size());
+      for (int j = 0; j < orgPartitionRequestInfo.getBlobIds().size(); j++) {
+        Assert.assertEquals(orgPartitionRequestInfo.getBlobIds().get(j),
+            deserializedPartitionRequestInfo.getBlobIds().get(j));
+      }
+    }
+  }
+
+  /**
+   * Verify the two {@link BatchDeleteResponse} are the same
+   * @param orgRes the original {@link BatchDeleteResponse}
+   * @param deserializedRes the deserialized {@link BatchDeleteResponse}
+   */
+  private void verifyBatchDeleteResponse(BatchDeleteResponse orgRes, BatchDeleteResponse deserializedRes) {
+    Assert.assertEquals(orgRes.type, RequestOrResponseType.BatchDeleteResponse);
+    Assert.assertEquals(orgRes.type, deserializedRes.type);
+    Assert.assertEquals(orgRes.getCorrelationId(), deserializedRes.getCorrelationId());
+    Assert.assertEquals(orgRes.getClientId(), deserializedRes.getClientId());
+    Assert.assertEquals(orgRes.getError(), deserializedRes.getError());
+    Assert.assertEquals(orgRes.getPartitionResponseInfoList().size(),
+        deserializedRes.getPartitionResponseInfoList().size());
+    for (int i = 0; i < orgRes.getPartitionResponseInfoList().size(); i++) {
+      BatchDeletePartitionResponseInfo orgPartitionResponseInfo = orgRes.getPartitionResponseInfoList().get(i);
+      BatchDeletePartitionResponseInfo deserializedPartitionResponseInfo =
+          deserializedRes.getPartitionResponseInfoList().get(i);
+      Assert.assertEquals(orgPartitionResponseInfo.getPartition(), deserializedPartitionResponseInfo.getPartition());
+      Assert.assertEquals(orgPartitionResponseInfo.getBlobsDeleteStatus().size(),
+          deserializedPartitionResponseInfo.getBlobsDeleteStatus().size());
+      for (int j = 0; j < orgPartitionResponseInfo.getBlobsDeleteStatus().size(); j++) {
+        Assert.assertEquals(orgPartitionResponseInfo.getBlobsDeleteStatus().get(j).getBlobId(),
+            deserializedPartitionResponseInfo.getBlobsDeleteStatus().get(j).getBlobId());
+        Assert.assertEquals(orgPartitionResponseInfo.getBlobsDeleteStatus().get(j).getStatus(),
+            deserializedPartitionResponseInfo.getBlobsDeleteStatus().get(j).getStatus());
+      }
+    }
+  }
+
+  /**
    * Verify the two {@link ReplicateBlobRequest} are the same
    * @param orgReq the original {@link ReplicateBlobRequest}
    * @param deserializedReq the deserialized {@link ReplicateBlobRequest}

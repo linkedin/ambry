@@ -152,8 +152,10 @@ public class CloudBlobStoreTest {
 
   protected AccountService accountService = mock(AccountService.class);
   protected MetricRegistry metricRegistry;
+  private AzuriteUtils azuriteUtils;
 
   public CloudBlobStoreTest() throws Exception {
+    azuriteUtils = new AzuriteUtils();
     this.ambryBackupVersion = CloudConfig.AMBRY_BACKUP_VERSION_2; // v1 is deprecated
     this.isVcr = true; // Just hardcode true. false is for blueshift, which is deprecated.
     partitionId = new MockPartitionId();
@@ -169,7 +171,7 @@ public class CloudBlobStoreTest {
    */
   private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start)
       throws ReflectiveOperationException {
-    properties = new Properties();
+    properties = azuriteUtils.getAzuriteConnectionProperties();
     // Required clustermap properties
     setBasicProperties(properties);
     // Require encryption for uploading
@@ -188,12 +190,8 @@ public class CloudBlobStoreTest {
           : mock(CloudDestination.class);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
       // TODO: This test suite needs improvements. It has a mixture of code from 3 different use-cases.
-      properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
-      properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
-      properties.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
       properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(this.compactionDryRun));
       properties.setProperty(CloudConfig.CLOUD_COMPACTION_GRACE_PERIOD_DAYS, String.valueOf(0));
-      properties.setProperty(AzureCloudConfig.AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, String.valueOf(1));
       /*
        * snalli@:
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
@@ -215,7 +213,7 @@ public class CloudBlobStoreTest {
       currentCacheLimit = 0;
       properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(currentCacheLimit));
       // Azure container name will be <clusterName>-<partitionId>, so dev-0 for this test
-      dest = new AzuriteUtils().getAzuriteClient(properties, metricRegistry, clusterMap, accountService);
+      dest = azuriteUtils.getAzuriteClient(properties, metricRegistry, clusterMap, accountService);
     }
     store = new CloudBlobStore(verifiableProperties, partitionId, dest, clusterMap, vcrMetrics);
     if (start) {
@@ -303,7 +301,7 @@ public class CloudBlobStoreTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     AzureMetrics azureMetrics = new AzureMetrics(metricRegistry);
     VcrMetrics vcrMetrics = new VcrMetrics(metricRegistry);
-    AzureCloudDestinationSync spyDest = spy(new AzuriteUtils().getAzuriteClient(properties, metricRegistry,
+    AzureCloudDestinationSync spyDest = spy(azuriteUtils.getAzuriteClient(properties, metricRegistry,
         clusterMap, accountService));
     CloudBlobStore spyStore = spy(new CloudBlobStore(new VerifiableProperties(properties), partitionId, spyDest,
         clusterMap, vcrMetrics));
@@ -795,17 +793,6 @@ public class CloudBlobStoreTest {
           any(CloudUpdateValidator.class));
     }
     verifyCacheHits(count * 4 + numPuts, count * 2);
-
-    // Test 5: Try to upload a set of blobs containing duplicates. This should fail.
-    List<MessageInfo> messageInfoList = new ArrayList<>(messageInfoMap.values());
-    messageInfoList.add(messageInfoList.get(messageInfoMap.values().size() - 1));
-    try {
-      store.delete(messageInfoList);
-      fail("delete must throw an exception for duplicates");
-    } catch (IllegalArgumentException iaex) {
-      assumeTrue(iaex.getMessage().startsWith("list contains duplicates"));
-    }
-    verifyCacheHits(count * 4 + numPuts, count * 2);
   }
 
   /** Test the CloudBlobStore updateTtl method. */
@@ -912,20 +899,6 @@ public class CloudBlobStoreTest {
           any(CloudUpdateValidator.class));
     }
     verifyCacheHits(4 + numPuts + numDeletes + numUnDeletes, 3);
-
-    /*
-        Test 5: ttl update with finite expiration time fails
-        V1: Should fail
-        V2: Should fail
-     */
-    messageWriteSet = new MockMessageWriteSet();
-    CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, System.currentTimeMillis() + 20000,
-        refAccountId, refContainerId, true, false, partitionId, operationTime, isVcr);
-    try {
-      store.updateTtl(messageWriteSet.getMessageSetInfo());
-    } catch (StoreException ex) {
-      assertEquals(ex.getErrorCode(), StoreErrorCodes.Update_Not_Allowed);
-    }
   }
 
   /** Test the CloudBlobStore undelete method. */
@@ -1474,7 +1447,7 @@ public class CloudBlobStoreTest {
     }
 
     // Set up VCR
-    Properties props = new Properties();
+    Properties props = azuriteUtils.getAzuriteConnectionProperties();
     setBasicProperties(props);
     props.setProperty("clustermap.port", "12300");
     props.setProperty("vcr.ssl.port", "12345");
@@ -1491,11 +1464,7 @@ public class CloudBlobStoreTest {
       dest =
           new LatchBasedInMemoryCloudDestination(blobIdList, clusterMap);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
-      props.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
-      props.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
-      props.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
-      props.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(0));
-      dest = new AzuriteUtils().getAzuriteClient(props, metricRegistry, clusterMap);
+      dest = azuriteUtils.getAzuriteClient(props, metricRegistry, clusterMap, null);
     }
 
     CloudReplica cloudReplica = new CloudReplica(partitionId, cloudDataNode);

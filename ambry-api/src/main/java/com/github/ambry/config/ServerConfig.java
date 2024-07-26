@@ -63,7 +63,8 @@ public class ServerConfig {
   /**
    * Implementation for message transformation.
    */
-  @Config("server.message.transformer")
+  public static final String SERVER_MESSAGE_TRANSFORMER = "server.message.transformer";
+  @Config(SERVER_MESSAGE_TRANSFORMER)
   @Default("com.github.ambry.messageformat.ValidatingTransformer")
   public final String serverMessageTransformer;
 
@@ -151,7 +152,7 @@ public class ServerConfig {
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
     serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");
-    serverMessageTransformer = verifiableProperties.getString("server.message.transformer",
+    serverMessageTransformer = verifiableProperties.getString(SERVER_MESSAGE_TRANSFORMER,
         "com.github.ambry.messageformat.ValidatingTransformer");
     serverValidateRequestBasedOnStoreState =
         verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);

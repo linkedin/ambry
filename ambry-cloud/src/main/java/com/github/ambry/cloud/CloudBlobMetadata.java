@@ -505,6 +505,9 @@ public class CloudBlobMetadata {
     if (!(o instanceof CloudBlobMetadata)) {
       return false;
     }
+    if (o == this) {
+      return true;
+    }
     CloudBlobMetadata om = (CloudBlobMetadata) o;
     return (Objects.equals(id, om.id) && Objects.equals(partitionId, om.partitionId) && accountId == om.accountId
         && containerId == om.containerId && size == om.size && creationTime == om.creationTime
