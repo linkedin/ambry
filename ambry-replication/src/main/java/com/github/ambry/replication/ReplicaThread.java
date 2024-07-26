@@ -2156,7 +2156,6 @@ public class ReplicaThread implements Runnable {
      */
     private void createGroupIds() {
       Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
-
       int groupId = 0;
 
       for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
