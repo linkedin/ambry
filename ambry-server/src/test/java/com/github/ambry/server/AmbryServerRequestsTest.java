@@ -56,6 +56,8 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BatchDeletePartitionRequestInfo;
+import com.github.ambry.protocol.BatchDeleteRequest;
 import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
@@ -284,7 +286,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     }
 
     for (RequestOrResponseType request : EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.GetRequest,
-        RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest,
+        RequestOrResponseType.DeleteRequest, RequestOrResponseType.BatchDeleteRequest, RequestOrResponseType.TtlUpdateRequest,
         RequestOrResponseType.UndeleteRequest)) {
       for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
         if (request == RequestOrResponseType.PutRequest) {
@@ -393,7 +395,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   @Test
   public void controlRequestSuccessTest() throws InterruptedException, IOException {
     RequestOrResponseType[] requestOrResponseTypes =
-        {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest,
+        {  RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
+            RequestOrResponseType.BatchDeleteRequest, RequestOrResponseType.GetRequest,
             RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest,
             RequestOrResponseType.UndeleteRequest};
     for (RequestOrResponseType requestType : requestOrResponseTypes) {
@@ -1916,6 +1919,10 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
           break;
         case DeleteRequest:
           request = new DeleteRequest(correlationId, clientId, originalBlobId, SystemTime.getInstance().milliseconds());
+          break;
+        case BatchDeleteRequest:
+          BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo = new BatchDeletePartitionRequestInfo(id, Collections.singletonList(originalBlobId));
+          request = new BatchDeleteRequest(correlationId, clientId, Collections.singletonList(batchDeletePartitionRequestInfo), SystemTime.getInstance().milliseconds());
           break;
         case UndeleteRequest:
           request =

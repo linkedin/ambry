@@ -19,6 +19,8 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatInputStream;
@@ -27,6 +29,7 @@ import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -759,6 +762,183 @@ public class BlobStore implements Store {
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
       onSuccess("DELETE");
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Override
+  public StoreBatchDeleteInfo batchDelete(List<MessageInfo> infosToDelete) throws StoreException {
+    checkStarted();
+    checkDuplicates(infosToDelete);
+    StoreBatchDeleteInfo storeBatchDeleteInfo = new StoreBatchDeleteInfo(
+        replicaId.getPartitionId(), new ArrayList<>());
+    final Timer.Context context = metrics.batchDeleteResponse.time();
+    int i = 0;
+    List<MessageInfo> filteredInfos = null;
+    try {
+      List<IndexValue> indexValuesPriorToDelete = new ArrayList<>();
+      List<IndexValue> originalPuts = new ArrayList<>();
+      List<Short> lifeVersions = new ArrayList<>();
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      filteredInfos = new ArrayList<>();
+      for (MessageInfo info : infosToDelete) {
+        try {
+          IndexValue value =
+              index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
+          if (value == null) {
+            throw new StoreException(
+                "Cannot delete id " + info.getStoreKey() + " because it is not present in the index",
+                StoreErrorCodes.ID_Not_Found);
+          }
+          if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
+            if (config.storeValidateAuthorization) {
+              throw new StoreException(
+                  "DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
+                      + value.getAccountId() + "Actually containerId: " + value.getContainerId(),
+                  StoreErrorCodes.Authorization_Failure);
+            } else {
+              logger.warn("DELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
+                  info.getStoreKey(), value.getAccountId(), value.getContainerId());
+              metrics.deleteAuthorizationFailureCount.inc();
+            }
+          }
+          short revisedLifeVersion = info.getLifeVersion();
+          if (info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+            // This is a delete request from frontend
+            if (value.isDelete()) {
+              throw new StoreException(
+                  "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                  StoreErrorCodes.ID_Deleted);
+            }
+            revisedLifeVersion = value.getLifeVersion();
+          } else {
+            // This is a delete request from replication
+            if (value.isDelete() && value.getLifeVersion() == info.getLifeVersion()) {
+              throw new StoreException("Cannot delete id " + info.getStoreKey()
+                  + " since it is already deleted in the index with lifeVersion " + value.getLifeVersion() + ".",
+                  StoreErrorCodes.ID_Deleted);
+            }
+            if (value.getLifeVersion() > info.getLifeVersion()) {
+              throw new StoreException("Cannot delete id " + info.getStoreKey()
+                  + " since it has a higher lifeVersion than the message info: " + value.getLifeVersion() + ">"
+                  + info.getLifeVersion(), StoreErrorCodes.Life_Version_Conflict);
+            }
+          }
+          indexValuesPriorToDelete.add(value);
+          lifeVersions.add(revisedLifeVersion);
+          if (!value.isDelete() && !value.isUndelete()) {
+            originalPuts.add(value);
+          } else {
+            originalPuts.add(index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), value.getOffset()),
+                EnumSet.of(PersistentIndex.IndexEntryType.PUT)));
+          }
+          i++;
+          filteredInfos.add(info);
+        } catch (StoreException e){
+          storeBatchDeleteInfo.addMessageErrorInfo(new MessageErrorInfo(info, e.getErrorCode()));
+          if (e.getErrorCode() == StoreErrorCodes.IOError) {
+            onError();
+          }
+        }
+      }
+      infosToDelete = filteredInfos;
+      if (infosToDelete.isEmpty()){
+        logger.trace("Batch Delete completely failed since all blobs failed");
+        return storeBatchDeleteInfo;
+      }
+      synchronized (storeWriteLock) {
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        i = 0;
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          filteredInfos = new ArrayList<>();
+          for (MessageInfo info : infosToDelete) {
+            try {
+              IndexValue value =
+                  index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+              if (value != null) {
+                // There are several possible cases that can exist here. Delete has to follow either PUT, TTL_UPDATE or UNDELETE.
+                // let EOBC be end offset before check, and [RECORD] means RECORD is optional
+                // 1. PUT [TTL_UPDATE DELETE UNDELETE] EOBC DELETE
+                // 2. PUT EOBC TTL_UPDATE
+                // 3. PUT EOBC DELETE UNDELETE: this is really extreme case
+                // From these cases, we can have value being DELETE, TTL_UPDATE AND UNDELETE, we have to deal with them accordingly.
+                if (value.getLifeVersion() == lifeVersions.get(i)) {
+                  if (value.isDelete()) {
+                    throw new StoreException(
+                        "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                        StoreErrorCodes.ID_Deleted);
+                  }
+                  // value being ttl update is fine, we can just append DELETE to it.
+                } else {
+                  // For the extreme case, we log it out and throw an exception.
+                  logger.warn("Concurrent operation for id " + info.getStoreKey() + " in store " + dataDir
+                      + ". Newly added value " + value);
+                  throw new StoreException(
+                      "Cannot delete id " + info.getStoreKey() + " since there are concurrent operation while delete",
+                      StoreErrorCodes.Life_Version_Conflict);
+                }
+                indexValuesPriorToDelete.set(i, value);
+              }
+              i++;
+              filteredInfos.add(info);
+            } catch (StoreException e){
+              storeBatchDeleteInfo.addMessageErrorInfo(new MessageErrorInfo(info, e.getErrorCode()));
+              if (e.getErrorCode() == StoreErrorCodes.IOError) {
+                onError();
+              }
+            }
+          }
+          infosToDelete = filteredInfos;
+          if (infosToDelete.isEmpty()){
+            logger.trace("Batch Delete completely failed since all blobs failed");
+            return storeBatchDeleteInfo;
+          }
+        }
+        List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
+        List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
+        i = 0;
+        for (MessageInfo info : infosToDelete) {
+          MessageFormatInputStream stream =
+              new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), lifeVersions.get(i));
+          // Don't change the lifeVersion here, there are other logic in markAsDeleted that relies on this lifeVersion.
+          updatedInfos.add(
+              new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), info.getLifeVersion()));
+          inputStreams.add(stream);
+          i++;
+        }
+        Offset endOffsetOfLastMessage = log.getEndOffset();
+        MessageFormatWriteSet writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), updatedInfos,
+                false);
+        writeSet.writeTo(log);
+        logger.trace("Store : {} delete mark written to log", dataDir);
+        int correspondingPutIndex = 0;
+        for (MessageInfo info : updatedInfos) {
+          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+          IndexValue deleteIndexValue =
+              index.markAsDeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(), info.getLifeVersion());
+          endOffsetOfLastMessage = fileSpan.getEndOffset();
+          blobStoreStats.handleNewDeleteEntry(info.getStoreKey(), deleteIndexValue,
+              originalPuts.get(correspondingPutIndex), indexValuesPriorToDelete.get(correspondingPutIndex));
+          correspondingPutIndex++;
+          storeBatchDeleteInfo.addMessageErrorInfo(new MessageErrorInfo(info, null));
+        }
+        logger.trace("Store : {} delete has been marked in the index ", dataDir);
+      }
+      onSuccess("BATCH_DELETE");
+      return storeBatchDeleteInfo;
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
         onError();

@@ -27,6 +27,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
@@ -495,5 +496,10 @@ public class InMemoryStore implements Store {
   @Override
   public boolean isStarted() {
     return started;
+  }
+
+  @Override
+  public StoreBatchDeleteInfo batchDelete(List<MessageInfo> infos) throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
   }
 }
