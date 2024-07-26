@@ -169,7 +169,7 @@ public class CloudTokenPersistorTest {
     token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
         true, (short) 3, null, null, (short) -1);
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
-        -1, Collections.emptyMap(), new SystemTime());
+            -1, Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
 
@@ -294,9 +294,9 @@ public class CloudTokenPersistorTest {
     when(vcrClusterParticipant.getCurrentDataNodeId()).thenReturn(dataNodeId);
     NetworkClientFactory networkClientFactory = mock(NetworkClientFactory.class);
     VcrReplicationManager vcrReplicationManager =
-        new VcrReplicationManager(verifiableProperties, null, storeKeyFactory, mockClusterMap,
-            vcrClusterParticipant, azuriteClient, null, networkClientFactory, null,
-            null);
+          new VcrReplicationManager(verifiableProperties, null, storeKeyFactory, mockClusterMap,
+              vcrClusterParticipant, azuriteClient, null, networkClientFactory, null,
+              null);
 
     // No one checks if local and peer are the same replica. Hmm ?
     // test 1: uninitialized token
@@ -379,7 +379,7 @@ public class CloudTokenPersistorTest {
           new LatchBasedInMemoryCloudDestination(Collections.emptyList(),
               AzureCloudDestinationFactory.getReplicationFeedType(new VerifiableProperties(props)), clusterMap);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
-      cloudDestination = new AzuriteUtils().getAzuriteClient(props, metricRegistry, clusterMap);
+      cloudDestination = azuriteUtils.getAzuriteClient(props, metricRegistry, clusterMap, null);
     }
 
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
