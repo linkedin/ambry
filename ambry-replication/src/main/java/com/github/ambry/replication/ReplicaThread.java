@@ -2252,15 +2252,15 @@ public class ReplicaThread implements Runnable {
   public void replicateContinuous2() {
 
     ArrayList<ReplicaNodeTracker> nodeTrackers = new ArrayList<>();
-    // A map from correlation id to RemoteReplicaGroup. This is used to find the group when response comes back.
     Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
-    // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
     Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
-    int remoteReplicaGroupId = 0;
+    int groupId = 0; // This id is only to identify log entries for a group; nothing else
     // TODO: drop caches
-    // This is a critical step; Don't fold it into the loop; Keep it separate
-    // This step refreshes the set of peer replicas
-    // This step _FIXES_ the number of group-trackers for a node
+    /**
+     * This is a critical step; Don't fold it into the loop; Keep it separate
+     * This step refreshes the set of peer replicas
+     * This step _FIXES_ the number of group-trackers for a node
+     */
     for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : selectReplicas(getRemoteReplicaInfos()).entrySet()) {
       DataNodeId remoteNode = entry.getKey();
       List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
@@ -2275,18 +2275,22 @@ public class ReplicaThread implements Runnable {
             maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicas, maxReplicaCountPerRequest)
                 : Collections.singletonList(activeReplicas);
         for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
+          ReplicaGroupTracker tracker = new ReplicaGroupTracker(groupId++);
           RemoteReplicaGroup group =
-              new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
-          nodeTracker.addInFlightGroup(new ReplicaGroupTracker().setReplicaGroup(group));
+              new RemoteReplicaGroup(replicaSubList, remoteNode, false, tracker.getId());
+          nodeTracker.addInFlightGroup(tracker.setReplicaGroup(group));
         }
       }
+      /** This timed-out tracker is a case that sticks out. Think of a way in the distant future to get rid of it */
+      ReplicaGroupTracker timedOutGroupTracker = new ReplicaGroupTracker(groupId++);
+      // TODO: set an empty group to avoid nulls
       if (standbyReplicas.size() > 0) {
-        List<RemoteReplicaInfo> timedOutReplicas =
-            getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicas);
+        List<RemoteReplicaInfo> timedOutReplicas = getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicas);
         if (timedOutReplicas.size() > 0) {
           RemoteReplicaGroup group =
-              new RemoteReplicaGroup(timedOutReplicas, remoteNode, true, remoteReplicaGroupId++);
-          nodeTracker.addInFlightGroup(new ReplicaGroupTracker().setReplicaGroup(group));
+              new RemoteReplicaGroup(timedOutReplicas, remoteNode, true,
+                  timedOutGroupTracker.getId());
+          nodeTracker.addInFlightGroup(timedOutGroupTracker.setReplicaGroup(group));
         }
       }
     }
@@ -2323,14 +2327,19 @@ public class ReplicaThread implements Runnable {
           List<RemoteReplicaInfo> standBy = new ArrayList<>();
           filterRemoteReplicasToReplicate(groupTracker.getRemoteReplicaGroup().getRemoteReplicaInfos(), active,
               standBy);
-          nodeTracker.addActiveWaiting(active);
-          nodeTracker.addTimedOutWaiting(getRemoteStandbyReplicasTimedOutOnNoProgress(standBy));
+          nodeTracker.addToActivePool(active);
+          nodeTracker.addToTimedOutPool(getRemoteStandbyReplicasTimedOutOnNoProgress(standBy));
         }
       }
 
+      // split into sub-lists
       List<List<RemoteReplicaInfo>> activeReplicaSubLists =
-          maxReplicaCountPerRequest > 0 ? Utils.partitionList(nodeTracker.getActiveWaiting().stream().collect(Collectors.toList()), maxReplicaCountPerRequest)
-              : Collections.singletonList(nodeTracker.getActiveWaiting().stream().collect(Collectors.toList()));
+          Collections.singletonList(nodeTracker.getActivePool().stream().collect(Collectors.toList()));
+      if (maxReplicaCountPerRequest > 0) {
+        activeReplicaSubLists = Utils.partitionList(nodeTracker.getActivePool().stream().collect(Collectors.toList()),
+            maxReplicaCountPerRequest);
+      }
+
       // re-distribute replicas into groups
       for (ReplicaGroupTracker groupTracker : nodeTracker.getInFlightGroups()) {
         // active groups
@@ -2350,7 +2359,7 @@ public class ReplicaThread implements Runnable {
         // standby-timed-out groups
         if (groupTracker.isDone() && groupTracker.getRemoteReplicaGroup().isNonProgressStandbyReplicaGroup()) {
           RemoteReplicaGroup replicaGroup =
-              new RemoteReplicaGroup(nodeTracker.getTimedOutWaiting().stream().collect(Collectors.toList()),
+              new RemoteReplicaGroup(nodeTracker.getTimedOutPool().stream().collect(Collectors.toList()),
                   nodeTracker.getNodeId(),
                   true,
                   groupTracker.getRemoteReplicaGroup().getId());
