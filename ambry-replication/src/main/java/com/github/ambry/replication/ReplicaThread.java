@@ -2349,7 +2349,7 @@ public class ReplicaThread implements Runnable {
               new RemoteReplicaGroup(activeReplicaSubLists.remove(0),
                   nodeTracker.getNodeId(),
                   false,
-                  groupTracker.getRemoteReplicaGroup().getId());
+                  groupTracker.getId());
           // re-use the tracker; do not create new ones
           groupTracker.setReplicaGroup(replicaGroup);
           // TODO: throttle here by setting groupTracker.resumeAt; don't throttle at replica-level, but group level
@@ -2362,7 +2362,7 @@ public class ReplicaThread implements Runnable {
               new RemoteReplicaGroup(nodeTracker.getTimedOutPool().stream().collect(Collectors.toList()),
                   nodeTracker.getNodeId(),
                   true,
-                  groupTracker.getRemoteReplicaGroup().getId());
+                  groupTracker.getId());
           // re-use the tracker; do not create new ones
           groupTracker.setReplicaGroup(replicaGroup);
           // TODO: throttle here by setting groupTracker.resumeAt; don't throttle at replica-level, but group level
