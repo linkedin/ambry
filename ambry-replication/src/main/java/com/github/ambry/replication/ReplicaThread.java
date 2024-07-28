@@ -2236,10 +2236,131 @@ public class ReplicaThread implements Runnable {
     public Exception getException() {
       return exception;
     }
+
+    public boolean isNonProgressStandbyReplicaGroup() {
+      return isNonProgressStandbyReplicaGroup;
+    }
   }
 
   @FunctionalInterface
   interface ExchangeMetadataListener {
     void onComplete(PartitionId partitionId, Exception exception);
+  }
+
+
+
+  public void replicateContinuous2() {
+
+    ArrayList<ReplicaNodeTracker> nodeTrackers = new ArrayList<>();
+    // A map from correlation id to RemoteReplicaGroup. This is used to find the group when response comes back.
+    Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
+    // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
+    Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+    int remoteReplicaGroupId = 0;
+    // TODO: drop caches
+    // This is a critical step; Don't fold it into the loop; Keep it separate
+    // This step refreshes the set of peer replicas
+    // This step _FIXES_ the number of group-trackers for a node
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : selectReplicas(getRemoteReplicaInfos()).entrySet()) {
+      DataNodeId remoteNode = entry.getKey();
+      List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
+      List<RemoteReplicaInfo> activeReplicas = new ArrayList<>();
+      List<RemoteReplicaInfo> standbyReplicas = new ArrayList<>();
+      filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicas,
+          standbyReplicas);
+      ReplicaNodeTracker nodeTracker = new ReplicaNodeTracker(dataNodeId);
+      nodeTrackers.add(nodeTracker);
+      if (activeReplicas.size() > 0) {
+        List<List<RemoteReplicaInfo>> activeReplicaSubLists =
+            maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicas, maxReplicaCountPerRequest)
+                : Collections.singletonList(activeReplicas);
+        for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
+          RemoteReplicaGroup group =
+              new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
+          nodeTracker.addInFlightGroup(new ReplicaGroupTracker().setReplicaGroup(group));
+        }
+      }
+      if (standbyReplicas.size() > 0) {
+        List<RemoteReplicaInfo> timedOutReplicas =
+            getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicas);
+        if (timedOutReplicas.size() > 0) {
+          RemoteReplicaGroup group =
+              new RemoteReplicaGroup(timedOutReplicas, remoteNode, true, remoteReplicaGroupId++);
+          nodeTracker.addInFlightGroup(new ReplicaGroupTracker().setReplicaGroup(group));
+        }
+      }
+    }
+
+    while (shouldContinue()) {
+      /** new code */
+      List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
+      for (ReplicaNodeTracker nodeTracker : nodeTrackers) {
+        // TODO: pick the ones for which current_time > resumeAt and not in Done state
+        remoteReplicaGroups.addAll(nodeTracker.getInFlightGroups()
+            .stream().map(replicaGroupTracker -> replicaGroupTracker.getRemoteReplicaGroup())
+            .collect(Collectors.toList()));
+      }
+      /** new code */
+
+      /** start old code */
+      // TODO: poll groups
+      // TODO: handle metrics and errors
+      /** end old code */
+
+      // for-each node, create new replica-groups
+      for (ReplicaNodeTracker nodeTracker : nodeTrackers) {
+        // collect active and standby-timed-out replicas
+        for (ReplicaGroupTracker groupTracker : nodeTracker.getInFlightGroups()) {
+          if (groupTracker.isDone()) {
+            List<RemoteReplicaInfo> active = new ArrayList<>();
+            List<RemoteReplicaInfo> standBy = new ArrayList<>();
+            filterRemoteReplicasToReplicate(groupTracker.getRemoteReplicaGroup().getRemoteReplicaInfos(), active,
+                standBy);
+            nodeTracker.addActiveWaiting(active);
+            nodeTracker.addTimedOutWaiting(getRemoteStandbyReplicasTimedOutOnNoProgress(standBy));
+          }
+        }
+
+        List<List<RemoteReplicaInfo>> activeReplicaSubLists =
+            maxReplicaCountPerRequest > 0 ? Utils.partitionList(nodeTracker.getActiveWaiting().stream().collect(Collectors.toList()), maxReplicaCountPerRequest)
+                : Collections.singletonList(nodeTracker.getActiveWaiting().stream().collect(Collectors.toList());
+        // re-distribute replicas into groups
+        for (ReplicaGroupTracker groupTracker : nodeTracker.getInFlightGroups()) {
+          // active groups
+          if (groupTracker.isDone() && !groupTracker.getRemoteReplicaGroup().isNonProgressStandbyReplicaGroup()) {
+            // TODO: check if any replicas avlb before remove(0)
+            RemoteReplicaGroup replicaGroup =
+                new RemoteReplicaGroup(activeReplicaSubLists.remove(0),
+                    nodeTracker.getNodeId(),
+                    false,
+                    groupTracker.getRemoteReplicaGroup().getId());
+            // re-use the tracker; do not create new ones
+            groupTracker.setReplicaGroup(replicaGroup);
+            // TODO: throttle here by setting groupTracker.resumeAt; don't throttle at replica-level, but group level
+            // TODO: increment iterCount
+            // TODO: drop caches
+          }
+          // standby-timed-out groups
+          if (groupTracker.isDone() && groupTracker.getRemoteReplicaGroup().isNonProgressStandbyReplicaGroup()) {
+            RemoteReplicaGroup replicaGroup =
+                new RemoteReplicaGroup(nodeTracker.getTimedOutWaiting().stream().collect(Collectors.toList()),
+                    nodeTracker.getNodeId(),
+                    true,
+                    groupTracker.getRemoteReplicaGroup().getId());
+            // re-use the tracker; do not create new ones
+            groupTracker.setReplicaGroup(replicaGroup);
+            // TODO: throttle here by setting groupTracker.resumeAt; don't throttle at replica-level, but group level
+            // TODO: increment iterCount
+            // TODO: drop caches
+          }
+        }
+      }
+
+    }
+  }
+
+  boolean shouldContinue() {
+    // TODO: fill up with all termination conditions
+    return false;
   }
 }
