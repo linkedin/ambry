@@ -2291,7 +2291,7 @@ public class ReplicaThread implements Runnable {
       }
     }
 
-    while (shouldContinue()) {
+    while (true) {
       /** new code */
       List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
       for (ReplicaNodeTracker nodeTracker : nodeTrackers) {
@@ -2306,6 +2306,10 @@ public class ReplicaThread implements Runnable {
       // TODO: poll groups
       // TODO: handle metrics and errors
       /** end old code */
+
+      if (!shouldContinue()) {
+        break;
+      }
 
       // for-each node, create new replica-groups
       for (ReplicaNodeTracker nodeTracker : nodeTrackers) {
@@ -2323,7 +2327,7 @@ public class ReplicaThread implements Runnable {
 
         List<List<RemoteReplicaInfo>> activeReplicaSubLists =
             maxReplicaCountPerRequest > 0 ? Utils.partitionList(nodeTracker.getActiveWaiting().stream().collect(Collectors.toList()), maxReplicaCountPerRequest)
-                : Collections.singletonList(nodeTracker.getActiveWaiting().stream().collect(Collectors.toList());
+                : Collections.singletonList(nodeTracker.getActiveWaiting().stream().collect(Collectors.toList()));
         // re-distribute replicas into groups
         for (ReplicaGroupTracker groupTracker : nodeTracker.getInFlightGroups()) {
           // active groups
@@ -2361,6 +2365,10 @@ public class ReplicaThread implements Runnable {
 
   boolean shouldContinue() {
     // TODO: fill up with all termination conditions
+    // terminate iff:
+    // 1. shutdown signal
+    // 2. peer-set changes; helix adds/removes a peer
+    // 3. if simulating prev protocol, then terminate if all replicas are Done
     return false;
   }
 }
