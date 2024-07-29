@@ -752,18 +752,13 @@ public class CloudBlobStore implements Store {
 
   @Override
   public short undelete(MessageInfo info) throws StoreException {
-    // TODO: Remove the duplicate code by calling unDeleteAsync() method.
-    checkStarted();
     try {
-      return requestAgent.doWithRetries(() -> undeleteIfNeeded((BlobId) info.getStoreKey(), info.getLifeVersion()),
-          "Undelete", partitionId.toPathString());
+      return cloudDestination.undeleteBlob((BlobId) info.getStoreKey(),  info.getLifeVersion(), null);
     } catch (CloudStorageException cex) {
       if (cex.getCause() instanceof StoreException) {
         throw (StoreException) cex.getCause();
       }
-      StoreErrorCodes errorCode =
-          (cex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
-      throw new StoreException(cex, errorCode);
+      throw new StoreException(cex, StoreErrorCodes.IOError);
     }
   }
 
