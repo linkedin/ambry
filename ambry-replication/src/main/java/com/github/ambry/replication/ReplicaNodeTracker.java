@@ -22,7 +22,7 @@ import java.util.List;
 public class ReplicaNodeTracker {
   DataNodeId nodeId;
   HashSet<RemoteReplicaInfo> activePool;
-  HashSet<RemoteReplicaInfo> timedOutPool;
+  HashSet<RemoteReplicaInfo> inactivePool;
   ArrayList<ReplicaGroupTracker> inFlight;
 
   public ReplicaNodeTracker(DataNodeId nodeId) {}
@@ -30,15 +30,9 @@ public class ReplicaNodeTracker {
     return nodeId;
   }
   public void addInFlightGroup(ReplicaGroupTracker tracker) {}
-  public ArrayList<ReplicaGroupTracker> getInFlightGroups() {
-    return inFlight;
-  }
-  public void addToActivePool(List<RemoteReplicaInfo> active) {}
-  public void addToTimedOutPool(List<RemoteReplicaInfo> timeo) {}
-  public HashSet<RemoteReplicaInfo> getActivePool() {
-    return activePool;
-  }
-  public HashSet<RemoteReplicaInfo> getTimedOutPool() {
-    return timedOutPool;
-  }
+  public ArrayList<ReplicaGroupTracker> getInFlightGroups() { return inFlight; }
+  public void moveToActivePool(List<RemoteReplicaInfo> active) { /* add to active; rm from inactive */ }
+  public void moveToInactivePool(List<RemoteReplicaInfo> inactive) { /* add to inactive; rm from active */ }
+  public HashSet<RemoteReplicaInfo> getActivePool() { return activePool; }
+  public HashSet<RemoteReplicaInfo> getInactivePool() { return inactivePool; }
 }

@@ -388,8 +388,9 @@ public class ReplicaThread implements Runnable {
         List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
         List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
         List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+        List<RemoteReplicaInfo> offline = new ArrayList<>();
         filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode,
-            standbyReplicasWithNoProgress);
+            standbyReplicasWithNoProgress, offline);
 
         if (activeReplicasPerNode.size() > 0) {
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
@@ -641,6 +642,35 @@ public class ReplicaThread implements Runnable {
     }
   }
 
+  boolean isReplicaOffline(RemoteReplicaInfo remoteReplicaInfo) {
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+    if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
+        || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
+      logger.debug(
+          "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
+              + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
+          replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
+          remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
+          replicationDisabledPartitions.contains(replicaId.getPartitionId()));
+      return true;
+    }
+    return false;
+  }
+
+  boolean isReplicaStandByWithNoProgress(RemoteReplicaInfo remoteReplicaInfo) {
+    if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
+      // check if all missing keys for standby replicas from previous replication cycle are now obtained
+      // via leader replica. If we still have missing keys, don't include them in current replication cycle
+      // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
+      processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
+      if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
    * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
@@ -651,32 +681,20 @@ public class ReplicaThread implements Runnable {
    *                                      previous ReplicaMetadataRequest.
    */
   void filterRemoteReplicasToReplicate(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress) {
+      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress,
+      List<RemoteReplicaInfo> offline) {
     // Get a list of active replicas that needs be included for this replication cycle
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-      ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-      boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-      if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
-          || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-        logger.debug(
-            "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
-                + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
-            replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
-            remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
-            replicationDisabledPartitions.contains(replicaId.getPartitionId()));
+      if (isReplicaOffline(remoteReplicaInfo)) {
+        offline.add(remoteReplicaInfo);
         continue;
       }
 
-      if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-        // check if all missing keys for standby replicas from previous replication cycle are now obtained
-        // via leader replica. If we still have missing keys, don't include them in current replication cycle
-        // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
-        processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
-        if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
-          standbyReplicasWithNoProgress.add(remoteReplicaInfo);
-          continue;
-        }
+      if (isReplicaStandByWithNoProgress(remoteReplicaInfo)) {
+        standbyReplicasWithNoProgress.add(remoteReplicaInfo);
+        continue;
       }
+
       activeReplicasPerNode.add(remoteReplicaInfo);
     }
   }
@@ -1591,7 +1609,8 @@ public class ReplicaThread implements Runnable {
         if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)
             && exchangeMetadataResponse.hasMissingStoreMessages()
             && (time.seconds() - exchangeMetadataResponse.lastMissingMessageReceivedTimeSec)
-            > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds) {
+            > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds
+            && !isReplicaOffline(remoteReplicaInfo)) {
           remoteReplicasTimedOut.add(remoteReplicaInfo);
         }
       }
@@ -2265,11 +2284,15 @@ public class ReplicaThread implements Runnable {
       DataNodeId remoteNode = entry.getKey();
       List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
       List<RemoteReplicaInfo> activeReplicas = new ArrayList<>();
-      List<RemoteReplicaInfo> standbyReplicas = new ArrayList<>();
-      filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicas,
-          standbyReplicas);
+      List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+      List<RemoteReplicaInfo> offline = new ArrayList<>();
       ReplicaNodeTracker nodeTracker = new ReplicaNodeTracker(dataNodeId);
       nodeTrackers.add(nodeTracker);
+      filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicas, standbyReplicasWithNoProgress, offline);
+      nodeTracker.moveToActivePool(activeReplicas);
+      nodeTracker.moveToInactivePool(offline);
+      nodeTracker.moveToInactivePool(standbyReplicasWithNoProgress);
+
       if (activeReplicas.size() > 0) {
         List<List<RemoteReplicaInfo>> activeReplicaSubLists =
             maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicas, maxReplicaCountPerRequest)
@@ -2284,8 +2307,9 @@ public class ReplicaThread implements Runnable {
       /** This timed-out tracker is a case that sticks out. Think of a way in the distant future to get rid of it */
       ReplicaGroupTracker timedOutGroupTracker = new ReplicaGroupTracker(groupId++);
       // TODO: set an empty group to avoid nulls
-      if (standbyReplicas.size() > 0) {
-        List<RemoteReplicaInfo> timedOutReplicas = getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicas);
+      if (standbyReplicasWithNoProgress.size() > 0) {
+        List<RemoteReplicaInfo> timedOutReplicas = getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
+        nodeTracker.moveToActivePool(timedOutReplicas); // Give timed-out ones a second chance
         if (timedOutReplicas.size() > 0) {
           RemoteReplicaGroup group =
               new RemoteReplicaGroup(timedOutReplicas, remoteNode, true,
@@ -2320,24 +2344,32 @@ public class ReplicaThread implements Runnable {
   private void enqueueReplicaGroups(ArrayList<ReplicaNodeTracker> nodeTrackers) {
     // for-each node, create new replica-groups
     for (ReplicaNodeTracker nodeTracker : nodeTrackers) {
-      // collect active and standby-timed-out replicas
+
+      List<RemoteReplicaInfo> active = new ArrayList<>();
+      List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+      List<RemoteReplicaInfo> offline = new ArrayList<>();
+
+      // collect active and offline replicas
       for (ReplicaGroupTracker groupTracker : nodeTracker.getInFlightGroups()) {
         if (groupTracker.isDone()) {
-          List<RemoteReplicaInfo> active = new ArrayList<>();
-          List<RemoteReplicaInfo> standBy = new ArrayList<>();
           filterRemoteReplicasToReplicate(groupTracker.getRemoteReplicaGroup().getRemoteReplicaInfos(), active,
-              standBy);
-          nodeTracker.addToActivePool(active);
-          nodeTracker.addToTimedOutPool(getRemoteStandbyReplicasTimedOutOnNoProgress(standBy));
+              standbyReplicasWithNoProgress, offline);
         }
       }
 
+      // Check if anything from inactive can be promoted to active
+      filterRemoteReplicasToReplicate(nodeTracker.getInactivePool().stream().collect(Collectors.toList()), active,
+          standbyReplicasWithNoProgress, offline);
+
+      // organize into pools
+      nodeTracker.moveToActivePool(active);
+      nodeTracker.moveToInactivePool(offline);
+      nodeTracker.moveToInactivePool(standbyReplicasWithNoProgress);
+
       // split into sub-lists
-      List<List<RemoteReplicaInfo>> activeReplicaSubLists =
-          Collections.singletonList(nodeTracker.getActivePool().stream().collect(Collectors.toList()));
+      List<List<RemoteReplicaInfo>> activeReplicaSubLists = Collections.singletonList(active);
       if (maxReplicaCountPerRequest > 0) {
-        activeReplicaSubLists = Utils.partitionList(nodeTracker.getActivePool().stream().collect(Collectors.toList()),
-            maxReplicaCountPerRequest);
+        activeReplicaSubLists = Utils.partitionList(active, maxReplicaCountPerRequest);
       }
 
       // re-distribute replicas into groups
@@ -2358,13 +2390,14 @@ public class ReplicaThread implements Runnable {
         }
         // standby-timed-out groups
         if (groupTracker.isDone() && groupTracker.getRemoteReplicaGroup().isNonProgressStandbyReplicaGroup()) {
+          List<RemoteReplicaInfo> timedOutReplicas =
+              getRemoteStandbyReplicasTimedOutOnNoProgress(nodeTracker.getInactivePool().stream().collect(Collectors.toList()));
           RemoteReplicaGroup replicaGroup =
-              new RemoteReplicaGroup(nodeTracker.getTimedOutPool().stream().collect(Collectors.toList()),
-                  nodeTracker.getNodeId(),
-                  true,
+              new RemoteReplicaGroup(timedOutReplicas, nodeTracker.getNodeId(), true,
                   groupTracker.getId());
           // re-use the tracker; do not create new ones
           groupTracker.setReplicaGroup(replicaGroup);
+          nodeTracker.moveToActivePool(timedOutReplicas); // Give timed-out ones a second chance
           // TODO: throttle here by setting groupTracker.resumeAt; don't throttle at replica-level, but group level
           // TODO: increment iterCount
           // TODO: drop caches
