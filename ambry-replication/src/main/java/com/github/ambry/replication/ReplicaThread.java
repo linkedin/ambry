@@ -761,12 +761,6 @@ public class ReplicaThread implements Runnable {
 
             replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                 exchangeMetadataResponse.localLagFromRemoteInBytes);
-            if (replicaMetadataResponseInfo.getMessageInfoList().size() > 0) {
-              replicationMetrics.updateCatchupPointMetricForCloudReplica(remoteReplicaInfo,
-                  replicaMetadataResponseInfo.getMessageInfoList()
-                      .get(replicaMetadataResponseInfo.getMessageInfoList().size() - 1)
-                      .getOperationTimeMs());
-            }
 
             // Add exchangeMetadataResponse to list at the end after operations such as replicaSyncUpManager(if not null)
             // has completed update, etc. The reason is we may get exceptions in between (for ex: replicaSyncUpManager may
