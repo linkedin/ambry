@@ -117,16 +117,8 @@ public class CloudBlobStore implements Store {
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
     requireEncryption = cloudConfig.vcrRequireEncryption;
     isVcr = cloudConfig.cloudIsVcr;
-    if (isVcr && cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
-      logger.info("Creating cloud blob store for partition {} with cache size {}", partitionId.toPathString(),
-          cloudConfig.recentBlobCacheLimit);
-      recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
-    } else {
-      logger.trace("Not creating recentBlobCache");
-      recentBlobCache = null;
-    }
+    recentBlobCache = null;
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
-
     String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
     try {
       cryptoAgentFactory = Utils.getObj(cryptoAgentFactoryClass, properties, clusterMapConfig.clusterMapClusterName,
@@ -142,6 +134,91 @@ public class CloudBlobStore implements Store {
     currentState = ReplicaState.STANDBY;
     logger.debug("Started store: {}", this);
   }
+
+  /**
+   * Puts a set of messages into the store
+   * @param messageSetToWrite The message set to write to the store
+   * @throws StoreException
+   */
+  @Override
+  public void put(MessageWriteSet messageSetToWrite) throws StoreException {
+    if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
+      throw new IllegalArgumentException("Message write set cannot be empty");
+    }
+    checkDuplicates(messageSetToWrite.getMessageSetInfo());
+    try {
+      cloudDestination.uploadBlobs((MessageFormatWriteSet) messageSetToWrite);
+    } catch (CloudStorageException e) {
+      throw new StoreException(e, StoreErrorCodes.IOError);
+    }
+  }
+
+  /**
+   * {@inheritDoc}
+   * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
+   * @param infos The list of messages that need to be updated.
+   * @throws StoreException
+   */
+  @Override
+  public void updateTtl(List<MessageInfo> infos) throws StoreException {
+    for (MessageInfo msg : infos) {
+      cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time, null);
+    }
+  }
+
+  /**
+   * Deletes blobs
+   * @param infos The list of messages that need to be deleted.
+   * @throws StoreException
+   */
+  @Override
+  public void delete(List<MessageInfo> infos) throws StoreException {
+    for (MessageInfo msg : infos) {
+      cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(), null);
+    }
+  }
+
+  /**
+   * Undeletes blob
+   * @param info The {@link MessageInfo} that carries some basic information about this operation.
+   * @return
+   * @throws StoreException
+   */
+  @Override
+  public short undelete(MessageInfo info) throws StoreException {
+    return cloudDestination.undeleteBlob((BlobId) info.getStoreKey(),  info.getLifeVersion(), null);
+  }
+
+  @Override
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
+    Set<StoreKey> missingKeys = new HashSet<>();
+    keys.stream().forEach(k -> {
+      try {
+        if (!cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) k)).containsKey(k.getID())) {
+          missingKeys.add(k);
+        }
+      } catch (Throwable e) {
+        // pass; error is handled or printed in getBlobMetadata
+      }
+    });
+    return missingKeys;
+  }
+
+  @Override
+  public MessageInfo findKey(StoreKey key) throws StoreException {
+    Map<String, CloudBlobMetadata> cloudBlobMetadataListMap = cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key));
+    CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
+    if (cloudBlobMetadata != null) {
+      return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
+          cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
+          (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
+          cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
+    } else {
+      throw new StoreException(String.format("FindKey couldn't find key: %s", key), StoreErrorCodes.ID_Not_Found);
+    }
+  }
+
+  // UNUSED CODE //
 
   @Override
   public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
@@ -362,35 +439,6 @@ public class CloudBlobStore implements Store {
    */
   static boolean isBlobExpired(CloudBlobMetadata metadata, long currentTimeStamp) {
     return metadata.getExpirationTime() != Utils.Infinite_Time && metadata.getExpirationTime() < currentTimeStamp;
-  }
-
-  /**
-   * Puts a set of messages into the store
-   * @param messageSetToWrite The message set to write to the store
-   * @throws StoreException
-   */
-  @Override
-  public void put(MessageWriteSet messageSetToWrite) throws StoreException {
-    checkStarted();
-    if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
-      throw new IllegalArgumentException("Message write set cannot be empty");
-    }
-    checkDuplicates(messageSetToWrite.getMessageSetInfo());
-
-    if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && !cloudConfig.vcrRequireEncryption) {
-      // If no encryption is needed, then just pass the input stream to the client and upload the blob.
-      // Otherwise, the code below in CloudWriteChannel creates an in-memory copy unnecessarily - legacy remnant.
-      try {
-        cloudDestination.uploadBlobs((MessageFormatWriteSet) messageSetToWrite);
-      } catch (CloudStorageException e) {
-        throw new StoreException(e, StoreErrorCodes.IOError);
-      }
-      return;
-    }
-
-    // Write the blobs in the message set
-    CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
-    messageSetToWrite.writeTo(cloudWriter);
   }
 
   /**
@@ -633,20 +681,6 @@ public class CloudBlobStore implements Store {
   }
 
   @Override
-  public void delete(List<MessageInfo> infos) throws StoreException {
-    try {
-      for (MessageInfo msg : infos) {
-        cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(), null);
-      }
-    } catch (CloudStorageException cse) {
-      if (cse.getCause() instanceof StoreException) {
-        throw (StoreException) cse.getCause();
-      }
-      throw new StoreException(cse.getCause(), StoreErrorCodes.IOError);
-    }
-  }
-
-  @Override
   public void purge(List<MessageInfo> infosToPurge) throws StoreException {
     throw new UnsupportedOperationException("Method not supported");
   }
@@ -691,37 +725,6 @@ public class CloudBlobStore implements Store {
   }
 
   /**
-   * Delete the specified blob if needed depending on the cache state.
-   * @param blobId the blob to delete
-   * @param deletionTime the deletion time
-   * @param lifeVersion life version of the blob.
-   * @return whether the deletion was performed
-   * @throws CloudStorageException
-   */
-  private boolean deleteIfNeeded(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException {
-    // TODO: Remove the duplicate code by calling deleteAsyncIfNeeded() method.
-    String blobKey = blobId.getID();
-    // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
-    // in which case the cache may have been updated by another thread.
-    if (!checkCacheState(blobKey, lifeVersion, BlobState.DELETED)) {
-      try {
-        boolean deleted = cloudDestination.deleteBlob(blobId, deletionTime, lifeVersion, this::preDeleteValidation);
-        addToCache(blobKey, lifeVersion, BlobState.DELETED);
-        return deleted;
-      } catch (CloudStorageException ex) {
-        // Cache entry could be stale, evict it to force refresh on retry.
-        removeFromCache(blobKey);
-        throw ex;
-      }
-    } else {
-      // This means that we definitely saw this delete for the same or smaller lifeversion before.
-      throw new CloudStorageException("Error updating blob metadata",
-          new StoreException("Cannot delete id " + blobId.getID() + " since it is already marked as deleted in cloud.",
-              StoreErrorCodes.ID_Deleted));
-    }
-  }
-
-  /**
    * Delete the specified blob if needed depending on the cache state asynchronously.
    * @param blobId the blob to delete
    * @param deletionTime the deletion time
@@ -750,18 +753,6 @@ public class CloudBlobStore implements Store {
             StoreErrorCodes.ID_Deleted)));
   }
 
-  @Override
-  public short undelete(MessageInfo info) throws StoreException {
-    try {
-      return cloudDestination.undeleteBlob((BlobId) info.getStoreKey(),  info.getLifeVersion(), null);
-    } catch (CloudStorageException cex) {
-      if (cex.getCause() instanceof StoreException) {
-        throw (StoreException) cex.getCause();
-      }
-      throw new StoreException(cex, StoreErrorCodes.IOError);
-    }
-  }
-
   /**
    * Undelete the blob identified by {@code id} in the store asynchronously. When the lifeVersion is
    * {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this method is invoked by the responding to the frontend request.
@@ -782,32 +773,6 @@ public class CloudBlobStore implements Store {
       });
     } catch (StoreException e) {
       return FutureUtils.completedExceptionally(e);
-    }
-  }
-
-  /**
-   * Undelete the specified blob if needed depending on the cache state.
-   * @param blobId the blob to delete.
-   * @param lifeVersion life version of the deleted blob.
-   * @return final updated life version of the blob.
-   * @throws CloudStorageException in case any exception happens during undelete.
-   */
-  private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException, StoreException {
-    // TODO: Remove the duplicate code by calling unDeleteAsyncIfNeeded() method.
-    String blobKey = blobId.getID();
-    // See note in deleteIfNeeded.
-    if (!checkCacheState(blobKey, lifeVersion, BlobState.CREATED)) {
-      try {
-        short newLifeVersion = cloudDestination.undeleteBlob(blobId, lifeVersion, this::preUndeleteValidation);
-        addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
-        return newLifeVersion;
-      } catch (CloudStorageException ex) {
-        // Cache entry could be stale, evict it to force refresh on retry.
-        removeFromCache(blobKey);
-        throw ex;
-      }
-    } else {
-      throw new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted);
     }
   }
 
@@ -833,26 +798,6 @@ public class CloudBlobStore implements Store {
     }
     return FutureUtils.completedExceptionally(
         new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted));
-  }
-
-  /**
-   * {@inheritDoc}
-   * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
-   * @param infos The list of messages that need to be updated.
-   * @throws StoreException
-   */
-  @Override
-  public void updateTtl(List<MessageInfo> infos) throws StoreException {
-    try {
-      for (MessageInfo msg : infos) {
-        cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time, null);
-      }
-    } catch (CloudStorageException cse) {
-      if (cse.getCause() instanceof StoreException) {
-        throw (StoreException) cse.getCause();
-      }
-      throw new StoreException(cse.getCause(),  StoreErrorCodes.IOError);
-    }
   }
 
   /**
@@ -894,31 +839,6 @@ public class CloudBlobStore implements Store {
     } catch (StoreException e) {
       return FutureUtils.completedExceptionally(e);
     }
-  }
-
-  /**
-   * Update the TTL of the specified blob if needed depending on the cache state.
-   * @param blobId the blob to update
-   * @return whether the update was performed
-   * @throws CloudStorageException
-   */
-  private boolean updateTtlIfNeeded(BlobId blobId) throws CloudStorageException {
-    // TODO: Remove the duplicate code by calling updateTtlAsyncIfNeeded() method.
-    String blobKey = blobId.getID();
-    // See note in deleteIfNeeded.
-    if (!checkCacheState(blobKey, BlobState.TTL_UPDATED)) {
-      try {
-        short lifeVersion =
-            cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time, this::preTtlUpdateValidation);
-        addToCache(blobKey, lifeVersion, BlobState.TTL_UPDATED);
-        return (lifeVersion != -1);
-      } catch (CloudStorageException ex) {
-        // Cache entry could be stale, evict it to force refresh on retry.
-        removeFromCache(blobKey);
-        throw ex;
-      }
-    }
-    return false;
   }
 
   /**
@@ -1251,41 +1171,6 @@ public class CloudBlobStore implements Store {
     boolean isTtlUpdated = false;  // No way to know
     return new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
         (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
-  }
-
-  @Override
-  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
-    Set<StoreKey> missingKeys = new HashSet<>();
-    keys.stream().forEach(k -> {
-      try {
-        if (!cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) k)).containsKey(k.getID())) {
-          missingKeys.add(k);
-        }
-      } catch (Throwable e) {
-        // pass; error is handled or printed in getBlobMetadata
-      }
-    });
-    return missingKeys;
-  }
-
-  @Override
-  public MessageInfo findKey(StoreKey key) throws StoreException {
-    try {
-      Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
-          requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key)),
-              "FindKey", partitionId.toPathString());
-      CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
-      if (cloudBlobMetadata != null) {
-        return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
-            cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
-            (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
-            cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
-      } else {
-        throw new StoreException(String.format("FindKey couldn't find key: %s", key), StoreErrorCodes.ID_Not_Found);
-      }
-    } catch (CloudStorageException e) {
-      throw new StoreException(e, StoreErrorCodes.IOError);
-    }
   }
 
   @Override

@@ -300,16 +300,9 @@ public class RecoveryNetworkClient implements NetworkClient {
         logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey, request.getPartition());
         return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.Blob_Not_Found);
       }
-
-      try {
-        azureSyncClient.downloadBlob((BlobId) storeKey, downloadToStream);
-        messageInfoList.add(info);
-        recoveryMetrics.blobDownloadByteRate.mark(info.getSize());
-      } catch (CloudStorageException e) {
-        logger.error("Failed to download blob {} due to {}", storeKey.getID(), e.getMessage());
-        e.printStackTrace();
-        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.IO_Error);
-      }
+      azureSyncClient.downloadBlob((BlobId) storeKey, downloadToStream);
+      messageInfoList.add(info);
+      recoveryMetrics.blobDownloadByteRate.mark(info.getSize());
     }
     List<MessageMetadata> messageMetadataList = new ArrayList<>();
     messageInfoList.forEach(info -> messageMetadataList.add(null)); // unused

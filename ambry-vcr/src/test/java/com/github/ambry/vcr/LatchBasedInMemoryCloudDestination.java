@@ -199,11 +199,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
-      CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
+      CloudUpdateValidator cloudUpdateValidator) throws StoreException {
     StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
-      throw new CloudStorageException("deleteBlob simulated error",
-          new StoreException("deleteBlob simulated error", serverError));
+      throw new StoreException("deleteBlob simulated error", serverError);
     }
 
     if (!map.containsKey(blobId)) {
@@ -232,11 +231,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException {
+      throws StoreException {
     StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
-      throw new CloudStorageException("updateBlobExpiration simulated error",
-          new StoreException("updateBlobExpiration simulated error", serverError));
+      throw new StoreException("updateBlobExpiration simulated error", serverError);
     }
 
     if (map.containsKey(blobId)) {
@@ -245,7 +243,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       changeFeed.add(blobId);
       return map.get(blobId).getFirst().getLifeVersion();
     }
-    throw new CloudStorageException(String.format("Blob %s not found", blobId.getID()));
+    throw new StoreException(String.format("Blob %s not found", blobId.getID()), StoreErrorCodes.ID_Not_Found);
   }
 
   @Override
@@ -259,11 +257,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException {
+      throws StoreException {
     StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
-      throw new CloudStorageException("undeleteBlob simulated error",
-          new StoreException("undeleteBlob simulated error", serverError));
+      throw new StoreException("undeleteBlob simulated error", serverError);
     }
 
     if (map.containsKey(blobId)) {
@@ -277,9 +274,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       changeFeed.add(blobId);
       return map.get(blobId).getFirst().getLifeVersion();
     } else {
-      throw new CloudStorageException(
-          String.format("Cannot update lifeversion as blob %s is not found.", blobId.getID()), null,
-          CloudBlobStore.STATUS_NOT_FOUND, false, null);
+      throw new StoreException(String.format("Blob %s not found", blobId.getID()), StoreErrorCodes.ID_Not_Found);
     }
   }
 
@@ -292,11 +287,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
+  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws StoreException {
     StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
-      throw new CloudStorageException("getBlobMetadata simulated error",
-          new StoreException("getBlobMetadata simulated error", serverError));
+      throw new StoreException("getBlobMetadata simulated error", serverError);
     }
 
     Map<String, CloudBlobMetadata> result = new HashMap<>();

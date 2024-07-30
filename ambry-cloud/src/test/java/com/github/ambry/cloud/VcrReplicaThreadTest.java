@@ -30,6 +30,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -109,11 +110,7 @@ public class VcrReplicaThreadTest {
   CloudBlobMetadata getBlobMetadata(BlobId blob) {
     AtomicReference<CloudBlobMetadata> md = new AtomicReference<>();
     IntStream.range(0,5).forEach(i -> {
-      try {
-        md.set(azureClient.getBlobMetadata(Collections.singletonList(blob)).get(blob.getID()));
-      } catch (CloudStorageException e) {
-        throw new RuntimeException(e);
-      }
+      md.set(azureClient.getBlobMetadata(Collections.singletonList(blob)).get(blob.getID()));
     });
     return md.get();
   }
@@ -140,7 +137,7 @@ public class VcrReplicaThreadTest {
    * @throws CloudStorageException
    */
   @Test
-  public void testThreadLocalMetadataCache() throws CloudStorageException {
+  public void testThreadLocalMetadataCache() throws CloudStorageException, StoreException {
     String data = "hello world!";
     HashMap<BlobId, CloudBlobMetadata> blobs = createBlob(data, 5);
     int iter = 0;

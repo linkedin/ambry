@@ -48,7 +48,6 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageCompactor;
-import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.clustermap.ClusterMap;
@@ -440,9 +439,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * Uploads a stream of blobs to Azure cloud
    * @param messageSetToWrite Messages replicated from servr
    * @return Unused boolean
-   * @throws CloudStorageException
    */
-  public boolean uploadBlobs(MessageFormatWriteSet messageSetToWrite) throws CloudStorageException {
+  public boolean uploadBlobs(MessageFormatWriteSet messageSetToWrite) {
     // Each input stream is a blob
     Timer.Context storageTimer = azureMetrics.blobBatchUploadLatency.time();
     MessageSievingInputStream stream = (MessageSievingInputStream) messageSetToWrite.getStreamToWrite();
@@ -464,7 +462,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
-      InputStream blobInputStream) throws CloudStorageException {
+      InputStream blobInputStream) {
     /*
      * Current impl of this fn is inefficient because the caller does a 0-4MB memcpy from src to dst stream
      * in CloudBlobStore.appendFrom - for each blob !
@@ -522,7 +520,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
           blobIdStr, blockBlobItemResponse.getStatusCode(),
           blockBlobItemResponse.getValue().getETag());
-    } catch (Exception e) {
+    } catch (Throwable e) {
       if (e instanceof BlobStorageException
           && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
@@ -537,7 +535,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       azureMetrics.blobUploadErrorCount.inc();
       String error = String.format("Failed to upload blob %s to Azure blob storage because %s", blobLayout, e.getMessage());
       logger.error(error);
-      throw new CloudStorageException(error);
+      throw e;
     } finally {
       if (storageTimer != null) {
         storageTimer.stop();
@@ -553,7 +551,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) {
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
     BlobContainerClient blobContainerClient = createOrGetBlobStore(blobLayout.containerName);
@@ -566,7 +564,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       String error = String.format("Failed to download blob %s from Azure blob storage due to %s",
           blobLayout, e.getMessage());
       logger.error(error);
-      throw new CloudStorageException(error);
+      throw e;
     } finally {
       if (storageTimer != null) {
         storageTimer.stop();
@@ -608,10 +606,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * Returns cached blob properties from Azure
    * @param blobLayout BlobLayout
    * @return Blob properties
-   * @throws CloudStorageException
    */
-  protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
-      throws CloudStorageException {
+  protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout) {
     AzureBlobProperties entry = (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
     BlobProperties blobProperties;
     if (entry == null) {
@@ -627,10 +623,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * Returns blob properties from Azure
    * @param blobLayout BlobLayout
    * @return Blob properties
-   * @throws CloudStorageException
    */
-  protected BlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
-      throws CloudStorageException {
+  protected BlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout) {
     Timer.Context storageTimer = azureMetrics.blobGetPropertiesLatency.time();
     try {
       BlobProperties blobProperties = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
@@ -642,31 +636,25 @@ public class AzureCloudDestinationSync implements CloudDestination {
     } catch (BlobStorageException bse) {
       String msg = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
       if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        /*
-          We encounter many BLOB_NOT_FOUND when uploading new blobs.
-          Trace log will not flood the logs when we encounter BLOB_NOT_FOUND.
-          Set azureMetrics to null so that we don't unnecessarily increment any metrics for this common case.
-         */
         logger.trace(msg);
-        throw new CloudStorageException(msg);
+      } else {
+        logger.error(msg);
       }
       azureMetrics.blobGetPropertiesErrorCount.inc();
-      logger.error(msg);
-      throw new CloudStorageException(msg);
+      throw bse;
     } catch (Throwable t) {
       azureMetrics.blobGetPropertiesErrorCount.inc();
       String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
       logger.error(error);
-      throw new CloudStorageException(error);
+      throw t;
     } finally {
       storageTimer.stop();
     }
   }
 
-
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
-      CloudUpdateValidator unused) throws CloudStorageException {
+      CloudUpdateValidator unused) throws StoreException {
     Timer.Context storageTimer = azureMetrics.blobUpdateDeleteTimeLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
@@ -702,15 +690,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return true;
-    } catch (StoreException e) {
+    } catch (BlobStorageException e) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw new CloudStorageException(error);
+      throw e;
     } catch (Throwable t) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
-      throw new CloudStorageException(error);
+      throw t;
     } finally {
       storageTimer.stop();
     } // try-catch
@@ -724,7 +712,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException {
+      throws StoreException {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
@@ -732,7 +720,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
-
     try {
       // Don't rely on the CloudBlobStore.recentCache to do the "right" thing.
       // Below is the correct behavior. For ref, look at BlobStore::undelete and ReplicaThread::applyUndelete
@@ -815,7 +802,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public short updateBlobExpiration(BlobId blobId, long unused, CloudUpdateValidator unused2)
-      throws CloudStorageException {
+      throws StoreException {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
@@ -853,12 +840,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // Auth error from validator
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw new CloudStorageException(error);
+      throw e;
     } catch (Throwable t) {
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
-      throw new CloudStorageException(error);
+      throw t;
     } finally {
       storageTimer.stop();
     } // try-catch
@@ -871,7 +858,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
+  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) {
     /*
         This is used by findMissingKeys, which doesn't even use the metadata provided.
         It just discards it. But due to legacy reasons, we are required to impl this way.
@@ -884,20 +871,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
       try {
         BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
         cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
-      } catch (CloudStorageException cse) {
-        if (cse.getCause() instanceof BlobStorageException &&
-            ((BlobStorageException) cse.getCause()).getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-          /*
-            We mostly get here from findMissingKeys, and we will encounter many blobs missing from cloud before we upload them.
-           */
-          continue;
+      } catch (BlobStorageException cse) {
+        if (((BlobStorageException) cse.getCause()).getErrorCode() != BlobErrorCode.BLOB_NOT_FOUND) {
+          // We mostly get here from findMissingKeys, and we will encounter many blobs missing from cloud before we upload them.
+          throw cse;
         }
-        throw cse;
       } catch (Throwable t) {
         // Unknown error, increment the generic metric in azureMetrics
         String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
         logger.error(error);
-        throw new CloudStorageException(error);
+        throw t;
       }
     }
     return cloudBlobMetadataMap;
@@ -909,8 +892,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries)
-      throws CloudStorageException {
+  public FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries) {
     throw new UnsupportedOperationException("findEntriesSince will not be implemented for AzureCloudDestinationSync");
   }
 
@@ -1017,10 +999,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * Compacts a partition
    * Stub for backward compatibility
    * @return the number of blobs erased from cloud
-   * @throws CloudStorageException
    */
   @Override
-  public int compactPartition(String partitionPath) throws CloudStorageException {
+  public int compactPartition(String partitionPath) {
     return compactPartition(partitionPath, null);
   }
 
@@ -1028,9 +1009,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * Compacts a partition
    * @param partitionPath the path of the partitions to compact.
    * @return the number of blobs erased from cloud
-   * @throws CloudStorageException
    */
-  public int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
+  public int compactPartition(String partitionPath, CloudStorageCompactor compactor) {
     /*
       BlobContainerStrategy must be PARTITION, otherwise compaction will not work because it cannot find the container in ABS.
       For BlobContainerStrategy to be CONTAINER, we need a blobId to extract accountId and containerId and we don't have that here.

@@ -304,15 +304,12 @@ class AzureCloudDestination implements CloudDestination {
 
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
-      CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
+      CloudUpdateValidator cloudUpdateValidator) {
     try {
       // Use the async version to delete blob and wait on the result.
       return deleteBlobAsync(blobId, deletionTime, lifeVersion, cloudUpdateValidator).join();
     } catch (CompletionException e) {
       Exception ex = Utils.extractFutureExceptionCause(e);
-      if (ex instanceof CloudStorageException) {
-        throw ((CloudStorageException) ex);
-      }
       throw new RuntimeException("Error deleting blob " + blobId, ex);
     }
   }
@@ -329,16 +326,12 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException {
+  public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator) {
     try {
       // Use the async version to updateBlobExpiration and wait on the result.
       return updateBlobExpirationAsync(blobId, expirationTime, cloudUpdateValidator).join();
     } catch (CompletionException e) {
       Exception ex = Utils.extractFutureExceptionCause(e);
-      if (ex instanceof CloudStorageException) {
-        throw ((CloudStorageException) ex);
-      }
       throw new RuntimeException("Error updating blob " + blobId, ex);
     }
   }
@@ -353,16 +346,12 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException {
+  public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator) {
     try {
       // Use the async version to undeleteBlob and wait on the result.
       return undeleteBlobAsync(blobId, lifeVersion, cloudUpdateValidator).join();
     } catch (CompletionException e) {
       Exception ex = Utils.extractFutureExceptionCause(e);
-      if (ex instanceof CloudStorageException) {
-        throw ((CloudStorageException) ex);
-      }
       throw new RuntimeException("Error undeleting blob " + blobId, ex);
     }
   }
@@ -379,15 +368,12 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
+  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) {
     try {
       // Use the async version to getBlobMetadata and wait on the result.
       return getBlobMetadataAsync(blobIds).join();
     } catch (CompletionException e) {
       Exception ex = Utils.extractFutureExceptionCause(e);
-      if (ex instanceof CloudStorageException) {
-        throw ((CloudStorageException) ex);
-      }
       throw new RuntimeException("Error getting metadata of blobs " + blobIds, ex);
     }
   }
