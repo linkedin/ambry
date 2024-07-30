@@ -19,6 +19,8 @@ import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import java.io.Closeable;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -88,7 +90,7 @@ public interface CloudDestination extends Closeable {
    * @throws CloudStorageException if the deletion encounters an error.
    */
   boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException;
+      throws CloudStorageException, StoreException;
 
   /**
    * Mark a blob as deleted in the cloud destination asynchronously, if {@code lifeVersion} is less than or equal to
@@ -112,7 +114,7 @@ public interface CloudDestination extends Closeable {
    * @throws CloudStorageException if the undelete encounters an error.
    */
   short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException;
+      throws CloudStorageException, StoreException;
 
   /**
    * Undelete the blob from cloud destination, and update the new life version asynchronously.
@@ -134,7 +136,7 @@ public interface CloudDestination extends Closeable {
    * @throws CloudStorageException if the update encounters an error.
    */
   short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException;
+      throws CloudStorageException, StoreException;
 
   /**
    * Update expiration time of blob in the cloud destination asynchronously.
