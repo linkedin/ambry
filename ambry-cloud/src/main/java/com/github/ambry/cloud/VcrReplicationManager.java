@@ -421,7 +421,6 @@ public class VcrReplicationManager extends ReplicationEngine {
                 findTokenFactory.getNewFindToken(),
                 storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
                 SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
-        replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);
         remoteReplicaInfos.add(remoteReplicaInfo);
       }
       rwLock.writeLock().lock();

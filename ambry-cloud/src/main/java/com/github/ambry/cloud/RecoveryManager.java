@@ -295,7 +295,6 @@ public class RecoveryManager extends ReplicationEngine {
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
       replicationMetrics.addLagMetricForPartition(partitionId, true);
     }
-    replicationMetrics.addCatchUpPointMetricForPartition(partitionId);
     logger.info("Added cloud replica for partition-{} for recovery", partitionName);
   }
 
@@ -335,7 +334,6 @@ public class RecoveryManager extends ReplicationEngine {
     PartitionId partitionId = localReplica.getPartitionId();
     stopPartitionReplication(partitionId);
     replicationMetrics.removeLagMetricForPartition(partitionId);
-    replicationMetrics.removeCatchupPointMetricForPartition(partitionId);
     logger.info("Cloud Partition {} removed from {}", partitionId, dataNodeId);
   }
 
