@@ -30,6 +30,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -140,7 +141,7 @@ public class VcrReplicaThreadTest {
    * @throws CloudStorageException
    */
   @Test
-  public void testThreadLocalMetadataCache() throws CloudStorageException {
+  public void testThreadLocalMetadataCache() throws CloudStorageException, StoreException {
     String data = "hello world!";
     HashMap<BlobId, CloudBlobMetadata> blobs = createBlob(data, 5);
     int iter = 0;
