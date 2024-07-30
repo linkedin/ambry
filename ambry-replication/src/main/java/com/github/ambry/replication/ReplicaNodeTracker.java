@@ -21,9 +21,9 @@ import java.util.List;
 
 public class ReplicaNodeTracker {
   DataNodeId nodeId;
-  HashSet<RemoteReplicaInfo> activePool;
-  HashSet<RemoteReplicaInfo> inactivePool;
-  ArrayList<ReplicaGroupTracker> inFlight;
+  HashSet<RemoteReplicaInfo> activePool; // Holds active replicas ready to replicate
+  HashSet<RemoteReplicaInfo> inactivePool; // Holds standby and offline/backoff replicas
+  ArrayList<ReplicaGroupTracker> inFlight; // Tracks inflight groups
 
   public ReplicaNodeTracker(DataNodeId nodeId) {}
   public DataNodeId getNodeId() {
