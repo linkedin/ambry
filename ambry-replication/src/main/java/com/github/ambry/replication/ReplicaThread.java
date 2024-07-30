@@ -2292,7 +2292,7 @@ public class ReplicaThread implements Runnable {
       nodeTracker.moveToActivePool(activeReplicas);
       nodeTracker.moveToInactivePool(offline);
       nodeTracker.moveToInactivePool(standbyReplicasWithNoProgress);
-
+      // TODO: Create as many group-trackers required to accomodate all replicas if they ALL become active and are out of standbyNoProgress mode
       if (activeReplicas.size() > 0) {
         List<List<RemoteReplicaInfo>> activeReplicaSubLists =
             maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicas, maxReplicaCountPerRequest)
