@@ -101,6 +101,25 @@ public class ReplicationConfig {
   @Default("0")
   public final long replicationInterReplicaThreadThrottleSleepDurationMs;
 
+  @Config("replication.enable.continuous.replication")
+  @Default("true")
+  public final boolean replicationEnableContinuousReplication;
+  /**
+   * The max number of times a replication group will be considered for iteration in a cycle
+   * in an intra colo replica thread
+   */
+  @Config("replication.intra.max.iterations.per.replication.group.per.cycle")
+  @Default("1")
+  public final int replicationIntraMaxIterationsPerReplicationGroupPerCycle;
+
+  /**
+   * The max number of times a replication group will be considered for iteration in a cycle
+   * in a cross colo replica thread
+   */
+  @Config("replication.inter.max.iterations.per.replication.group.per.cycle")
+  @Default("1")
+  public final int replicationInterMaxIterationsPerReplicationGroupPerCycle;
+
   /**
    * The time (in ms) to sleep between replication cycles when the replica thread is not doing any useful work
    */
@@ -343,6 +362,11 @@ public class ReplicationConfig {
     replicationInterReplicaThreadThrottleSleepDurationMs =
         verifiableProperties.getLongInRange("replication.inter.replica.thread.throttle.sleep.duration.ms", 0, 0,
             Long.MAX_VALUE);
+    replicationEnableContinuousReplication = verifiableProperties.getBoolean("replication.enable.continuous.replication", false);
+    replicationIntraMaxIterationsPerReplicationGroupPerCycle =
+        verifiableProperties.getIntInRange("replication.intra.max.iterations.per.replication.group.per.cycle", 1, 1, 100000);
+    replicationInterMaxIterationsPerReplicationGroupPerCycle =
+        verifiableProperties.getIntInRange("replication.inter.max.iterations.per.replication.group.per.cycle", 1, 1, 100000);
     replicationReplicaThreadIdleSleepDurationMs =
         verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationSyncedReplicaBackoffDurationMs =
