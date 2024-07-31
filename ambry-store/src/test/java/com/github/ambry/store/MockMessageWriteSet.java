@@ -13,7 +13,12 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
@@ -24,10 +29,59 @@ import java.util.List;
  * A mock implementation of {@link MessageWriteSet} to help write to a {@link Store} and simulate cases where
  * IOException occurred.
  */
-public class MockMessageWriteSet implements MessageWriteSet {
+public class MockMessageWriteSet extends MessageFormatWriteSet {
   final List<ByteBuffer> buffers;
   final List<MessageInfo> infos;
   final StoreException exception;
+
+  public class ByteBufferListInputStream extends InputStream {
+    private final List<ByteBuffer> buffers;
+    private int currentBufferIndex = 0;
+
+    public ByteBufferListInputStream(List<ByteBuffer> buffers) {
+      this.buffers = buffers;
+    }
+
+    @Override
+    public int read() {
+      while (currentBufferIndex < buffers.size()) {
+        ByteBuffer currentBuffer = buffers.get(currentBufferIndex);
+        if (currentBuffer.hasRemaining()) {
+          return currentBuffer.get() & 0xFF; // Read a byte and convert to an unsigned int
+        }
+        currentBufferIndex++;
+      }
+      return -1; // End of stream
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) {
+      if (b == null) {
+        throw new NullPointerException("Byte array is null");
+      }
+      if (off < 0 || len < 0 || len > b.length - off) {
+        throw new IndexOutOfBoundsException("Invalid offset or length");
+      }
+      if (len == 0) {
+        return 0;
+      }
+
+      int bytesRead = 0;
+      while (currentBufferIndex < buffers.size() && bytesRead < len) {
+        ByteBuffer currentBuffer = buffers.get(currentBufferIndex);
+        int remaining = currentBuffer.remaining();
+        if (remaining > 0) {
+          int bytesToRead = Math.min(len - bytesRead, remaining);
+          currentBuffer.get(b, off + bytesRead, bytesToRead);
+          bytesRead += bytesToRead;
+        } else {
+          currentBufferIndex++;
+        }
+      }
+      return bytesRead == 0 ? -1 : bytesRead; // Return -1 if no bytes were read
+    }
+  }
+
 
   /**
    * Constructor taking fixed lists of {@link MessageInfo} and {@link ByteBuffer}.
@@ -45,6 +99,7 @@ public class MockMessageWriteSet implements MessageWriteSet {
    * @param exception
    */
   public MockMessageWriteSet(List<MessageInfo> infos, List<ByteBuffer> buffers, StoreException exception) {
+    super(null);
     this.infos = infos;
     this.buffers = buffers;
     this.exception = exception;
@@ -54,6 +109,7 @@ public class MockMessageWriteSet implements MessageWriteSet {
    * Constructor that starts with empty lists.
    */
   public MockMessageWriteSet() {
+    super(null);
     this.infos = new ArrayList<>();
     this.buffers = new ArrayList<>();
     this.exception = null;
@@ -98,5 +154,20 @@ public class MockMessageWriteSet implements MessageWriteSet {
 
   public List<ByteBuffer> getBuffers() {
     return buffers;
+  }
+  /**
+   * Returns input stream
+   * @return InputStream
+   */
+  @Override
+  public InputStream getStreamToWrite() {
+    try {
+      MessageSievingInputStream stream = new MessageSievingInputStream(new ByteBufferListInputStream(buffers), infos,
+          null, new MetricRegistry());
+      stream.setReplicaLocation("localhost");
+      return stream;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 }
