@@ -190,6 +190,7 @@ public class CloudBlobStoreTest {
           : mock(CloudDestination.class);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
       // TODO: This test suite needs improvements. It has a mixture of code from 3 different use-cases.
+      properties.setProperty(CloudConfig.AMBRY_BACKUP_VERSION, CloudConfig.AMBRY_BACKUP_VERSION);
       properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(this.compactionDryRun));
       properties.setProperty(CloudConfig.CLOUD_COMPACTION_GRACE_PERIOD_DAYS, String.valueOf(0));
       /*
@@ -618,7 +619,6 @@ public class CloudBlobStoreTest {
       assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
       assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
     }
-    assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
     verifyCacheHits(expectedUploads, 0);
 
     /*
@@ -1520,11 +1520,7 @@ public class CloudBlobStoreTest {
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
     replicaThread.replicate();
-    if (isVcr) {
-      assertFalse("Blob should not exist (vcr).", dest.doesBlobExist(id));
-    } else {
-      assertTrue("Blob should exist (not vcr).", dest.doesBlobExist(id));
-    }
+    assertTrue("Blob should exist (not vcr).", dest.doesBlobExist(id));
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();

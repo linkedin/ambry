@@ -62,6 +62,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -165,6 +166,9 @@ public class CloudBlobStore implements Store {
         cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(), null);
       }
     } catch (CloudStorageException e) {
+      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+      }
       throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
@@ -184,6 +188,9 @@ public class CloudBlobStore implements Store {
         cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time, null);
       }
     } catch (CloudStorageException e) {
+      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+      }
       throw new StoreException(e.getMessage(),  StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
@@ -201,6 +208,9 @@ public class CloudBlobStore implements Store {
     try {
       return cloudDestination.undeleteBlob((BlobId) info.getStoreKey(), info.getLifeVersion(), null);
     } catch (CloudStorageException e) {
+      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+      }
       throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
@@ -221,8 +231,7 @@ public class CloudBlobStore implements Store {
       try {
         cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key));
       } catch (CloudStorageException e) {
-        if (e.getCause() instanceof BlobStorageException &&
-            ((BlobStorageException) e.getCause()).getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
           missingKeys.add(key);
         } else {
           throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
@@ -252,8 +261,7 @@ public class CloudBlobStore implements Store {
           (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
           cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
     } catch (CloudStorageException e) {
-      if (e.getCause() instanceof BlobStorageException &&
-          ((BlobStorageException) e.getCause()).getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
         throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
       }
       throw new StoreException(e, StoreErrorCodes.IOError);

@@ -448,7 +448,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     MessageSievingInputStream stream = (MessageSievingInputStream) messageSetToWrite.getStreamToWrite();
     ListIterator<InputStream> messageStreamListIter = stream.getValidMessageStreamList().listIterator();
     boolean unused_ret = true;
-    for (MessageInfo messageInfo: messageSetToWrite.getMessageSetInfo()) {
+    for (MessageInfo messageInfo: stream.getValidMessageInfoList()) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       CloudBlobMetadata cloudBlobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
@@ -648,7 +648,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           Set azureMetrics to null so that we don't unnecessarily increment any metrics for this common case.
          */
         logger.trace(msg);
-        throw new CloudStorageException(msg, bse);
+        throw new CloudStorageException(msg, HttpStatus.SC_NOT_FOUND);
       }
       azureMetrics.blobGetPropertiesErrorCount.inc();
       logger.error(msg);
@@ -704,8 +704,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       return true;
     } catch (StoreException e) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
-      String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw new CloudStorageException(error);
+      throw e;
     } catch (Throwable t) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
@@ -723,8 +722,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
-      throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
@@ -762,7 +759,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return lifeVersion;
     } catch (BlobStorageException bse) {
-      String error = String.format("Failed to undelete blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
+      String error =
+          String.format("Failed to undelete blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
       if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
         /*
           If we are here, it just means that two threads tried to un-delete concurrently. This is ok.
@@ -773,6 +771,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
       azureMetrics.blobUndeleteErrorCount.inc();
       logger.error(error);
       throw new CloudStorageException(error);
+    } catch (StoreException e) {
+      azureMetrics.blobUndeleteErrorCount.inc();
+      throw e;
     } catch (Throwable t) {
       // Unknown error
       azureMetrics.blobUndeleteErrorCount.inc();
@@ -814,7 +815,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public short updateBlobExpiration(BlobId blobId, long unused, CloudUpdateValidator unused2)
-      throws CloudStorageException {
+      throws CloudStorageException, StoreException {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
@@ -851,8 +852,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     } catch (StoreException e) {
       // Auth error from validator
       azureMetrics.blobUpdateTTLErrorCount.inc();
-      String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw new CloudStorageException(error);
+      throw e;
     } catch (Throwable t) {
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());

@@ -27,6 +27,13 @@ public class CloudStorageException extends Exception {
     this(message, null);
   }
 
+  public CloudStorageException(String message, int status) {
+    super(message, null);
+    this.statusCode = status;
+    this.isRetryable = false;
+    this.retryDelayMs = 0L;
+  }
+
   public CloudStorageException(String message, Throwable e) {
     this(message, e, DEFAULT_STATUS_CODE, false, null);
   }

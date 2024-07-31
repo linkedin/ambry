@@ -33,6 +33,10 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   protected final InputStream streamToWrite;
   protected List<MessageInfo> streamInfo;
 
+  public MessageFormatWriteSet(InputStream streamToWrite) {
+    this.streamToWrite = streamToWrite;
+  }
+
   public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo, boolean materializeStream)
       throws IOException {
     long sizeToWrite = 0;
