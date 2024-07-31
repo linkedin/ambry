@@ -624,6 +624,157 @@ public class ReplicaThread implements Runnable {
     logger.trace("Thread name: {} Exiting replication, all iterations Done!", threadName);
   }
 
+  List<DataNodeTracker> assignGroupsToReplicas() {
+    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToReplicas = selectReplicas(getRemoteReplicaInfos());
+    List<DataNodeTracker> nodeTrackers = new ArrayList<>();
+    int groupId = 0;
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToReplicas.entrySet()) {
+      DataNodeId remoteNode = entry.getKey();
+      List<RemoteReplicaInfo> replicas = entry.getValue();
+
+      if (!replicas.isEmpty()) {
+        continue;
+      }
+      List<ActiveGroupTracker> activeGroupTrackers = new ArrayList<>();
+      List<List<RemoteReplicaInfo>> replicaSubLists =
+          maxReplicaCountPerRequest > 0 ? Utils.partitionList(replicas, maxReplicaCountPerRequest)
+              : Collections.singletonList(replicas);
+
+      for (List<RemoteReplicaInfo> replicaSubList : replicaSubLists) {
+        ActiveGroupTracker activeGroupTracker = new ActiveGroupTracker(groupId++, replicaSubList.stream()
+            .map(remoteReplicaInfo -> new ReplicaTracker(remoteReplicaInfo, time, threadThrottleDurationMs))
+            .collect(Collectors.toList()));
+        activeGroupTrackers.add(activeGroupTracker);
+      }
+
+      StandByGroupTracker standByGroupTracker = new StandByGroupTracker(groupId++);
+      DataNodeTracker dataNodeTracker = new DataNodeTracker(dataNodeId, activeGroupTrackers, standByGroupTracker);
+      nodeTrackers.add(dataNodeTracker);
+    }
+    return nodeTrackers;
+  }
+
+  void processFinishedGroups(List<DataNodeTracker> nodeTrackers) {
+    nodeTrackers.forEach((dataNodeTracker -> {
+      dataNodeTracker.getGroupTrackers().forEach((groupTracker -> {
+        if (groupTracker.isPresentAndFinished()) {
+          List<ReplicaTracker> replicaTrackers = groupTracker.getInflightReplicas();
+          RemoteReplicaGroup remoteReplicaGroup = groupTracker.getRemoteReplicaGroup();
+          storeKeyConverter.tryDropCache(remoteReplicaGroup.getStoreKeysConversionLog());
+          groupTracker.free();
+          replicaTrackers.forEach(ReplicaTracker::iterationFinished);
+        }
+      }));
+    }));
+  }
+
+  void enqueueActiveGroups(List<DataNodeTracker> nodeTrackers) {
+    nodeTrackers.forEach((nodeTracker -> {
+      nodeTracker.getActiveGroupTrackers().forEach((groupTracker -> {
+        if (!groupTracker.isFree()) {
+          return;
+        }
+
+        List<ReplicaTracker> replicaTrackers = groupTracker.getPreAssignedReplicas();
+        List<ReplicaTracker> availableReplicaTrackers = replicaTrackers.stream().filter(
+            replicaTracker -> replicaTracker.isFree() && replicaTracker.isStandByTimedOut()
+        ).collect(Collectors.toList());
+
+      }));
+    }));
+  }
+  void enqueueReplicaGroups(List<DataNodeTracker> nodeTrackers){
+    processFinishedGroups(nodeTrackers);
+    enqueueActiveGroups(nodeTrackers);
+  }
+
+  public void replicateContinuousV2(){
+    long oneRoundStartTimeMs = time.milliseconds();
+    shouldTerminateCurrentCycle = false;
+    logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
+    exchangeMetadataResponsesInEachCycle = new HashMap<>();
+    Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
+    boolean allReplicasCaughtEarly = false;
+    int allProcessedReplicaCount = 0;
+
+    try {
+      storeKeyConverter.dropCache();
+
+      List<DataNodeTracker> nodeTrackers = assignGroupsToReplicas();
+      List<RemoteReplicaGroup> inflightRemoteReplicaGroups;
+
+      Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
+      Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+
+      RemoteReplicaGroupPoller poller = new RemoteReplicaGroupPoller();
+      // we keep polling groups until we can, i.e. there are no more inflight groups
+      do {
+        inflightRemoteReplicaGroups = poller.pollGroups();
+
+        // get request infos from all inflight remote replica groups
+        List<RequestInfo> requestInfos =
+            pollRemoteReplicaGroups(inflightRemoteReplicaGroups, correlationIdToRequestInfo,
+                correlationIdToReplicaGroup);
+        logger.trace("Thread name: {} Requests generated", threadName);
+
+        // generate responses for requests that are timed out
+        List<ResponseInfo> responseInfosForTimedOutRequests =
+            filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
+        logger.trace("Thread name: {} Filtered timed out Requests", threadName);
+
+        // mark timed out requests to be dropped by network client
+        Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
+            .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
+            .collect(Collectors.toSet());
+
+        if (!requestsToDrop.isEmpty()) {
+          replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
+              datacenterName);
+        }
+
+        final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
+
+        // submit requests and get response for earlier submitted requests
+        List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
+        logger.trace("Thread name: {} received {} responses from network client", threadName, responseInfos.size());
+        responseInfos.addAll(responseInfosForTimedOutRequests);
+        // process responses
+        onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+
+        /* for each data node we are caching the first metadata responses received for remote replica groups.
+           this will be used in tests only.
+        */
+        inflightRemoteReplicaGroups.stream()
+            .filter(g -> !groupsAddedToExchangeMetadatResponse.contains(g.id) && g.isDone()
+                && g.getExchangeMetadataResponseList() != null)
+            .forEach(g -> {
+              exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
+                  .addAll(g.getExchangeMetadataResponseList());
+              groupsAddedToExchangeMetadatResponse.add(g.id);
+            });
+
+        //print logs for groups which have error
+        inflightRemoteReplicaGroups.stream()
+            .filter(g -> g.isDone() && g.getException() != null)
+            .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
+                g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
+        logger.trace("Thread name: {} Finish one iteration for RemoteReplicaGroup replication", threadName);
+      } while (!inflightRemoteReplicaGroups.isEmpty());
+      logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
+      allReplicasCaughtEarly = poller.allReplicasCaughtUpEarly();
+      allProcessedReplicaCount = poller.allProcessedReplicaCount();
+    } catch (Exception e) {
+      logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
+    } finally {
+      replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
+          replicatingFromRemoteColo, datacenterName);
+    }
+
+    // check and make thread sleep and publish metrics for throttling
+    maybeSleepAfterReplication(allReplicasCaughtEarly, allProcessedReplicaCount);
+    logger.trace("Thread name: {} Exiting replication, all iterations Done!", threadName);
+  }
+
   /**
    * We should call this method to convert store keys, This will convert the keys and add the keys which were
    * converted to the list.
