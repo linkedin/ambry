@@ -722,6 +722,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
+  public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator unused)
+      throws CloudStorageException, StoreException {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
