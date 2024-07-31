@@ -20,7 +20,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
 
-public class AzureMetricsUnused {
+public class AzureMetricsOld {
 
   // Metric name constants
   public static final String ABS_FORBIDDEN_EXCEPTION_COUNT = "ABSForbiddenExceptionCount";
@@ -125,7 +125,7 @@ public class AzureMetricsUnused {
   public final Timer missingKeysQueryTime;
   public final Timer replicationFeedQueryTime;
 
-  public AzureMetricsUnused(MetricRegistry registry) {
+  public AzureMetricsOld(MetricRegistry registry) {
     this.metricRegistry = registry;
     // Unused metrics
     blobUploadRequestCount =

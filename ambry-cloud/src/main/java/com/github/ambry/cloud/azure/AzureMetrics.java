@@ -18,8 +18,8 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
-// extend AzureMetricsUnused to not break old-code
-public class AzureMetrics extends AzureMetricsUnused {
+// extend AzureMetricsOld to not break old-code
+public class AzureMetrics extends AzureMetricsOld {
 
   // Metric name constants
   public static final String BLOB_UPLOAD_SUCCESS_RATE = "BlobUploadSuccessRate";

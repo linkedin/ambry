@@ -437,29 +437,6 @@ public class RecoveryNetworkClientTest {
     });
   }
 
-  public class A {
-    public static final String abc = "abc";
-  }
-
-  public class X extends A {
-    public static final String xyz = "xyz";
-  }
-
-  /**
-   * Tests that metrics from parent class are not listed as declared fields in child class
-   */
-  @Test
-  public void testInheritedMetrics() {
-    Arrays.stream(X.class.getDeclaredFields())
-        .sequential()
-        .filter(field -> Modifier.isPublic(field.getModifiers()) && Modifier.isStatic(field.getModifiers())
-            && Modifier.isFinal(field.getModifiers()))
-        .forEach(field -> {
-          logger.info("Field: {}", field.getName());
-          assertNotEquals("abc", field.getName());
-        });
-  }
-
   /**
    * Test simple metric registration
    */
