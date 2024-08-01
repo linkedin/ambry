@@ -224,7 +224,7 @@ public class S3ListHandlerTest {
     assertEquals("Mismatch in key count", 2, listBucketResultV2.getKeyCount());
     assertEquals("Mismatch in delimiter", "/", listBucketResultV2.getDelimiter());
     assertEquals("Mismatch in encoding type", "url", listBucketResultV2.getEncodingType());
-    assertEquals("Mismatch in size", -1, listBucketResultV2.getContents().get(0).getSize());
+    assertEquals("Mismatch in size", 0, listBucketResultV2.getContents().get(0).getSize());
 
     // 4. Get list of blobs with continuation-token
     s3_list_request_uri =

@@ -260,7 +260,7 @@ class AmbrySecurityService implements SecurityService {
                   if (options.getRange() != null) {
                     responseChannel.setStatus(ResponseStatus.PartialContent);
                   }
-                  setGetBlobResponseHeaders(blobInfo, options, responseChannel);
+                  setGetBlobResponseHeaders(restRequest, blobInfo, options, responseChannel);
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                   setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel, container.getUserMetadataKeysToNotPrefixInResponse());
@@ -282,7 +282,7 @@ class AmbrySecurityService implements SecurityService {
                         Headers.RESERVED_METADATA_ID, blobInfo.getBlobProperties().getReservedMetadataBlobId());
                   }
                 } else if (subResource.equals(SubResource.Segment)) {
-                  setGetBlobResponseHeaders(blobInfo, options, responseChannel);
+                  setGetBlobResponseHeaders(restRequest, blobInfo, options, responseChannel);
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                 }
@@ -377,12 +377,13 @@ class AmbrySecurityService implements SecurityService {
 
   /**
    * Sets the required headers in the response.
-   * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
-   * @param options the {@link GetBlobOptions} associated with the request.
+   * @param restRequest         the {@link RestRequest} that was received.
+   * @param blobInfo            the {@link BlobInfo} to refer to while setting headers.
+   * @param options             the {@link GetBlobOptions} associated with the request.
    * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setGetBlobResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
+  private void setGetBlobResponseHeaders(RestRequest restRequest, BlobInfo blobInfo, GetBlobOptions options,
       RestResponseChannel restResponseChannel) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
@@ -394,7 +395,8 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getFirst());
       contentLength = rangeAndLength.getSecond();
     }
-    if (contentLength < frontendConfig.chunkedGetResponseThresholdInBytes) {
+    if (contentLength < frontendConfig.chunkedGetResponseThresholdInBytes || RestUtils.isS3Request(restRequest)) {
+      // If it is a S3 GetBlob API, always send content-length header. Else, S3 java client seems to be failing.
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     }
     if (blobProperties.getContentType() != null) {

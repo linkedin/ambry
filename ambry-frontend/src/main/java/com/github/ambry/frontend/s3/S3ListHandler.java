@@ -111,8 +111,10 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     for (NamedBlobListEntry namedBlobRecord : namedBlobRecordPage.getEntries()) {
       String blobName = namedBlobRecord.getBlobName();
       String todayDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(Calendar.getInstance().getTime());
-      //Set size to -1 due to current use case don't need this value.
-      contentsList.add(new Contents(blobName, todayDate, -1));
+      // Set size to 0 for now. Although this doesn't seem to be used by S3 clients, -1 is being treated an invalid value by s3 java client
+      // TODO: Flink team is requesting to send valid blob size and modified date in the Contents for debugging purposes.
+      //  This would need mysql schema change
+      contentsList.add(new Contents(blobName, todayDate, 0));
       if (++keyCount == maxKeysValue) {
         break;
       }
