@@ -359,7 +359,7 @@ public class BackupCheckerThread extends ReplicaThread {
     }
     // Maintain alphabetical order of fields for string match
     json.put("replica_token", rinfo.getToken().toString());
-\    // Pretty print with indent for easy viewing
+    // Pretty print with indent for easy viewing
     fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString(4));
   }
 
