@@ -378,6 +378,7 @@ public class ReplicaThread implements Runnable {
     logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
     List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
     int remoteReplicaGroupId = 0;
+    Map<Integer, Long> groupFinishTime = new HashMap<>();
 
     try {
       // Before each cycle of replication, we clean up the cache in key converter.
@@ -415,6 +416,10 @@ public class ReplicaThread implements Runnable {
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
       // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
       Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+
+      remoteReplicaGroups.stream().filter(RemoteReplicaGroup::isDone).forEach(group -> {
+        groupFinishTime.putIfAbsent(group.getId(), time.milliseconds());
+      });
 
       while (remoteReplicaGroups.size() > 0 && !remoteReplicaGroups.stream().allMatch(RemoteReplicaGroup::isDone)) {
         if (!running) {
@@ -461,6 +466,10 @@ public class ReplicaThread implements Runnable {
     } finally {
       replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
           replicatingFromRemoteColo, datacenterName);
+      groupFinishTime.forEach((groupId, finishTime) -> {
+        replicationMetrics.updateRemoteReplicaGroupIdleTime(time.milliseconds() - finishTime, replicatingFromRemoteColo,
+            datacenterName);
+      });
       if (fastestReplicaFinishTime != null) {
         replicationMetrics.updateFastestSlowestReplicaPerCycleTimeDifference(
             time.milliseconds() - fastestReplicaFinishTime, replicatingFromRemoteColo, datacenterName);
