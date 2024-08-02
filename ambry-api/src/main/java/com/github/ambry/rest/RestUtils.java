@@ -497,6 +497,12 @@ public class RestUtils {
      * Boolean field set to "true" if this is a S3 request.
      */
     public static final String S3_REQUEST = KEY_PREFIX + "is-s3-request";
+
+    /**
+     * Use to store size of the blob for range requests. This is an internal key and used later to set the
+     * content-length header
+     */
+    public static final String CONTENT_RANGE_LENGTH = KEY_PREFIX + "content-range-length";
   }
 
   /**

@@ -77,6 +77,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.mockito.Mockito.*;
 
 
@@ -900,6 +901,14 @@ public class AmbrySecurityServiceTest {
       Assert.assertNull("Content length value should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     }
+
+    if (range != null) {
+      Assert.assertEquals("Content length value mismatch in internal header", contentLength,
+          Long.parseLong(RestUtils.getHeader(restRequest.getArgs(), CONTENT_RANGE_LENGTH, false)));
+    } else {
+      Assert.assertNull("", RestUtils.getHeader(restRequest.getArgs(), CONTENT_RANGE_LENGTH, false));
+    }
+
     verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
         accountAndContainer.getSecond());

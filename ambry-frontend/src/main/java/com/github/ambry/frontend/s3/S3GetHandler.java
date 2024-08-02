@@ -24,8 +24,12 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
@@ -33,6 +37,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  * Handles S3 Get requests.
  */
 public class S3GetHandler extends S3BaseHandler<ReadableStreamChannel> {
+  private static final Logger LOGGER = LoggerFactory.getLogger(S3GetHandler.class);
   private final SecurityService securityService;
   private final FrontendMetrics frontendMetrics;
   private final AccountAndContainerInjector accountAndContainerInjector;
@@ -80,7 +85,18 @@ public class S3GetHandler extends S3BaseHandler<ReadableStreamChannel> {
     } else if (S3BaseHandler.isMultipartListPartRequest(restRequest)) {
       s3MultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     } else {
-      getBlobHandler.handle(requestPath, restRequest, restResponseChannel, callback);
+      getBlobHandler.handle(requestPath, restRequest, restResponseChannel,
+          buildCallback(frontendMetrics.s3GetHandleMetrics, (r) -> {
+            // Set content-length for S3 requests since S3 java client seems to be looking for it
+            long contentLength = Long.parseLong((String) restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+            String contentRangeLength = RestUtils.getHeader(restRequest.getArgs(), CONTENT_RANGE_LENGTH, false);
+            if (contentRangeLength != null) {
+              // If is a range request, update the content length
+              contentLength = Long.parseLong(contentRangeLength);
+            }
+            restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
+            callback.onCompletion(r, null);
+          }, restRequest.getUri(), LOGGER, callback));
     }
   }
 }
