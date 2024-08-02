@@ -90,7 +90,6 @@ import static com.github.ambry.utils.Utils.*;
 public class VcrServer {
 
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
-  private NetworkServer networkServer = null;
   private ScheduledExecutorService scheduler = null;
   private VcrReplicationManager vcrReplicationManager = null;
   private StoreManager cloudStorageManager = null;
@@ -103,7 +102,6 @@ public class VcrServer {
   private JmxReporter reporter = null;
   private final NotificationSystem notificationSystem;
   private final Function<MetricRegistry, JmxReporter> reporterFactory;
-  private CloudDestinationFactory cloudDestinationFactory;
   private CloudDestination cloudDestination;
   private ServerSecurityService serverSecurityService;
   private ServerMetrics serverMetrics;
@@ -138,7 +136,6 @@ public class VcrServer {
       NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
       Function<MetricRegistry, JmxReporter> reporterFactory) {
     this(properties, clusterAgentsFactory, notificationSystem, reporterFactory);
-    this.cloudDestinationFactory = cloudDestinationFactory;
   }
 
   /**
@@ -182,7 +179,6 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
       AccountService accountService = accountServiceFactory.getAccountService();
 
-      scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
 
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
@@ -233,9 +229,6 @@ public class VcrServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("VCR shutdown started");
-      if (scheduler != null) {
-        shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
-      }
       if (vcrReplicationManager != null) {
         vcrReplicationManager.shutdown();
       }
