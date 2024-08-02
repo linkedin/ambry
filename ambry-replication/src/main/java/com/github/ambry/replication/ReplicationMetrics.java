@@ -406,7 +406,7 @@ public class ReplicationMetrics {
         MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-FastestSlowestReplicaPerCycleTimeDifference"));
     interColoFastestSlowestReplicaPerCycleTimeDifference.put(datacenter, interColoFastestSlowestReplicaPerCycleTimeDifferencePerDC);
     Histogram interColoRemoteReplicaGroupIdleTimePerDC = registry.histogram(
-        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-interColoRemoteReplicaGroupIdleTime"));
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "RemoteReplicaGroupIdleTime"));
     interColoRemoteReplicaGroupIdleTime.put(datacenter, interColoRemoteReplicaGroupIdleTimePerDC);
     Histogram plainTextInterColoTotalReplicationTimePerDC = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-TotalReplicationTime"));
