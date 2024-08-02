@@ -712,7 +712,7 @@ public class ReplicationMetrics {
   }
 
   public void updateRemoteReplicaGroupIdleTime(long idleTime, boolean remoteColo, String datacenter) {
-    if(remoteColo) {
+    if (remoteColo) {
       interColoRemoteReplicaGroupIdleTime.get(datacenter).update(idleTime);
     } else {
       intraColoRemoteReplicaGroupIdleTime.update(idleTime);

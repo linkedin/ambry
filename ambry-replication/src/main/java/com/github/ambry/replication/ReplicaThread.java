@@ -440,7 +440,7 @@ public class ReplicaThread implements Runnable {
         // still be able to handle duplicate response infos for the same request.
         responseInfos.addAll(responseInfosForTimedOutRequests);
         onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
-        if((fastestReplicaFinishTime == null) && remoteReplicaGroups.stream().anyMatch(RemoteReplicaGroup::isDone)){
+        if ((fastestReplicaFinishTime == null) && remoteReplicaGroups.stream().anyMatch(RemoteReplicaGroup::isDone)) {
           fastestReplicaFinishTime = time.milliseconds();
         }
         remoteReplicaGroups.stream().filter(RemoteReplicaGroup::isDone).forEach(group -> {
