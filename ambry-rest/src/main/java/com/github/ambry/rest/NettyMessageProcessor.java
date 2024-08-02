@@ -36,7 +36,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
@@ -379,9 +378,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       }
       boolean isPutOrPost = request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT);
       boolean isMultipart = request.isMultipart() && requestContentFullyReceived;
-      boolean hasContinueAndIsPut = RestUtils.isPutRequestAndExpectContinue(request);
-      if (success && (!isPutOrPost || isMultipart || hasContinueAndIsPut)) {
-        if (hasContinueAndIsPut) {
+      boolean hasContinueAndIsPutOrPost = RestUtils.isPutOrPostRequestAndExpectContinue(request);
+      if (success && (!isPutOrPost || isMultipart || hasContinueAndIsPutOrPost)) {
+        if (hasContinueAndIsPutOrPost) {
           request.setArg(EXPECT, "");
           removeInternalKeyFromRequest();
           responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);

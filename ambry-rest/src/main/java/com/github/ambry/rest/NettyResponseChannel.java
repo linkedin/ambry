@@ -66,9 +66,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.rest.RestUtils.*;
-import static com.github.ambry.rest.RestUtils.Headers.*;
-
 
 /**
  * Netty specific implementation of {@link RestResponseChannel} used to return responses via Netty. It is supported by
@@ -1112,7 +1109,7 @@ class NettyResponseChannel implements RestResponseChannel {
             writeFuture.setSuccess();
             //Don't close the request when we see 100-continue in EXPECT header.
             completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false,
-                !RestUtils.isPutRequestAndExpectContinue(request));
+                !RestUtils.isPutOrPostRequestAndExpectContinue(request));
           }
         } else {
           // otherwise there is some content to write.
