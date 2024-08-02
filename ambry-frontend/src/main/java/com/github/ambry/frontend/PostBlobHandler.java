@@ -23,6 +23,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -46,6 +47,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 
 
 /**
@@ -164,9 +167,16 @@ class PostBlobHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
     private Callback<Void> securityProcessRequestCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postSecurityProcessRequestMetrics,
-          securityCheckResult -> securityService.postProcessRequest(restRequest,
-              securityPostProcessRequestCallback(blobInfo)), uri, LOGGER, finalCallback);
+      return buildCallback(frontendMetrics.postSecurityProcessRequestMetrics, securityCheckResult -> {
+        if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
+          restResponseChannel.setStatus(ResponseStatus.Continue);
+          //We need to set the content length in order to be a full http response in NettyResponseChannel::maybeWriteResponseMetadata.
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          finalCallback.onCompletion(null, null);
+        } else {
+          securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
+        }
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
