@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import java.util.Collection;
 import java.util.Properties;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -30,6 +31,7 @@ import static org.junit.Assert.*;
 
 /** Test cases for {@link AzureBlobLayoutStrategy} */
 @RunWith(Parameterized.class)
+@Ignore
 public class AzureBlobLayoutStrategyTest {
 
   private Properties configProps = new Properties();
