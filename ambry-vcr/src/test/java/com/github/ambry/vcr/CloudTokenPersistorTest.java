@@ -163,7 +163,6 @@ public class CloudTokenPersistorTest {
             verifiableProperties);
 
     long lastOpTime = System.currentTimeMillis();
-    replica.setReplicatedUntilTime(lastOpTime);
 
     // test 1: uninitialized token
     token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
@@ -198,9 +197,6 @@ public class CloudTokenPersistorTest {
         Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
-    DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
-    assertEquals(formatter.format(lastOpTime),
-        getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
   }
 
   /**
@@ -267,7 +263,6 @@ public class CloudTokenPersistorTest {
   protected void uploadTokenToAzureTable(RemoteReplicaInfo replica, StoreFindToken token, long lastOpTime) {
     String partitionKey = String.valueOf(replica.getReplicaId().getPartitionId().getId());
     String rowKey = replica.getReplicaId().getDataNodeId().getHostname();
-    DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
     TableEntity entity = new TableEntity(partitionKey, rowKey)
         .addProperty(VcrReplicationManager.TOKEN_TYPE,
             token.getType().toString())
@@ -277,9 +272,6 @@ public class CloudTokenPersistorTest {
             token.getOffset() == null ? "none" : token.getOffset().getOffset())
         .addProperty(VcrReplicationManager.STORE_KEY,
             token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
-        .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
-            lastOpTime == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
-                : formatter.format(lastOpTime))
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
     azuriteClient.upsertTableEntity(azureTableNameReplicaTokens, entity);
@@ -307,7 +299,6 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
 
     // test 2: journal-based token w/o reset key
     lastOpTime = Utils.Infinite_Time;
@@ -317,7 +308,6 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
 
     // test 3: journal-based token w/ reset key
     lastOpTime = System.currentTimeMillis();
@@ -328,7 +318,6 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
 
     // test 4: index-based token
     lastOpTime = System.currentTimeMillis();
@@ -339,7 +328,6 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
   }
 
   @Test

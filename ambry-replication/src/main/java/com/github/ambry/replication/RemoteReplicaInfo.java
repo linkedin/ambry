@@ -71,7 +71,6 @@ public class RemoteReplicaInfo {
   private int replicationRetryCount;
   // Configurable
   protected final int maxReplicationRetryCount;
-  protected long replicatedUntilTime;
 
   // Metadata response information received for this replica in the most recent replication cycle.
   // This is used during leader based replication to store the missing store messages, remote token info and local lag
@@ -104,7 +103,6 @@ public class RemoteReplicaInfo {
     this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
     this.replicationRetryCount = 0;
     this.maxReplicationRetryCount = maxReplicationRetryCount;
-    this.replicatedUntilTime = -1L;
   }
 
   /**
@@ -218,15 +216,6 @@ public class RemoteReplicaInfo {
     // reference assignment is atomic in java but we want to be completely safe. performance is
     // not important here
     currentToken = token;
-  }
-
-  public synchronized long setReplicatedUntilTime(long time) {
-    replicatedUntilTime = time;
-    return replicatedUntilTime;
-  }
-
-  public synchronized long getReplicatedUntilTime() {
-    return replicatedUntilTime;
   }
 
   public void initializeTokens(FindToken token) {

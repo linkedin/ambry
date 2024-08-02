@@ -230,7 +230,6 @@ public class BackupCheckerThread extends ReplicaThread {
           metadata.getMessageInfoList().stream()
               .map(serverBlob -> {
                 numBlobScanned.incrementAndGet();
-                replica.setReplicatedUntilTime(serverBlob.getOperationTimeMs());
                 return mapBlob(serverBlob);
               })
               .filter(serverBlob -> serverBlob.getStoreKey() != null)
@@ -360,7 +359,6 @@ public class BackupCheckerThread extends ReplicaThread {
     }
     // Maintain alphabetical order of fields for string match
     json.put("replica_token", rinfo.getToken().toString());
-    json.put("replicated_until", rinfo.getReplicatedUntilTime());
     // Pretty print with indent for easy viewing
     fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString(4));
   }

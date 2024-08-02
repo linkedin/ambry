@@ -186,16 +186,14 @@ public class VcrReplicaThread extends ReplicaThread {
     }
     logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
     // Table entity = Table row
-    // =============================================================================================================
-    // | partition-key | row-key | tokenType | logSegment | offset | storeKey | replicatedUntilUTC   | binaryToken |
-    // =============================================================================================================
-    // | partition     | host1   | Journal   | 3_14       | 12     | none     | 2024_Feb_11_14_21_00 | AAASLKJDFX  |
-    // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | 2024_Jan_02_13_01_00 | AAAEWODSDS  |
-    // =============================================================================================================
-    long lastOpTime = remoteReplicaInfo.getReplicatedUntilTime();
+    // ======================================================================================
+    // | partition-key | row-key | tokenType | logSegment | offset | storeKey | binaryToken |
+    // ======================================================================================
+    // | partition     | host1   | Journal   | 3_14       | 12     | none     | AAASLKJDFX  |
+    // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | AAAEWODSDS  |
+    // ======================================================================================
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
-    DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
     TableEntity entity = new TableEntity(partitionKey, rowKey)
         .addProperty(VcrReplicationManager.BACKUP_NODE, dataNodeId.getHostname())
         .addProperty(VcrReplicationManager.TOKEN_TYPE,
@@ -206,9 +204,6 @@ public class VcrReplicaThread extends ReplicaThread {
             token.getOffset() == null ? "none" : token.getOffset().getOffset())
         .addProperty(VcrReplicationManager.STORE_KEY,
             token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
-        .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
-            lastOpTime == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
-                : formatter.format(lastOpTime))
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
     // Now persist the token in cloud
