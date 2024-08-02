@@ -29,9 +29,7 @@ import com.github.ambry.utils.Utils;
 public class AzureBlobLayoutStrategy {
 
   private static final String DASH = "-";
-  private static final String BLOB_NAME_SEPARATOR = DASH;
   // Note: Azure container name needs to be lower case
-  private static final String TOKEN_CONTAINER_NAME = "replicatokens";
   private final String clusterName;
   private int currentVersion;
   private BlobContainerStrategy blobContainerStrategy;
@@ -43,11 +41,8 @@ public class AzureBlobLayoutStrategy {
   public enum BlobContainerStrategy {
 
     /** Each Azure container corresponds to an Ambry partitionId. */
-    PARTITION,
-
-    /** Each Azure container corresponds to an Ambry accountId-containerId combination. */
-    CONTAINER;
-
+    PARTITION;
+    // We had other layout schemes, but they have been deprecated now.
     /**
      * @return {@link BlobContainerStrategy} using case-insensitive string match.
      * @param enumVal the enum string value.
@@ -126,13 +121,7 @@ public class AzureBlobLayoutStrategy {
    * @param tokenFileName the name of the token file to store.
    */
   public BlobLayout getTokenBlobLayout(String partitionPath, String tokenFileName) {
-    if (blobContainerStrategy == BlobContainerStrategy.PARTITION) {
-      return new BlobLayout(getClusterAwareAzureContainerName(partitionPath), tokenFileName);
-    } else {
-      // Use separate dedicated token container, using replicaTokens//partitionPath/replicaTokens
-      return new BlobLayout(getClusterAwareAzureContainerName(TOKEN_CONTAINER_NAME),
-          partitionPath + "/" + tokenFileName);
-    }
+    return new BlobLayout(getClusterAwareAzureContainerName(partitionPath), tokenFileName);
   }
 
   /**
@@ -141,10 +130,7 @@ public class AzureBlobLayoutStrategy {
    * @return the container name to use.
    */
   private String getAzureContainerName(CloudBlobMetadata blobMetadata) {
-    String baseContainerName =
-        (blobContainerStrategy == BlobContainerStrategy.PARTITION) ? blobMetadata.getPartitionId()
-            : blobMetadata.getAccountId() + containerNameSeparator + blobMetadata.getContainerId();
-    return getClusterAwareAzureContainerName(baseContainerName);
+    return getClusterAwareAzureContainerName(blobMetadata.getPartitionId());
   }
 
   /**
@@ -152,17 +138,8 @@ public class AzureBlobLayoutStrategy {
    * @param blobMetadata the {@link CloudBlobMetadata} to store.
    */
   private String getAzureBlobName(CloudBlobMetadata blobMetadata) {
-    String blobIdStr = blobMetadata.getId();
-    int nameVersion = blobMetadata.getNameSchemeVersion();
-    switch (nameVersion) {
-      case 0:
-        // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
-        return blobIdStr.substring(blobIdStr.length() - 4) + BLOB_NAME_SEPARATOR + blobIdStr;
-      case 1:
-      default:
-        // snalli@: I have discussed thoroughly with MSFT that prefixing 4 random char does not help at all!
-        return blobIdStr;
-    }
+    // snalli@: I have discussed thoroughly with MSFT that prefixing 4 random char does not help at all!
+    return blobMetadata.getId();
   }
 
   /**
