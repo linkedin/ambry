@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
@@ -50,6 +51,7 @@ import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
 
 
@@ -62,7 +64,7 @@ public class S3PutHandlerTest {
   private FrontendConfig frontendConfig;
   private S3PutHandler s3PutHandler;
   private NamedBlobDb namedBlobDb;
-  private GetBlobHandler getBlobHandler;
+  private S3GetHandler s3GetHandler;
 
   public S3PutHandlerTest() throws Exception {
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -114,10 +116,14 @@ public class S3PutHandlerTest {
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> getResult = new FutureResult<>();
-    getBlobHandler.handle(requestPath, request, restResponseChannel, getResult::done);
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, size);
+    request.setArg(CONTENT_RANGE_LENGTH, String.valueOf(size / 2));
+    s3GetHandler.handle(request, restResponseChannel, getResult::done);
     ReadableStreamChannel readableStreamChannel = getResult.get();
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertArrayEquals("Mismatch in blob content", content, ((ByteBufferRSC) readableStreamChannel).getBuffer().array());
+    assertEquals("Mismatch in content length size", size / 2,
+        Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
   }
 
   @Test
@@ -150,9 +156,10 @@ public class S3PutHandlerTest {
     NamedBlobPutHandler namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, injector,
             frontendConfig, metrics, CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
-    getBlobHandler =
+    GetBlobHandler getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
             QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, null, metrics);
+    s3GetHandler = new S3GetHandler(null, null, getBlobHandler, securityService, metrics, injector);
   }
 }

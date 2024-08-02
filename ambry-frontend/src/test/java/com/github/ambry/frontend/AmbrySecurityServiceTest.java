@@ -77,7 +77,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.mockito.Mockito.*;
 
 
@@ -386,7 +386,6 @@ public class AmbrySecurityServiceTest {
     testGetBlobWithVariousRanges(RANDOM_INFO);
     testGetBlobWithVariousRanges(LIFEVERSION_INFO);
     testGetBlobWithReservedMetadataId(RESERVED_METADATA_INFO);
-    testS3GetBlob();
     // less than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID, "image/gif",
@@ -632,26 +631,6 @@ public class AmbrySecurityServiceTest {
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForGetBlob(restRequest, blobInfo, accountAndContainer, range, restResponseChannel);
     return restResponseChannel;
-  }
-
-  /**
-   * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a S3 Get
-   * blob with the passed in {@link BlobInfo}
-   * @throws Exception
-   */
-  private void testS3GetBlob() throws Exception {
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    Pair<Account, Container> accountAndContainer =
-        getAccountAndContainer(AmbrySecurityServiceTest.DEFAULT_INFO.getBlobProperties());
-    RestRequest restRequest = createRestRequest(RestMethod.GET,
-        "/s3/" + accountAndContainer.getFirst().getName() + "/" + accountAndContainer.getSecond().getName()
-            + "/blob-name", null);
-    insertAccountAndContainer(restRequest, accountAndContainer.getFirst(), accountAndContainer.getSecond());
-    securityService.processResponse(restRequest, restResponseChannel, AmbrySecurityServiceTest.DEFAULT_INFO).get();
-    Assert.assertEquals("ProcessResponse status should have been set", ResponseStatus.Ok,
-        restResponseChannel.getStatus());
-    verifyHeadersForGetBlob(restRequest, AmbrySecurityServiceTest.DEFAULT_INFO, accountAndContainer, null,
-        restResponseChannel);
   }
 
   /**
@@ -918,13 +897,18 @@ public class AmbrySecurityServiceTest {
     if (contentLength < FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes) {
       Assert.assertEquals("Content length value mismatch", contentLength,
           Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
-    } else if (isS3Request(restRequest)) {
-      Assert.assertEquals("Content length value mismatch", contentLength,
-          Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     } else {
       Assert.assertNull("Content length value should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     }
+
+    if (range != null) {
+      Assert.assertEquals("Content length value mismatch in internal header", contentLength,
+          Long.parseLong(RestUtils.getHeader(restRequest.getArgs(), CONTENT_RANGE_LENGTH, false)));
+    } else {
+      Assert.assertNull("", RestUtils.getHeader(restRequest.getArgs(), CONTENT_RANGE_LENGTH, false));
+    }
+
     verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
         accountAndContainer.getSecond());

@@ -52,6 +52,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.GetBlobOptions.*;
 
 
@@ -394,9 +395,10 @@ class AmbrySecurityService implements SecurityService {
           RestUtils.buildContentRangeAndLength(options.getRange(), contentLength, options.resolveRangeOnEmptyBlob());
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getFirst());
       contentLength = rangeAndLength.getSecond();
+      // Store the calculated range size in an internal key. This can be used later if needed.
+      restRequest.setArg(CONTENT_RANGE_LENGTH, String.valueOf(contentLength));
     }
-    if (contentLength < frontendConfig.chunkedGetResponseThresholdInBytes || RestUtils.isS3Request(restRequest)) {
-      // If it is a S3 GetBlob API, always send content-length header. Else, S3 java client seems to be failing.
+    if (contentLength < frontendConfig.chunkedGetResponseThresholdInBytes) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     }
     if (blobProperties.getContentType() != null) {
