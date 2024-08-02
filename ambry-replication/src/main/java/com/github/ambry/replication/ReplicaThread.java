@@ -913,7 +913,6 @@ public class ReplicaThread implements Runnable {
     long startTime = time.milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     Map<MessageInfo, StoreKey> remoteMessageToConvertedKeyNonNull = new HashMap<>();
-    long lastOpTime = remoteReplicaInfo.getReplicatedUntilTime();
     for (MessageInfo messageInfo : messageInfoList) {
       StoreKey storeKey = messageInfo.getStoreKey();
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
@@ -926,14 +925,7 @@ public class ReplicaThread implements Runnable {
           || !skipPredicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
-      /**
-       * These message_info timestamps from peer replica do not increase monotonically, rendering them useless
-       * for any practical purpose. However, we still record it here to get an idea of how far along the backup
-       * is done for a partition. Take it with a pinch of salt.
-       */
-      lastOpTime = messageInfo.getOperationTimeMs();
     }
-    remoteReplicaInfo.setReplicatedUntilTime(lastOpTime);
     Set<StoreKey> convertedMissingStoreKeys =
         remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
     Set<MessageInfo> missingRemoteMessages = new HashSet<>();

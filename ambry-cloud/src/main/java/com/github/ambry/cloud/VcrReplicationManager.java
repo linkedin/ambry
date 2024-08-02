@@ -256,7 +256,6 @@ public class VcrReplicationManager extends ReplicationEngine {
         logger.error("Failed to deserialize token for peer replica {} due to {}", replicaInfo, t.toString());
         t.printStackTrace();
         replicaInfo.setToken(findTokenFactory.getNewFindToken());
-        replicaInfo.setReplicatedUntilTime(-1);
       } // try-catch
     } // for-loop
     return (int) azureMetrics.replicaTokenReadErrorCount.getCount();
