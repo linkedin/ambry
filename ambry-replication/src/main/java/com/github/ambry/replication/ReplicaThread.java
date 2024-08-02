@@ -422,10 +422,6 @@ public class ReplicaThread implements Runnable {
           break;
         }
 
-        if((fastestReplicaFinishTime == null) && remoteReplicaGroups.stream().anyMatch(RemoteReplicaGroup::isDone)){
-          fastestReplicaFinishTime = time.milliseconds();
-        }
-
         List<RequestInfo> requestInfos =
             pollRemoteReplicaGroups(remoteReplicaGroups, correlationIdToRequestInfo, correlationIdToReplicaGroup);
         List<ResponseInfo> responseInfosForTimedOutRequests =
@@ -444,6 +440,9 @@ public class ReplicaThread implements Runnable {
         // still be able to handle duplicate response infos for the same request.
         responseInfos.addAll(responseInfosForTimedOutRequests);
         onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+        if((fastestReplicaFinishTime == null) && remoteReplicaGroups.stream().anyMatch(RemoteReplicaGroup::isDone)){
+          fastestReplicaFinishTime = time.milliseconds();
+        }
         remoteReplicaGroups.stream().filter(RemoteReplicaGroup::isDone).forEach(group -> {
           groupFinishTime.putIfAbsent(group.getId(), time.milliseconds());
         });
