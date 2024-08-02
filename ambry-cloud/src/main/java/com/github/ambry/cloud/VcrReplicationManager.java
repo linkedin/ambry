@@ -250,10 +250,6 @@ public class VcrReplicationManager extends ReplicationEngine {
         DataInputStream inputStream = new DataInputStream(
             new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
         replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
-        String replUntil = (String) row.getProperty(REPLICATED_UNITL_UTC);
-        DateFormat formatter = new SimpleDateFormat(DATE_FORMAT);
-        long time = replUntil.equals(String.valueOf(Utils.Infinite_Time)) ? -1 : formatter.parse(replUntil).getTime();
-        replicaInfo.setReplicatedUntilTime(time);
       } catch (Throwable t) {
         // log and metric
         azureMetrics.replicaTokenReadErrorCount.inc();
