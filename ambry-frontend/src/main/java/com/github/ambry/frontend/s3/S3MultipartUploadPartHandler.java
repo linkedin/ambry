@@ -165,9 +165,16 @@ public class S3MultipartUploadPartHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        PutBlobOptions options = getPutBlobOptionsFromRequest();
-        router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-            routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+        if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
+          restResponseChannel.setStatus(ResponseStatus.Continue);
+          //We need to set the content length in order to be a full http response in NettyResponseChannel::maybeWriteResponseMetadata.
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          finalCallback.onCompletion(null, null);
+        } else {
+          PutBlobOptions options = getPutBlobOptionsFromRequest();
+          router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+        }
       }, uri, logger, finalCallback);
     }
 
