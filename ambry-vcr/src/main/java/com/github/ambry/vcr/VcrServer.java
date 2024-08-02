@@ -169,10 +169,6 @@ public class VcrServer {
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       properties.verify();
-      // These are required to be at these values going forward for backups.
-      assert azureCloudConfig.azureBlobContainerStrategy.equals(AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION);
-      assert azureCloudConfig.azureNameSchemeVersion == 1;
-      assert cloudConfig.ambryBackupVersion == CloudConfig.AMBRY_BACKUP_VERSION_2;
 
       // TODO Make sure that config.updaterPollingIntervalMs value is large (~one day) for VCR.
       AccountServiceFactory accountServiceFactory =
