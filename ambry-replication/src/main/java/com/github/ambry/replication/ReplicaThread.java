@@ -417,10 +417,6 @@ public class ReplicaThread implements Runnable {
       // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
       Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
 
-      remoteReplicaGroups.stream().filter(RemoteReplicaGroup::isDone).forEach(group -> {
-        groupFinishTime.putIfAbsent(group.getId(), time.milliseconds());
-      });
-
       while (remoteReplicaGroups.size() > 0 && !remoteReplicaGroups.stream().allMatch(RemoteReplicaGroup::isDone)) {
         if (!running) {
           break;
@@ -448,6 +444,9 @@ public class ReplicaThread implements Runnable {
         // still be able to handle duplicate response infos for the same request.
         responseInfos.addAll(responseInfosForTimedOutRequests);
         onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+        remoteReplicaGroups.stream().filter(RemoteReplicaGroup::isDone).forEach(group -> {
+          groupFinishTime.putIfAbsent(group.getId(), time.milliseconds());
+        });
       }
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
       remoteReplicaGroups.stream()
