@@ -88,11 +88,18 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
 
   protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
-    return new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
-        .httpClient(httpClient)
-        .retryOptions(retryOptions)
-        .configuration(configuration)
-        .buildClient();
+    try {
+      return new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
+          .httpClient(httpClient)
+          .retryOptions(retryOptions)
+          .configuration(configuration)
+          .buildClient();
+    } catch (Throwable e) {
+      String err = String.format("Failed to build blob service client with connection string %s due to %s",
+          azureCloudConfig.azureStorageConnectionString, e.getMessage());
+      logger.error(err);
+      throw e;
+    }
   }
 
   @Override
