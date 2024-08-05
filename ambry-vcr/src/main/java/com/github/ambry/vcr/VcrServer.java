@@ -24,6 +24,7 @@ import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.VcrReplicationManager;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -211,7 +212,9 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
 
-      cloudDestination = new AzureCloudDestinationSync(properties, registry, clusterMap, accountService);
+      AzureCloudDestinationFactory cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass,
+          properties, registry, clusterMap, accountService);
+      cloudDestination = cloudDestinationFactory.getCloudDestination();
       vcrClusterParticipant =
           ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, cloudConfig,
               clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
