@@ -306,10 +306,12 @@ public class AzureCloudConfig {
   @Config(COSMOS_PURGE_BATCH_SIZE)
   public final int cosmosPurgeBatchSize;
 
+  // UNUSED
   @Config(AZURE_NAME_SCHEME_VERSION)
   @Default("0")
   public final int azureNameSchemeVersion;
 
+  // UNUSED
   @Config(AZURE_BLOB_CONTAINER_STRATEGY)
   @Default("Partition")
   public final String azureBlobContainerStrategy;

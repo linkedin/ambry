@@ -487,8 +487,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *
      */
     Timer.Context storageTimer = null;
-    // setNameSchemeVersion is a remnant of legacy code. We have to set it explicitly.
-    cloudBlobMetadata.setNameSchemeVersion(azureCloudConfig.azureNameSchemeVersion);
     // Azure cloud container names must be 3 - 63 char
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(cloudBlobMetadata);
     String blobIdStr = blobLayout.blobFilePath;
@@ -1025,16 +1023,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @throws CloudStorageException
    */
   public int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
-    /*
-      BlobContainerStrategy must be PARTITION, otherwise compaction will not work because it cannot find the container in ABS.
-      For BlobContainerStrategy to be CONTAINER, we need a blobId to extract accountId and containerId and we don't have that here.
-     */
-    if (AzureBlobLayoutStrategy.BlobContainerStrategy.get(azureCloudConfig.azureBlobContainerStrategy) !=
-        AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION) {
-      logger.info("[COMPACT] Unable to compact because BlobContainerStrategy is {} when it must be {}", azureCloudConfig.azureBlobContainerStrategy,
-          AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION);
-      return 0;
-    }
     Set<Pair<Short, Short>> deletedContainers = getDeletedContainers();
     String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(partitionPath);
     BlobContainerClient blobContainerClient = createOrGetBlobStore(containerName);

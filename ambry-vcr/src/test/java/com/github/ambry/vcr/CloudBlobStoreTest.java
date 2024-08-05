@@ -190,7 +190,7 @@ public class CloudBlobStoreTest {
           : mock(CloudDestination.class);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
       // TODO: This test suite needs improvements. It has a mixture of code from 3 different use-cases.
-      properties.setProperty(CloudConfig.AMBRY_BACKUP_VERSION, CloudConfig.AMBRY_BACKUP_VERSION);
+      properties.setProperty(CloudConfig.AMBRY_BACKUP_VERSION, CloudConfig.AMBRY_BACKUP_VERSION_2);
       properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(this.compactionDryRun));
       properties.setProperty(CloudConfig.CLOUD_COMPACTION_GRACE_PERIOD_DAYS, String.valueOf(0));
       /*

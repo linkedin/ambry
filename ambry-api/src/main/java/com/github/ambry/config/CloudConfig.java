@@ -117,10 +117,11 @@ public class CloudConfig {
   /**
    * Azure backup version
    */
+  // UNUSED
   public static final String AMBRY_BACKUP_VERSION = "ambry.backup.version";
   public static final String AMBRY_BACKUP_VERSION_1 = "1.0";
   public static final String AMBRY_BACKUP_VERSION_2 = "2.0";
-  public static final String DEFAULT_AMBRY_BACKUP_VERSION = AMBRY_BACKUP_VERSION_1;
+  public static final String DEFAULT_AMBRY_BACKUP_VERSION = AMBRY_BACKUP_VERSION_2;
   @Config(AMBRY_BACKUP_VERSION)
   public final String ambryBackupVersion;
 

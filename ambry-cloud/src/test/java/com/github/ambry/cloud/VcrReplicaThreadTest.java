@@ -126,7 +126,6 @@ public class VcrReplicaThreadTest {
     assertEquals(original.getContainerId(), received.getContainerId());
     assertEquals(original.getSize(), received.getSize());
     assertEquals(original.getCreationTime(), received.getCreationTime());
-    assertEquals(original.getNameSchemeVersion(), azureCloudConfig.azureNameSchemeVersion);
     // these fields are unused but check them any ways
     assertEquals(original.getEncryptionOrigin(), received.getEncryptionOrigin());
     assertEquals(original.getVcrKmsContext(), received.getVcrKmsContext());
