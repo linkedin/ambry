@@ -24,6 +24,7 @@ import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.VcrReplicationManager;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -164,11 +165,23 @@ public class VcrServer {
       AzureCloudConfig azureCloudConfig = new AzureCloudConfig(properties);
       NetworkConfig networkConfig = new NetworkConfig(properties);
       StoreConfig storeConfig = new StoreConfig(properties);
-      ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       CloudConfig cloudConfig = new CloudConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       properties.verify();
+      // These are required to be at these values going forward for backups.
+      if (!azureCloudConfig.azureBlobContainerStrategy.equals(AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION)) {
+        throw new InstantiationException("azureBlobContainerStrategy must be PARTITION but is "
+            + azureCloudConfig.azureBlobContainerStrategy);
+      }
+      if (azureCloudConfig.azureNameSchemeVersion != 1)  {
+        throw new InstantiationException("azureNameSchemeVersion must be 1 but is "
+            + azureCloudConfig.azureNameSchemeVersion);
+      }
+      if (cloudConfig.ambryBackupVersion != CloudConfig.AMBRY_BACKUP_VERSION_2) {
+        throw new InstantiationException("ambryBackupVersion must be 2.0 but is "
+            + cloudConfig.ambryBackupVersion);
+      }
 
       // TODO Make sure that config.updaterPollingIntervalMs value is large (~one day) for VCR.
       AccountServiceFactory accountServiceFactory =
@@ -199,7 +212,9 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
 
-      cloudDestination = new AzureCloudDestinationSync(properties, registry, clusterMap, accountService);
+      AzureCloudDestinationFactory cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass,
+          properties, registry, clusterMap, accountService);
+      cloudDestination = cloudDestinationFactory.getCloudDestination();
       vcrClusterParticipant =
           ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, cloudConfig,
               clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
