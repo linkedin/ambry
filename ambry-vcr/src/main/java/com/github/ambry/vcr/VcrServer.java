@@ -164,11 +164,23 @@ public class VcrServer {
       AzureCloudConfig azureCloudConfig = new AzureCloudConfig(properties);
       NetworkConfig networkConfig = new NetworkConfig(properties);
       StoreConfig storeConfig = new StoreConfig(properties);
-      ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       CloudConfig cloudConfig = new CloudConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       properties.verify();
+      // These are required to be at these values going forward for backups.
+      if (!azureCloudConfig.azureBlobContainerStrategy.equals(AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION)) {
+        throw new InstantiationException("azureBlobContainerStrategy must be PARTITION but is "
+            + azureCloudConfig.azureBlobContainerStrategy);
+      }
+      if (azureCloudConfig.azureNameSchemeVersion != 1)  {
+        throw new InstantiationException("azureNameSchemeVersion must be 1 but is "
+            + azureCloudConfig.azureNameSchemeVersion);
+      }
+      if (cloudConfig.ambryBackupVersion != CloudConfig.AMBRY_BACKUP_VERSION_2) {
+        throw new InstantiationException("ambryBackupVersion must be 2.0 but is "
+            + cloudConfig.ambryBackupVersion);
+      }
 
       // TODO Make sure that config.updaterPollingIntervalMs value is large (~one day) for VCR.
       AccountServiceFactory accountServiceFactory =
