@@ -73,7 +73,7 @@ public class AccountDaoTest {
             .lastModifiedTime(lastModifiedTime)
             .build();
     testAccountInfo = new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
-        new ArrayList<>());
+        new ArrayList<>(), new ArrayList<>());
 
     Connection mockConnection = mock(Connection.class);
     MySqlDataAccessor dataAccessor = getDataAccessor(mockConnection, metrics);
@@ -211,7 +211,7 @@ public class AccountDaoTest {
     // test batch account inserts
     for (int i = 1; i <= size; i++) {
       Account account = new AccountBuilder((short) i, "test account " + i, Account.AccountStatus.ACTIVE).build();
-      accountUpdateInfos.add(new AccountUpdateInfo(account, true, false, new ArrayList<>(), new ArrayList<>()));
+      accountUpdateInfos.add(new AccountUpdateInfo(account, true, false, new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
     }
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockAccountInsertStatement, times(size)).addBatch();
@@ -222,7 +222,7 @@ public class AccountDaoTest {
     for (int i = 1; i <= size; i++) {
       Account account =
           new AccountBuilder((short) i, "test account " + i, Account.AccountStatus.ACTIVE).snapshotVersion(1).build();
-      accountUpdateInfos.add(new AccountUpdateInfo(account, false, true, new ArrayList<>(), new ArrayList<>()));
+      accountUpdateInfos.add(new AccountUpdateInfo(account, false, true, new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
     }
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockAccountUpdateStatement, times(size)).addBatch();
@@ -236,7 +236,7 @@ public class AccountDaoTest {
     }
     // test batch container inserts
     accountUpdateInfos.clear();
-    accountUpdateInfos.add(new AccountUpdateInfo(account, false, false, containers, new ArrayList<>()));
+    accountUpdateInfos.add(new AccountUpdateInfo(account, false, false, containers, new ArrayList<>(), new ArrayList<>()));
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockContainerInsertStatement, times(size)).addBatch();
     // Execute batch should be invoked only once since all containers belong to same account
@@ -244,7 +244,7 @@ public class AccountDaoTest {
 
     // test batch container updates
     accountUpdateInfos.clear();
-    accountUpdateInfos.add(new AccountUpdateInfo(account, false, false, new ArrayList<>(), containers));
+    accountUpdateInfos.add(new AccountUpdateInfo(account, false, false, new ArrayList<>(), containers, new ArrayList<>()));
     accountDao.updateAccounts(accountUpdateInfos, batchSize);
     verify(mockContainerUpdateStatement, times(size)).addBatch();
     // Execute batch should be invoked only once since all containers belong to same account
