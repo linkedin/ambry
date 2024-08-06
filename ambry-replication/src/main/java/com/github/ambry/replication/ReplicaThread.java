@@ -374,12 +374,9 @@ public class ReplicaThread implements Runnable {
   public void replicate() {
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     long oneRoundStartTimeMs = time.milliseconds();
-    Long fastestReplicaFinishTime = null;
     logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
     List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
     int remoteReplicaGroupId = 0;
-    Map<Integer, Long> groupFinishTime = new HashMap<>();
-
     try {
       // Before each cycle of replication, we clean up the cache in key converter.
       storeKeyConverter.dropCache();
@@ -440,12 +437,9 @@ public class ReplicaThread implements Runnable {
         // still be able to handle duplicate response infos for the same request.
         responseInfos.addAll(responseInfosForTimedOutRequests);
         onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
-        if ((fastestReplicaFinishTime == null) && remoteReplicaGroups.stream().anyMatch(RemoteReplicaGroup::isDone)) {
-          fastestReplicaFinishTime = time.milliseconds();
-        }
-        remoteReplicaGroups.stream().filter(RemoteReplicaGroup::isDone).forEach(group -> {
-          groupFinishTime.putIfAbsent(group.getId(), time.milliseconds());
-        });
+        remoteReplicaGroups.stream()
+            .filter(RemoteReplicaGroup::shouldSetFinishTime)
+            .forEach(group -> group.setFinishTime(time.milliseconds()));
       }
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
       remoteReplicaGroups.stream()
@@ -462,18 +456,28 @@ public class ReplicaThread implements Runnable {
     } catch (Throwable e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
-      replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
-          replicatingFromRemoteColo, datacenterName);
-      groupFinishTime.forEach((groupId, finishTime) -> {
-        replicationMetrics.updateRemoteReplicaGroupIdleTime(time.milliseconds() - finishTime, replicatingFromRemoteColo,
-            datacenterName);
-      });
-      if (fastestReplicaFinishTime != null) {
-        replicationMetrics.updateFastestSlowestReplicaPerCycleTimeDifference(
-            time.milliseconds() - fastestReplicaFinishTime, replicatingFromRemoteColo, datacenterName);
-      }
+      emmitReplicationCycleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, time.milliseconds());
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
+  }
+
+  private void emmitReplicationCycleMetrics(List<RemoteReplicaGroup> groups, long roundStartTime,
+      long roundEndTime) {
+
+    replicationMetrics.updateOneCycleReplicationTime(roundEndTime - roundStartTime, replicatingFromRemoteColo,
+        datacenterName);
+
+    long totalIdleTime = 0;
+
+    for (RemoteReplicaGroup group : groups) {
+      totalIdleTime = totalIdleTime + group.getFinishTime() - roundStartTime;
+    }
+
+    replicationMetrics.updateReplicaBatchTotalIdleTimeMs(totalIdleTime, replicatingFromRemoteColo, datacenterName);
+
+    long idleTimePercentage = (totalIdleTime * 100) / (groups.size() * (roundEndTime - roundStartTime));
+    replicationMetrics.updateReplicaBatchTotalIdleTimePercentage(idleTimePercentage, replicatingFromRemoteColo,
+        datacenterName);
   }
 
   void setExchangeMetadataListener(ExchangeMetadataListener exchangeMetadataListener) {
@@ -1963,6 +1967,7 @@ public class ReplicaThread implements Runnable {
     private long getRequestStartTimeMs;
     private long exchangeMetadataStartTimeInMs;
     private long fixMissingStoreKeysStartTimeInMs;
+    long finishTime;
 
     /**
      * Constructor of {@link RemoteReplicaGroup}.
@@ -1979,6 +1984,7 @@ public class ReplicaThread implements Runnable {
       this.remoteDataNode = dataNodeId;
       this.isNonProgressStandbyReplicaGroup = isNonProgressStandbyReplicaGroup;
       this.id = id;
+      finishTime = 0;
       if (isNonProgressStandbyReplicaGroup) {
         exchangeMetadataResponseList = remoteReplicaInfos.stream()
             .map(remoteReplicaInfo -> new ExchangeMetadataResponse(remoteReplicaInfo.getExchangeMetadataResponse()))
@@ -2001,6 +2007,18 @@ public class ReplicaThread implements Runnable {
       logger.trace(
           "Remote node: {} Thread name: {} Adding a new RemoteReplicaGroup {}, ReplicaInfos {}, State {} isNonProgressStandByReplicaGroup {}",
           remoteDataNode, threadName, id, remoteReplicaInfos, state, isNonProgressStandbyReplicaGroup);
+    }
+
+    public long getFinishTime() {
+      return finishTime;
+    }
+
+    public void setFinishTime(long finishTime) {
+      this.finishTime = finishTime;
+    }
+
+    public boolean shouldSetFinishTime() {
+      return isDone() && finishTime == 0;
     }
 
     public List<RemoteReplicaInfo> getRemoteReplicaInfos() {
