@@ -179,7 +179,7 @@ public class VcrServer {
         throw new InstantiationException("azureNameSchemeVersion must be 1 but is "
             + azureCloudConfig.azureNameSchemeVersion);
       }
-      if (cloudConfig.ambryBackupVersion != CloudConfig.AMBRY_BACKUP_VERSION_2) {
+      if (!cloudConfig.ambryBackupVersion.equalsIgnoreCase(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
         throw new InstantiationException("ambryBackupVersion must be 2.0 but is "
             + cloudConfig.ambryBackupVersion);
       }
@@ -213,7 +213,7 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
 
-      AzureCloudDestinationFactory cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass,
+      CloudDestinationFactory cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass,
           properties, registry, clusterMap, accountService);
       cloudDestination = cloudDestinationFactory.getCloudDestination();
       vcrClusterParticipant =
