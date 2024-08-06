@@ -827,12 +827,13 @@ public class RestUtils {
   }
 
   /**
-   * Return true if the request set 100-continue in Except header and it's a named blob base put request.
+   * Return true if the request set 100-continue in Except header and it's a named blob base put request or multi-upload post.
    * @param restRequest the {@link RestRequest}.
    * @return
    */
-  public static boolean isPutRequestAndExpectContinue(RestRequest restRequest) {
-    return CONTINUE.equals(restRequest.getArgs().get(EXPECT)) && restRequest.getRestMethod().equals(RestMethod.PUT);
+  public static boolean isPutOrPostRequestAndExpectContinue(RestRequest restRequest) {
+    return CONTINUE.equals(restRequest.getArgs().get(EXPECT)) && (restRequest.getRestMethod().equals(RestMethod.PUT)
+        || restRequest.getRestMethod().equals(RestMethod.POST));
   }
 
   /**

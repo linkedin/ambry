@@ -117,6 +117,12 @@ public class MockRestRequestService implements RestRequestService {
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       try {
+        if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
+          restResponseChannel.setStatus(ResponseStatus.Continue);
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          handleResponse(restRequest, restResponseChannel, null, null);
+          return;
+        }
         restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
         restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
