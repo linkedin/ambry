@@ -456,23 +456,28 @@ public class ReplicaThread implements Runnable {
     } catch (Throwable e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
-      emmitReplicationCycleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, time.milliseconds());
+      emitReplicationCycleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, time.milliseconds());
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
   }
 
-  private void emmitReplicationCycleMetrics(List<RemoteReplicaGroup> groups, long roundStartTime,
-      long roundEndTime) {
-
+  /**
+   * Emits metrics for
+   * 1. Replication cycle duration
+   * 2. Cumulative time groups are idle in a cycle i.e groups are in DONE state but cycle continues
+   * 3. Cumulative percentage of time per cycle groups are idle
+   * @param groups list of RemoteReplicaGroups
+   * @param roundStartTime start time of replication cycle
+   * @param roundEndTime end time of replication cycle
+   */
+  private void emitReplicationCycleMetrics(List<RemoteReplicaGroup> groups, long roundStartTime, long roundEndTime) {
     replicationMetrics.updateOneCycleReplicationTime(roundEndTime - roundStartTime, replicatingFromRemoteColo,
         datacenterName);
 
     long totalIdleTime = 0;
-
     for (RemoteReplicaGroup group : groups) {
       totalIdleTime = totalIdleTime + group.getFinishTime() - roundStartTime;
     }
-
     replicationMetrics.updateReplicaBatchTotalIdleTimeMs(totalIdleTime, replicatingFromRemoteColo, datacenterName);
 
     long idleTimePercentage = (totalIdleTime * 100) / (groups.size() * (roundEndTime - roundStartTime));
