@@ -68,6 +68,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
@@ -170,19 +171,26 @@ public class S3MultipartCompleteUploadHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics, securityCheckResult -> {
-        // 1. Add headers required by Ambry. These become the blob properties.
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
-        String accountName = namedBlobPath.getAccountName();
-        restRequest.setArg(Headers.SERVICE_ID, accountName);
-        //Setting default content-type if not provide by S3 client
-        if (restRequest.getArgs().get(Headers.CONTENT_TYPE) == null) {
-          restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, RestUtils.OCTET_STREAM_CONTENT_TYPE);
+        if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
+          restResponseChannel.setStatus(ResponseStatus.Continue);
+          //We need to set the content length in order to be a full http response in NettyResponseChannel::maybeWriteResponseMetadata.
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          finalCallback.onCompletion(null, null);
         } else {
-          restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+          // 1. Add headers required by Ambry. These become the blob properties.
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+          String accountName = namedBlobPath.getAccountName();
+          restRequest.setArg(Headers.SERVICE_ID, accountName);
+          //Setting default content-type if not provide by S3 client
+          if (restRequest.getArgs().get(Headers.CONTENT_TYPE) == null) {
+            restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, RestUtils.OCTET_STREAM_CONTENT_TYPE);
+          } else {
+            restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+          }
+          restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+          BlobInfo blobInfo = getBlobInfoFromRequest();
+          securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
         }
-        restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
-        BlobInfo blobInfo = getBlobInfoFromRequest();
-        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
       }, uri, LOGGER, finalCallback);
     }
 
