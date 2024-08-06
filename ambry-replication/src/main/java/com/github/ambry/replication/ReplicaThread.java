@@ -480,9 +480,12 @@ public class ReplicaThread implements Runnable {
     }
     replicationMetrics.updateReplicaBatchTotalIdleTimeMs(totalIdleTime, replicatingFromRemoteColo, datacenterName);
 
-    long idleTimePercentage = (totalIdleTime * 100) / (groups.size() * (roundEndTime - roundStartTime));
-    replicationMetrics.updateReplicaBatchTotalIdleTimePercentage(idleTimePercentage, replicatingFromRemoteColo,
-        datacenterName);
+    long cumulativeTime = groups.size() * (roundEndTime - roundStartTime);
+    if (cumulativeTime > 0) {
+      long idleTimePercentage = (totalIdleTime * 100) / cumulativeTime;
+      replicationMetrics.updateReplicaBatchTotalIdleTimePercentage(idleTimePercentage, replicatingFromRemoteColo,
+          datacenterName);
+    }
   }
 
   void setExchangeMetadataListener(ExchangeMetadataListener exchangeMetadataListener) {
