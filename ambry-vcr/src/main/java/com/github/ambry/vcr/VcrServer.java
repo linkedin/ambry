@@ -170,7 +170,7 @@ public class VcrServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       properties.verify();
       // These are required to be at these values going forward for backups.
-      if (!azureCloudConfig.azureBlobContainerStrategy.equals(
+      if (!azureCloudConfig.azureBlobContainerStrategy.equalsIgnoreCase(
           String.valueOf(AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION))) {
         throw new InstantiationException("azureBlobContainerStrategy must be PARTITION but is "
             + azureCloudConfig.azureBlobContainerStrategy);
