@@ -75,8 +75,9 @@ public class AzureCloudConfig {
   public static final int DEFAULT_CONTAINER_COMPACTION_ABS_PURGE_LIMIT = 100;
   public static final double DEFAULT_AZURE_STORAGE_CLIENT_REFRESH_FACTOR = 0.9F;
 
-  public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
-  public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
+  public static final int DEFAULT_NAME_SCHEME_VERSION = 1;
+  public static final String DEFAULT_CONTAINER_STRATEGY =
+      String.valueOf(AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION);
   public static final String DEFAULT_AZURE_STORAGE_CLIENT_CLASS =
       "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient";
 
@@ -308,12 +309,10 @@ public class AzureCloudConfig {
 
   // UNUSED
   @Config(AZURE_NAME_SCHEME_VERSION)
-  @Default("0")
   public final int azureNameSchemeVersion;
 
   // UNUSED
   @Config(AZURE_BLOB_CONTAINER_STRATEGY)
-  @Default("Partition")
   public final String azureBlobContainerStrategy;
 
   /**
