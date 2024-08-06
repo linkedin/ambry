@@ -1975,7 +1975,7 @@ public class ReplicaThread implements Runnable {
     private long getRequestStartTimeMs;
     private long exchangeMetadataStartTimeInMs;
     private long fixMissingStoreKeysStartTimeInMs;
-    long finishTime;
+    private long finishTime;
 
     /**
      * Constructor of {@link RemoteReplicaGroup}.
