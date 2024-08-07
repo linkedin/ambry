@@ -467,20 +467,20 @@ public class ReplicaThread implements Runnable {
    * 2. Cumulative time groups are idle in a cycle i.e groups are in DONE state but cycle continues
    * 3. Cumulative percentage of time per cycle groups are idle
    * @param groups list of RemoteReplicaGroups
-   * @param roundStartTime start time of replication cycle
-   * @param roundEndTime end time of replication cycle
+   * @param cycleStartTime start time of replication cycle
+   * @param cycleEndTime end time of replication cycle
    */
-  private void emitReplicationCycleMetrics(List<RemoteReplicaGroup> groups, long roundStartTime, long roundEndTime) {
-    replicationMetrics.updateOneCycleReplicationTime(roundEndTime - roundStartTime, replicatingFromRemoteColo,
+  private void emitReplicationCycleMetrics(List<RemoteReplicaGroup> groups, long cycleStartTime, long cycleEndTime) {
+    replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - cycleStartTime, replicatingFromRemoteColo,
         datacenterName);
 
     long totalIdleTime = 0;
     for (RemoteReplicaGroup group : groups) {
-      totalIdleTime = totalIdleTime + roundEndTime - group.getFinishTime();
+      totalIdleTime = totalIdleTime + cycleEndTime - group.getFinishTime();
     }
     replicationMetrics.updateReplicaBatchTotalIdleTimeMs(totalIdleTime, replicatingFromRemoteColo, datacenterName);
 
-    long cumulativeTime = groups.size() * (roundEndTime - roundStartTime);
+    long cumulativeTime = groups.size() * (cycleEndTime - cycleStartTime);
     if (cumulativeTime > 0) {
       long idleTimePercentage = (totalIdleTime * 100) / cumulativeTime;
       replicationMetrics.updateReplicaBatchTotalIdleTimePercentage(idleTimePercentage, replicatingFromRemoteColo,
