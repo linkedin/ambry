@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -82,6 +83,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mock;
 import org.mockito.Mockito;
 import sun.nio.ch.FileChannelImpl;
 
@@ -224,6 +226,27 @@ public class BlobStoreTest {
       } else {
         delete(id);
       }
+      return EMPTY_RESULT;
+    }
+  }
+
+  /**
+   * Batch delete for a list of blob.
+   */
+  private class BatchDeleter implements Callable<CallableResult> {
+
+    final List<MockId> ids;
+
+    /**
+     * @param ids {@link List<MockId>} to delete.
+     */
+    BatchDeleter(List<MockId> ids) {
+      this.ids = ids;
+    }
+
+    @Override
+    public CallableResult call() throws Exception {
+      batchDelete(ids);
       return EMPTY_RESULT;
     }
   }
@@ -745,6 +768,29 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests the case where there are many concurrent BATCH_DELETEs each deleting a list of ids
+   * @throws Exception
+   */
+  @Test
+  public void concurrentBatchDeleteTest() throws Exception {
+    int extraBlobCount = 2000 / PUT_RECORD_SIZE + 1;
+    put(extraBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    List<BatchDeleter> batchDeleters = new ArrayList<>(liveKeys.size());
+    List<MockId> liveKeysArray = new ArrayList<>(liveKeys);
+    int chunkSize = 5;
+    for (int i=0; i<liveKeysArray.size(); i+=chunkSize){
+      batchDeleters.add(new BatchDeleter(liveKeysArray.subList(i, Math.min(i+chunkSize, liveKeysArray.size()))));
+    }
+    ExecutorService executorService = Executors.newFixedThreadPool(batchDeleters.size());
+    try {
+      List<Future<CallableResult>> futures = executorService.invokeAll(batchDeleters);
+      verifyBatchDeleteFutures(batchDeleters, futures);
+    } finally {
+      executorService.shutdownNow();
+    }
+  }
+
+  /**
    * Tests the case where there are many concurrent FORCE DELETEs on different Blob IDs or on same BLob ID.
    * @throws Exception
    */
@@ -848,6 +894,50 @@ public class BlobStoreTest {
     }
   }
 
+
+  /**
+   * Test when batch deleting the same list of blobs at the same time. Only one batch delete can go through and only
+   * one operation's log and index record should be persisted.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentBatchDeleteTestOnSameBlobList() throws Exception {
+    final List<MockId> idsToDelete = put(5, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    assertNotNull(idsToDelete);
+    int count = 2;
+    long logEndOffsetBeforeDelete = store.getLogEndOffsetInBytes();
+    long indexEndOffsetBeforeDelete = store.getSizeInBytes();
+    ExecutorService executorService = Executors.newFixedThreadPool(count);
+    try {
+      List<Future<StoreBatchDeleteInfo>> futures = new ArrayList<>();
+      for (int i = 0; i < count; i++) {
+        futures.add(executorService.submit(() -> batchDelete(idsToDelete)));
+      }
+      int failedCount = 0;
+      int succeededCount = 0;
+      for (Future<StoreBatchDeleteInfo> future : futures) {
+        try {
+          StoreBatchDeleteInfo storeBatchDeleteInfo = future.get();
+          succeededCount++;
+          assertEquals(idsToDelete.size(), storeBatchDeleteInfo.getMessageErrorInfos().size());
+        } catch (ExecutionException e) {
+          failedCount++;
+          assertTrue(e.getCause() instanceof StoreException);
+          assertEquals(StoreErrorCodes.Unknown_Error, ((StoreException) e.getCause()).getErrorCode());
+        }
+      }
+
+      assertEquals(1, succeededCount);
+      assertEquals(count - 1, failedCount);
+      long logEndOffsetAfterDelete = store.getLogEndOffsetInBytes();
+      long indexEndOffsetAfterDelete = store.getSizeInBytes();
+      assertEquals((long) DELETE_RECORD_SIZE * idsToDelete.size(), logEndOffsetAfterDelete - logEndOffsetBeforeDelete);
+      assertEquals((long) DELETE_RECORD_SIZE * idsToDelete.size(), indexEndOffsetAfterDelete - indexEndOffsetBeforeDelete);
+    } finally {
+      executorService.shutdownNow();
+    }
+  }
+
   /**
    * Test the case where a Put happens while a Delete is doing the preliminary check.
    * Since the delete happens before put, delete should return a ID_NOT_FOUND error.
@@ -874,6 +964,38 @@ public class BlobStoreTest {
         assertTrue(e.getCause() instanceof StoreException);
         assertEquals(StoreErrorCodes.ID_Not_Found, ((StoreException) e.getCause()).getErrorCode());
       }
+    } finally {
+      executorService.shutdownNow();
+    }
+  }
+
+  /**
+   * Test the case where a Put happens while a Batch_Delete is doing the preliminary check.
+   * Since the batch delete happens before put, delete should return a ID_NOT_FOUND error.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentBatchDeleteAndPutTest() throws Exception {
+    List<MockId> ids = new ArrayList<>(Arrays.asList(getUniqueId(), getUniqueId()));
+
+    ExecutorService executorService = Executors.newFixedThreadPool(2);
+    try {
+      Future<StoreBatchDeleteInfo> batchDeleteFuture = executorService.submit(() -> {
+        List<MessageInfo> infoList = new ArrayList<>();
+        for (MockId id : ids) {
+          MessageInfo info =
+              new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+                  MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+          infoList.add(info);
+        }
+        return store.batchDelete(infoList);
+      });
+
+      StoreBatchDeleteInfo storeBatchDeleteInfo = batchDeleteFuture.get();
+      for (MessageErrorInfo messageErrorInfo: storeBatchDeleteInfo.getMessageErrorInfos()){
+        assertEquals(StoreErrorCodes.ID_Not_Found, messageErrorInfo.getError());
+      }
+
     } finally {
       executorService.shutdownNow();
     }
@@ -1438,6 +1560,29 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests error cases for {@link BlobStore#batchDelete}.
+   * @throws StoreException
+   */
+  @Test
+  public void batchDeleteErrorCasesTest() throws StoreException {
+    // IDs which are already deleted
+    Iterator<MockId> deletedKeysIterator = deletedKeys.iterator();
+    List<MockId> idsAlreadyDeleted = new ArrayList<>(Arrays.asList(deletedKeysIterator.next(), deletedKeysIterator.next()));
+    verifyBatchDeleteSameFailure(idsAlreadyDeleted, StoreErrorCodes.ID_Deleted);
+
+    // IDs that do not exist
+    verifyBatchDeleteSameFailure(Arrays.asList(getUniqueId(), getUniqueId()), StoreErrorCodes.ID_Not_Found);
+
+    // Duplicate ids in input should fail
+    MockId id = getUniqueId();
+    try{
+      verifyBatchDeleteSameFailure(Arrays.asList(id, id), null);
+    } catch(IllegalArgumentException e){
+      // expected. Nothing to do.
+    }
+  }
+
+  /**
    * Tests error cases for {@link BlobStore#undelete(MessageInfo)}.
    * @throws StoreException
    */
@@ -1495,6 +1640,37 @@ public class BlobStoreTest {
         mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyDeleteFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
+          StoreErrorCodes.Authorization_Failure);
+    }
+  }
+
+
+  /**
+   * Test BATCH_DELETE with valid accountId and containerId.
+   */
+  @Test
+  public void batchDeleteAuthorizationSuccessTest() throws Exception {
+    short[] accountIds = {-1, Utils.getRandomShort(TestUtils.RANDOM), -1};
+    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
+    for (int i = 0; i < accountIds.length; i++) {
+      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
+      batchDelete(Collections.singletonList(new MockId(mockId.getID(), mockId.getAccountId(), mockId.getContainerId())));
+      verifyBatchDeleteSameFailure(Collections.singletonList(mockId), StoreErrorCodes.ID_Deleted);
+    }
+  }
+
+  /**
+   * Test BATCH_DELETE with invalid accountId/containerId. Failure is expected.
+   */
+  @Test
+  public void batchDeleteAuthorizationFailureTest() throws Exception {
+    MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    short[] accountIds =
+        {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(TestUtils.RANDOM)};
+    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+        mockId.getContainerId()};
+    for (int i = 0; i < accountIds.length; i++) {
+      verifyBatchDeleteSameFailure(Collections.singletonList(new MockId(mockId.getID(), accountIds[i], containerIds[i])),
           StoreErrorCodes.Authorization_Failure);
     }
   }
@@ -2986,6 +3162,16 @@ public class BlobStoreTest {
   }
 
   /**
+   * Batch delete for a list of blobs in a partition
+   * @param idsToDelete the {@link List<MockId>} of the blobs to BATCH_DELETE.
+   * @return the {@link StoreBatchDeleteInfo} at the partition level
+   * @throws StoreException
+   */
+  private StoreBatchDeleteInfo batchDelete(List<MockId> idsToDelete) throws StoreException {
+    return batchDelete(idsToDelete, time.milliseconds());
+  }
+
+  /**
    * Deletes a blob with a given operationTimeMs
    * @param idToDelete the {@link MockId} of the blob to DELETE.
    * @param operationTimeMs the operationTimeMs in {@link MessageInfo}.
@@ -3011,6 +3197,34 @@ public class BlobStoreTest {
     undeletedKeys.remove(idToDelete);
     liveKeys.remove(idToDelete);
     return info;
+  }
+
+  /**
+   * Batch Delete a list of blobs with a given operationTimeMs
+   * @param idsToDelete the {@link List<MockId>} of the blobs to BATCH_DELETE.
+   * @param operationTimeMs the operationTimeMs in {@link MessageInfo}.
+   * @return the {@link StoreBatchDeleteInfo} response of store.batchDelete.
+   * @throws StoreException
+   */
+  private StoreBatchDeleteInfo batchDelete(List<MockId> idsToDelete, long operationTimeMs) throws StoreException {
+    List<MessageInfo> msgInfoList = new ArrayList<>();
+    for (MockId mockId: idsToDelete){
+      MessageInfo putMsgInfo = allKeys.get(mockId).getFirst();
+      MessageInfo info = new MessageInfo(mockId, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
+          operationTimeMs, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+      msgInfoList.add(info);
+    }
+    StoreBatchDeleteInfo storeBatchDeleteInfo = store.batchDelete(msgInfoList);
+    for (MessageErrorInfo messageErrorInfo: storeBatchDeleteInfo.getMessageErrorInfos()){
+      if (messageErrorInfo.getError() != null){
+        throw new StoreException("Batch delete failed", StoreErrorCodes.Unknown_Error);
+      }
+    }
+
+    deletedKeys.addAll(idsToDelete);
+    undeletedKeys.removeAll(idsToDelete);
+    liveKeys.removeAll(idsToDelete);
+    return storeBatchDeleteInfo;
   }
 
   /**
@@ -3653,6 +3867,25 @@ public class BlobStoreTest {
     }
   }
 
+
+  /**
+   * Verifies that the batch deletes are successful. Also ensures that a GET for the {@link List<MockId>} fails with
+   * {@link StoreErrorCodes#ID_Deleted}.
+   * @param batchDeleters list of {@link BatchDeleter} instances.
+   * @param futures list of {@link Future}s returned from submitting the {@code deleters} to an {@link ExecutorService}
+   * @throws Exception
+   */
+  private void verifyBatchDeleteFutures(List<BatchDeleter> batchDeleters, List<Future<CallableResult>> futures) throws Exception {
+    for (int i = 0; i < batchDeleters.size(); i++) {
+      List<MockId> ids = batchDeleters.get(i).ids;
+      Future<CallableResult> future = futures.get(i);
+      future.get(1, TimeUnit.SECONDS);
+      for (MockId id : ids) {
+        verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
+      }
+    }
+  }
+
   /**
    * Verifies that the updates are successful. Also ensures that a GET for the {@link MockId} returns data that confirms
    * that the TTL is infinite
@@ -3753,6 +3986,25 @@ public class BlobStoreTest {
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
     }
+  }
+
+  /**
+   * Verifies that BATCH_DELETE fails with same error for all blobs.
+   * @param idsToDelete {@link List<MockId>} for BATCH_DELETE.
+   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure for all blobs
+   */
+  private void verifyBatchDeleteSameFailure(List<MockId> idsToDelete, StoreErrorCodes expectedErrorCode)
+      throws StoreException {
+    List<MessageInfo> infosToDelete = new ArrayList<>();
+    for (MockId id : idsToDelete) {
+      infosToDelete.add(new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+          MessageInfo.LIFE_VERSION_FROM_FRONTEND));
+    }
+    StoreBatchDeleteInfo storeBatchDeleteInfo = store.batchDelete(infosToDelete);
+    for (MessageErrorInfo messageErrorInfo: storeBatchDeleteInfo.getMessageErrorInfos()){
+      assertEquals("Unexpected StoreErrorCode", expectedErrorCode, messageErrorInfo.getError());
+    }
+    assertEquals("Input output size mismatch", idsToDelete.size(), storeBatchDeleteInfo.getMessageErrorInfos().size());
   }
 
   // updateTtlErrorCasesTest() helpers

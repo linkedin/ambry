@@ -51,7 +51,11 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BatchDeletePartitionRequestInfo;
+import com.github.ambry.protocol.BatchDeletePartitionResponseInfo;
 import com.github.ambry.protocol.BatchDeleteRequest;
+import com.github.ambry.protocol.BatchDeleteResponse;
+import com.github.ambry.protocol.BlobDeleteStatus;
 import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
@@ -86,8 +90,10 @@ import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
+import com.github.ambry.store.MessageErrorInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
@@ -106,6 +112,7 @@ import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.rmi.ServerError;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -113,6 +120,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.apache.logging.log4j.core.jmx.Server;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -209,6 +217,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case DeleteRequest:
           handleDeleteRequest(networkRequest);
+          break;
+        case BatchDeleteRequest:
+          handleBatchDeleteRequest(networkRequest);
           break;
         case TtlUpdateRequest:
           handleTtlUpdateRequest(networkRequest);
@@ -506,6 +517,122 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
             metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  /**
+   * Handles a {@link BatchDeleteRequest} and sends out the response via the {@link RequestResponseChannel}.
+   * @param request the {@link NetworkRequest} that contains the {@link BatchDeleteRequest}.
+   * @throws IOException if there is an I/O error reading from the {@link NetworkRequest}.
+   * @throws InterruptedException if the operation is interrupted.
+   */
+  @Override
+  public void handleBatchDeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
+    logger.info("Batch delete request received.");
+    BatchDeleteRequest batchDeleteRequest;
+    if (request instanceof LocalChannelRequest) {
+      // This is a case where handleDeleteRequest is called when frontends are talking to Azure. In this case, this method
+      // is called by request handler threads running within the frontend router itself. So, the request can be directly
+      // referenced as java objects without any need for deserialization.
+      batchDeleteRequest = (BatchDeleteRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
+    } else {
+      batchDeleteRequest = BatchDeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    }
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+    boolean operationSuccessful = true;
+    ServerErrorCode operationServerErrorCode = ServerErrorCode.No_Error;
+    List<BatchDeletePartitionResponseInfo> partitionResponseInfoList = new ArrayList<>();
+    BatchDeleteResponse response = new BatchDeleteResponse(batchDeleteRequest.getCorrelationId(), batchDeleteRequest.getClientId(), new ArrayList<>(), ServerErrorCode.No_Error);
+    for (BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo : batchDeleteRequest.getPartitionRequestInfoList()) {
+      BatchDeletePartitionResponseInfo partitionResponseInfo = null;
+      try {
+        List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(batchDeletePartitionRequestInfo.getBlobIds());
+        ServerErrorCode error =
+            validateRequest(batchDeletePartitionRequestInfo.getPartition(), RequestOrResponseType.BatchDeleteRequest,
+                false);
+        if (error != ServerErrorCode.No_Error) {
+          logger.error("Validating delete request failed with error {} for request {}", error, batchDeleteRequest);
+          List<BlobDeleteStatus> blobsDeleteStatuses = new ArrayList<>();
+          for (StoreKey storeKey: batchDeletePartitionRequestInfo.getBlobIds()){
+            blobsDeleteStatuses.add(new BlobDeleteStatus((BlobId) storeKey, error));
+          }
+          partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobsDeleteStatuses);
+        } else {
+          List<MessageInfo> infoList = new ArrayList<>();
+          for (StoreKey convertedStoreKey : convertedStoreKeys) {
+            BlobId convertedBlobId = (BlobId) convertedStoreKey;
+            infoList.add(new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
+                convertedBlobId.getContainerId(), batchDeleteRequest.getDeletionTimeInMs()).isDeleted(true)
+                .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+                .build());
+          }
+          Store storeToDelete = storeManager.getStore(batchDeletePartitionRequestInfo.getPartition());
+          StoreBatchDeleteInfo storeBatchDeleteInfo = storeToDelete.batchDelete(infoList);
+          List<BlobDeleteStatus> blobDeleteStatuses = new ArrayList<>();
+          for (MessageErrorInfo messageErrorInfo : storeBatchDeleteInfo.getMessageErrorInfos()){
+            ServerErrorCode msgInfoServerErrorCode = messageErrorInfo.getError() == null ? ServerErrorCode.No_Error: ErrorMapping.getStoreErrorMapping(messageErrorInfo.getError());
+            blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)messageErrorInfo.getMessageInfo().getStoreKey(), msgInfoServerErrorCode));
+          }
+          partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobDeleteStatuses);
+
+          if (notification != null) {
+            for (StoreKey convertedStoreKey : convertedStoreKeys) {
+              notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
+                  convertedStoreKey.getID(), BlobReplicaSourceType.PRIMARY);
+            }
+          }
+        }
+      } catch (Exception e) {
+        List<BlobDeleteStatus> blobDeleteStatuses = new ArrayList<>();
+        for (StoreKey storeKey : batchDeletePartitionRequestInfo.getBlobIds()){
+          blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)storeKey, ServerErrorCode.Bad_Request));
+        }
+        // All blobs failed to delete
+        partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobDeleteStatuses);
+        metrics.unExpectedStoreDeleteError.inc();
+      } finally {
+        long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+        totalTimeSpent += processingTime;
+        publicAccessLogger.info("{} {} processingTime {}", batchDeleteRequest, response, processingTime);
+        // Update request metrics.
+        RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+        batchDeleteRequest.accept(metricsUpdater);
+        for (BlobDeleteStatus blobDeleteStatus: partitionResponseInfo.getBlobsDeleteStatus()){
+          // Set operation level error to Bad_Request if any of the blobs fails
+          ServerErrorCode error = blobDeleteStatus.getStatus();
+          if (error != ServerErrorCode.No_Error) {
+            // Handling for control test when request type is disabled + setting default to Bad_Request for any error.
+            operationServerErrorCode = error==ServerErrorCode.Temporarily_Disabled?ServerErrorCode.Temporarily_Disabled:ServerErrorCode.Bad_Request;
+            boolean logInErrorLevel = false;
+            if (error == ServerErrorCode.Blob_Not_Found) {
+              metrics.idNotFoundError.inc();
+            } else if (error == ServerErrorCode.Blob_Expired) {
+              metrics.ttlExpiredError.inc();
+            } else if (error == ServerErrorCode.Blob_Deleted) {
+              metrics.idDeletedError.inc();
+            } else if (error == ServerErrorCode.Blob_Authorization_Failure) {
+              metrics.deleteAuthorizationFailure.inc();
+            } else {
+              logInErrorLevel = true;
+              metrics.unExpectedStoreDeleteError.inc();
+            }
+            if (logInErrorLevel) {
+              logger.error("Store exception on a delete within a batch delete operation with error code {} for request {}", error, batchDeleteRequest);
+            } else {
+              logger.trace("Store exception on a delete within a batch delete operation with error code {} for request {}", error, batchDeleteRequest);
+            }
+          }
+        }
+        partitionResponseInfoList.add(partitionResponseInfo);
+
+      }
+    }
+    response = new BatchDeleteResponse(batchDeleteRequest.getCorrelationId(), batchDeleteRequest.getClientId(), partitionResponseInfoList, operationServerErrorCode);
+    logger.info(response.toString());
+    requestResponseChannel.sendResponse(response, request,
+    new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
+        metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
   }
 
   @Override
@@ -1863,7 +1990,7 @@ public class AmbryRequests implements RequestAPI {
 
     @Override
     public void visit(BatchDeleteRequest deleteRequest) {
-      
+
     }
 
     @Override
