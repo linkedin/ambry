@@ -476,7 +476,7 @@ public class ReplicaThread implements Runnable {
 
     long totalIdleTime = 0;
     for (RemoteReplicaGroup group : groups) {
-      totalIdleTime = totalIdleTime + group.getFinishTime() - roundStartTime;
+      totalIdleTime = totalIdleTime + roundEndTime - group.getFinishTime();
     }
     replicationMetrics.updateReplicaBatchTotalIdleTimeMs(totalIdleTime, replicatingFromRemoteColo, datacenterName);
 
