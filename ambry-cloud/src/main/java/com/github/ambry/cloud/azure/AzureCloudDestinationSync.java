@@ -668,33 +668,38 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUpdateDeleteTimeLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    if (azureCloudConfig.azureBlobDeletePolicy.equals(AzureBlobDeletePolicy.IMMEDIATE)) {
-      return eraseBlob(createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath),
-          "CUSTOMER_DELETE_REQUEST");
-    }
-    // AzureBlobDeletePolicy.EVENTUAL
-    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
-    Map<String, String> cloudMetadata = blobProperties.getMetadata();
-    // lifeVersion must always be present
-    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+    String errfmt = "Uninitialized string";
     try {
+      // AzureBlobDeletePolicy.IMMEDIATE
+      if (azureCloudConfig.azureBlobDeletePolicy.equals(AzureBlobDeletePolicy.IMMEDIATE)) {
+        errfmt = "Failed to delete blob %s in Azure blob storage due to (%s)";
+        return eraseBlob(createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath),
+            "CUSTOMER_DELETE_REQUEST");
+      }
+
+      // AzureBlobDeletePolicy.EVENTUAL
+      BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+      Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
+      // lifeVersion must always be present
+      short cloudlifeVersion = Short.parseShort(cloudMetadataCached.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
       if (cloudlifeVersion > lifeVersion) {
         String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
             blobIdStr, cloudlifeVersion, lifeVersion);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.Life_Version_Conflict);
       }
-      if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
+      if (cloudlifeVersion == lifeVersion && cloudMetadataCached.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.ID_Deleted);
       }
+      errfmt = "Failed to update deleteTime of blob %s in Azure blob storage due to (%s)";
       Map<String, Object> newMetadata = new HashMap<>();
       newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
       newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
-      newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
+      newMetadata.forEach((k,v) -> cloudMetadataCached.put(k, String.valueOf(v)));
       logger.trace("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
-      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobPropertiesCached);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateDeleteTimeSuccessRate.mark();
       logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
@@ -704,12 +709,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       throw e;
     } catch (Throwable t) {
+      // not a good metric name, but too late to change it now because all the dashboards use it
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
-      String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
+      String error = String.format(errfmt, blobLayout, t.getMessage());
       logger.error(error);
       throw new CloudStorageException(error);
     } finally {
       storageTimer.stop();
+      getThreadLocalMdCache().deleteObject(blobLayout.blobFilePath);
     } // try-catch
   }
 
@@ -725,18 +732,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
-    Map<String, String> cloudMetadata = blobProperties.getMetadata();
+    BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+    Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     try {
       // If we are here, it means the cloudLifeVersion >= replicaLifeVersion.
       // Cloud is either ahead of server or caught up.
       // lifeVersion must always be present
-      short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+      short cloudlifeVersion = Short.parseShort(cloudMetadataCached.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
       // if cloudLifeVersion == replicaLifeVersion && deleteTime absent in cloudMetatadata, then something is wrong. Throw Life_Version_Conflict.
       // if cloudLifeVersion == replicaLifeVersion && deleteTime != -1, then something is wrong. Throw Life_Version_Conflict.
-      if (cloudlifeVersion == lifeVersion && !cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
+      if (cloudlifeVersion == lifeVersion && !cloudMetadataCached.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         String error = String.format("Failed to undelete blob %s as it is undeleted in cloud", blobIdStr);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.ID_Undeleted);
@@ -749,10 +756,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
       }
       // Just remove the deletion time, instead of setting it to -1.
       // It just leads to two cases in code later in compaction, for deleted blobs.
-      newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
-      cloudMetadata.remove(CloudBlobMetadata.FIELD_DELETION_TIME);
+      newMetadata.forEach((k,v) -> cloudMetadataCached.put(k, String.valueOf(v)));
+      cloudMetadataCached.remove(CloudBlobMetadata.FIELD_DELETION_TIME);
       logger.trace("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
-      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobPropertiesCached);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUndeleteSucessRate.mark();
       logger.trace("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
@@ -782,6 +789,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       throw new CloudStorageException(error);
     } finally {
       storageTimer.stop();
+      getThreadLocalMdCache().deleteObject(blobLayout.blobFilePath);
     } // try-catch
   }
 
@@ -819,31 +827,31 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
-    Map<String, String> cloudMetadata = blobProperties.getMetadata();
+    BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+    Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
     // lifeVersion must always be present because we add it explicitly before PUT
-    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+    short cloudlifeVersion = Short.parseShort(cloudMetadataCached.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
     try {
       // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
       // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
       // It is absorbed by applyTtlUpdate::L1395.
       // The validator doesn't check for this, perhaps another gap in legacy code.
-      if (isDeleted(cloudMetadata)) {
+      if (isDeleted(cloudMetadataCached)) {
         // Replication must first undelete the deleted blob, and then update-TTL.
         String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.ID_Deleted);
       }
-      if (!cloudMetadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
+      if (!cloudMetadataCached.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
         String error = String.format("Unable to update TTL of %s as its TTL is already updated cloud", blobIdStr);
         logger.trace(error);
         throw new StoreException(error, StoreErrorCodes.Already_Updated);
       }
       // Just remove the expiration time, instead of setting it to -1.
       // It just leads to two cases in code later in compaction and recovery, for permanent blobs.
-      cloudMetadata.remove(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
+      cloudMetadataCached.remove(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
       logger.trace("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
-      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobPropertiesCached);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateTTLSucessRate.mark();
       logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
@@ -860,6 +868,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       throw new CloudStorageException(error);
     } finally {
       storageTimer.stop();
+      getThreadLocalMdCache().deleteObject(blobLayout.blobFilePath);
     } // try-catch
   }
 
@@ -881,8 +890,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     for (BlobId blobId: blobIds) {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
-        BlobProperties blobProperties = getBlobPropertiesCached(blobLayout);
-        cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
+        BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+        cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobPropertiesCached.getMetadata()));
       } catch (CloudStorageException cse) {
         throw cse;
       } catch (Throwable t) {
