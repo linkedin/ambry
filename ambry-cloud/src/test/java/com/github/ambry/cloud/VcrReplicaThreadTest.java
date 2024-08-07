@@ -143,43 +143,42 @@ public class VcrReplicaThreadTest {
   public void testThreadLocalMetadataCache() throws CloudStorageException, StoreException {
     String data = "hello world!";
     HashMap<BlobId, CloudBlobMetadata> blobs = createBlob(data, 5);
-    int iter = 0;
+    int iter = 1;
     for (BlobId blob : blobs.keySet()) {
       CloudBlobMetadata metadata = blobs.get(blob);
       short version = metadata.getLifeVersion();
       // put blob
       azureClient.uploadBlob(blob, data.length(), metadata,
           new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
-      assertEquals(metadata, getBlobMetadata(blob)); // same content
+      assertEquals(metadata, getBlobMetadata(blob)); // same content; md-cache miss
       assertFalse(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
 
       // remove TTL
-      azureClient.updateBlobExpiration(blob, Utils.Infinite_Time, null);
-      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      azureClient.updateBlobExpiration(blob, Utils.Infinite_Time, null); // md-cache hit
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob)); // md-cache miss
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
 
       // delete blob
       long now = System.currentTimeMillis();
-      azureClient.deleteBlob(blob, now, (short) (version + 1), null);
-      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      azureClient.deleteBlob(blob, now, (short) (version + 1), null); // md-cache hit
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob)); // md-cache miss
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertTrue(getBlobMetadata(blob).isDeleted());
       assertFalse(getBlobMetadata(blob).isUndeleted());
       assertEquals(now, getBlobMetadata(blob).getDeletionTime());
 
       // undelete blob
-      azureClient.undeleteBlob(blob, (short) (version + 2), null);
-      verifyConstantMetadataFields(metadata, getBlobMetadata(blob));
+      azureClient.undeleteBlob(blob, (short) (version + 2), null); // md-cache hit
+      verifyConstantMetadataFields(metadata, getBlobMetadata(blob)); // md-cache miss
       assertTrue(getBlobMetadata(blob).isTtlUpdated());
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertTrue(getBlobMetadata(blob).isUndeleted());
 
-      // fetch metadata per blob _exactly_ once, all other calls should hit cache
-      assertEquals(iter+1, azureMetrics.blobGetPropertiesSuccessRate.getCount());
+      assertEquals(4*iter, azureMetrics.blobGetPropertiesSuccessRate.getCount()); // num cache_misses
       iter += 1;
     }
   }
