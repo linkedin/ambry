@@ -403,10 +403,10 @@ public class ReplicationMetrics {
         MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-OneCycleReplicationTime"));
     interColoOneCycleReplicationTime.put(datacenter, interColoOneCycleReplicationTimePerDC);
     Histogram interColoReplicaBatchTotalIdleTimePercentagePerDC = registry.histogram(
-        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "ReplicaBatchTotalIdleTimePercentage"));
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicaBatchTotalIdleTimePercentage"));
     interColoReplicaBatchTotalIdleTimePercentage.put(datacenter, interColoReplicaBatchTotalIdleTimePercentagePerDC);
     Histogram interColoReplicaBatchTotalIdleTimeMsPerDC = registry.histogram(
-        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "ReplicaBatchTotalIdleTimeMs"));
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicaBatchTotalIdleTimeMs"));
     interColoReplicaBatchTotalIdleTimeMs.put(datacenter, interColoReplicaBatchTotalIdleTimeMsPerDC);
     Histogram plainTextInterColoTotalReplicationTimePerDC = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-TotalReplicationTime"));
