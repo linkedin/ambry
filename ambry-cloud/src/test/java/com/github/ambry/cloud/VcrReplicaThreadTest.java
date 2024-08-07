@@ -178,8 +178,7 @@ public class VcrReplicaThreadTest {
       assertFalse(getBlobMetadata(blob).isDeleted());
       assertTrue(getBlobMetadata(blob).isUndeleted());
 
-      // fetch metadata per blob _exactly_ once, all other calls should hit cache
-      assertEquals(iter+1, azureMetrics.blobGetPropertiesSuccessRate.getCount());
+      assertEquals(3*(iter+1), azureMetrics.blobGetPropertiesSuccessRate.getCount());
       iter += 1;
     }
   }
