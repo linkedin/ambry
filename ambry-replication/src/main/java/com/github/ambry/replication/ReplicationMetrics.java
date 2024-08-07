@@ -113,10 +113,12 @@ public class ReplicationMetrics {
   public final Histogram sslIntraColoBatchStoreWriteTime;
   public final Map<String, Histogram> interColoTotalReplicationTime = new HashMap<>();
   public final Map<String, Histogram> interColoOneCycleReplicationTime = new HashMap<>();
-  public final Map<String, Histogram> interColoFastestSlowestReplicaPerCycleTimeDifference = new HashMap<>();
+  public final Map<String, Histogram> interColoReplicaBatchTotalIdleTimePercentage = new HashMap<>();
+  public final Map<String, Histogram> interColoReplicaBatchTotalIdleTimeMs = new HashMap<>();
   public final Histogram intraColoTotalReplicationTime;
   public final Histogram intraColoOneCycleReplicationTime;
-  public final Histogram intraColoFastestSlowestReplicaPerCycleTimeDifference;
+  public final Histogram intraColoReplicaBatchTotalIdleTimePercentage;
+  public final Histogram intraColoReplicaBatchTotalIdleTimeMs;
   public final Map<String, Histogram> plainTextInterColoTotalReplicationTime = new HashMap<String, Histogram>();
   public final Histogram plainTextIntraColoTotalReplicationTime;
   public final Map<String, Histogram> sslInterColoTotalReplicationTime = new HashMap<String, Histogram>();
@@ -257,8 +259,10 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoTotalReplicationTime"));
     intraColoOneCycleReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoOneCycleReplicationTime"));
-    intraColoFastestSlowestReplicaPerCycleTimeDifference =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoFastestSlowestReplicaPerCycleTimeDifference"));
+    intraColoReplicaBatchTotalIdleTimePercentage =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicaBatchTotalIdleTimePercentage"));
+    intraColoReplicaBatchTotalIdleTimeMs =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicaBatchTotalIdleTimeMs"));
     plainTextIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoTotalReplicationTime"));
     sslIntraColoTotalReplicationTime =
@@ -398,9 +402,12 @@ public class ReplicationMetrics {
     Histogram interColoOneCycleReplicationTimePerDC = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-OneCycleReplicationTime"));
     interColoOneCycleReplicationTime.put(datacenter, interColoOneCycleReplicationTimePerDC);
-    Histogram interColoFastestSlowestReplicaPerCycleTimeDifferencePerDC = registry.histogram(
-        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-FastestSlowestReplicaPerCycleTimeDifference"));
-    interColoFastestSlowestReplicaPerCycleTimeDifference.put(datacenter, interColoFastestSlowestReplicaPerCycleTimeDifferencePerDC);
+    Histogram interColoReplicaBatchTotalIdleTimePercentagePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "ReplicaBatchTotalIdleTimePercentage"));
+    interColoReplicaBatchTotalIdleTimePercentage.put(datacenter, interColoReplicaBatchTotalIdleTimePercentagePerDC);
+    Histogram interColoReplicaBatchTotalIdleTimeMsPerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "ReplicaBatchTotalIdleTimeMs"));
+    interColoReplicaBatchTotalIdleTimeMs.put(datacenter, interColoReplicaBatchTotalIdleTimeMsPerDC);
     Histogram plainTextInterColoTotalReplicationTimePerDC = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-TotalReplicationTime"));
     plainTextInterColoTotalReplicationTime.put(datacenter, plainTextInterColoTotalReplicationTimePerDC);
@@ -695,12 +702,20 @@ public class ReplicationMetrics {
     }
   }
 
-  public void updateFastestSlowestReplicaPerCycleTimeDifference(long timeDifference, boolean remoteColo,
+  public void updateReplicaBatchTotalIdleTimePercentage(long idleTimePercentage, boolean remoteColo,
       String datacenter) {
     if (remoteColo) {
-      interColoFastestSlowestReplicaPerCycleTimeDifference.get(datacenter).update(timeDifference);
+      interColoReplicaBatchTotalIdleTimePercentage.get(datacenter).update(idleTimePercentage);
     } else {
-      intraColoFastestSlowestReplicaPerCycleTimeDifference.update(timeDifference);
+      intraColoReplicaBatchTotalIdleTimePercentage.update(idleTimePercentage);
+    }
+  }
+
+  public void updateReplicaBatchTotalIdleTimeMs(long idleTime, boolean remoteColo, String datacenter) {
+    if (remoteColo) {
+      interColoReplicaBatchTotalIdleTimeMs.get(datacenter).update(idleTime);
+    } else {
+      intraColoReplicaBatchTotalIdleTimeMs.update(idleTime);
     }
   }
 
