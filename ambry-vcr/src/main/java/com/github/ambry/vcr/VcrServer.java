@@ -213,6 +213,7 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
 
+      // This statement is only for legacy reasons otherwise post-merge jobs on dev-fabric break
       CloudDestinationFactory cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass,
           properties, registry, clusterMap, accountService);
       cloudDestination = cloudDestinationFactory.getCloudDestination();
