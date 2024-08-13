@@ -93,7 +93,7 @@ public class BackupIntegrityMonitor implements Runnable {
   private final StorageManager storageManager;
   private final AzureCloudConfig azureConfig;
   private final RecoveryMetrics metrics;
-  private int currentPartitionId;
+  private long currentPartitionId;
   private int currentDiskId;
 
   public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
@@ -135,11 +135,11 @@ public class BackupIntegrityMonitor implements Runnable {
     logger.info("[BackupIntegrityMonitor] Created BackupIntegrityMonitor");
   }
 
-  int getMaxPartitionIdVerified() {
-    int maxPartitionId = 0;
+  long getMaxPartitionIdVerified() {
+    long maxPartitionId = 0;
     try {
       for(File file : new File(replicationConfig.backupCheckerReportDir).listFiles()) {
-        maxPartitionId = Math.max(maxPartitionId, Integer.parseInt(file.getName()));
+        maxPartitionId = Math.max(maxPartitionId, Long.parseLong(file.getName()));
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
@@ -150,8 +150,8 @@ public class BackupIntegrityMonitor implements Runnable {
 
   class PartitionIdComparator implements Comparator<PartitionId> {
     @Override
-    public int compare(PartitionId o1, PartitionId o2) {
-      return o1.getId() >= o2.getId() ? 1 : -1;
+    public int compare(PartitionId p1, PartitionId p2) {
+      return p1.getId() >= p2.getId() ? 1 : -1;
     }
   }
 
@@ -409,7 +409,7 @@ public class BackupIntegrityMonitor implements Runnable {
         compareMetadata(serverReplica, cloudReplica);
       }
 
-      currentPartitionId = ++currentPartitionId % Math.toIntExact(maxPartitionId.getId());
+      currentPartitionId = ++currentPartitionId % maxPartitionId.getId();
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
       logger.error(String.format("[BackupIntegrityMonitor] Failed to verify cloud backup partition-%s due to",
