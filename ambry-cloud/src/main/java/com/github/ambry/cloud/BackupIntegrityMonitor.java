@@ -44,6 +44,8 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -355,6 +357,14 @@ public class BackupIntegrityMonitor implements Runnable {
           .filter(p -> p.getId() == currentPartitionId)
           .collect(Collectors.toList())
           .get(0);
+      if (currentPartitionId == 0) {
+        // We circled back to partition 0 because we either finished all partitions,
+        // or there was some error in finding out the last partition scanned. Clear state.
+        logger.info("[BackupIntegrityMonitor] Deleting directory {}", replicationConfig.backupCheckerReportDir);
+        Utils.deleteFileOrDirectory(new File(replicationConfig.backupCheckerReportDir));
+        logger.info("[BackupIntegrityMonitor] Creating directory {}", replicationConfig.backupCheckerReportDir);
+        Files.createDirectories(Paths.get(replicationConfig.backupCheckerReportDir));
+      }
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
 
       /** Create local Store S */
