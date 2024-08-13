@@ -420,6 +420,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
 
       currentPartitionId = ++currentPartitionId % maxPartitionId.getId();
+      // Don't delete any state, leave it for inspection.
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
       logger.error(String.format("[BackupIntegrityMonitor] Failed to verify cloud backup partition-%s due to",
