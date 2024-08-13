@@ -196,7 +196,7 @@ public class BackupIntegrityMonitor implements Runnable {
         .collect(Collectors.toList());
     logger.info("[BackupIntegrityMonitor] {} disks can accommodate partition-{}", disks.size(), partition.getId());
     // Pick the next disk to make debugging easier
-    DiskId disk = disks.get((++currentDiskId % disks.size()));
+    DiskId disk = disks.get(++currentDiskId % disks.size());
     logger.info("[BackupIntegrityMonitor] Selected disk at mount path {}", disk.getMountPath());
     // Clear disk to make space, this is simpler instead of deciding which partition to delete.
     // This is why this is thread-unsafe.
