@@ -88,7 +88,7 @@ public class HelixVcrPopulateTool {
       boolean dryRun = options.has(dryRunOpt);
       if (options.has(srcOpt)) {
         String[] srcZkAndCluster = options.valueOf(srcOpt).split(SEPARATOR);
-        if (srcZkAndCluster.length != 3) {
+        if (srcZkAndCluster[0].contains("shared") && srcZkAndCluster.length != 3) {
           errorAndExit("src argument must have form 'zkString/namespace/clusterName'");
         }
         String srcZkString = srcZkAndCluster[0] + HelixVcrUtil.SEPARATOR + srcZkAndCluster[1];
