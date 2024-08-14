@@ -68,7 +68,7 @@ public class AzureMetrics extends AzureMetricsOld {
   public final Meter blobUndeleteSuccessRate;
   public final Timer blobUndeleteLatency;
   public final Counter blobUndeleteErrorCount;
-  public final Meter blobUpdateTTLSucessRate;
+  public final Meter blobUpdateTTLSuccessRate;
   public final Timer blobUpdateTTLLatency;
   public final Counter blobUpdateTTLErrorCount;
   public final Meter blobGetPropertiesSuccessRate;
@@ -117,7 +117,7 @@ public class AzureMetrics extends AzureMetricsOld {
     blobDeleteSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE));
     blobUpdateTTLErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_ERROR_COUNT));
     blobUpdateTTLLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_LATENCY));
-    blobUpdateTTLSucessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_SUCCESS_RATE));
+    blobUpdateTTLSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_SUCCESS_RATE));
     blobUploadByteRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_BYTE_RATE));
     blobUploadConflictCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_CONFLICT_COUNT));
     blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_ERROR_COUNT));
