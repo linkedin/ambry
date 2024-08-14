@@ -165,7 +165,7 @@ public class BackupIntegrityMonitor implements Runnable {
    * Starts and schedules monitor
    */
   public void start() {
-    executor.scheduleWithFixedDelay(this::run, 0, 1, TimeUnit.HOURS);
+    executor.scheduleWithFixedDelay(this::run, 0, 30, TimeUnit.MINUTES);
     logger.info("[BackupIntegrityMonitor] Started BackupIntegrityMonitor");
   }
 
