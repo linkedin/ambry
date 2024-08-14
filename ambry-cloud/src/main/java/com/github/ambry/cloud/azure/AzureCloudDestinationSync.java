@@ -982,8 +982,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
         eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime, gracePeriod, now);
       } else if (metadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
         long expirationTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME));
-        eraseBlob = (expirationTime + gracePeriod) < now;
-        eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, gracePeriod, now);
+        eraseBlob = expirationTime < now; // no grace-period for expired blobs; just get rid of them
+        eraseReason = String.format("%s: %s < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, now);
       } else if (deletedContainers.contains(accountContainerIds)) {
         eraseBlob = true;
         eraseReason = String.format("account = %s, deleted_container = %s", accountContainerIds.getFirst(), accountContainerIds.getSecond());
