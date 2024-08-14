@@ -673,14 +673,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // AzureBlobDeletePolicy.IMMEDIATE
       if (azureCloudConfig.azureBlobDeletePolicy.equals(AzureBlobDeletePolicy.IMMEDIATE)) {
         errfmt = "Failed to delete blob %s in Azure blob storage due to (%s)";
-        boolean status = eraseBlob(createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath),
+        int status = eraseBlob(createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath),
             "CUSTOMER_DELETE_REQUEST");
-        if(status) {
-          azureMetrics.blobDeleteSuccessRate.mark();
-        } else {
-          azureMetrics.blobDeleteErrorCount.inc();
+        if(status != HttpStatus.SC_ACCEPTED) {
+          // Throw CloudStorageException for operations that reached Azure, else StoreException.
+          // Throw an error to halt replication. If we don't, then we risk orphan blobs in Azure costing storage.
+          // The message here will be concatenated with errfmt string in the catch-clause.
+          throw new CloudStorageException(String.format("%s error code", status), status);
         }
-        return status;
+        azureMetrics.blobDeleteSuccessRate.mark();
+        return true; // this return value is unused
       }
 
       // AzureBlobDeletePolicy.EVENTUAL
@@ -923,11 +925,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   /**
    * Erases a blob permanently, including all snapshots of it from Azure Storage.
-   * @param blobClient Client for the blob
+   *
+   * @param blobClient  Client for the blob
    * @param eraseReason Reason to delete
    * @return True if blob deleted, else false.
    */
-  protected boolean eraseBlob(BlobClient blobClient, String eraseReason) {
+  protected int eraseBlob(BlobClient blobClient, String eraseReason) {
     Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
     BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch("*");
     Response<Void> response = blobClient.deleteWithResponse(DeleteSnapshotsOptionType.INCLUDE,
@@ -946,7 +949,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.error("[ERASE] Failed to erase blob {}/{} from Azure blob storage, reason = {}, status {}",
             blobClient.getContainerName(), blobClient.getBlobName(), eraseReason, response.getStatusCode());
     }
-    return response.getStatusCode() == HttpStatus.SC_ACCEPTED;
+    return response.getStatusCode();
   }
 
   /**
@@ -995,7 +998,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
           logger.trace("[DRY-RUN][COMPACT] Can erase blob {} from Azure blob storage because {}", blobItem.getName(), eraseReason);
           numBlobsPurged += 1;
         } else {
-          if (eraseBlob(blobContainerClient.getBlobClient(blobItem.getName()), eraseReason)) {
+          int status = eraseBlob(blobContainerClient.getBlobClient(blobItem.getName()), eraseReason);
+          if (status == HttpStatus.SC_ACCEPTED) {
             numBlobsPurged += 1;
             azureMetrics.blobCompactionSuccessRate.mark();
           } else {
