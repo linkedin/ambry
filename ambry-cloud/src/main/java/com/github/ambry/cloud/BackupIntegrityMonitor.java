@@ -124,10 +124,10 @@ public class BackupIntegrityMonitor implements Runnable {
      *
      * So the sequence looks like this:
      * R1: 0 1 2 3 x (crash/restart/deployment)
-     * R2:       3 4 5 x (restart/deployment)
+     * R2:       3 4 5 x (crash/restart/deployment)
      * R3:           5 6 7 ... so on.
      */
-    currentPartitionId = getMaxPartitionIdVerified();
+    currentPartitionId = getLastPartitionIdVerified();
     currentDiskId = 0;
     // log disk state
     staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
@@ -137,7 +137,11 @@ public class BackupIntegrityMonitor implements Runnable {
     logger.info("[BackupIntegrityMonitor] Created BackupIntegrityMonitor");
   }
 
-  long getMaxPartitionIdVerified() {
+  /**
+   * Returns the last partition-id scanned and verified
+   * @return
+   */
+  long getLastPartitionIdVerified() {
     long maxPartitionId = 0;
     try {
       for(File file : new File(replicationConfig.backupCheckerReportDir).listFiles()) {
@@ -145,7 +149,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
-      logger.error("[BackupIntegrityMonitor] Failed to get max partition-id due to {}, start verification from partition-id 0", e.getMessage());
+      logger.error("[BackupIntegrityMonitor] Failed to get last partition-id due to {}, start verification from partition-id 0", e.getMessage());
     }
     return maxPartitionId;
   }
