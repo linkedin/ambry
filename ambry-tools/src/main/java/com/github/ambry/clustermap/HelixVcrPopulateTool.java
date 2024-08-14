@@ -60,7 +60,7 @@ public class HelixVcrPopulateTool {
     OptionSet options = parser.parse(args);
 
     String[] destZkAndCluster = options.valueOf(destOpt).split(HelixVcrUtil.SEPARATOR);
-    if (destZkAndCluster.length != 3) {
+    if (destZkAndCluster[0].contains("shared") && destZkAndCluster.length != 3) {
       errorAndExit("dest argument must have form 'zkString/namespace/clusterName'");
     }
     String destZkString = destZkAndCluster[0] + HelixVcrUtil.SEPARATOR + destZkAndCluster[1];
