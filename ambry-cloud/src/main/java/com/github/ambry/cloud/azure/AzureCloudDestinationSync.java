@@ -717,7 +717,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
       azureMetrics.blobDeleteErrorCount.inc();
       throw e;
     } catch (Throwable t) {
-      // not a good metric name, but too late to change it now because all the dashboards use it
       azureMetrics.blobDeleteErrorCount.inc();
       String error = String.format(errfmt, blobLayout, t.getMessage());
       logger.error(error);
