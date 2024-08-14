@@ -860,7 +860,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobPropertiesCached);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
-      azureMetrics.blobUpdateTTLSucessRate.mark();
+      azureMetrics.blobUpdateTTLSuccessRate.mark();
       logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return cloudlifeVersion;
