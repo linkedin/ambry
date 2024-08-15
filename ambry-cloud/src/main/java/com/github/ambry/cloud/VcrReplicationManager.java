@@ -237,8 +237,7 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   @Override
   public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas) {
-    // pass; reload just before replication
-    return 0;
+    throw new UnsupportedOperationException("Reload replication-tokens just before replication");
   }
 
   @Override
