@@ -247,9 +247,13 @@ public class VcrReplicationManager extends ReplicationEngine {
       FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
       try {
         TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
-        DataInputStream inputStream = new DataInputStream(
-            new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
-        replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        if (row == null) {
+          replicaInfo.setToken(findTokenFactory.getNewFindToken());
+        } else {
+          DataInputStream inputStream = new DataInputStream(
+              new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
+          replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        }
       } catch (Throwable t) {
         // log and metric
         azureMetrics.replicaTokenReadErrorCount.inc();
