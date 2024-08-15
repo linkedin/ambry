@@ -159,6 +159,10 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudDestination.getTableClient(this.azureCloudConfig.azureTableNameCorruptBlobs);
     azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.cloudDestination.getTableClient(azureTableNameReplicaTokens);
+    String datacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+    logger.info("Local datacenter = {}", datacenter);
+    replicaThreadPoolByDc.computeIfAbsent(datacenter,
+        key -> createThreadPool(datacenter, getNumReplThreads(cloudConfig.backupNodeCpuScale), true));
   }
 
   /**
@@ -196,15 +200,15 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   /**
-   * Get thread pool for given datacenter. Create thread pool for a datacenter if its thread pool doesn't exist.
+   * Get thread pool for given datacenter.
    * @param datacenter The datacenter String.
-   * @param startThread If thread needs to be started when create.
    * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
    */
-  @Override
-  protected List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
-    return replicaThreadPoolByDc.computeIfAbsent(datacenter,
-        key -> createThreadPool(datacenter, getNumReplThreads(cloudConfig.backupNodeCpuScale), startThread));
+  protected List<ReplicaThread> getThreadPool(String datacenter) {
+    if (!replicaThreadPoolByDc.keySet().contains(datacenter)) {
+      throw new RuntimeException("No thread pool for datacenter " + datacenter);
+    }
+    return replicaThreadPoolByDc.get(datacenter);
   }
 
   /**
@@ -216,11 +220,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       String dc = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
-      List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(dc, startThread);
-      if (replicaThreads == null || replicaThreads.isEmpty()) {
-        logger.error("Replication thread pool is empty for datacenter {}", dc);
-        return;
-      }
+      List<ReplicaThread> replicaThreads = getThreadPool(dc);
       ReplicaThread rthread = partitionToReplicaThread.computeIfAbsent(
           rinfo.getLocalReplicaId().getPartitionId().getId(),
           key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
