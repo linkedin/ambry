@@ -286,6 +286,7 @@ public class CloudTokenPersistorTest {
   }
 
   @Test
+  @Ignore("Moved token reload to VcrReplicaThread just before replication")
   public void testRetrieveToken() throws ReplicationException {
     StoreFindToken token;
     long lastOpTime;

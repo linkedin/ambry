@@ -127,10 +127,10 @@ public class VcrReplicaThread extends ReplicaThread {
         logger.warn("Resetting token for replica {}/{} because no token found", partitionKey, rowKey);
         replicaInfo.setToken(findTokenFactory.getNewFindToken());
       } else {
-        logger.info("Loading token for replica {}/{}", partitionKey, rowKey);
         DataInputStream inputStream = new DataInputStream(
             new ByteArrayInputStream((byte[]) row.getProperty(VcrReplicationManager.BINARY_TOKEN)));
         replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        logger.info("Loaded token for replica {}/{}, token = {}", partitionKey, rowKey, replicaInfo.getToken());
       }
     } catch (Throwable t) {
       azureMetrics.replicaTokenReadErrorCount.inc();
