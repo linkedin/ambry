@@ -400,9 +400,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
                 responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
         replicaThreads.add(replicaThread);
         if (startThread) {
-          Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
-          thread.start();
-          logger.info("Started replica thread {}", thread.getName());
+          runThread(replicaThread);
         }
       } catch (Exception e) {
         throw new RuntimeException("Encountered exception instantiating ReplicaThread", e);
@@ -410,6 +408,12 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     }
     replicationMetrics.trackLiveThreadsCount(replicaThreads, datacenter);
     return replicaThreads;
+  }
+
+  protected void runThread(ReplicaThread replicaThread) {
+    Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
+    thread.start();
+    logger.info("Started replica thread {}", thread.getName());
   }
 
   /**

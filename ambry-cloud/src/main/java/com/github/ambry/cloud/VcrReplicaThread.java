@@ -47,6 +47,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -97,6 +99,18 @@ public class VcrReplicaThread extends ReplicaThread {
       String d2 = r2.getReplicaId().getDataNodeId().getHostname();
       return d1.compareTo(d2);
     }
+  }
+
+  @Override
+  public void run() {
+    try {
+      int delay = new Random().nextInt(900) + 1;
+      logger.info("Starting replica thread {} in {} seconds", Thread.currentThread().getName(), delay);
+      Thread.sleep(TimeUnit.SECONDS.toMillis(delay));
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
+    super.run();
   }
 
   /**
@@ -181,10 +195,10 @@ public class VcrReplicaThread extends ReplicaThread {
       return;
     }
     if (token.equals(oldToken)) {
-      logger.trace("Skipping token upload due to unchanged token, oldToken = {}, newToken = {}", oldToken, token);
+      logger.info("Skipping token upload due to unchanged token, oldToken = {}, newToken = {}", oldToken, token);
       return;
     }
-    logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
+    logger.info("[snkt] replica = {}, token = {}", remoteReplicaInfo, token);
     // Table entity = Table row
     // ======================================================================================
     // | partition-key | row-key | tokenType | logSegment | offset | storeKey | binaryToken |

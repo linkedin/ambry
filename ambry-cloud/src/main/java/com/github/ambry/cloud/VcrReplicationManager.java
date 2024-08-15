@@ -198,6 +198,12 @@ public class VcrReplicationManager extends ReplicationEngine {
     return (int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * cpuScale);
   }
 
+  @Override
+  protected void runThread(ReplicaThread replicaThread) {
+    Utils.daemonThread(replicaThread.getName(), replicaThread).start();
+    logger.info("Started replica thread {}", replicaThread.getName());
+  }
+
   /**
    * Get thread pool for given datacenter. Create thread pool for a datacenter if its thread pool doesn't exist.
    * @param datacenter The datacenter String.
@@ -247,9 +253,15 @@ public class VcrReplicationManager extends ReplicationEngine {
       FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
       try {
         TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
-        DataInputStream inputStream = new DataInputStream(
-            new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
-        replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        if (row == null) {
+          logger.error("Resetting token for replica {}/{}", partitionKey, rowKey);
+          replicaInfo.setToken(findTokenFactory.getNewFindToken());
+        } else {
+          logger.info("[snkt] token is not null for {}/{}", partitionKey, rowKey);
+          DataInputStream inputStream = new DataInputStream(
+              new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
+          replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        }
       } catch (Throwable t) {
         // log and metric
         azureMetrics.replicaTokenReadErrorCount.inc();
