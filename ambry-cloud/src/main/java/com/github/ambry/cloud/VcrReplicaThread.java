@@ -31,7 +31,6 @@ import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
-import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.MessageInfo;
