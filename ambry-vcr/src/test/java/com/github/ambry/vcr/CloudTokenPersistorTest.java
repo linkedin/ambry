@@ -32,6 +32,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -40,21 +41,28 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.LogSegmentName;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreFindTokenFactory;
+import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -159,7 +167,7 @@ public class CloudTokenPersistorTest {
             null,
             null, null, false,
             "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
-            null, null, null, azuriteClient,
+            null, null, azuriteClient,
             verifiableProperties);
 
     long lastOpTime = System.currentTimeMillis();
@@ -216,7 +224,7 @@ public class CloudTokenPersistorTest {
             null,
             null, null, false,
             "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
-            null, null, null, azuriteClient,
+            null, null, azuriteClient,
             verifiableProperties);
 
     // upload a dummy token; this must remain unchange in Azure Table through this test

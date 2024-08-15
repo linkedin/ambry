@@ -23,7 +23,6 @@ import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.ReplicaSelectionPolicy;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
@@ -43,8 +42,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -79,7 +76,7 @@ public class VcrReplicaThread extends ReplicaThread {
       NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin,
       CloudDestination cloudDestination, VerifiableProperties properties) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         new ReplicationConfig(properties),
