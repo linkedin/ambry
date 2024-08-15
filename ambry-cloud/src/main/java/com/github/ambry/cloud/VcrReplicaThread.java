@@ -117,6 +117,10 @@ public class VcrReplicaThread extends ReplicaThread {
     super.run();
   }
 
+  /**
+   * Fetch replica-token from Azure and set it in the thread
+   * @param replicaInfo
+   */
   void setReplicaToken(RemoteReplicaInfo replicaInfo) {
     String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
@@ -127,6 +131,7 @@ public class VcrReplicaThread extends ReplicaThread {
         logger.warn("Resetting token for replica {}/{} because no token found", partitionKey, rowKey);
         replicaInfo.setToken(findTokenFactory.getNewFindToken());
       } else {
+        logger.info("Loading token for replica {}/{}", partitionKey, rowKey);
         DataInputStream inputStream = new DataInputStream(
             new ByteArrayInputStream((byte[]) row.getProperty(VcrReplicationManager.BINARY_TOKEN)));
         replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
@@ -223,10 +228,10 @@ public class VcrReplicaThread extends ReplicaThread {
       return;
     }
     if (token.equals(oldToken)) {
-      logger.info("Skipping token upload due to unchanged token, oldToken = {}, newToken = {}", oldToken, token);
+      logger.trace("Skipping token upload due to unchanged token, oldToken = {}, newToken = {}", oldToken, token);
       return;
     }
-    logger.info("[snkt] replica = {}, token = {}", remoteReplicaInfo, token);
+    logger.trace("Uploading token = {} for replica = {}", token, remoteReplicaInfo);
     // Table entity = Table row
     // ======================================================================================
     // | partition-key | row-key | tokenType | logSegment | offset | storeKey | binaryToken |
