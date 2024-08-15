@@ -94,7 +94,7 @@ public class ReplicaThread implements Runnable {
   private final Set<PartitionId> allReplicatedPartitions = new HashSet<>();
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
-  private final FindTokenHelper findTokenHelper;
+  protected final FindTokenHelper findTokenHelper;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
   protected final DataNodeId dataNodeId;

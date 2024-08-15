@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,7 +27,6 @@ import com.github.ambry.clustermap.HelixVcrUtil;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
-import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterParticipantListener;
 import com.github.ambry.commons.ResponseHandler;
@@ -41,7 +39,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
@@ -60,11 +57,7 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -119,9 +112,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   public static final String LOG_SEGMENT = "logSegment";
   public static final String OFFSET = "offset";
   public static final String STORE_KEY = "storeKey";
-  public static final String REPLICATED_UNITL_UTC = "replicatedUntilUTC";
   public static final String BINARY_TOKEN = "binaryToken";
-  public static final String DATE_FORMAT = "yyyy_MMM_dd_HH_mm_ss";
 
   public VcrReplicationManager(VerifiableProperties properties, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
@@ -246,31 +237,8 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   @Override
   public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas) {
-    // For each replica of a partition
-    for (RemoteReplicaInfo replicaInfo : peerReplicas) {
-      String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
-      String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
-      FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
-      try {
-        TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
-        if (row == null) {
-          logger.error("Resetting token for replica {}/{}", partitionKey, rowKey);
-          replicaInfo.setToken(findTokenFactory.getNewFindToken());
-        } else {
-          logger.info("[snkt] token is not null for {}/{}", partitionKey, rowKey);
-          DataInputStream inputStream = new DataInputStream(
-              new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
-          replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
-        }
-      } catch (Throwable t) {
-        // log and metric
-        azureMetrics.replicaTokenReadErrorCount.inc();
-        logger.error("Failed to deserialize token for peer replica {} due to {}", replicaInfo, t.toString());
-        t.printStackTrace();
-        replicaInfo.setToken(findTokenFactory.getNewFindToken());
-      } // try-catch
-    } // for-loop
-    return (int) azureMetrics.replicaTokenReadErrorCount.getCount();
+    // pass; reload just before replication
+    return 0;
   }
 
   @Override
@@ -421,22 +389,16 @@ public class VcrReplicationManager extends ReplicationEngine {
         // We need to ensure that a replica token gets persisted only after the corresponding data in the
         // store gets flushed to cloud. We use the store flush interval multiplied by a constant factor
         // to determine the token flush interval
-        FindTokenFactory findTokenFactory =
-            tokenHelper.getFindTokenFactoryFromReplicaType(peerReplica.getReplicaType());
         RemoteReplicaInfo remoteReplicaInfo =
             new RemoteReplicaInfo(this.replicationConfig, peerReplica, cloudReplica, store,
-                findTokenFactory.getNewFindToken(),
-                storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
-                SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
+                null, -1, SystemTime.getInstance(),
+                peerReplica.getDataNodeId().getPortToConnectTo());
         remoteReplicaInfos.add(remoteReplicaInfo);
       }
       rwLock.writeLock().lock();
       try {
         updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
         partitionStoreMap.put(partitionId.toPathString(), store);
-        reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
-
-        // Add remoteReplicaInfos to {@link ReplicaThread}.
         addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
       } finally {
         rwLock.writeLock().unlock();
