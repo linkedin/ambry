@@ -28,6 +28,7 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.store.StoreException;
@@ -184,7 +185,7 @@ public class VcrReplicaThreadTest {
   }
 
   @Test
-  public void testSelectReplicas() {
+  public void testSelectReplicas() throws ReflectiveOperationException {
     // Give hosts a name
     AtomicInteger ai = new AtomicInteger(0);
     int Z = 'Z';
@@ -192,7 +193,7 @@ public class VcrReplicaThreadTest {
 
     // Create a test-thread
     VcrReplicaThread rthread =
-        new VcrReplicaThread("vcrReplicaThreadTest", null, clustermap,
+        new VcrReplicaThread("vcrReplicaThreadTest", new MockFindTokenHelper(), clustermap,
             new AtomicInteger(0), clustermap.getDataNodes().get(0), null, null,
             null, null, false,
             clustermap.getDataNodes().get(0).getDatacenterName(), null, null,
