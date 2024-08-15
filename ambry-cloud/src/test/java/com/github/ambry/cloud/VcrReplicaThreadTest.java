@@ -40,6 +40,7 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -257,11 +258,16 @@ public class VcrReplicaThreadTest {
    * @throws ReplicationException
    */
   @Test
-  public void testNumReplThreads() throws ReplicationException {
+  public void testNumReplThreads() throws ReplicationException, InstantiationException {
+    VcrClusterParticipant vcrClusterParticipant = mock(VcrClusterParticipant.class);
+    when(vcrClusterParticipant.getCurrentDataNodeId()).thenReturn(clustermap.getCurrentDataNodeId());
+    StoreKeyConverterFactory storeKeyConverterFactory = mock(StoreKeyConverterFactory.class);
+    StoreKeyConverter storeKeyConverter = mock(StoreKeyConverter.class);
+    when(storeKeyConverterFactory.getStoreKeyConverter()).thenReturn(storeKeyConverter);
     VcrReplicationManager manager =
         new VcrReplicationManager(properties, null, null, clustermap,
-            mock(VcrClusterParticipant.class), mock(AzureCloudDestinationSync.class), null,
-            mock(NetworkClientFactory.class), null, null);
+            vcrClusterParticipant, mock(AzureCloudDestinationSync.class), null,
+            mock(NetworkClientFactory.class), null, storeKeyConverterFactory);
     assertEquals(0, manager.getNumReplThreads(0));
     assertEquals(2, manager.getNumReplThreads(-2.5));
     assertEquals((int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * 2.5),

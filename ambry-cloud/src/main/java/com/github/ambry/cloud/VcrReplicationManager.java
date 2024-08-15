@@ -160,9 +160,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.cloudDestination.getTableClient(azureTableNameReplicaTokens);
     String datacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
-    logger.info("Local datacenter = {}", datacenter);
-    replicaThreadPoolByDc.computeIfAbsent(datacenter,
-        key -> createThreadPool(datacenter, getNumReplThreads(cloudConfig.backupNodeCpuScale), true));
+    logger.info("Local datacenter id = {}, Local datacenter name = {}", clusterMap.getLocalDatacenterId(), datacenter);
+    replicaThreadPoolByDc.put(datacenter,
+        createThreadPool(datacenter, getNumReplThreads(cloudConfig.backupNodeCpuScale), true));
   }
 
   /**
