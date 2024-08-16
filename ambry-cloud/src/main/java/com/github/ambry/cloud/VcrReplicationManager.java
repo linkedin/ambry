@@ -197,7 +197,7 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   @Override
   protected void createThread(ReplicaThread replicaThread, boolean unused) {
-    replicaThread.setThread(Utils.daemonThread(replicaThread.getName(), replicaThread));
+    replicaThread.setThread(Utils.newThread(replicaThread.getName(), replicaThread, false));
   }
 
   /**
