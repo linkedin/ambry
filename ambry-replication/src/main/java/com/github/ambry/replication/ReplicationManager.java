@@ -192,11 +192,6 @@ public class ReplicationManager extends ReplicationEngine {
     return started;
   }
 
-  @Override
-  protected boolean shouldReplicateFromDc(String datacenterName) {
-    return true;
-  }
-
   /**
    * Add given replica into replication manager.
    * @param replicaId the replica to add

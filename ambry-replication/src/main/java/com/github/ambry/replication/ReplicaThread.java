@@ -73,6 +73,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -94,7 +95,7 @@ public class ReplicaThread implements Runnable {
   private final Set<PartitionId> allReplicatedPartitions = new HashSet<>();
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
-  private final FindTokenHelper findTokenHelper;
+  protected final FindTokenHelper findTokenHelper;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
   protected final DataNodeId dataNodeId;
@@ -123,6 +124,8 @@ public class ReplicaThread implements Runnable {
   private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
+  protected Thread thread;
+  protected AtomicBoolean threadStarted;
 
   // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
@@ -180,6 +183,23 @@ public class ReplicaThread implements Runnable {
     }
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
+    threadStarted = new AtomicBoolean(false);
+  }
+
+  public boolean startThread() {
+   if (threadStarted.compareAndSet(false, true)) {
+     thread.start();
+     return true;
+   }
+   return false;
+  }
+
+  public void setThread(Thread thread) {
+    this.thread = thread;
+  }
+
+  public Thread getThread() {
+    return thread;
   }
 
   /**
