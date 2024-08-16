@@ -14,7 +14,6 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -399,9 +398,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
                 threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
                 responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
         replicaThreads.add(replicaThread);
-        if (startThread) {
-          runThread(replicaThread);
-        }
+        createThread(replicaThread, startThread);
       } catch (Exception e) {
         throw new RuntimeException("Encountered exception instantiating ReplicaThread", e);
       }
@@ -410,10 +407,12 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     return replicaThreads;
   }
 
-  protected void runThread(ReplicaThread replicaThread) {
-    Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
-    thread.start();
-    logger.info("Started replica thread {}", thread.getName());
+  protected void createThread(ReplicaThread replicaThread, boolean startThread) {
+    if (startThread) {
+      Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
+      thread.start();
+      logger.info("Started replica thread {}", thread.getName());
+    }
   }
 
   /**
@@ -760,8 +759,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
           // 2. determine if added/removed replicas have peer replica on local node.
           //    We skip the replica on current node because it should already be added/removed by state transition thread.
           Set<ReplicaId> addedPeerReplicas = addedReplicas.stream()
-              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != dataNodeId
-                  && shouldReplicateFromDc(r.getDataNodeId().getDatacenterName()))
+              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != dataNodeId)
               .collect(Collectors.toSet());
           Set<ReplicaId> removedPeerReplicas = removedReplicas.stream()
               .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != dataNodeId)
@@ -857,11 +855,4 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);
   }
-
-  /**
-   * Check if replication is allowed from given datacenter.
-   * @param datacenterName datacenter name to check.
-   * @return true if replication is allowed. false otherwise.
-   */
-  protected abstract boolean shouldReplicateFromDc(String datacenterName);
 }

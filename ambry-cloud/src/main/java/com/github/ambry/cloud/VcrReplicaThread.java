@@ -104,7 +104,7 @@ public class VcrReplicaThread extends ReplicaThread {
   @Override
   public void run() {
     try {
-      int delay = new Random().nextInt(900) + 1;
+      int delay = new Random().nextInt(vcrNodeConfig.backupStartupDelaySecs) + 10;
       logger.info("Starting replica thread {} in {} seconds", Thread.currentThread().getName(), delay);
       Thread.sleep(TimeUnit.SECONDS.toMillis(delay));
     } catch (InterruptedException e) {

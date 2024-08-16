@@ -123,6 +123,7 @@ public class ReplicaThread implements Runnable {
   private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
+  protected Thread thread;
 
   // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
@@ -180,6 +181,14 @@ public class ReplicaThread implements Runnable {
     }
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
+  }
+
+  public void setThread(Thread thread) {
+    this.thread = thread;
+  }
+
+  public Thread getThread() {
+    return thread;
   }
 
   /**

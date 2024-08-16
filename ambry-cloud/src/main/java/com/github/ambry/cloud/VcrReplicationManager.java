@@ -86,6 +86,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
+  private final String localDatacenterName;
   protected String azureTableNameReplicaTokens;
   protected AzureCloudConfig azureCloudConfig;
   protected AzureMetrics azureMetrics;
@@ -159,10 +160,12 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudDestination.getTableClient(this.azureCloudConfig.azureTableNameCorruptBlobs);
     azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.cloudDestination.getTableClient(azureTableNameReplicaTokens);
-    String datacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
-    logger.info("Local datacenter id = {}, Local datacenter name = {}", clusterMap.getLocalDatacenterId(), datacenter);
-    replicaThreadPoolByDc.put(datacenter,
-        createThreadPool(datacenter, getNumReplThreads(cloudConfig.backupNodeCpuScale), true));
+    // Cross-colo replication is unsupported in VCR
+    localDatacenterName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+    logger.info("Local datacenter id = {}, Local datacenter name = {}", clusterMap.getLocalDatacenterId(),
+        localDatacenterName);
+    replicaThreadPoolByDc.put(localDatacenterName,
+        createThreadPool(localDatacenterName, getNumReplThreads(cloudConfig.backupNodeCpuScale), false));
   }
 
   /**
@@ -194,9 +197,10 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   @Override
-  protected void runThread(ReplicaThread replicaThread) {
-    Utils.daemonThread(replicaThread.getName(), replicaThread).start();
-    logger.info("Started replica thread {}", replicaThread.getName());
+  protected void createThread(ReplicaThread replicaThread, boolean unused) {
+    Thread thread = Utils.daemonThread(replicaThread.getName(), replicaThread);
+    replicaThread.setThread(thread);
+    logger.info("Created replica thread {}", replicaThread.getName());
   }
 
   /**
@@ -206,7 +210,8 @@ public class VcrReplicationManager extends ReplicationEngine {
    */
   protected List<ReplicaThread> getThreadPool(String datacenter) {
     if (!replicaThreadPoolByDc.keySet().contains(datacenter)) {
-      throw new RuntimeException("No thread pool for datacenter " + datacenter);
+      throw new UnsupportedOperationException(
+          String.format("Cross-colo replication from %s to %s is unsupported in VCR", localDatacenterName, datacenter));
     }
     return replicaThreadPoolByDc.get(datacenter);
   }
@@ -226,6 +231,10 @@ public class VcrReplicationManager extends ReplicationEngine {
           key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
       rthread.addRemoteReplicaInfo(rinfo);
       rinfo.setReplicaThread(rthread);
+      // Start the thread when the first replica is added to this thread
+      if (rthread.getThread().getState() == Thread.State.NEW) {
+        rthread.getThread().start();
+      }
       logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
     }
   }
@@ -278,16 +287,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             vcrHelixUpdateLock.unlock();
           }
         }
-        try {
-          addReplica(partitionId);
-        } catch (ReplicationException e) {
-          vcrMetrics.addPartitionErrorCount.inc();
-          logger.error("Exception on adding Partition {} to {}: ", partitionId, dataNodeId, e);
-        } catch (Exception e) {
-          // Helix will run into error state if exception throws in Helix context.
-          vcrMetrics.addPartitionErrorCount.inc();
-          logger.error("Unknown Exception on adding Partition {} to {}: ", partitionId, dataNodeId, e);
-        }
+        addReplica(partitionId);
       }
 
       @Override
@@ -367,50 +367,48 @@ public class VcrReplicationManager extends ReplicationEngine {
    * @param partitionId the {@link PartitionId} of the replica to add.
    * @throws ReplicationException if replicas initialization failed.
    */
-  void addReplica(PartitionId partitionId) throws ReplicationException {
-    if (partitionToPartitionInfo.containsKey(partitionId)) {
-      throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
-    }
-    ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());
-    if (!storeManager.addBlobStore(cloudReplica)) {
-      logger.error("Can't start cloudstore for replica {}", cloudReplica);
-      throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);
-    }
-    List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
-    List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
-    Store store = storeManager.getStore(partitionId);
-    if (peerReplicas != null) {
-      for (ReplicaId peerReplica : peerReplicas) {
-        if (!shouldReplicateFromDc(peerReplica.getDataNodeId().getDatacenterName())) {
-          logger.trace("Skipping replication from {}", peerReplica.getDataNodeId().getDatacenterName());
-          continue;
-        }
-        // We need to ensure that a replica token gets persisted only after the corresponding data in the
-        // store gets flushed to cloud. We use the store flush interval multiplied by a constant factor
-        // to determine the token flush interval
-        RemoteReplicaInfo remoteReplicaInfo =
-            new RemoteReplicaInfo(this.replicationConfig, peerReplica, cloudReplica, store,
-                null, -1, SystemTime.getInstance(),
-                peerReplica.getDataNodeId().getPortToConnectTo());
-        remoteReplicaInfos.add(remoteReplicaInfo);
-      }
+  void addReplica(PartitionId partitionId) {
+    try {
       rwLock.writeLock().lock();
-      try {
+      if (partitionToPartitionInfo.containsKey(partitionId)) {
+        vcrMetrics.addPartitionErrorCount.inc();
+        logger.warn("Partition {} already exists", partitionId.getId());
+        return;
+      }
+      ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());
+      List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
+      if (peerReplicas == null || peerReplicas.size() == 0) {
+        vcrMetrics.addPartitionErrorCount.inc();
+        logger.error("No peer replicas for {}", partitionId.getId());
+        return;
+      }
+      List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
+      if (!storeManager.addBlobStore(cloudReplica)) {
+        vcrMetrics.addPartitionErrorCount.inc();
+        logger.error("Failed to add Store for partition {}", partitionId.getId());
+        return;
+      }
+      Store store = storeManager.getStore(partitionId);
+      for (ReplicaId peerReplica : peerReplicas) {
+        if (peerReplica.getDataNodeId().getDatacenterName().equalsIgnoreCase(localDatacenterName)) {
+          RemoteReplicaInfo remoteReplicaInfo =
+              new RemoteReplicaInfo(this.replicationConfig, peerReplica, cloudReplica, store,
+                  null, -1, SystemTime.getInstance(),
+                  peerReplica.getDataNodeId().getPortToConnectTo());
+          remoteReplicaInfos.add(remoteReplicaInfo);
+        }
+      }
+      if (!remoteReplicaInfos.isEmpty()) {
         updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
         partitionStoreMap.put(partitionId.toPathString(), store);
         addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-      } finally {
-        rwLock.writeLock().unlock();
       }
-    } else {
-      logger.error("Null peer-replica {}", cloudReplica);
-      try {
-        storeManager.shutdownBlobStore(partitionId);
-        storeManager.removeBlobStore(partitionId);
-      } finally {
-        throw new ReplicationException(
-            "Failed to add Partition " + partitionId + " on " + dataNodeId + " , because no peer replicas found.");
-      }
+    } catch (Throwable e) {
+      // Helix will run into error state if exception throws in Helix context.
+      vcrMetrics.addPartitionErrorCount.inc();
+      logger.error("Failed to add Store for partition {} due to {}", partitionId.getId(), e.getMessage());
+    } finally {
+      rwLock.writeLock().unlock();
     }
   }
 
@@ -475,16 +473,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   protected String getReplicaThreadName(String datacenterToReplicateFrom, int threadIndexWithinPool) {
     return "Vcr" + super.getReplicaThreadName(datacenterToReplicateFrom, threadIndexWithinPool);
-  }
-
-  /**
-   * Check if replication is allowed from given datacenter.
-   * @param datacenterName datacenter name to check.
-   * @return true if replication is allowed. false otherwise.
-   */
-  @Override
-  protected boolean shouldReplicateFromDc(String datacenterName) {
-    return cloudConfig.vcrSourceDatacenters.contains(datacenterName);
   }
 
   /**
