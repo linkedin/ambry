@@ -198,8 +198,7 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   @Override
   protected void createThread(ReplicaThread replicaThread, boolean unused) {
-    Thread thread = Utils.daemonThread(replicaThread.getName(), replicaThread);
-    replicaThread.setThread(thread);
+    replicaThread.setThread(Utils.daemonThread(replicaThread.getName(), replicaThread));
     logger.info("Created replica thread {}", replicaThread.getName());
   }
 
@@ -231,10 +230,7 @@ public class VcrReplicationManager extends ReplicationEngine {
           key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
       rthread.addRemoteReplicaInfo(rinfo);
       rinfo.setReplicaThread(rthread);
-      // Start the thread when the first replica is added to this thread
-      if (rthread.getThread().getState() == Thread.State.NEW) {
-        rthread.getThread().start();
-      }
+      rthread.startThread();
       logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
     }
   }
