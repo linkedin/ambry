@@ -64,7 +64,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -97,7 +96,6 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   private CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
-  protected final Map<Long, ReplicaThread> partitionToReplicaThread;
   private final boolean trackPerDatacenterLagInMetric;
   private final Lock vcrHelixUpdateLock = new ReentrantLock();
   private volatile boolean isVcrHelixUpdater = false;
@@ -107,6 +105,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   private volatile ScheduledFuture<?> ambryVcrHelixSyncCheckTaskFuture = null;
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
   private DistributedLock vcrUpdateDistributedLock = null;
+  private final List<ReplicaThread> threadPool;
+  private final AtomicInteger threadIndex;
 
   public static final String BACKUP_NODE = "backupNode";
   public static final String TOKEN_TYPE = "tokenType";
@@ -131,7 +131,6 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.vcrClusterParticipant = vcrClusterParticipant;
-    this.partitionToReplicaThread = new ConcurrentHashMap<>();
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     try {
       vcrHelixConfig =
@@ -164,8 +163,8 @@ public class VcrReplicationManager extends ReplicationEngine {
     localDatacenterName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     logger.info("Local datacenter id = {}, Local datacenter name = {}", clusterMap.getLocalDatacenterId(),
         localDatacenterName);
-    replicaThreadPoolByDc.put(localDatacenterName,
-        createThreadPool(localDatacenterName, getNumReplThreads(cloudConfig.backupNodeCpuScale), false));
+    threadPool = createThreadPool(localDatacenterName, getNumReplThreads(cloudConfig.backupNodeCpuScale), false);
+    threadIndex = new AtomicInteger(0);
   }
 
   /**
@@ -199,20 +198,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   protected void createThread(ReplicaThread replicaThread, boolean unused) {
     replicaThread.setThread(Utils.daemonThread(replicaThread.getName(), replicaThread));
-    logger.info("Created replica thread {}", replicaThread.getName());
-  }
-
-  /**
-   * Get thread pool for given datacenter.
-   * @param datacenter The datacenter String.
-   * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
-   */
-  protected List<ReplicaThread> getThreadPool(String datacenter) {
-    if (!replicaThreadPoolByDc.keySet().contains(datacenter)) {
-      throw new UnsupportedOperationException(
-          String.format("Cross-colo replication from %s to %s is unsupported in VCR", localDatacenterName, datacenter));
-    }
-    return replicaThreadPoolByDc.get(datacenter);
   }
 
   /**
@@ -223,11 +208,13 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
-      String dc = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
-      List<ReplicaThread> replicaThreads = getThreadPool(dc);
-      ReplicaThread rthread = partitionToReplicaThread.computeIfAbsent(
-          rinfo.getLocalReplicaId().getPartitionId().getId(),
-          key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
+      String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
+      if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
+        throw new UnsupportedOperationException(
+            String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
+                localDatacenterName, datacenter, rinfo));
+      }
+      ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
       rthread.addRemoteReplicaInfo(rinfo);
       rinfo.setReplicaThread(rthread);
       rthread.startThread();
