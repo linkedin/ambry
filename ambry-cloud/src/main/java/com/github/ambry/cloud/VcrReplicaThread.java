@@ -20,17 +20,17 @@ import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.ReplicaSelectionPolicy;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
-import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.MessageInfo;
@@ -39,14 +39,16 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -73,7 +75,7 @@ public class VcrReplicaThread extends ReplicaThread {
       NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin,
       CloudDestination cloudDestination, VerifiableProperties properties) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         new ReplicationConfig(properties),
@@ -97,6 +99,45 @@ public class VcrReplicaThread extends ReplicaThread {
       String d2 = r2.getReplicaId().getDataNodeId().getHostname();
       return d1.compareTo(d2);
     }
+  }
+
+  @Override
+  public void run() {
+    try {
+      // sleep here with a random delay to spread out the thread load on Azure
+      int delay = new Random().nextInt(vcrNodeConfig.backupStartupDelaySecs) + 10; // +delta for non-zero delay
+      logger.info("Starting replica thread {} in {} seconds", Thread.currentThread().getName(), delay);
+      Thread.sleep(TimeUnit.SECONDS.toMillis(delay));
+    } catch (InterruptedException e) {
+      // pass; just start the thread
+    }
+    super.run();
+  }
+
+  /**
+   * Fetch replica-token from Azure and set it in the thread
+   * @param replicaInfo
+   */
+  void setReplicaToken(RemoteReplicaInfo replicaInfo) {
+    String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
+    String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
+    FindTokenFactory findTokenFactory = findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
+    try {
+      TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
+      if (row == null) {
+        logger.warn("Resetting token for replica {}/{} because no token found", partitionKey, rowKey);
+        replicaInfo.setToken(findTokenFactory.getNewFindToken());
+      } else {
+        DataInputStream inputStream = new DataInputStream(
+            new ByteArrayInputStream((byte[]) row.getProperty(VcrReplicationManager.BINARY_TOKEN)));
+        replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        logger.info("Loaded token for replica {}/{}, token = {}", partitionKey, rowKey, replicaInfo.getToken());
+      }
+    } catch (Throwable t) {
+      azureMetrics.replicaTokenReadErrorCount.inc();
+      logger.error("Resetting token for replica {}/{} due to {}", partitionKey, rowKey, t.toString());
+      replicaInfo.setToken(findTokenFactory.getNewFindToken());
+    } // try-catch
   }
 
   /**
@@ -132,6 +173,9 @@ public class VcrReplicaThread extends ReplicaThread {
           logger.trace("{} replicaSelectionPolicy picked {} for partition-{}",
               vcrNodeConfig.DEFAULT_REPLICA_SELECTION_POLICY, replica.getReplicaId().getDataNodeId().getHostname(),
               replica.getReplicaId().getPartitionId().getId());
+      }
+      if (replica.getToken() == null) {
+        setReplicaToken(replica);
       }
       // Group by data node
       nodes.computeIfAbsent(replica.getReplicaId().getDataNodeId(), k -> new ArrayList<>()).add(replica);
@@ -184,7 +228,7 @@ public class VcrReplicaThread extends ReplicaThread {
       logger.trace("Skipping token upload due to unchanged token, oldToken = {}, newToken = {}", oldToken, token);
       return;
     }
-    logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
+    logger.trace("Uploading token = {} for replica = {}", token, remoteReplicaInfo);
     // Table entity = Table row
     // ======================================================================================
     // | partition-key | row-key | tokenType | logSegment | offset | storeKey | binaryToken |

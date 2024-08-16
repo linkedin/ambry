@@ -24,6 +24,9 @@ public class MockFindTokenHelper extends FindTokenHelper {
       throws ReflectiveOperationException {
   }
 
+  public MockFindTokenHelper() {
+  }
+
   @Override
   public FindTokenFactory getFindTokenFactoryFromReplicaType(ReplicaType replicaType) {
     return new MockFindTokenFactory();

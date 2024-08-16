@@ -77,6 +77,7 @@ public class MockClusterMap implements ClusterMap {
 
   private RuntimeException exceptionOnSnapshot = null;
   private volatile boolean shouldDataNodeBeInFullAuto = false;
+  private DataNodeId currentDataNodeId;
 
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 default partitions/replicas
@@ -170,6 +171,10 @@ public class MockClusterMap implements ClusterMap {
     if (localDcName != null) {
       // if caller specifies the local data center name, use the one specified.
       localDatacenterName = localDcName;
+      dataCentersInClusterMap.add(localDcName);
+      currentDataNodeId = createDataNode(
+          getListOfPorts(currentPlainTextPort++, currentSSLPort++, enableHttp2Ports ? currentHttp2Port++ : null),
+          localDcName, numMountPointsPerNode);
     }
     partitions = new HashMap<>();
 
@@ -209,6 +214,9 @@ public class MockClusterMap implements ClusterMap {
             Math.min(defaultPartition.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS, null);
   }
 
+  public DataNodeId getCurrentDataNodeId() {
+    return currentDataNodeId;
+  }
   /**
    * Creates a mock cluster map with given list of data nodes and partitions.
    * @param enableSSLPorts whether to enable SSL port.

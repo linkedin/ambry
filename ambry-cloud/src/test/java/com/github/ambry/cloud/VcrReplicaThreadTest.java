@@ -22,17 +22,29 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyConverterFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -184,7 +196,7 @@ public class VcrReplicaThreadTest {
   }
 
   @Test
-  public void testSelectReplicas() {
+  public void testSelectReplicas() throws ReflectiveOperationException {
     // Give hosts a name
     AtomicInteger ai = new AtomicInteger(0);
     int Z = 'Z';
@@ -192,11 +204,11 @@ public class VcrReplicaThreadTest {
 
     // Create a test-thread
     VcrReplicaThread rthread =
-        new VcrReplicaThread("vcrReplicaThreadTest", null, clustermap,
+        new VcrReplicaThread("vcrReplicaThreadTest", new MockFindTokenHelper(), clustermap,
             new AtomicInteger(0), clustermap.getDataNodes().get(0), null, null,
             null, null, false,
             clustermap.getDataNodes().get(0).getDatacenterName(), null, null,
-            null, null, null, null, null,
+            null, null, null, null,
             properties);
 
     // Assign replicas to test-thread
@@ -246,11 +258,16 @@ public class VcrReplicaThreadTest {
    * @throws ReplicationException
    */
   @Test
-  public void testNumReplThreads() throws ReplicationException {
+  public void testNumReplThreads() throws ReplicationException, InstantiationException {
+    VcrClusterParticipant vcrClusterParticipant = mock(VcrClusterParticipant.class);
+    when(vcrClusterParticipant.getCurrentDataNodeId()).thenReturn(clustermap.getCurrentDataNodeId());
+    StoreKeyConverterFactory storeKeyConverterFactory = mock(StoreKeyConverterFactory.class);
+    StoreKeyConverter storeKeyConverter = mock(StoreKeyConverter.class);
+    when(storeKeyConverterFactory.getStoreKeyConverter()).thenReturn(storeKeyConverter);
     VcrReplicationManager manager =
         new VcrReplicationManager(properties, null, null, clustermap,
-            mock(VcrClusterParticipant.class), mock(AzureCloudDestinationSync.class), null,
-            mock(NetworkClientFactory.class), null, null);
+            vcrClusterParticipant, mock(AzureCloudDestinationSync.class), null,
+            mock(NetworkClientFactory.class), null, storeKeyConverterFactory);
     assertEquals(0, manager.getNumReplThreads(0));
     assertEquals(2, manager.getNumReplThreads(-2.5));
     assertEquals((int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * 2.5),
