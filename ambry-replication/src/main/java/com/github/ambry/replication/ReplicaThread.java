@@ -307,6 +307,8 @@ public class ReplicaThread implements Runnable {
         if (!remoteReplicaInfos.remove(remoteReplicaInfo)) {
           replicationMetrics.remoteReplicaInfoRemoveError.inc();
           logger.error("ReplicaThread: {}, RemoteReplicaInfo {} not found.", threadName, remoteReplicaInfo);
+        } else {
+          logger.info("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
         }
       } else {
         replicationMetrics.remoteReplicaInfoRemoveError.inc();
@@ -316,7 +318,6 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
-    logger.trace("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
   }
 
   /**

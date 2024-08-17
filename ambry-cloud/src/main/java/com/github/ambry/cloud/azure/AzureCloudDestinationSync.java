@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.HttpHeaderName;
+import com.azure.core.http.HttpResponse;
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
@@ -91,6 +92,8 @@ import org.slf4j.LoggerFactory;
 
 public class AzureCloudDestinationSync implements CloudDestination {
 
+  public static final String X_MS_REQUEST_ID = "x-ms-request-id";
+
   private final MetricRegistry metrics;
   protected AzureBlobLayoutStrategy azureBlobLayoutStrategy;
   protected AzureCloudConfig azureCloudConfig;
@@ -111,13 +114,19 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     private final BlobProperties properties;
     private final int azureStatus;
-    public AzureBlobProperties(BlobProperties properties, int azureStatus) {
+    private final String azureRequestId;
+    public AzureBlobProperties(BlobProperties properties, String azureRequestId, int azureStatus) {
       this.properties = properties;
+      this.azureRequestId = azureRequestId;
       this.azureStatus = azureStatus;
     }
 
     public BlobProperties getProperties() {
       return properties;
+    }
+
+    public String getAzureRequestId() {
+      return azureRequestId;
     }
 
     public int getAzureStatus() {
@@ -527,11 +536,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.blobUploadConflictCount.inc();
         AzureBlobProperties properties =
             (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
-        Integer status = null;
+        String status = "no record of previous request";
         if (properties != null) {
-          status = properties.getAzureStatus();
+          status = String.format("previous Azure request {} returned {}", properties.getAzureRequestId(),
+              properties.getAzureStatus());
         }
-        logger.error("Failed to upload blob {} from {} to Azure as it already exists & Azure previously reported {}",
+        logger.error("Failed to upload blob {} from {} to Azure as it already exists & {}",
             blobLayout, cloudBlobMetadata.getReplicaLocation(), status);
         // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
         // However, if we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
@@ -622,19 +632,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
       return entry.getProperties();
     }
 
-    BlobProperties blobProperties = getBlobProperties(blobLayout);
-    if (blobProperties == null) {
-      /**
-       * It is not efficient use of cache space to track blobs absent, but helps in debugging later.
-       */
-      getThreadLocalMdCache().putObject(blobLayout.blobFilePath,
-          new AzureBlobProperties(null, HttpStatus.SC_NOT_FOUND));
-      return null;
-    }
-
-    getThreadLocalMdCache().putObject(blobLayout.blobFilePath,
-        new AzureBlobProperties(blobProperties, HttpStatus.SC_OK));
-    return blobProperties;
+    AzureBlobProperties azureBlobProperties = getBlobProperties(blobLayout);
+    getThreadLocalMdCache().putObject(blobLayout.blobFilePath, azureBlobProperties);
+    return azureBlobProperties.getProperties();
   }
 
   /**
@@ -643,22 +643,28 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return Blob properties
    * @throws CloudStorageException
    */
-  protected BlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
+  protected AzureBlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobGetPropertiesLatency.time();
     String errfmt = "Failed to get blob properties for %s from Azure blob storage due to %s";
     try {
-      BlobProperties blobProperties = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
+      Response<BlobProperties> response = createOrGetBlobStore(blobLayout.containerName)
+          .getBlobClient(blobLayout.blobFilePath)
+          .getPropertiesWithResponse(null, null, Context.NONE);
+      BlobProperties blobProperties = response.getValue();
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobGetPropertiesSuccessRate.mark();
       logger.trace("Successfully got blob-properties for {} from Azure blob storage with etag = {}",
           blobLayout.blobFilePath, blobProperties.getETag());
-      return blobProperties;
+      return new AzureBlobProperties(blobProperties, response.getHeaders().getValue(X_MS_REQUEST_ID),
+          response.getStatusCode());
     } catch (BlobStorageException bse) {
       String msg = String.format(errfmt, blobLayout, bse.getMessage());
       if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
         logger.trace(msg);
-        return null;
+        HttpResponse response = bse.getResponse();
+        return new AzureBlobProperties(null, bse.getResponse().getHeaders().getValue(X_MS_REQUEST_ID),
+            response.getStatusCode());
       }
       azureMetrics.blobGetPropertiesErrorCount.inc();
       logger.error(msg);

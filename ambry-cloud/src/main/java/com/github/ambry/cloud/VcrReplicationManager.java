@@ -207,6 +207,7 @@ public class VcrReplicationManager extends ReplicationEngine {
    */
   @Override
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
+    ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
       if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
@@ -214,7 +215,6 @@ public class VcrReplicationManager extends ReplicationEngine {
             String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
                 localDatacenterName, datacenter, rinfo));
       }
-      ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
       rthread.addRemoteReplicaInfo(rinfo);
       rinfo.setReplicaThread(rthread);
       rthread.startThread();
@@ -403,17 +403,17 @@ public class VcrReplicationManager extends ReplicationEngine {
     rwLock.writeLock().lock();
     try {
       stopPartitionReplication(partitionId);
+      Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
+      if (cloudStore != null) {
+        storeManager.shutdownBlobStore(partitionId);
+        storeManager.removeBlobStore(partitionId);
+      } else {
+        logger.warn("Store not found for partition {}", partitionId);
+      }
+      logger.info("Partition {} removed from {}", partitionId, dataNodeId);
     } finally {
       rwLock.writeLock().unlock();
     }
-    Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
-    if (cloudStore != null) {
-      storeManager.shutdownBlobStore(partitionId);
-      storeManager.removeBlobStore(partitionId);
-    } else {
-      logger.warn("Store not found for partition {}", partitionId);
-    }
-    logger.info("Partition {} removed from {}", partitionId, dataNodeId);
     // We don't close cloudBlobStore because because replicate in ReplicaThread is using a copy of
     // remoteReplicaInfo which needs CloudBlobStore.
   }
