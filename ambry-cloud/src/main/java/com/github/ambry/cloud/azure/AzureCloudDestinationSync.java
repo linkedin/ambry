@@ -887,29 +887,50 @@ public class AzureCloudDestinationSync implements CloudDestination {
     throw new UnsupportedOperationException("updateBlobExpirationAsync will not be implemented for AzureCloudDestinationSync");
   }
 
+  /**
+   * Get azure-blob-properties and wraps it in ambry cloud-blob-metadata object.
+   * @param blobId
+   * @return
+   * @throws CloudStorageException
+   */
+  @Override
+  public CloudBlobMetadata getCloudBlobMetadata(BlobId blobId) throws CloudStorageException {
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    try {
+      BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+      if (blobPropertiesCached != null) {
+        return CloudBlobMetadata.fromMap(blobPropertiesCached.getMetadata());
+      }
+    } catch (CloudStorageException cse) {
+      throw cse;
+    } catch (Throwable t) {
+      String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout,
+          t.getMessage());
+      logger.error(error);
+      throw new CloudStorageException(error);
+    }
+    return null;
+  }
+
   @Override
   public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
-    /*
-        This is used by findMissingKeys, which doesn't even use the metadata provided.
-        It just discards it. But due to legacy reasons, we are required to impl this way.
-        We could use one-liner Azure SDK provided lightweight exists() method, which internally fetches blob-properties
-        and does the same thing that findMissingKeys does.
+    /**
+     * Just keeping this fn around for tests and legacy reasons but imo this is a horrible function.
+     * The fn takes a list as an arg, why not just a single blob ? It is only ever used to fetch metadata of a blob,
+     * not a list. And because this fn design, the higher levels have to wrap the blob-id in a list.
+     * More importantly, the return type is map. The higher levels have to explicitly look for the result in the map
+     * with blob-id. If there is typo in the code in the looking up the map, for eg. instead of storeKey.getId, we
+     * type storeKey alone, then we make a mistake of thinking the blob is not found. Just stop using maps.
      */
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = new HashMap<>();
     for (BlobId blobId: blobIds) {
-      AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
-        BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
-        if (blobPropertiesCached != null) {
-          cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobPropertiesCached.getMetadata()));
+        CloudBlobMetadata cloudBlobMetadata = getCloudBlobMetadata(blobId);
+        if (cloudBlobMetadata != null) {
+          cloudBlobMetadataMap.put(blobId.getID(), cloudBlobMetadata);
         }
-      } catch (CloudStorageException cse) {
-        throw cse;
       } catch (Throwable t) {
-        // Unknown error, increment the generic metric in azureMetrics
-        String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
-        logger.error(error);
-        throw new CloudStorageException(error);
+        throw t;
       }
     }
     return cloudBlobMetadataMap;

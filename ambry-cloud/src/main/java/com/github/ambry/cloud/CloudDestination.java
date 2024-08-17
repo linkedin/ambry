@@ -149,6 +149,8 @@ public interface CloudDestination extends Closeable {
   CompletableFuture<Short> updateBlobExpirationAsync(BlobId blobId, long expirationTime,
       CloudUpdateValidator cloudUpdateValidator);
 
+  CloudBlobMetadata getCloudBlobMetadata(BlobId blobId) throws CloudStorageException;
+
   /**
    * Query the blob metadata for the specified blobs.
    * @param blobIds list of blob Ids to query.
