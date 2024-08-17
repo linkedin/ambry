@@ -165,13 +165,10 @@ public class CloudBlobStore implements Store {
       for (MessageInfo msg : infos) {
         cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(), null);
       }
-    } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
-      }
-      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
   }
 
@@ -187,13 +184,10 @@ public class CloudBlobStore implements Store {
       for (MessageInfo msg : infos) {
         cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time, null);
       }
-    } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
-      }
-      throw new StoreException(e.getMessage(),  StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(),  StoreErrorCodes.IOError);
     }
   }
 
@@ -207,13 +201,10 @@ public class CloudBlobStore implements Store {
   public short undelete(MessageInfo info) throws StoreException {
     try {
       return cloudDestination.undeleteBlob((BlobId) info.getStoreKey(), info.getLifeVersion(), null);
-    } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
-      }
-      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
   }
 

@@ -924,7 +924,7 @@ public class CloudBlobStoreTest {
       fail("Undelete for a non existent blob should throw exception");
     } catch (StoreException ex) {
       // The expected value must come first
-      assertSame(StoreErrorCodes.ID_Not_Found, ex.getErrorCode());
+      assertSame(StoreErrorCodes.IOError, ex.getErrorCode());
     }
     int numUndelete = 1;
     if (mockingDetails(dest).isMock()) {
