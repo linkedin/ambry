@@ -624,6 +624,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     BlobProperties blobProperties = getBlobProperties(blobLayout);
     if (blobProperties == null) {
+      /**
+       * It is not efficient use of cache space to track blobs absent, but helps in debugging later.
+       */
       getThreadLocalMdCache().putObject(blobLayout.blobFilePath,
           new AzureBlobProperties(null, HttpStatus.SC_NOT_FOUND));
       return null;
