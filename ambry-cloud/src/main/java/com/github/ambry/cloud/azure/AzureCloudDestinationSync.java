@@ -904,10 +904,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     } catch (CloudStorageException cse) {
       throw cse;
     } catch (Throwable t) {
-      String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout,
-          t.getMessage());
-      logger.error(error);
-      throw new CloudStorageException(error);
+      throw new CloudStorageException(t.getMessage());
     }
     return null;
   }
