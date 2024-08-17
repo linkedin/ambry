@@ -229,6 +229,7 @@ public class CloudBlobStore implements Store {
     // Keys may be missing if we are here, we are here to find out
     for (StoreKey key : keys) {
       try {
+        // Look for key.getID and not just key. This interface is poorly designed and causes such look up errors.
         if (!cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key)).containsKey(key.getID())) {
           missingKeys.add(key);
         }
