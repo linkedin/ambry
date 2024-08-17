@@ -149,8 +149,6 @@ public interface CloudDestination extends Closeable {
   CompletableFuture<Short> updateBlobExpirationAsync(BlobId blobId, long expirationTime,
       CloudUpdateValidator cloudUpdateValidator);
 
-  CloudBlobMetadata getCloudBlobMetadata(BlobId blobId) throws CloudStorageException;
-
   /**
    * Query the blob metadata for the specified blobs.
    * @param blobIds list of blob Ids to query.
@@ -158,6 +156,9 @@ public interface CloudDestination extends Closeable {
    * it will not be included in the returned map.
    */
   Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException;
+  default CloudBlobMetadata getCloudBlobMetadata(BlobId blobId) throws CloudStorageException {
+    return null;
+  }
 
   /**
    * Query the blob metadata for the specified blobs asynchronously.

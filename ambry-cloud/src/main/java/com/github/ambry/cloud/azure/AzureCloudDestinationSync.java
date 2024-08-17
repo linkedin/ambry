@@ -917,10 +917,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
     /**
      * Just keeping this fn around for tests and legacy reasons but imo this is a horrible function.
      * The fn takes a list as an arg, why not just a single blob ? It is only ever used to fetch metadata of a blob,
-     * not a list. And because this fn design, the higher levels have to wrap the blob-id in a list.
+     * not a list. And because of this design, the higher levels have to wrap the blob-id in a list.
      * More importantly, the return type is map. The higher levels have to explicitly look for the result in the map
-     * with blob-id. If there is typo in the code in the looking up the map, for eg. instead of storeKey.getId, we
-     * type storeKey alone, then we make a mistake of thinking the blob is not found. Just stop using maps.
+     * with blob-id. If there is typo in the code in looking up the map, for eg. instead of storeKey.getId(),
+     * if we type storeKey() alone, then we make a mistake of thinking the blob is not found. Just stop using maps!
      */
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = new HashMap<>();
     for (BlobId blobId: blobIds) {
