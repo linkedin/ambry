@@ -921,7 +921,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
      * More importantly, the return type is map. The higher levels have to explicitly look for the result in the map
      * with blob-id. If there is typo in the code in looking up the map, for eg. instead of storeKey.getId(),
      * if we type storeKey() alone, then we make a mistake of thinking the blob is not found. Just stop using maps!
-     * Such lookup errors are easy to miss in code-reviews.
+     * Such lookup errors are easy to miss in code-reviews. And most legacy tests are broken beyond repair.
      */
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = new HashMap<>();
     for (BlobId blobId: blobIds) {
