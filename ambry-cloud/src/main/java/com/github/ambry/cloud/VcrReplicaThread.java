@@ -105,7 +105,7 @@ public class VcrReplicaThread extends ReplicaThread {
   public void run() {
     try {
       // sleep here with a random delay to spread out the thread load on Azure
-      int delay = new Random().nextInt(900) + 10; // +delta for non-zero delay
+      int delay = new Random().nextInt(vcrNodeConfig.backupStartupDelaySecs) + 10; // +delta for non-zero delay
       logger.info("Starting replica thread {} in {} seconds", Thread.currentThread().getName(), delay);
       Thread.sleep(TimeUnit.SECONDS.toMillis(delay));
     } catch (InterruptedException e) {
