@@ -254,7 +254,7 @@ public class CloudBlobStore implements Store {
           cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key));
       if (!cloudBlobMetadataListMap.containsKey(key.getID())) {
         // If we are here, the key must exist
-        throw new StoreException(String.format("%s not found", key), StoreErrorCodes.ID_Not_Found);
+        throw new StoreException(String.format("%s not found", key.getID()), StoreErrorCodes.ID_Not_Found);
       }
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
       return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
