@@ -110,12 +110,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected class AzureBlobProperties implements AmbryCacheEntry {
 
     private final BlobProperties properties;
-    public AzureBlobProperties(BlobProperties properties) {
+    private final int azureStatus;
+    public AzureBlobProperties(BlobProperties properties, int azureStatus) {
       this.properties = properties;
+      this.azureStatus = azureStatus;
     }
 
     public BlobProperties getProperties() {
       return properties;
+    }
+
+    public int getAzureStatus() {
+      return azureStatus;
     }
   }
   /**
@@ -519,8 +525,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
           && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
         azureMetrics.blobUploadConflictCount.inc();
-        logger.error("Failed to upload blob {} from {} to Azure blob storage because it already exists", blobLayout,
-            cloudBlobMetadata.getReplicaLocation());
+        AzureBlobProperties properties =
+            (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
+        Integer status = null;
+        if (properties != null) {
+          status = properties.getAzureStatus();
+        }
+        logger.error("Failed to upload blob {} from {} to Azure as it already exists & Azure previously reported {}",
+            blobLayout, cloudBlobMetadata.getReplicaLocation(), status);
         // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
         // However, if we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
         // The blob in the cloud is safe as Azure prevented us from overwriting it due to an ETag check.
@@ -534,6 +546,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       if (storageTimer != null) {
         storageTimer.stop();
       }
+      getThreadLocalMdCache().deleteObject(blobLayout.blobFilePath);
     } // try-catch
     return true;
   }
@@ -605,13 +618,19 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
     AzureBlobProperties entry = (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
-    BlobProperties blobProperties;
-    if (entry == null) {
-      blobProperties = getBlobProperties(blobLayout);
-      getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new AzureBlobProperties(blobProperties));
-    } else {
-      blobProperties = entry.getProperties();
+    if (entry != null && entry.getProperties() != null && entry.getAzureStatus() == HttpStatus.SC_OK) {
+      return entry.getProperties();
     }
+
+    BlobProperties blobProperties = getBlobProperties(blobLayout);
+    if (blobProperties == null) {
+      getThreadLocalMdCache().putObject(blobLayout.blobFilePath,
+          new AzureBlobProperties(null, HttpStatus.SC_NOT_FOUND));
+      return null;
+    }
+
+    getThreadLocalMdCache().putObject(blobLayout.blobFilePath,
+        new AzureBlobProperties(blobProperties, HttpStatus.SC_OK));
     return blobProperties;
   }
 
@@ -624,6 +643,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected BlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobGetPropertiesLatency.time();
+    String errfmt = "Failed to get blob properties for %s from Azure blob storage due to %s";
     try {
       BlobProperties blobProperties = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
       // Success rate is effective, success counter is ineffective because it just monotonically increases
@@ -632,22 +652,17 @@ public class AzureCloudDestinationSync implements CloudDestination {
           blobLayout.blobFilePath, blobProperties.getETag());
       return blobProperties;
     } catch (BlobStorageException bse) {
-      String msg = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
+      String msg = String.format(errfmt, blobLayout, bse.getMessage());
       if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        /*
-          We encounter many BLOB_NOT_FOUND when uploading new blobs.
-          Trace log will not flood the logs when we encounter BLOB_NOT_FOUND.
-          Set azureMetrics to null so that we don't unnecessarily increment any metrics for this common case.
-         */
         logger.trace(msg);
-        throw new CloudStorageException(msg, HttpStatus.SC_NOT_FOUND);
+        return null;
       }
       azureMetrics.blobGetPropertiesErrorCount.inc();
       logger.error(msg);
       throw new CloudStorageException(msg);
     } catch (Throwable t) {
       azureMetrics.blobGetPropertiesErrorCount.inc();
-      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
+      String error = String.format(errfmt, blobLayout, t.getMessage());
       logger.error(error);
       throw new CloudStorageException(error);
     } finally {
@@ -885,7 +900,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
         BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
-        cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobPropertiesCached.getMetadata()));
+        if (blobPropertiesCached != null) {
+          cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobPropertiesCached.getMetadata()));
+        }
       } catch (CloudStorageException cse) {
         throw cse;
       } catch (Throwable t) {

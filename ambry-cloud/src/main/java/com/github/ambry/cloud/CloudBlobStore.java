@@ -229,12 +229,8 @@ public class CloudBlobStore implements Store {
     // Keys may be missing if we are here, we are here to find out
     for (StoreKey key : keys) {
       try {
-        cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key));
-      } catch (CloudStorageException e) {
-        if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+        if (!cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key)).containsKey(key.getID())) {
           missingKeys.add(key);
-        } else {
-          throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
         }
       } catch (Throwable e) {
         throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
@@ -255,15 +251,16 @@ public class CloudBlobStore implements Store {
       // Key must exist if we are here
       Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
           cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key));
+      if (!cloudBlobMetadataListMap.containsKey(key.getID())) {
+        // If we are here, the key must exist
+        throw new StoreException(String.format("%s not found", key), StoreErrorCodes.ID_Not_Found);
+      }
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
       return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
           cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
           (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
           cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
     } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
-      }
       throw new StoreException(e, StoreErrorCodes.IOError);
     }
   }

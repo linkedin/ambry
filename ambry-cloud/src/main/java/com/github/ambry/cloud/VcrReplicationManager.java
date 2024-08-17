@@ -389,7 +389,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     } catch (Throwable e) {
       // Helix will run into error state if exception throws in Helix context.
       vcrMetrics.addPartitionErrorCount.inc();
-      logger.error("Failed to add Store for partition {} due to {}", partitionId.getId(), e.getMessage());
+      logger.error("Failed to add Store for partition {} due to {}", partitionId.getId(), e);
     } finally {
       rwLock.writeLock().unlock();
     }
