@@ -207,6 +207,7 @@ public class VcrReplicationManager extends ReplicationEngine {
    */
   @Override
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
+    // All replicas belong to the same partition, so just assign all to the same thread
     ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
