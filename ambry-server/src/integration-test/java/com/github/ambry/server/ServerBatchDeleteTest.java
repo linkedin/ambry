@@ -13,7 +13,6 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -24,12 +23,17 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.BatchDeletePartitionRequestInfo;
 import com.github.ambry.protocol.BatchDeleteRequest;
 import com.github.ambry.protocol.BatchDeleteResponse;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.MockTime;
@@ -40,6 +44,8 @@ import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -62,11 +68,18 @@ public class ServerBatchDeleteTest {
   private ArrayList<BlobId> blobIdList1;
   private ArrayList<BlobId> blobIdList2;
 
+  private List<PartitionId> partitionIds;
+
+  private ConnectedChannel channel;
+
   @Before
   public void initialize() throws Exception {
     mockClusterAgentsFactory = new MockClusterAgentsFactory(false, true, 1, 1, 2);
     mockClusterMap = mockClusterAgentsFactory.getClusterMap();
     notificationSystem = new MockNotificationSystem(mockClusterMap);
+    partitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    channel = ServerTestUtil.getBlockingChannelBasedOnPortType(new Port(mockClusterMap.getDataNodeIds().get(0).getPort(),
+                PortType.PLAINTEXT), "localhost", null, null);
     time = new MockTime(SystemTime.getInstance().milliseconds());
     Properties props = new Properties();
     props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
@@ -112,6 +125,20 @@ public class ServerBatchDeleteTest {
     Assert.assertEquals(ServerErrorCode.No_Error, response0.getError());
   }
 
+
+  /**
+   * Fetches a single blob from ambry server node
+   * @param blobId the {@link BlobId} that needs to be fetched
+   * @param channel the {@link ConnectedChannel} to use to send and receive data
+   * @throws IOException
+   */
+  GetResponse getBlob(BlobId blobId, ConnectedChannel channel) throws IOException {
+    List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+    partitionRequestInfoList.add(new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId)));
+    GetRequest getRequest = new GetRequest(1, "client1", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOption.None);
+    return GetResponse.readFrom(channel.sendAndReceive(getRequest).getInputStream(), mockClusterMap);
+  }
+
   /**
    * Deletes a list of blobs from ambry server node
    * @param batchDeletePartitionRequestInfos the {@link List<BatchDeletePartitionRequestInfo>} that needs to be deleted
@@ -119,10 +146,62 @@ public class ServerBatchDeleteTest {
    * @throws IOException
    */
   BatchDeleteResponse deleteBlobs(List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfos, ConnectedChannel channel) throws IOException {
-
     BatchDeleteRequest batchDeleteRequest = new BatchDeleteRequest(1, "client1", batchDeletePartitionRequestInfos, time.milliseconds());
-    BatchDeleteResponse batchDeleteResponse = BatchDeleteResponse.readFrom(channel.sendAndReceive(batchDeleteRequest).getInputStream(), mockClusterMap);
-    return batchDeleteResponse;
+    return BatchDeleteResponse.readFrom(channel.sendAndReceive(batchDeleteRequest).getInputStream(), mockClusterMap);
+  }
+
+  List<BatchDeletePartitionRequestInfo> getBatchDeletePartitionRequestInfoList(){
+    List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = new ArrayList<>();
+    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(0), blobIdList1));
+    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(1), blobIdList2));
+    return batchDeletePartitionRequestInfoList;
+  }
+
+  private void prepareDataForTestingBatchDelete(){
+    encryptionKey = new ArrayList<>(5);
+    usermetadata = new ArrayList<>(5);
+    data = new ArrayList<>(5);
+    Random random = new Random();
+    for (int i = 0; i < 5; i++) {
+      if (i % 2 == 0) {
+        encryptionKey.add(new byte[100]);
+        random.nextBytes(encryptionKey.get(i));
+      } else {
+        encryptionKey.add(null);
+      }
+      usermetadata.add(new byte[1000 + i]);
+      data.add(new byte[31870 + i]);
+      random.nextBytes(usermetadata.get(i));
+      random.nextBytes(data.get(i));
+    }
+
+    properties = new ArrayList<>(5);
+    properties.add(new BlobProperties(31870, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), true));
+    properties.add(new BlobProperties(31871, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), false));
+    properties.add(new BlobProperties(31872, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), true));
+    properties.add(
+        new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null));
+    properties.add(new BlobProperties(31874, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), true));
+
+    blobIdList1 = new ArrayList<>(3);
+    blobIdList2 = new ArrayList<>(2);
+    for (int i = 0; i < 5; i++) {
+      if (i%2 == 0) {
+        blobIdList1.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
+            partitionIds.get(0), false, BlobId.BlobDataType.DATACHUNK));
+      }
+      else{
+        blobIdList2.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
+            partitionIds.get(1), false, BlobId.BlobDataType.DATACHUNK));
+      }
+    }
   }
 
   /**
@@ -137,56 +216,7 @@ public class ServerBatchDeleteTest {
    */
   @Test
   public void testBatchDeleteSuccess() throws Exception {
-    DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
-    encryptionKey = new ArrayList<>(5);
-    usermetadata = new ArrayList<>(5);
-    data = new ArrayList<>(5);
-    Random random = new Random();
-    for (int i = 0; i < 5; i++) {
-      if (i % 2 == 0) {
-        encryptionKey.add(new byte[100]);
-        random.nextBytes(encryptionKey.get(i));
-      } else {
-        encryptionKey.add(null);
-      }
-      usermetadata.add(new byte[1000 + i]);
-      data.add(new byte[31870 + i]);
-      random.nextBytes(usermetadata.get(i));
-      random.nextBytes(data.get(i));
-    }
-
-    properties = new ArrayList<>(5);
-    properties.add(new BlobProperties(31870, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-    properties.add(new BlobProperties(31871, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), false));
-    properties.add(new BlobProperties(31872, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-    properties.add(
-        new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
-            Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null));
-    properties.add(new BlobProperties(31874, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-
-    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
-    blobIdList1 = new ArrayList<>(3);
-    blobIdList2 = new ArrayList<>(2);
-    for (int i = 0; i < 5; i++) {
-      if (i%2 == 0) {
-        blobIdList1.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
-            partitionIds.get(0), false, BlobId.BlobDataType.DATACHUNK));
-      }
-      else{
-        blobIdList2.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
-            partitionIds.get(1), false, BlobId.BlobDataType.DATACHUNK));
-      }
-    }
-
-    ConnectedChannel channel =
-        ServerTestUtil.getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT),
-            "localhost", null, null);
+    prepareDataForTestingBatchDelete();
     channel.connect();
     for (int i = 0; i < 3; i++) {
       putBlob(blobIdList1.get(i), properties.get(i), encryptionKey.get(i), usermetadata.get(i), data.get(i), channel);
@@ -194,11 +224,20 @@ public class ServerBatchDeleteTest {
     for (int i = 0; i < 2; i++) {
       putBlob(blobIdList2.get(i), properties.get(i), encryptionKey.get(i), usermetadata.get(i), data.get(i), channel);
     }
-    List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = new ArrayList<>();
-    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(0), blobIdList1));
-    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(1), blobIdList2));
+    List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = getBatchDeletePartitionRequestInfoList();
     BatchDeleteResponse batchDeleteResponse = deleteBlobs(batchDeletePartitionRequestInfoList, channel);
     Assert.assertEquals(ServerErrorCode.No_Error, batchDeleteResponse.getError());
+
+    // check if blobs are deleted by doing get operation on those blobs
+    for (int i = 0; i < 3; i++) {
+      GetResponse getResponse = getBlob(blobIdList1.get(i), channel);
+      Assert.assertEquals(ServerErrorCode.Blob_Deleted, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+    }
+    for (int i = 0; i < 2; i++) {
+      GetResponse getResponse = getBlob(blobIdList2.get(i), channel);
+      Assert.assertEquals(ServerErrorCode.Blob_Deleted, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+    }
+    channel.disconnect();
   }
 
   /**
@@ -213,65 +252,25 @@ public class ServerBatchDeleteTest {
    */
   @Test
   public void testBatchDeletePartialFailure() throws Exception {
-    DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
-    encryptionKey = new ArrayList<>(5);
-    usermetadata = new ArrayList<>(5);
-    data = new ArrayList<>(5);
-    Random random = new Random();
-    for (int i = 0; i < 5; i++) {
-      if (i % 2 == 0) {
-        encryptionKey.add(new byte[100]);
-        random.nextBytes(encryptionKey.get(i));
-      } else {
-        encryptionKey.add(null);
-      }
-      usermetadata.add(new byte[1000 + i]);
-      data.add(new byte[31870 + i]);
-      random.nextBytes(usermetadata.get(i));
-      random.nextBytes(data.get(i));
-    }
-
-    properties = new ArrayList<>(5);
-    properties.add(new BlobProperties(31870, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-    properties.add(new BlobProperties(31871, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), false));
-    properties.add(new BlobProperties(31872, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-    properties.add(
-        new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
-            Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null));
-    properties.add(new BlobProperties(31874, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-
-    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
-    blobIdList1 = new ArrayList<>(3);
-    blobIdList2 = new ArrayList<>(2);
-    for (int i = 0; i < 5; i++) {
-      if (i%2 == 0) {
-        blobIdList1.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
-            partitionIds.get(0), false, BlobId.BlobDataType.DATACHUNK));
-      }
-      else{
-        blobIdList2.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
-            partitionIds.get(1), false, BlobId.BlobDataType.DATACHUNK));
-      }
-    }
-
-    ConnectedChannel channel =
-        ServerTestUtil.getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT),
-            "localhost", null, null);
+    prepareDataForTestingBatchDelete();
     channel.connect();
     for (int i = 0; i < 3; i++) {
       putBlob(blobIdList1.get(i), properties.get(i), encryptionKey.get(i), usermetadata.get(i), data.get(i), channel);
     }
-    List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = new ArrayList<>();
-    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(0), blobIdList1));
-    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(1), blobIdList2));
+    List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = getBatchDeletePartitionRequestInfoList();
     BatchDeleteResponse batchDeleteResponse = deleteBlobs(batchDeletePartitionRequestInfoList, channel);
-    Assert.assertEquals(ServerErrorCode.Bad_Request, batchDeleteResponse.getError());
+    Assert.assertEquals(ServerErrorCode.Unknown_Error, batchDeleteResponse.getError());
+
+    // check if blobs are deleted by doing get operation on those blobs
+    for (int i = 0; i < 3; i++) {
+      GetResponse getResponse = getBlob(blobIdList1.get(i), channel);
+      Assert.assertEquals(ServerErrorCode.Blob_Deleted, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+    }
+    for (int i = 0; i < 2; i++) {
+      GetResponse getResponse = getBlob(blobIdList2.get(i), channel);
+      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+    }
+    channel.disconnect();
   }
 
   /**
@@ -286,61 +285,20 @@ public class ServerBatchDeleteTest {
    */
   @Test
   public void testBatchDeleteCompleteFailure() throws Exception {
-    DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
-    encryptionKey = new ArrayList<>(5);
-    usermetadata = new ArrayList<>(5);
-    data = new ArrayList<>(5);
-    Random random = new Random();
-    for (int i = 0; i < 5; i++) {
-      if (i % 2 == 0) {
-        encryptionKey.add(new byte[100]);
-        random.nextBytes(encryptionKey.get(i));
-      } else {
-        encryptionKey.add(null);
-      }
-      usermetadata.add(new byte[1000 + i]);
-      data.add(new byte[31870 + i]);
-      random.nextBytes(usermetadata.get(i));
-      random.nextBytes(data.get(i));
-    }
-
-    properties = new ArrayList<>(5);
-    properties.add(new BlobProperties(31870, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-    properties.add(new BlobProperties(31871, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), false));
-    properties.add(new BlobProperties(31872, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-    properties.add(
-        new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
-            Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null));
-    properties.add(new BlobProperties(31874, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), true));
-
-    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
-    blobIdList1 = new ArrayList<>(3);
-    blobIdList2 = new ArrayList<>(2);
-    for (int i = 0; i < 5; i++) {
-      if (i%2 == 0) {
-        blobIdList1.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
-            partitionIds.get(0), false, BlobId.BlobDataType.DATACHUNK));
-      }
-      else{
-        blobIdList2.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
-            partitionIds.get(1), false, BlobId.BlobDataType.DATACHUNK));
-      }
-    }
-
-    ConnectedChannel channel =
-        ServerTestUtil.getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT),
-            "localhost", null, null);
+    prepareDataForTestingBatchDelete();
     channel.connect();
-    List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = new ArrayList<>();
-    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(0), blobIdList1));
-    batchDeletePartitionRequestInfoList.add(new BatchDeletePartitionRequestInfo(partitionIds.get(1), blobIdList2));
+    List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = getBatchDeletePartitionRequestInfoList();
     BatchDeleteResponse batchDeleteResponse = deleteBlobs(batchDeletePartitionRequestInfoList, channel);
-    Assert.assertEquals(ServerErrorCode.Bad_Request, batchDeleteResponse.getError());
+    Assert.assertEquals(ServerErrorCode.Unknown_Error, batchDeleteResponse.getError());
+    // check if blobs are deleted by doing get operation on those blobs
+    for (int i = 0; i < 3; i++) {
+      GetResponse getResponse = getBlob(blobIdList1.get(i), channel);
+      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+    }
+    for (int i = 0; i < 2; i++) {
+      GetResponse getResponse = getBlob(blobIdList2.get(i), channel);
+      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+    }
+    channel.disconnect();
   }
 }

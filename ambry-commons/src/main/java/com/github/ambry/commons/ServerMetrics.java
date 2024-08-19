@@ -106,8 +106,11 @@ public class ServerMetrics {
   public final Histogram batchDeleteBlobResponseQueueTimeInMs;
   public final Histogram purgeBlobResponseQueueTimeInMs;
   public final Histogram deleteBlobSendTimeInMs;
+
+  public final Histogram batchDeleteBlobSendTimeInMs;
   public final Histogram purgeBlobSendTimeInMs;
   public final Histogram deleteBlobTotalTimeInMs;
+  public final Histogram batchDeleteBlobTotalTimeInMs;
   public final Histogram purgeBlobTotalTimeInMs;
 
   public final Histogram undeleteBlobRequestQueueTimeInMs;
@@ -262,6 +265,10 @@ public class ServerMetrics {
   public final Counter unExpectedStoreGetError;
   public final Counter unExpectedStoreTtlUpdateError;
   public final Counter unExpectedStoreDeleteError;
+
+  public final Counter unExpectedStoreDeleteErrorInBatchDelete;
+
+  public final Counter unExpectedStoreBatchDeleteError;
   public final Counter unExpectedStorePurgeError;
   public final Counter unExpectedStoreUndeleteError;
   public final Counter unExpectedAdminOperationError;
@@ -270,22 +277,31 @@ public class ServerMetrics {
   public final Counter dataCorruptError;
   public final Counter unknownFormatError;
   public final Counter idNotFoundError;
+
+  public final Counter idNotFoundErrorInBatchDelete;
   public final Counter idDeletedError;
+
+  public final Counter idDeletedErrorInBatchDelete;
   public final Counter idPurgedError;
   public final Counter idUndeletedError;
   public final Counter idNotDeletedError;
   public final Counter lifeVersionConflictError;
   public final Counter ttlExpiredError;
+
+  public final Counter ttlExpiredErrorInBatchDelete;
   public final Counter badRequestError;
   public final Counter temporarilyDisabledError;
   public final Counter getAuthorizationFailure;
   public final Counter deleteAuthorizationFailure;
+
+  public final Counter deleteAuthorizationFailureInBatchDelete;
   public final Counter purgeAuthorizationFailure;
   public final Counter undeleteAuthorizationFailure;
   public final Counter ttlUpdateAuthorizationFailure;
   public final Counter ttlAlreadyUpdatedError;
   public final Counter ttlUpdateRejectedError;
   public final Counter replicationResponseMessageSizeTooHigh;
+  public final Counter batchDeleteOperationError;
   public Counter sealedReplicasMismatchCount = null;
   public Counter partiallySealedReplicasMismatchCount = null;
   public Counter stoppedReplicasMismatchCount = null;
@@ -411,8 +427,10 @@ public class ServerMetrics {
     purgeBlobResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "PurgeBlobResponseQueueTimeInMs"));
     deleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobSendTime"));
+    batchDeleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobSendTime"));
     purgeBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PurgeBlobSendTimeInMs"));
     deleteBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobTotalTime"));
+    batchDeleteBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobTotalTime"));
     purgeBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PurgeBlobTotalTimeInMs"));
 
     undeleteBlobRequestQueueTimeInMs =
@@ -631,17 +649,22 @@ public class ServerMetrics {
     dataCorruptError = registry.counter(MetricRegistry.name(requestClass, "DataCorruptError"));
     unknownFormatError = registry.counter(MetricRegistry.name(requestClass, "UnknownFormatError"));
     idNotFoundError = registry.counter(MetricRegistry.name(requestClass, "IDNotFoundError"));
+    idNotFoundErrorInBatchDelete = registry.counter(MetricRegistry.name(requestClass, "IDNotFoundErrorInBatchDelete"));
     idDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDDeletedError"));
+    idDeletedErrorInBatchDelete = registry.counter(MetricRegistry.name(requestClass, "IDDeletedErrorInBatchDelete"));
     idPurgedError = registry.counter(MetricRegistry.name(requestClass, "IDPurgedError"));
     idUndeletedError = registry.counter(MetricRegistry.name(requestClass, "IDUndeletedError"));
     idNotDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDNotDeletedError"));
     lifeVersionConflictError = registry.counter(MetricRegistry.name(requestClass, "lifeVersionConflictError"));
     ttlExpiredError = registry.counter(MetricRegistry.name(requestClass, "TTLExpiredError"));
+    ttlExpiredErrorInBatchDelete = registry.counter(MetricRegistry.name(requestClass, "TTLExpiredErrorInBatchDelete"));
     temporarilyDisabledError = registry.counter(MetricRegistry.name(requestClass, "TemporarilyDisabledError"));
     badRequestError = registry.counter(MetricRegistry.name(requestClass, "BadRequestError"));
     unExpectedStorePutError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStorePutError"));
     unExpectedStoreGetError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreGetError"));
     unExpectedStoreDeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreDeleteError"));
+    unExpectedStoreDeleteErrorInBatchDelete = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreDeleteErrorInBatchDelete"));
+    unExpectedStoreBatchDeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreBatchDeleteError"));
     unExpectedStorePurgeError =
         registry.counter(MetricRegistry.name(requestClass, "UnExpectedStorePurgeError"));
     unExpectedStoreUndeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreUndeleteError"));
@@ -653,6 +676,8 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreFindEntriesError"));
     getAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "GetAuthorizationFailure"));
     deleteAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "DeleteAuthorizationFailure"));
+    deleteAuthorizationFailureInBatchDelete = registry.counter(MetricRegistry.name(requestClass, "DeleteAuthorizationFailureInBatchDelete"));
+    batchDeleteOperationError = registry.counter(MetricRegistry.name(requestClass, "BatchDeleteOperationError"));
     purgeAuthorizationFailure =
         registry.counter(MetricRegistry.name(requestClass, "PurgeAuthorizationFailure"));
     undeleteAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "UndeleteAuthorizationFailure"));

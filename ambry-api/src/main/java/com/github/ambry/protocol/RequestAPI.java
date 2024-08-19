@@ -56,8 +56,9 @@ public interface RequestAPI {
   void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
-   * Deletes a list of blobs from the store.
-   * @param request The request that contains the list of partition and id of the blob that needs to be deleted.
+   * Deletes a list of blobs from the store. Also handles the scenarios of complete success, partial success and full
+   * failure by returning appropriate response {@code BatchDeleteResponse} to network channel.
+   * @param request The request that contains the list of partitions and ids of the blob that needs to be deleted.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */

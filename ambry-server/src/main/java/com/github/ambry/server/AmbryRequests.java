@@ -112,7 +112,6 @@ import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.rmi.ServerError;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -120,7 +119,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.apache.logging.log4j.core.jmx.Server;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -520,34 +518,27 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   * Handles a {@link BatchDeleteRequest} and sends out the response via the {@link RequestResponseChannel}.
+   * Handles a {@link BatchDeleteRequest} and sends out the response via the {@link RequestResponseChannel}. The input
+   * request contains a list of {@link BatchDeletePartitionRequestInfo} each containing a list of {@link StoreKey} to be
+   * deleted in batch. This method handles full success, partial success and full failure scenarios by forming a batch
+   * response {@link BatchDeleteResponse} and sending it out via the {@link RequestResponseChannel}.
    * @param request the {@link NetworkRequest} that contains the {@link BatchDeleteRequest}.
    * @throws IOException if there is an I/O error reading from the {@link NetworkRequest}.
    * @throws InterruptedException if the operation is interrupted.
    */
   @Override
   public void handleBatchDeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
-    logger.info("Batch delete request received.");
-    BatchDeleteRequest batchDeleteRequest;
-    if (request instanceof LocalChannelRequest) {
-      // This is a case where handleDeleteRequest is called when frontends are talking to Azure. In this case, this method
-      // is called by request handler threads running within the frontend router itself. So, the request can be directly
-      // referenced as java objects without any need for deserialization.
-      batchDeleteRequest = (BatchDeleteRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
-    } else {
-      batchDeleteRequest = BatchDeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    }
+    BatchDeleteRequest batchDeleteRequest = BatchDeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    logger.trace("Batch delete request {} received.", batchDeleteRequest);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
-    boolean operationSuccessful = true;
     ServerErrorCode operationServerErrorCode = ServerErrorCode.No_Error;
     List<BatchDeletePartitionResponseInfo> partitionResponseInfoList = new ArrayList<>();
-    BatchDeleteResponse response = new BatchDeleteResponse(batchDeleteRequest.getCorrelationId(), batchDeleteRequest.getClientId(), new ArrayList<>(), ServerErrorCode.No_Error);
+    BatchDeleteResponse response = null;
     for (BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo : batchDeleteRequest.getPartitionRequestInfoList()) {
       BatchDeletePartitionResponseInfo partitionResponseInfo = null;
       try {
-        List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(batchDeletePartitionRequestInfo.getBlobIds());
         ServerErrorCode error =
             validateRequest(batchDeletePartitionRequestInfo.getPartition(), RequestOrResponseType.BatchDeleteRequest,
                 false);
@@ -559,38 +550,18 @@ public class AmbryRequests implements RequestAPI {
           }
           partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobsDeleteStatuses);
         } else {
-          List<MessageInfo> infoList = new ArrayList<>();
-          for (StoreKey convertedStoreKey : convertedStoreKeys) {
-            BlobId convertedBlobId = (BlobId) convertedStoreKey;
-            infoList.add(new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
-                convertedBlobId.getContainerId(), batchDeleteRequest.getDeletionTimeInMs()).isDeleted(true)
-                .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
-                .build());
-          }
-          Store storeToDelete = storeManager.getStore(batchDeletePartitionRequestInfo.getPartition());
-          StoreBatchDeleteInfo storeBatchDeleteInfo = storeToDelete.batchDelete(infoList);
-          List<BlobDeleteStatus> blobDeleteStatuses = new ArrayList<>();
-          for (MessageErrorInfo messageErrorInfo : storeBatchDeleteInfo.getMessageErrorInfos()){
-            ServerErrorCode msgInfoServerErrorCode = messageErrorInfo.getError() == null ? ServerErrorCode.No_Error: ErrorMapping.getStoreErrorMapping(messageErrorInfo.getError());
-            blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)messageErrorInfo.getMessageInfo().getStoreKey(), msgInfoServerErrorCode));
-          }
-          partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobDeleteStatuses);
-
-          if (notification != null) {
-            for (StoreKey convertedStoreKey : convertedStoreKeys) {
-              notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
-                  convertedStoreKey.getID(), BlobReplicaSourceType.PRIMARY);
-            }
-          }
+          partitionResponseInfo = processStoreBatchDelete(batchDeleteRequest, batchDeletePartitionRequestInfo);
         }
       } catch (Exception e) {
+        // All blobs failed to delete in a partition
+        // This is when some unknown exception gets thrown while deleting a batch of blobs in a partition,
+        // in that case all blobDeleteStatus will be marked Bad_Request
+        logger.trace("Exception when processing Batch delete request {}", e.toString());
         List<BlobDeleteStatus> blobDeleteStatuses = new ArrayList<>();
         for (StoreKey storeKey : batchDeletePartitionRequestInfo.getBlobIds()){
-          blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)storeKey, ServerErrorCode.Bad_Request));
+          blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)storeKey, ServerErrorCode.Unknown_Error));
         }
-        // All blobs failed to delete
         partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobDeleteStatuses);
-        metrics.unExpectedStoreDeleteError.inc();
       } finally {
         long processingTime = SystemTime.getInstance().milliseconds() - startTime;
         totalTimeSpent += processingTime;
@@ -598,41 +569,118 @@ public class AmbryRequests implements RequestAPI {
         // Update request metrics.
         RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
         batchDeleteRequest.accept(metricsUpdater);
-        for (BlobDeleteStatus blobDeleteStatus: partitionResponseInfo.getBlobsDeleteStatus()){
-          // Set operation level error to Bad_Request if any of the blobs fails
-          ServerErrorCode error = blobDeleteStatus.getStatus();
-          if (error != ServerErrorCode.No_Error) {
-            // Handling for control test when request type is disabled + setting default to Bad_Request for any error.
-            operationServerErrorCode = error==ServerErrorCode.Temporarily_Disabled?ServerErrorCode.Temporarily_Disabled:ServerErrorCode.Bad_Request;
-            boolean logInErrorLevel = false;
-            if (error == ServerErrorCode.Blob_Not_Found) {
-              metrics.idNotFoundError.inc();
-            } else if (error == ServerErrorCode.Blob_Expired) {
-              metrics.ttlExpiredError.inc();
-            } else if (error == ServerErrorCode.Blob_Deleted) {
-              metrics.idDeletedError.inc();
-            } else if (error == ServerErrorCode.Blob_Authorization_Failure) {
-              metrics.deleteAuthorizationFailure.inc();
-            } else {
-              logInErrorLevel = true;
-              metrics.unExpectedStoreDeleteError.inc();
-            }
-            if (logInErrorLevel) {
-              logger.error("Store exception on a delete within a batch delete operation with error code {} for request {}", error, batchDeleteRequest);
-            } else {
-              logger.trace("Store exception on a delete within a batch delete operation with error code {} for request {}", error, batchDeleteRequest);
-            }
-          }
-        }
+        operationServerErrorCode = getBatchDeleteOperationServerErrorCode(partitionResponseInfo);
+        handleBatchDeleteMetrics(partitionResponseInfo, batchDeleteRequest, operationServerErrorCode);
         partitionResponseInfoList.add(partitionResponseInfo);
-
       }
     }
+    // partitionResponseInfoList will have status for each blob in each partition.
+    // There is one global operation level status which will be set to UNKNOWN_ERROR if any of the blobs fail.
+    // There will also be individual blob level status for each blob in each partition in this list for blob-level handling on FE.
+    // Frontend will rely on this for full success, partial success and full failure scenarios in E2E operation handling.
     response = new BatchDeleteResponse(batchDeleteRequest.getCorrelationId(), batchDeleteRequest.getClientId(), partitionResponseInfoList, operationServerErrorCode);
-    logger.info(response.toString());
+    logger.trace("Batch delete response {}.", response);
     requestResponseChannel.sendResponse(response, request,
-    new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
-        metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+    new ServerNetworkResponseMetrics(metrics.batchDeleteBlobResponseQueueTimeInMs, metrics.batchDeleteBlobSendTimeInMs,
+        metrics.batchDeleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  /**
+   * Prepares infoList @link{List<MessageInfo>} for the blobs to be deleted in a partition and calls store.batchDelete.
+   * Also, calls handler for notification on blob replica deleted.
+   * @param batchDeleteRequest the {@Link BatchDeleteRequest} is the input from frontend.
+   * @param batchDeletePartitionRequestInfo the {@Link BatchDeletePartitionRequestInfo} for the partition where Batch_Delete is to be performed.
+   * @return the {@Link BatchDeletePartitionResponseInfo} having a list of {@Link BlobDeleteStatus} for the status of blobs requested to be deleted.
+   */
+  private BatchDeletePartitionResponseInfo processStoreBatchDelete(BatchDeleteRequest batchDeleteRequest, BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo)
+      throws Exception {
+    List<MessageInfo> infoList = new ArrayList<>();
+    List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(batchDeletePartitionRequestInfo.getBlobIds());
+    for (StoreKey convertedStoreKey : convertedStoreKeys) {
+      BlobId convertedBlobId = (BlobId) convertedStoreKey;
+      infoList.add(new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
+          convertedBlobId.getContainerId(), batchDeleteRequest.getDeletionTimeInMs()).isDeleted(true)
+          .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+          .build());
+    }
+    Store storeToDeleteFrom = storeManager.getStore(batchDeletePartitionRequestInfo.getPartition());
+    StoreBatchDeleteInfo storeBatchDeleteInfo = storeToDeleteFrom.batchDelete(infoList);
+    List<BlobDeleteStatus> blobDeleteStatuses = new ArrayList<>();
+    for (MessageErrorInfo messageErrorInfo : storeBatchDeleteInfo.getMessageErrorInfos()){
+      ServerErrorCode msgInfoServerErrorCode = messageErrorInfo.getError() == null ? ServerErrorCode.No_Error: ErrorMapping.getStoreErrorMapping(messageErrorInfo.getError());
+      blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)messageErrorInfo.getMessageInfo().getStoreKey(), msgInfoServerErrorCode));
+    }
+    if (notification != null) {
+      for (StoreKey convertedStoreKey : convertedStoreKeys) {
+        notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
+            convertedStoreKey.getID(), BlobReplicaSourceType.PRIMARY);
+      }
+    }
+    return new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobDeleteStatuses);
+  }
+
+  /**
+   * OperationServerErrorCode captures operation level error. If even a single blob fails, we assign Unknown_Error
+   * for the operation so frontend has a cue to check for the list of errors for all blobs individually.
+   * @param partitionResponseInfo the {@Link BatchDeletePartitionResponseInfo} for the partition where Batch_Delete is
+   *                              performed.
+   * @return the {@Link ServerErrorCode} indicating the ServerErrorCode for the BatchDelete operation.
+   */
+  private ServerErrorCode getBatchDeleteOperationServerErrorCode(BatchDeletePartitionResponseInfo partitionResponseInfo){
+    ServerErrorCode operationServerErrorCode = ServerErrorCode.No_Error;
+    for (BlobDeleteStatus blobDeleteStatus: partitionResponseInfo.getBlobsDeleteStatus()) {
+      // Set operation level error to Bad_Request if any of the blobs fails
+      ServerErrorCode error = blobDeleteStatus.getStatus();
+      if (error != ServerErrorCode.No_Error) {
+        // Handling for control test when request type is disabled + setting default to Bad_Request for any error.
+        operationServerErrorCode = error == ServerErrorCode.Temporarily_Disabled ? ServerErrorCode.Temporarily_Disabled
+            : ServerErrorCode.Unknown_Error;
+        break;
+      }
+    }
+    return operationServerErrorCode;
+  }
+
+  /**
+   * Handler for all metrics to be updated for batch delete operation.
+   */
+  private void handleBatchDeleteMetrics(BatchDeletePartitionResponseInfo partitionResponseInfo,
+      BatchDeleteRequest batchDeleteRequest, ServerErrorCode operationServerErrorCode) {
+    if (operationServerErrorCode != ServerErrorCode.No_Error) {
+      metrics.batchDeleteOperationError.inc();
+    }
+    for (BlobDeleteStatus blobDeleteStatus: partitionResponseInfo.getBlobsDeleteStatus()){
+      // Set operation level error to Bad_Request if any of the blobs fails
+      ServerErrorCode error = blobDeleteStatus.getStatus();
+      if (error != ServerErrorCode.No_Error) {
+        // TODO: BatchDelete level metrics have been added for initial monitoring. Call can be taken later to remove those counters
+        boolean logInErrorLevel = false;
+        if (error == ServerErrorCode.Blob_Not_Found) {
+          metrics.idNotFoundError.inc();
+          metrics.idNotFoundErrorInBatchDelete.inc();
+        } else if (error == ServerErrorCode.Blob_Expired) {
+          metrics.ttlExpiredError.inc();
+          metrics.ttlExpiredErrorInBatchDelete.inc();
+        } else if (error == ServerErrorCode.Blob_Deleted) {
+          metrics.idDeletedError.inc();
+          metrics.idDeletedErrorInBatchDelete.inc();
+        } else if (error == ServerErrorCode.Blob_Authorization_Failure) {
+          metrics.deleteAuthorizationFailure.inc();
+          metrics.deleteAuthorizationFailureInBatchDelete.inc();
+        } else {
+          logInErrorLevel = true;
+          metrics.unExpectedStoreDeleteError.inc();
+          metrics.unExpectedStoreDeleteErrorInBatchDelete.inc();
+        }
+        if (logInErrorLevel) {
+          logger.error("Store exception on a delete within a batch delete operation with error code {} for request {}", error,
+              batchDeleteRequest);
+        } else {
+          logger.trace("Store exception on a delete within a batch delete operation with error code {} for request {}", error,
+              batchDeleteRequest);
+        }
+      }
+    }
   }
 
   @Override

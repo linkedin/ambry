@@ -63,9 +63,11 @@ public interface Store {
 
   /**
    * Deletes all the messages in the list. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this
-   * method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
+   * method is invoked by the responding to the frontend BATCH_DELETE request. Invocation in replication thread is not
+   * yet supported.
    * @param infosToDelete The list of messages that need to be deleted.
    *                      Only the StoreKey, OperationTime, LifeVersion should be used in this method.
+   * @return The {@link StoreBatchDeleteInfo} for the given ids
    * @throws StoreException
    */
   StoreBatchDeleteInfo batchDelete(List<MessageInfo> infosToDelete) throws StoreException;
