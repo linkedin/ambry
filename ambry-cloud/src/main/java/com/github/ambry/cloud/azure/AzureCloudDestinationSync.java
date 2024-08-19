@@ -536,9 +536,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.blobUploadConflictCount.inc();
         AzureBlobProperties properties =
             (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
-        String status = "no record of previous request";
+        String status = "no record of a look-up request";
         if (properties != null) {
-          status = String.format("previous Azure request {} returned {}", properties.getAzureRequestId(),
+          status = String.format("previous look-up request %s returned %s", properties.getAzureRequestId(),
               properties.getAzureStatus());
         }
         logger.error("Failed to upload blob {} from {} to Azure as it already exists & {}",
