@@ -644,23 +644,23 @@ public class NettyResponseChannelTest {
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, uri.toString(), null);
     HttpUtil.setKeepAlive(httpRequest, false);
 
-    String iseMetricName = MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount");
-    long iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
+    String brMetricName = MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount");
+    long brBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(brMetricName).getCount();
     String cetMetricName = MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminationCount");
     long cetBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(cetMetricName).getCount();
 
     channel.writeInbound(httpRequest);
     // first outbound has to be response.
     HttpResponse response = channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
     if (!(response instanceof FullHttpResponse)) {
       // empty the channel
       while (channel.readOutbound() != null) {
       }
     }
 
-    assertEquals("Client terminations should not count towards InternalServerError count", iseBeforeCount,
-        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
+    assertEquals("Client terminations should not count towards Bad request count", brBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(brMetricName).getCount());
     assertEquals("Client terminations should have been tracked", cetBeforeCount + 1,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(cetMetricName).getCount());
   }
@@ -1439,7 +1439,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         break;
       case OnResponseCompleteWithEarlyClientTermination:
         restResponseChannel.onResponseComplete(Utils.convertToClientTerminationException(new Exception()));
-        assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
+        assertEquals("ResponseStatus does not reflect error", ResponseStatus.BadRequest,
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
         break;

@@ -577,9 +577,12 @@ class NettyResponseChannel implements RestResponseChannel {
         errHeaders = restServiceException.getExceptionHeadersMap();
       }
     } else if (Utils.isPossibleClientTermination(cause)) {
+      // Client closed the connection, it's likely that error response won't be able to reach client.
+      // If that's the case, then set the status to client error. This would then be recorded as client error
+      // in ContainerMetrics
       nettyMetrics.clientEarlyTerminationCount.inc();
-      status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
-      errorResponseStatus = ResponseStatus.InternalServerError;
+      status = HttpResponseStatus.BAD_REQUEST;
+      errorResponseStatus = ResponseStatus.BadRequest;
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
