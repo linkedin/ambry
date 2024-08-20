@@ -304,6 +304,14 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     }
   }
 
+  protected  RemoteReplicaInfo createRemoteReplica(ReplicaId remote, ReplicaId local, Store store, FindToken token) {
+    return
+        new RemoteReplicaInfo(remote, local, store,
+            token,
+            TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
+            SystemTime.getInstance(), remote.getDataNodeId().getPortToConnectTo());
+  }
+
   /**
    * Assign {@link RemoteReplicaInfo} to a {@link ReplicaThread} for replication.
    * The assignment is based on {@link DataNodeId}. If no {@link ReplicaThread} responsible for a {@link DataNodeId},
@@ -777,10 +785,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             FindToken findToken =
                 tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
             RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(remoteReplica, partitionInfo.getLocalReplicaId(), partitionInfo.getStore(),
-                    findToken,
-                    TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
-                    SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+                createRemoteReplica(remoteReplica, partitionInfo.getLocalReplicaId(), partitionInfo.getStore(), findToken);
             logger.info("Adding remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
                 remoteReplica.getDataNodeId());
             if (partitionInfo.addReplicaInfoIfAbsent(remoteReplicaInfo)) {

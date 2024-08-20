@@ -39,6 +39,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
@@ -215,31 +216,26 @@ public class VcrReplicationManager extends ReplicationEngine {
      * It is called by helix when a new partition (not a new replica) is assigned to VCR node.
      * addPartition -> addPartitionToReplicaThread
      */
-    try {
-      partitionIdThreadMapLock.writeLock().lock();
-      long pid = partitionId.getId();
-      if (partitionIdThreadMap.containsKey(pid)) {
-        throw new ReplicationException(String.format("Partition-%s already exists in replica-thread-map", pid),
-            ServerErrorCode.IO_Error);
-      }
-      // All replicas belong to the same partition, so just assign all to the same thread
-      ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
-      for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
-        String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
-        if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
-          throw new UnsupportedOperationException(
-              String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
-                  localDatacenterName, datacenter, rinfo));
-        }
-        rthread.addRemoteReplicaInfo(rinfo);
-        rinfo.setReplicaThread(rthread);
-        logger.info("[PARTITION] Added replica {} to thread {}", rinfo, rthread.getName());
-      }
-      partitionIdThreadMap.put(partitionId.getId(), rthread);
-      rthread.startThread();
-    } finally {
-      partitionIdThreadMapLock.writeLock().unlock();
+    long pid = partitionId.getId();
+    if (partitionIdThreadMap.containsKey(pid)) {
+      throw new ReplicationException(String.format("Partition-%s already exists in replica-thread-map", pid),
+          ServerErrorCode.IO_Error);
     }
+    // All replicas belong to the same partition, so just assign all to the same thread
+    ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
+    for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+      String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
+      if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
+        throw new UnsupportedOperationException(
+            String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
+                localDatacenterName, datacenter, rinfo));
+      }
+      rthread.addRemoteReplicaInfo(rinfo);
+      rinfo.setReplicaThread(rthread);
+      logger.info("[PARTITION] Added replica {} to thread {}", rinfo, rthread.getName());
+    }
+    partitionIdThreadMap.put(partitionId.getId(), rthread);
+    rthread.startThread();
   }
 
   /**
@@ -408,6 +404,14 @@ public class VcrReplicationManager extends ReplicationEngine {
     }
   }
 
+  @Override
+  protected RemoteReplicaInfo createRemoteReplica(ReplicaId remote, ReplicaId local, Store store, FindToken token) {
+    return
+        new RemoteReplicaInfo(this.replicationConfig, remote, local, store,
+            token, -1, SystemTime.getInstance(),
+            remote.getDataNodeId().getPortToConnectTo());
+  }
+
   /**
    * Add a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
    * @param partitionId the {@link PartitionId} of the replica to add.
@@ -416,6 +420,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   void addPartition(PartitionId partitionId) {
     try {
       rwLock.writeLock().lock();
+      partitionIdThreadMapLock.writeLock().lock();
       if (partitionToPartitionInfo.containsKey(partitionId)) {
         vcrMetrics.addPartitionErrorCount.inc();
         logger.warn("Partition {} already exists", partitionId.getId());
@@ -437,11 +442,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       Store store = storeManager.getStore(partitionId);
       for (ReplicaId peerReplica : peerReplicas) {
         if (peerReplica.getDataNodeId().getDatacenterName().equalsIgnoreCase(localDatacenterName)) {
-          RemoteReplicaInfo remoteReplicaInfo =
-              new RemoteReplicaInfo(this.replicationConfig, peerReplica, cloudReplica, store,
-                  null, -1, SystemTime.getInstance(),
-                  peerReplica.getDataNodeId().getPortToConnectTo());
-          remoteReplicaInfos.add(remoteReplicaInfo);
+          remoteReplicaInfos.add(createRemoteReplica(peerReplica, cloudReplica, store, null));
         }
       }
       if (!remoteReplicaInfos.isEmpty()) {
@@ -453,6 +454,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       vcrMetrics.addPartitionErrorCount.inc();
       logger.error("Failed to add partition {} due to {}", partitionId.getId(), e);
     } finally {
+      partitionIdThreadMapLock.writeLock().unlock();
       rwLock.writeLock().unlock();
     }
   }
