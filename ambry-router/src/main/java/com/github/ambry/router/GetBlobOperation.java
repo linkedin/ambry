@@ -1066,6 +1066,10 @@ class GetBlobOperation extends GetOperation {
           if (chunkOperationTracker.hasFailedOnNotFound()) {
             chunkException =
                 buildChunkException("Get Chunk failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
+            if (!chunkBlobId.equals(blobId) && chunkBlobId.getBlobDataType() == BlobId.BlobDataType.DATACHUNK) {
+              // Metadata exist but missing a data chunk
+              routerMetrics.missingDataChunkErrorCount.inc();
+            }
           } else if (chunkOperationTracker.hasSomeUnavailability()) {
             setChunkException(
                 buildChunkException("Get Chunk failed because of offline replicas", RouterErrorCode.AmbryUnavailable));
@@ -1455,7 +1459,7 @@ class GetBlobOperation extends GetOperation {
      * @return a {@link RouterException} with additional info about the chunk that failed.
      */
     private RouterException buildChunkException(String message, Throwable cause, RouterErrorCode errorCode) {
-      return new RouterException(message + ". Chunk ID: " + chunkBlobId, cause, errorCode);
+      return new RouterException(message + ". Chunk ID: " + chunkBlobId + " Blob ID: " + blobId, cause, errorCode);
     }
 
     /**
@@ -1464,7 +1468,7 @@ class GetBlobOperation extends GetOperation {
      * @return a {@link RouterException} with additional info about the chunk that failed.
      */
     private RouterException buildChunkException(String message, RouterErrorCode errorCode) {
-      return new RouterException(message + ". Chunk ID: " + chunkBlobId, errorCode);
+      return new RouterException(message + ". Chunk ID: " + chunkBlobId + " Blob ID: " + blobId, errorCode);
     }
 
     /**

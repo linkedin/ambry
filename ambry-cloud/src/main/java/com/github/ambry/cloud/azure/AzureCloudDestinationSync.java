@@ -302,17 +302,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param tableName Name of the table in Azure Table Service
    */
   public TableEntity getTableEntity(String tableName, String partitionKey, String rowKey) {
-    Throwable throwable = null;
     try {
       return getTableClient(tableName).getEntity(partitionKey, rowKey);
     } catch (Throwable e) {
-      throwable = e;
-    } finally {
-      if (throwable != null) {
-        logger.error("Failed to fetch table entity {}/{} from {} due to {}",
-            partitionKey, rowKey, tableName, throwable);
-        throwable.printStackTrace();
-      }
+      logger.error("Failed to fetch table entity {}/{} from {} due to {}",
+          partitionKey, rowKey, tableName, e.getMessage());
     }
     return null;
   }

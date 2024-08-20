@@ -376,13 +376,6 @@ public class CloudConfig {
   @Default(DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS)
   public final String vcrClusterAgentsFactoryClass;
 
-  /**
-   * Comma separated set of datacenters which can act as peer for cross colo replication.
-   */
-  @Config(VCR_SOURCE_DATACENTERS)
-  @Default("")
-  public final Set<String> vcrSourceDatacenters;
-
   @Config(CLOUD_COMPACTION_NUM_THREADS)
   public final int cloudCompactionNumThreads;
 
@@ -470,6 +463,10 @@ public class CloudConfig {
   @Config(BACKUP_NODE_CPU_SCALE)
   public final double backupNodeCpuScale;
 
+  public static final String BACKUP_STARTUP_DELAY_SECS = "backup.startup.delay.secs";
+  public static final int DEFAULT_BACKUP_STARTUP_DELAY_SECS = 900;
+  @Config(BACKUP_STARTUP_DELAY_SECS)
+  public final int backupStartupDelaySecs;
   /**
    * Specifies how the backup-node must select server replicas to replicate from
    */
@@ -479,6 +476,7 @@ public class CloudConfig {
   public ReplicaSelectionPolicy replicaSelectionPolicy;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
+    backupStartupDelaySecs = verifiableProperties.getInt(BACKUP_STARTUP_DELAY_SECS, DEFAULT_BACKUP_STARTUP_DELAY_SECS);;
     replicaSelectionPolicy = verifiableProperties.getEnum(REPLICA_SELECTION_POLICY, ReplicaSelectionPolicy.class,
         DEFAULT_REPLICA_SELECTION_POLICY);
     backupNodeCpuScale = verifiableProperties.getDoubleInRange(BACKUP_NODE_CPU_SCALE,
@@ -534,12 +532,8 @@ public class CloudConfig {
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
-
     vcrClusterAgentsFactoryClass =
         verifiableProperties.getString(VCR_CLUSTER_AGENTS_FACTORY_CLASS, DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS);
-
-    vcrSourceDatacenters =
-        Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
     vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
         DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
     vcrHelixUpdaterPartitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "");
