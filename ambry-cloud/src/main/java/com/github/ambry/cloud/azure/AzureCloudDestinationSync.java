@@ -659,7 +659,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
       CloudUpdateValidator unused) throws CloudStorageException, StoreException {
-    Timer.Context storageTimer = azureMetrics.blobUpdateDeleteTimeLatency.time();
+    Timer.Context storageTimer = azureMetrics.blobDeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
     String errfmt = "Uninitialized string";
@@ -667,8 +667,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // AzureBlobDeletePolicy.IMMEDIATE
       if (azureCloudConfig.azureBlobDeletePolicy.equals(AzureBlobDeletePolicy.IMMEDIATE)) {
         errfmt = "Failed to delete blob %s in Azure blob storage due to (%s)";
-        return eraseBlob(createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath),
+        int status = eraseBlob(createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath),
             "CUSTOMER_DELETE_REQUEST");
+        if(status != HttpStatus.SC_ACCEPTED) {
+          // Throw CloudStorageException for operations that reached Azure, else StoreException.
+          // Throw an error to halt replication. If we don't, then we risk orphan blobs in Azure costing storage.
+          // The message here will be concatenated with errfmt string in the catch-clause.
+          throw new CloudStorageException(String.format("%s error code", status), status);
+        }
+        azureMetrics.blobDeleteSuccessRate.mark();
+        return true; // this return value is unused
       }
 
       // AzureBlobDeletePolicy.EVENTUAL
@@ -695,16 +703,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobPropertiesCached);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
-      azureMetrics.blobUpdateDeleteTimeSuccessRate.mark();
+      azureMetrics.blobDeleteSuccessRate.mark();
       logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return true;
     } catch (StoreException e) {
-      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      azureMetrics.blobDeleteErrorCount.inc();
       throw e;
     } catch (Throwable t) {
-      // not a good metric name, but too late to change it now because all the dashboards use it
-      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      azureMetrics.blobDeleteErrorCount.inc();
       String error = String.format(errfmt, blobLayout, t.getMessage());
       logger.error(error);
       throw new CloudStorageException(error);
@@ -755,7 +762,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobPropertiesCached);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
-      azureMetrics.blobUndeleteSucessRate.mark();
+      azureMetrics.blobUndeleteSuccessRate.mark();
       logger.trace("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return lifeVersion;
@@ -847,7 +854,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobPropertiesCached);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
-      azureMetrics.blobUpdateTTLSucessRate.mark();
+      azureMetrics.blobUpdateTTLSuccessRate.mark();
       logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return cloudlifeVersion;
@@ -911,11 +918,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   /**
    * Erases a blob permanently, including all snapshots of it from Azure Storage.
-   * @param blobClient Client for the blob
+   *
+   * @param blobClient  Client for the blob
    * @param eraseReason Reason to delete
    * @return True if blob deleted, else false.
    */
-  protected boolean eraseBlob(BlobClient blobClient, String eraseReason) {
+  protected int eraseBlob(BlobClient blobClient, String eraseReason) {
     Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
     BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch("*");
     Response<Void> response = blobClient.deleteWithResponse(DeleteSnapshotsOptionType.INCLUDE,
@@ -925,18 +933,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
       case HttpStatus.SC_ACCEPTED:
         logger.trace("[ERASE] Erased blob {}/{} from Azure blob storage, reason = {}, status = {}",
             blobClient.getContainerName(), blobClient.getBlobName(), eraseReason, response.getStatusCode());
-        azureMetrics.blobCompactionSuccessRate.mark();
         break;
       case HttpStatus.SC_NOT_FOUND:
         // If you're trying to delete a blob, then it must exist.
         // If it doesn't, then there is something wrong in the code. Go figure it out !
       default:
         // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
-        azureMetrics.blobCompactionErrorCount.inc();
         logger.error("[ERASE] Failed to erase blob {}/{} from Azure blob storage, reason = {}, status {}",
             blobClient.getContainerName(), blobClient.getBlobName(), eraseReason, response.getStatusCode());
     }
-    return response.getStatusCode() == HttpStatus.SC_ACCEPTED;
+    return response.getStatusCode();
   }
 
   /**
@@ -970,8 +976,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
         eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime, gracePeriod, now);
       } else if (metadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
         long expirationTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME));
-        eraseBlob = (expirationTime + gracePeriod) < now;
-        eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, gracePeriod, now);
+        eraseBlob = expirationTime < now; // no grace-period for expired blobs; just get rid of them
+        eraseReason = String.format("%s: %s < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, now);
       } else if (deletedContainers.contains(accountContainerIds)) {
         eraseBlob = true;
         eraseReason = String.format("account = %s, deleted_container = %s", accountContainerIds.getFirst(), accountContainerIds.getSecond());
@@ -985,7 +991,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
           logger.trace("[DRY-RUN][COMPACT] Can erase blob {} from Azure blob storage because {}", blobItem.getName(), eraseReason);
           numBlobsPurged += 1;
         } else {
-          numBlobsPurged += eraseBlob(blobContainerClient.getBlobClient(blobItem.getName()), eraseReason) ? 1 : 0;
+          int status = eraseBlob(blobContainerClient.getBlobClient(blobItem.getName()), eraseReason);
+          if (status == HttpStatus.SC_ACCEPTED) {
+            numBlobsPurged += 1;
+            azureMetrics.blobCompactionSuccessRate.mark();
+          } else {
+            azureMetrics.blobCompactionErrorCount.inc();
+          }
         }
       } else {
         logger.trace("[COMPACT] Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);

@@ -13,12 +13,14 @@
  */
 package com.github.ambry.cloud;
 
+import org.apache.http.HttpStatus;
+
+
 /**
  * Exception class indicating an error moving data between Ambry and cloud storage.
  */
 public class CloudStorageException extends Exception {
   private static final long serialVersionUID = 1;
-  private static final int DEFAULT_STATUS_CODE = 500;
   private final int statusCode;
   private final boolean isRetryable;
   private final Long retryDelayMs;
@@ -35,7 +37,7 @@ public class CloudStorageException extends Exception {
   }
 
   public CloudStorageException(String message, Throwable e) {
-    this(message, e, DEFAULT_STATUS_CODE, false, null);
+    this(message, e, HttpStatus.SC_INTERNAL_SERVER_ERROR, false, null);
   }
 
   public CloudStorageException(String message, Throwable e, int statusCode, boolean isRetryable, Long retryDelayMs) {
