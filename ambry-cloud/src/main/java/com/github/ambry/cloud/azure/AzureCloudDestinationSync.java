@@ -632,7 +632,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureBlobProperties.getAzureStatus() == HttpStatus.SC_OK) {
       return azureBlobProperties;
     }
-
     azureBlobProperties = getBlobProperties(blobLayout);
     getThreadLocalMdCache().putObject(blobLayout.blobFilePath, azureBlobProperties);
     return azureBlobProperties;
@@ -830,8 +829,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   @Override
   public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
-    AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     try {
+      AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       return getAzureBlobPropertiesCached(blobLayout).getProperties() != null;
     } catch (CloudStorageException cse) {
       throw cse;
@@ -910,7 +909,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       AzureBlobProperties azureBlobProperties = getAzureBlobPropertiesCached(blobLayout);
       if (azureBlobProperties.getProperties() == null) {
         throw new CloudStorageException(String.format("Failed to find blob properties for %s due to %s",
-            blobLayout.blobFilePath, azureBlobProperties.getAzureStatus()), azureBlobProperties.getAzureStatus());
+            blobLayout.blobFilePath, azureBlobProperties.getAzureStatus()));
       }
       return CloudBlobMetadata.fromMap(azureBlobProperties.getProperties().getMetadata());
     } catch (CloudStorageException cse) {

@@ -216,18 +216,18 @@ public class CloudBlobStore implements Store {
    */
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
-    Set<StoreKey> missingKeys = new HashSet<>();
     // Keys may be missing if we are here, we are here to find out
-    for (StoreKey key : keys) {
-      try {
+    try {
+      Set<StoreKey> missingKeys = new HashSet<>();
+      for (StoreKey key : keys) {
         if (!cloudDestination.doesBlobExist((BlobId) key)) {
           missingKeys.add(key);
         }
-      } catch (Throwable e) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
       }
+      return missingKeys;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
-    return missingKeys;
   }
 
   /**
@@ -246,12 +246,14 @@ public class CloudBlobStore implements Store {
           null, (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
           cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
     } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+      switch (e.getStatusCode()) {
+        case HttpStatus.SC_NOT_FOUND:
+          throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+        default:
+          throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
       }
-      throw new StoreException(e, StoreErrorCodes.IOError);
     } catch (Throwable e) {
-      throw new StoreException(e, StoreErrorCodes.IOError);
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
   }
 
