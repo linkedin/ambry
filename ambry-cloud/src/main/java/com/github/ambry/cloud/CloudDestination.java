@@ -241,7 +241,7 @@ public interface CloudDestination extends Closeable {
    * @param id
    * @return
    */
-  default boolean doesBlobExist(BlobId id) {return false;};
+  default boolean doesBlobExist(BlobId id) throws CloudStorageException {return false;};
 
   /**
    * Creates a table in Azure Table or gets a ref to it if it exists

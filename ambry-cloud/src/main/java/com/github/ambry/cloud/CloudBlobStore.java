@@ -220,7 +220,7 @@ public class CloudBlobStore implements Store {
     // Keys may be missing if we are here, we are here to find out
     for (StoreKey key : keys) {
       try {
-        if (cloudDestination.getCloudBlobMetadata((BlobId) key) == null) {
+        if (!cloudDestination.doesBlobExist((BlobId) key)) {
           missingKeys.add(key);
         }
       } catch (Throwable e) {
@@ -239,17 +239,17 @@ public class CloudBlobStore implements Store {
   @Override
   public MessageInfo findKey(StoreKey key) throws StoreException {
     try {
-      CloudBlobMetadata cloudBlobMetadata =
-          cloudDestination.getCloudBlobMetadata((BlobId) key);
-      if (cloudBlobMetadata == null) {
-        // If we are here, the key must exist
-        throw new StoreException(String.format("%s must be present in Azure but was absent", key.getID()),
-            StoreErrorCodes.ID_Not_Found);
-      }
+      // If we are here, the key must exist
+      CloudBlobMetadata cloudBlobMetadata = cloudDestination.getCloudBlobMetadata((BlobId) key);
       return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
-          cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
-          (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
+          cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(),
+          null, (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
           cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
+    } catch (CloudStorageException e) {
+      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+      }
+      throw new StoreException(e, StoreErrorCodes.IOError);
     } catch (Throwable e) {
       throw new StoreException(e, StoreErrorCodes.IOError);
     }

@@ -625,16 +625,17 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return Blob properties
    * @throws CloudStorageException
    */
-  protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
+  protected AzureBlobProperties getAzureBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
-    AzureBlobProperties entry = (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
-    if (entry != null && entry.getProperties() != null && entry.getAzureStatus() == HttpStatus.SC_OK) {
-      return entry.getProperties();
+    AzureBlobProperties azureBlobProperties = (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
+    if (azureBlobProperties != null && azureBlobProperties.getProperties() != null &&
+        azureBlobProperties.getAzureStatus() == HttpStatus.SC_OK) {
+      return azureBlobProperties;
     }
 
-    AzureBlobProperties azureBlobProperties = getBlobProperties(blobLayout);
+    azureBlobProperties = getBlobProperties(blobLayout);
     getThreadLocalMdCache().putObject(blobLayout.blobFilePath, azureBlobProperties);
-    return azureBlobProperties.getProperties();
+    return azureBlobProperties;
   }
 
   /**
@@ -696,7 +697,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       }
 
       // AzureBlobDeletePolicy.EVENTUAL
-      BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+      BlobProperties blobPropertiesCached = getAzureBlobPropertiesCached(blobLayout).getProperties();
       Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
       // lifeVersion must always be present
       short cloudlifeVersion = Short.parseShort(cloudMetadataCached.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
@@ -750,7 +751,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+    BlobProperties blobPropertiesCached = getAzureBlobPropertiesCached(blobLayout).getProperties();
     Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
@@ -828,14 +829,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return
    */
   @Override
-  public boolean doesBlobExist(BlobId blobId) {
-    AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+  public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     try {
-      return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).exists();
+      return getAzureBlobPropertiesCached(blobLayout).getProperties() != null;
+    } catch (CloudStorageException cse) {
+      throw cse;
     } catch (Throwable t) {
-      azureMetrics.blobCheckError.inc();
-      logger.error("Failed to check if blob {} exists in Azure blob storage due to {}", blobLayout, t.getMessage());
-      return false;
+      throw new CloudStorageException(t.getMessage());
     }
   }
 
@@ -845,7 +846,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+    BlobProperties blobPropertiesCached = getAzureBlobPropertiesCached(blobLayout).getProperties();
     Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
     // lifeVersion must always be present because we add it explicitly before PUT
     short cloudlifeVersion = Short.parseShort(cloudMetadataCached.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
@@ -906,16 +907,17 @@ public class AzureCloudDestinationSync implements CloudDestination {
   public CloudBlobMetadata getCloudBlobMetadata(BlobId blobId) throws CloudStorageException {
     AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     try {
-      BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
-      if (blobPropertiesCached != null) {
-        return CloudBlobMetadata.fromMap(blobPropertiesCached.getMetadata());
+      AzureBlobProperties azureBlobProperties = getAzureBlobPropertiesCached(blobLayout);
+      if (azureBlobProperties.getProperties() == null) {
+        throw new CloudStorageException(String.format("Failed to find blob properties for %s due to %s",
+            blobLayout.blobFilePath, azureBlobProperties.getAzureStatus()), azureBlobProperties.getAzureStatus());
       }
+      return CloudBlobMetadata.fromMap(azureBlobProperties.getProperties().getMetadata());
     } catch (CloudStorageException cse) {
       throw cse;
     } catch (Throwable t) {
       throw new CloudStorageException(t.getMessage());
     }
-    return null;
   }
 
   @Override
