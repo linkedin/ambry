@@ -279,9 +279,12 @@ public class VcrReplicationManager extends ReplicationEngine {
           logger.info("[REPLICA] Added replica {} to thread {}", rinfo, rthread.getName());
         } catch (Throwable e) {
           vcrMetrics.addPartitionErrorCount.inc();
-          logger.error("Failed to add replica {} to thread due to {}", rinfo, e);
+          logger.error("[REPLICA] Failed to add replica {} to thread due to {}", rinfo, e);
         }
       }
+    } catch (Throwable e) {
+      vcrMetrics.addPartitionErrorCount.inc();
+      logger.error("Failed to add replica(s) due to {}", e);
     } finally {
       partitionIdThreadMapLock.readLock().unlock();
     }
