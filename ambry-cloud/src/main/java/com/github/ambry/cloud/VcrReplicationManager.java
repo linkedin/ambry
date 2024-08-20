@@ -40,16 +40,16 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
-import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -57,19 +57,19 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.helix.lock.DistributedLock;
@@ -95,7 +95,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   protected ScheduledExecutorService cloudCompactionScheduler;
 
   private CloudContainerCompactor cloudContainerCompactor;
-  private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final boolean trackPerDatacenterLagInMetric;
   private final Lock vcrHelixUpdateLock = new ReentrantLock();
   private volatile boolean isVcrHelixUpdater = false;
@@ -107,6 +106,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   private DistributedLock vcrUpdateDistributedLock = null;
   private final List<ReplicaThread> threadPool;
   private final AtomicInteger threadIndex;
+  private final HashMap<Long, ReplicaThread> partitionIdThreadMap;
+  private final ReadWriteLock partitionIdThreadMapLock = new ReentrantReadWriteLock();
 
   public static final String BACKUP_NODE = "backupNode";
   public static final String TOKEN_TYPE = "tokenType";
@@ -165,6 +166,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         localDatacenterName);
     threadPool = createThreadPool(localDatacenterName, getNumReplThreads(cloudConfig.backupNodeCpuScale), false);
     threadIndex = new AtomicInteger(0);
+    partitionIdThreadMap = new HashMap<>();
   }
 
   /**
@@ -177,7 +179,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+      LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         notification, storeKeyConverter, transformer, replicatingOverSsl, datacenterName, responseHandler, time,
         replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, cloudDestination, properties);
@@ -202,24 +204,90 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   /**
    * Assign all replicas of a partition to the same thread to avoid concurrent updates to Azure
-   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo}
-   * @param startThread start threads on creation
+   *
+   * @param partitionId Partition
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} List of replicas, must belong to same partition
+   */
+  protected void addPartitionToReplicaThread(PartitionId partitionId, List<RemoteReplicaInfo> remoteReplicaInfos)
+      throws ReplicationException {
+    /**
+     * This fn must be called with threadMapLock.writeLock() held.
+     * It is called by helix when a new partition (not a new replica) is assigned to VCR node.
+     * addPartition -> addPartitionToReplicaThread
+     */
+    try {
+      partitionIdThreadMapLock.writeLock().lock();
+      long pid = partitionId.getId();
+      if (partitionIdThreadMap.containsKey(pid)) {
+        throw new ReplicationException(String.format("Partition-%s already exists in replica-thread-map", pid),
+            ServerErrorCode.IO_Error);
+      }
+      // All replicas belong to the same partition, so just assign all to the same thread
+      ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
+      for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+        String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
+        if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
+          throw new UnsupportedOperationException(
+              String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
+                  localDatacenterName, datacenter, rinfo));
+        }
+        rthread.addRemoteReplicaInfo(rinfo);
+        rinfo.setReplicaThread(rthread);
+        logger.info("[PARTITION] Added replica {} to thread {}", rinfo, rthread.getName());
+      }
+      partitionIdThreadMap.put(partitionId.getId(), rthread);
+      rthread.startThread();
+    } finally {
+      partitionIdThreadMapLock.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Assign all replicas of a partition to the same thread to avoid concurrent updates to Azure
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} These replicas belong to different partitions
+   * @param unused unused variable
    */
   @Override
-  protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
-    // All replicas belong to the same partition, so just assign all to the same thread
-    ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
-    for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
-      String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
-      if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
-        throw new UnsupportedOperationException(
-            String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
-                localDatacenterName, datacenter, rinfo));
+  protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean unused) {
+    /**
+     * This fn must be called with threadMapLock.readLock() held.
+     * It is called by helix when a new replica (not a new partition) is assigned to VCR node.
+     * onReplicaAddedOrRemoved -> addPartitionToReplicaThread
+     *
+     * Cannot use the same rwlock.writeLock because this is called with rwlock.readLock.
+     * Lock upgrades are not allowed.
+     * If it is allowed in the future, then the release below could release the lock entirely
+     * and not downgrade back to read-mode, causing more trouble.
+     */
+    try {
+      partitionIdThreadMapLock.readLock().lock();
+      for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+        // Replicas here may belong to different partitions, but they must already be assigned to this node
+        long pid = rinfo.getReplicaId().getPartitionId().getId();
+        if (!partitionIdThreadMap.containsKey(pid)) {
+          // Do not throw an error because this run in helix-context and nothing catches the error in the common code,
+          // so helix will go bonkers. Just re-use this metric here.
+          logger.error("Partition-{} does not exist in replica-thread-map", pid);
+          continue;
+        }
+        try {
+          ReplicaThread rthread = partitionIdThreadMap.get(pid);
+          String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
+          if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
+            throw new UnsupportedOperationException(
+                String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
+                    localDatacenterName, datacenter, rinfo));
+          }
+          rthread.addRemoteReplicaInfo(rinfo);
+          rinfo.setReplicaThread(rthread);
+          logger.info("[REPLICA] Added replica {} to thread {}", rinfo, rthread.getName());
+        } catch (Throwable e) {
+          vcrMetrics.addPartitionErrorCount.inc();
+          logger.error("Failed to add replica {} to thread due to {}", rinfo, e);
+        }
       }
-      rthread.addRemoteReplicaInfo(rinfo);
-      rinfo.setReplicaThread(rthread);
-      rthread.startThread();
-      logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
+    } finally {
+      partitionIdThreadMapLock.readLock().unlock();
     }
   }
 
@@ -271,7 +339,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             vcrHelixUpdateLock.unlock();
           }
         }
-        addReplica(partitionId);
+        addPartition(partitionId);
       }
 
       @Override
@@ -290,13 +358,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             vcrHelixUpdateLock.unlock();
           }
         }
-        try {
-          removeReplica(partitionId);
-        } catch (Exception e) {
-          // Helix will run into error state if exception throws in Helix context.
-          vcrMetrics.removePartitionErrorCount.inc();
-          logger.error("Exception on removing Partition {} from {}: ", partitionId, dataNodeId, e);
-        }
+        removePartition(partitionId);
       }
     });
 
@@ -351,7 +413,7 @@ public class VcrReplicationManager extends ReplicationEngine {
    * @param partitionId the {@link PartitionId} of the replica to add.
    * @throws ReplicationException if replicas initialization failed.
    */
-  void addReplica(PartitionId partitionId) {
+  void addPartition(PartitionId partitionId) {
     try {
       rwLock.writeLock().lock();
       if (partitionToPartitionInfo.containsKey(partitionId)) {
@@ -384,8 +446,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       }
       if (!remoteReplicaInfos.isEmpty()) {
         updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
-        partitionStoreMap.put(partitionId.toPathString(), store);
-        addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
+        addPartitionToReplicaThread(partitionId, remoteReplicaInfos);
       }
     } catch (Throwable e) {
       // Helix will run into error state if exception throws in Helix context.
@@ -400,23 +461,27 @@ public class VcrReplicationManager extends ReplicationEngine {
    * Remove a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionId the {@link PartitionId} of the replica to removed.
    */
-  void removeReplica(PartitionId partitionId) throws IOException, StoreException {
+  void removePartition(PartitionId partitionId) {
     rwLock.writeLock().lock();
+    partitionIdThreadMapLock.writeLock().lock();
     try {
+      PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);
+      Store cloudStore = partitionInfo.getRemoteReplicaInfos().get(0).getLocalStore();
       stopPartitionReplication(partitionId);
-      Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
       if (cloudStore != null) {
         storeManager.shutdownBlobStore(partitionId);
         storeManager.removeBlobStore(partitionId);
-      } else {
-        logger.warn("Store not found for partition {}", partitionId);
       }
+      partitionIdThreadMap.remove(partitionId.getId());
       logger.info("Partition {} removed from {}", partitionId, dataNodeId);
+    } catch (Throwable e) {
+      // Helix will run into error state if exception throws in Helix context.
+      vcrMetrics.removePartitionErrorCount.inc();
+      logger.error("Failed to remove partition-{} due to {}", partitionId, dataNodeId, e);
     } finally {
+      partitionIdThreadMapLock.writeLock().unlock();
       rwLock.writeLock().unlock();
     }
-    // We don't close cloudBlobStore because because replicate in ReplicaThread is using a copy of
-    // remoteReplicaInfo which needs CloudBlobStore.
   }
 
   @Override
