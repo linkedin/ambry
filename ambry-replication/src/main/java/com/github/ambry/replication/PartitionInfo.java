@@ -30,6 +30,9 @@ public class PartitionInfo {
   private final Store store;
   private final ReplicaId localReplicaId;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+  // Only in VCR, we set the replicaThread because we want a single thread in VCR to take care of a partition and
+  // all its replicas. This is unlike server-server replication, where multiple threads are working on multiple replicas
+  // of a partition. Check selectReplicas().
   private ReplicaThread replicaThread = null;
 
   public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store,
@@ -40,10 +43,12 @@ public class PartitionInfo {
     this.localReplicaId = localReplicaId;
   }
 
+  // Only used in VCR, not server-server replication
   public void setReplicaThread(ReplicaThread replicaThread) {
     this.replicaThread = replicaThread;
   }
 
+  // Only used in VCR, not server-server replication
   public ReplicaThread getReplicaThread() {
     return replicaThread;
   }
