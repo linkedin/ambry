@@ -104,9 +104,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   private DistributedLock vcrUpdateDistributedLock = null;
   private final List<ReplicaThread> threadPool;
   private final AtomicInteger threadIndex;
-  // Stashing ReplicaThread in PartitionId creates a circular dependency.
-  // Let's just track partitionId -> ReplicaThread here.
-  private final HashMap<Long, ReplicaThread> partitionIdThreadMap;
 
   public static final String BACKUP_NODE = "backupNode";
   public static final String TOKEN_TYPE = "tokenType";
