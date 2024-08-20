@@ -756,13 +756,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         throw new IllegalStateException("Replication manager startup is interrupted while updating remote replicas");
       }
       if (started) {
-        // Read-write lock avoids contention between addReplica()/removeReplica() and onReplicaAddedOrRemoved() methods.
-        // Read lock for current method should suffice because multiple threads from cluster change handlers should be able
-        // to access partitionToPartitionInfo map. Each thread only updates PartitionInfo of certain partition and synchronization
-        // is only required within PartitionInfo. addRemoteReplicaInfoToReplicaThread() is thread-safe which allows
-        // several threads from cluster change handlers to add remoteReplicaInfo, but addRemoteReplicaInfoToReplicaThread
-        // and partitionToPartitionInfo read/write should be within the same transaction to avoid race condition.
-        rwLock.readLock().lock();
+        rwLock.writeLock().lock();
         try {
           // 2. determine if added/removed replicas have peer replica on local node.
           //    We skip the replica on current node because it should already be added/removed by state transition thread.
@@ -816,7 +810,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
                 addedPeerReplicas.size(), removedPeerReplicas.size());
           }
         } finally {
-          rwLock.readLock().unlock();
+          rwLock.writeLock().unlock();
         }
       }
     }

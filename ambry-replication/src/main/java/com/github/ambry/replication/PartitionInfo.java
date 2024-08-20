@@ -30,6 +30,7 @@ public class PartitionInfo {
   private final Store store;
   private final ReplicaId localReplicaId;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+  private ReplicaThread replicaThread = null;
 
   public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store,
       ReplicaId localReplicaId) {
@@ -37,6 +38,14 @@ public class PartitionInfo {
     this.partitionId = partitionId;
     this.store = store;
     this.localReplicaId = localReplicaId;
+  }
+
+  public void setReplicaThread(ReplicaThread replicaThread) {
+    this.replicaThread = replicaThread;
+  }
+
+  public ReplicaThread getReplicaThread() {
+    return replicaThread;
   }
 
   public PartitionId getPartitionId() {
