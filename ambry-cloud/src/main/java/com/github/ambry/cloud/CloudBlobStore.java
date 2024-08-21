@@ -165,13 +165,10 @@ public class CloudBlobStore implements Store {
       for (MessageInfo msg : infos) {
         cloudDestination.deleteBlob((BlobId) msg.getStoreKey(), msg.getOperationTimeMs(), msg.getLifeVersion(), null);
       }
-    } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
-      }
-      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
   }
 
@@ -187,13 +184,10 @@ public class CloudBlobStore implements Store {
       for (MessageInfo msg : infos) {
         cloudDestination.updateBlobExpiration((BlobId) msg.getStoreKey(), Utils.Infinite_Time, null);
       }
-    } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
-      }
-      throw new StoreException(e.getMessage(),  StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(),  StoreErrorCodes.IOError);
     }
   }
 
@@ -207,13 +201,10 @@ public class CloudBlobStore implements Store {
   public short undelete(MessageInfo info) throws StoreException {
     try {
       return cloudDestination.undeleteBlob((BlobId) info.getStoreKey(), info.getLifeVersion(), null);
-    } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
-      }
-      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     } catch (StoreException e) {
       throw e;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
   }
 
@@ -225,22 +216,18 @@ public class CloudBlobStore implements Store {
    */
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
-    Set<StoreKey> missingKeys = new HashSet<>();
     // Keys may be missing if we are here, we are here to find out
-    for (StoreKey key : keys) {
-      try {
-        cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key));
-      } catch (CloudStorageException e) {
-        if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+    try {
+      Set<StoreKey> missingKeys = new HashSet<>();
+      for (StoreKey key : keys) {
+        if (!cloudDestination.doesBlobExist((BlobId) key)) {
           missingKeys.add(key);
-        } else {
-          throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
         }
-      } catch (Throwable e) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
       }
+      return missingKeys;
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
-    return missingKeys;
   }
 
   /**
@@ -252,19 +239,21 @@ public class CloudBlobStore implements Store {
   @Override
   public MessageInfo findKey(StoreKey key) throws StoreException {
     try {
-      // Key must exist if we are here
-      Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
-          cloudDestination.getBlobMetadata(Collections.singletonList((BlobId) key));
-      CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
+      // If we are here, the key must exist
+      CloudBlobMetadata cloudBlobMetadata = cloudDestination.getCloudBlobMetadata((BlobId) key);
       return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
-          cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
-          (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
+          cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(),
+          null, (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
           cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
     } catch (CloudStorageException e) {
-      if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+      switch (e.getStatusCode()) {
+        case HttpStatus.SC_NOT_FOUND:
+          throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+        default:
+          throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
       }
-      throw new StoreException(e, StoreErrorCodes.IOError);
+    } catch (Throwable e) {
+      throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
     }
   }
 

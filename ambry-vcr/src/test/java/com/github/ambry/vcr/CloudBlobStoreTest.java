@@ -331,15 +331,25 @@ public class CloudBlobStoreTest {
     // Check blob exists
     assertEquals(0, azureMetrics.blobCompactionSuccessRate.getCount());
     when(spyContainerClient.getBlobClient(any())).thenCallRealMethod();
-    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
-        assertTrue(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey())));
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo -> {
+      try {
+        assertTrue(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+      } catch (CloudStorageException e) {
+        throw new RuntimeException(e);
+      }
+    });
 
     // Really compact and check blobs are gone
     when(mockBlobClient.deleteWithResponse(any(), any(), any(), any())).thenCallRealMethod();
     assertEquals(numBlobs, spyDest.compactPartition(String.valueOf(partitionId.getId())));
     assertEquals(numBlobs, azureMetrics.blobCompactionSuccessRate.getCount());
-    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
-        assertFalse(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey())));
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo -> {
+      try {
+        assertFalse(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+      } catch (CloudStorageException e) {
+        throw new RuntimeException(e);
+      }
+    });
   }
 
   @Test
@@ -924,7 +934,7 @@ public class CloudBlobStoreTest {
       fail("Undelete for a non existent blob should throw exception");
     } catch (StoreException ex) {
       // The expected value must come first
-      assertSame(StoreErrorCodes.ID_Not_Found, ex.getErrorCode());
+      assertSame(StoreErrorCodes.IOError, ex.getErrorCode());
     }
     int numUndelete = 1;
     if (mockingDetails(dest).isMock()) {
