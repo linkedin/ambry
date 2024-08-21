@@ -39,17 +39,17 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
-import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -57,13 +57,11 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -95,7 +93,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   protected ScheduledExecutorService cloudCompactionScheduler;
 
   private CloudContainerCompactor cloudContainerCompactor;
-  private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final boolean trackPerDatacenterLagInMetric;
   private final Lock vcrHelixUpdateLock = new ReentrantLock();
   private volatile boolean isVcrHelixUpdater = false;
@@ -177,7 +174,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+      LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         notification, storeKeyConverter, transformer, replicatingOverSsl, datacenterName, responseHandler, time,
         replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, cloudDestination, properties);
@@ -202,11 +199,18 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   /**
    * Assign all replicas of a partition to the same thread to avoid concurrent updates to Azure
-   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo}
-   * @param startThread start threads on creation
+   *
+   * @param partitionId Partition
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} List of replicas, must belong to same partition
    */
-  @Override
-  protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
+  protected void addPartitionToReplicaThread(PartitionId partitionId, List<RemoteReplicaInfo> remoteReplicaInfos) {
+    /**
+     * This fn must be called with rwlock.writeLock() held.
+     * It is called by helix when a new partition (not a new replica) is assigned to VCR node.
+     * addPartition -> addPartitionToReplicaThread
+     */
+    // All replicas belong to the same partition, so just assign all to the same thread
+    ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
       if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
@@ -214,11 +218,49 @@ public class VcrReplicationManager extends ReplicationEngine {
             String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
                 localDatacenterName, datacenter, rinfo));
       }
-      ReplicaThread rthread = threadPool.get(threadIndex.incrementAndGet() % threadPool.size());
       rthread.addRemoteReplicaInfo(rinfo);
       rinfo.setReplicaThread(rthread);
-      rthread.startThread();
-      logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
+      logger.info("[PARTITION] Added replica {} to thread {}", rinfo, rthread.getName());
+    }
+    partitionToPartitionInfo.get(partitionId).setReplicaThread(rthread);
+    rthread.startThread();
+  }
+
+  /**
+   * Assign all replicas of a partition to the same thread to avoid concurrent updates to Azure
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} These replicas belong to different partitions
+   * @param unused unused variable
+   */
+  @Override
+  protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean unused) {
+    /**
+     * This fn must be called with rwlock.writeLock() held.
+     * It is called by helix when a new replica (not a new partition) is assigned to VCR node.
+     * onReplicaAddedOrRemoved -> addPartitionToReplicaThread
+     */
+    try {
+      for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+        try {
+          // Replicas here may belong to different partitions, but they must already be assigned to this node
+          PartitionId partitionId = rinfo.getReplicaId().getPartitionId();
+          ReplicaThread rthread = partitionToPartitionInfo.get(partitionId).getReplicaThread();
+          String datacenter = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
+          if (!localDatacenterName.equalsIgnoreCase(datacenter)) {
+            throw new UnsupportedOperationException(
+                String.format("Cross-colo replication from %s to %s is unsupported in VCR for replica {}",
+                    localDatacenterName, datacenter, rinfo));
+          }
+          rthread.addRemoteReplicaInfo(rinfo);
+          rinfo.setReplicaThread(rthread);
+          logger.info("[REPLICA] Added replica {} to thread {}", rinfo, rthread.getName());
+        } catch (Throwable e) {
+          vcrMetrics.addPartitionErrorCount.inc();
+          logger.error("[REPLICA] Failed to add replica {} to thread due to {}", rinfo, e);
+        }
+      }
+    } catch (Throwable e) {
+      vcrMetrics.addPartitionErrorCount.inc();
+      logger.error("Failed to add replica(s) due to {}", e);
     }
   }
 
@@ -270,7 +312,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             vcrHelixUpdateLock.unlock();
           }
         }
-        addReplica(partitionId);
+        addPartition(partitionId);
       }
 
       @Override
@@ -289,13 +331,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             vcrHelixUpdateLock.unlock();
           }
         }
-        try {
-          removeReplica(partitionId);
-        } catch (Exception e) {
-          // Helix will run into error state if exception throws in Helix context.
-          vcrMetrics.removePartitionErrorCount.inc();
-          logger.error("Exception on removing Partition {} from {}: ", partitionId, dataNodeId, e);
-        }
+        removePartition(partitionId);
       }
     });
 
@@ -345,12 +381,20 @@ public class VcrReplicationManager extends ReplicationEngine {
     }
   }
 
+  @Override
+  protected RemoteReplicaInfo createRemoteReplica(ReplicaId remote, ReplicaId local, Store store, FindToken token) {
+    return
+        new RemoteReplicaInfo(this.replicationConfig, remote, local, store,
+            token, -1, SystemTime.getInstance(),
+            remote.getDataNodeId().getPortToConnectTo());
+  }
+
   /**
    * Add a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
    * @param partitionId the {@link PartitionId} of the replica to add.
    * @throws ReplicationException if replicas initialization failed.
    */
-  void addReplica(PartitionId partitionId) {
+  void addPartition(PartitionId partitionId) {
     try {
       rwLock.writeLock().lock();
       if (partitionToPartitionInfo.containsKey(partitionId)) {
@@ -374,22 +418,17 @@ public class VcrReplicationManager extends ReplicationEngine {
       Store store = storeManager.getStore(partitionId);
       for (ReplicaId peerReplica : peerReplicas) {
         if (peerReplica.getDataNodeId().getDatacenterName().equalsIgnoreCase(localDatacenterName)) {
-          RemoteReplicaInfo remoteReplicaInfo =
-              new RemoteReplicaInfo(this.replicationConfig, peerReplica, cloudReplica, store,
-                  null, -1, SystemTime.getInstance(),
-                  peerReplica.getDataNodeId().getPortToConnectTo());
-          remoteReplicaInfos.add(remoteReplicaInfo);
+          remoteReplicaInfos.add(createRemoteReplica(peerReplica, cloudReplica, store, null));
         }
       }
       if (!remoteReplicaInfos.isEmpty()) {
         updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
-        partitionStoreMap.put(partitionId.toPathString(), store);
-        addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
+        addPartitionToReplicaThread(partitionId, remoteReplicaInfos);
       }
     } catch (Throwable e) {
       // Helix will run into error state if exception throws in Helix context.
       vcrMetrics.addPartitionErrorCount.inc();
-      logger.error("Failed to add Store for partition {} due to {}", partitionId.getId(), e.getMessage());
+      logger.error("Failed to add partition {} due to {}", partitionId.getId(), e);
     } finally {
       rwLock.writeLock().unlock();
     }
@@ -399,23 +438,22 @@ public class VcrReplicationManager extends ReplicationEngine {
    * Remove a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionId the {@link PartitionId} of the replica to removed.
    */
-  void removeReplica(PartitionId partitionId) throws IOException, StoreException {
+  void removePartition(PartitionId partitionId) {
     rwLock.writeLock().lock();
     try {
+      PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);
       stopPartitionReplication(partitionId);
+      storeManager.shutdownBlobStore(partitionId);
+      storeManager.removeBlobStore(partitionId);
+      partitionInfo.setReplicaThread(null);
+      logger.info("Partition {} removed from {}", partitionId, dataNodeId);
+    } catch (Throwable e) {
+      // Helix will run into error state if exception throws in Helix context.
+      vcrMetrics.removePartitionErrorCount.inc();
+      logger.error("Failed to remove partition-{} due to {}", partitionId, dataNodeId, e);
     } finally {
       rwLock.writeLock().unlock();
     }
-    Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
-    if (cloudStore != null) {
-      storeManager.shutdownBlobStore(partitionId);
-      storeManager.removeBlobStore(partitionId);
-    } else {
-      logger.warn("Store not found for partition {}", partitionId);
-    }
-    logger.info("Partition {} removed from {}", partitionId, dataNodeId);
-    // We don't close cloudBlobStore because because replicate in ReplicaThread is using a copy of
-    // remoteReplicaInfo which needs CloudBlobStore.
   }
 
   @Override

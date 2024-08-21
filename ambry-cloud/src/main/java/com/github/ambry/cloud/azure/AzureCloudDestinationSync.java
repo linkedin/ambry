@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.HttpHeaderName;
+import com.azure.core.http.HttpResponse;
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
@@ -91,6 +92,8 @@ import org.slf4j.LoggerFactory;
 
 public class AzureCloudDestinationSync implements CloudDestination {
 
+  public static final String X_MS_REQUEST_ID = "x-ms-request-id";
+
   private final MetricRegistry metrics;
   protected AzureBlobLayoutStrategy azureBlobLayoutStrategy;
   protected AzureCloudConfig azureCloudConfig;
@@ -110,12 +113,24 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected class AzureBlobProperties implements AmbryCacheEntry {
 
     private final BlobProperties properties;
-    public AzureBlobProperties(BlobProperties properties) {
+    private final int azureStatus;
+    private final String azureRequestId;
+    public AzureBlobProperties(BlobProperties properties, String azureRequestId, int azureStatus) {
       this.properties = properties;
+      this.azureRequestId = azureRequestId;
+      this.azureStatus = azureStatus;
     }
 
     public BlobProperties getProperties() {
       return properties;
+    }
+
+    public String getAzureRequestId() {
+      return azureRequestId;
+    }
+
+    public int getAzureStatus() {
+      return azureStatus;
     }
   }
   /**
@@ -519,8 +534,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
           && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
         azureMetrics.blobUploadConflictCount.inc();
-        logger.error("Failed to upload blob {} from {} to Azure blob storage because it already exists", blobLayout,
-            cloudBlobMetadata.getReplicaLocation());
+        AzureBlobProperties properties =
+            (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
+        String status = "no record of a look-up request";
+        if (properties != null) {
+          status = String.format("previous look-up request %s returned %s", properties.getAzureRequestId(),
+              properties.getAzureStatus());
+        }
+        logger.error("Failed to upload blob {} from {} to Azure as it already exists & {}",
+            blobLayout, cloudBlobMetadata.getReplicaLocation(), status);
         // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
         // However, if we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
         // The blob in the cloud is safe as Azure prevented us from overwriting it due to an ETag check.
@@ -534,6 +556,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       if (storageTimer != null) {
         storageTimer.stop();
       }
+      getThreadLocalMdCache().deleteObject(blobLayout.blobFilePath);
     } // try-catch
     return true;
   }
@@ -602,17 +625,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return Blob properties
    * @throws CloudStorageException
    */
-  protected BlobProperties getBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
+  protected AzureBlobProperties getAzureBlobPropertiesCached(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
-    AzureBlobProperties entry = (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
-    BlobProperties blobProperties;
-    if (entry == null) {
-      blobProperties = getBlobProperties(blobLayout);
-      getThreadLocalMdCache().putObject(blobLayout.blobFilePath, new AzureBlobProperties(blobProperties));
-    } else {
-      blobProperties = entry.getProperties();
+    AzureBlobProperties azureBlobProperties = (AzureBlobProperties) getThreadLocalMdCache().getObject(blobLayout.blobFilePath);
+    if (azureBlobProperties != null && azureBlobProperties.getProperties() != null &&
+        azureBlobProperties.getAzureStatus() == HttpStatus.SC_OK) {
+      return azureBlobProperties;
     }
-    return blobProperties;
+    azureBlobProperties = getBlobProperties(blobLayout);
+    getThreadLocalMdCache().putObject(blobLayout.blobFilePath, azureBlobProperties);
+    return azureBlobProperties;
   }
 
   /**
@@ -621,33 +643,35 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return Blob properties
    * @throws CloudStorageException
    */
-  protected BlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
+  protected AzureBlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobGetPropertiesLatency.time();
+    String errfmt = "Failed to get blob properties for %s from Azure blob storage due to %s";
     try {
-      BlobProperties blobProperties = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
+      Response<BlobProperties> response = createOrGetBlobStore(blobLayout.containerName)
+          .getBlobClient(blobLayout.blobFilePath)
+          .getPropertiesWithResponse(null, null, Context.NONE);
+      BlobProperties blobProperties = response.getValue();
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobGetPropertiesSuccessRate.mark();
       logger.trace("Successfully got blob-properties for {} from Azure blob storage with etag = {}",
           blobLayout.blobFilePath, blobProperties.getETag());
-      return blobProperties;
+      return new AzureBlobProperties(blobProperties, response.getHeaders().getValue(X_MS_REQUEST_ID),
+          response.getStatusCode());
     } catch (BlobStorageException bse) {
-      String msg = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
+      String msg = String.format(errfmt, blobLayout, bse.getMessage());
       if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        /*
-          We encounter many BLOB_NOT_FOUND when uploading new blobs.
-          Trace log will not flood the logs when we encounter BLOB_NOT_FOUND.
-          Set azureMetrics to null so that we don't unnecessarily increment any metrics for this common case.
-         */
         logger.trace(msg);
-        throw new CloudStorageException(msg, HttpStatus.SC_NOT_FOUND);
+        HttpResponse response = bse.getResponse();
+        return new AzureBlobProperties(null, bse.getResponse().getHeaders().getValue(X_MS_REQUEST_ID),
+            response.getStatusCode());
       }
       azureMetrics.blobGetPropertiesErrorCount.inc();
       logger.error(msg);
       throw new CloudStorageException(msg);
     } catch (Throwable t) {
       azureMetrics.blobGetPropertiesErrorCount.inc();
-      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
+      String error = String.format(errfmt, blobLayout, t.getMessage());
       logger.error(error);
       throw new CloudStorageException(error);
     } finally {
@@ -680,7 +704,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       }
 
       // AzureBlobDeletePolicy.EVENTUAL
-      BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+      BlobProperties blobPropertiesCached = getAzureBlobPropertiesCached(blobLayout).getProperties();
       Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
       // lifeVersion must always be present
       short cloudlifeVersion = Short.parseShort(cloudMetadataCached.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
@@ -733,7 +757,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUndeleteLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+    BlobProperties blobPropertiesCached = getAzureBlobPropertiesCached(blobLayout).getProperties();
     Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
     Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
@@ -811,14 +835,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return
    */
   @Override
-  public boolean doesBlobExist(BlobId blobId) {
-    AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+  public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
     try {
-      return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).exists();
+      AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+      return getAzureBlobPropertiesCached(blobLayout).getProperties() != null;
+    } catch (CloudStorageException cse) {
+      throw cse;
     } catch (Throwable t) {
-      azureMetrics.blobCheckError.inc();
-      logger.error("Failed to check if blob {} exists in Azure blob storage due to {}", blobLayout, t.getMessage());
-      return false;
+      throw new CloudStorageException(t.getMessage());
     }
   }
 
@@ -828,7 +852,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
+    BlobProperties blobPropertiesCached = getAzureBlobPropertiesCached(blobLayout).getProperties();
     Map<String, String> cloudMetadataCached = blobPropertiesCached.getMetadata();
     // lifeVersion must always be present because we add it explicitly before PUT
     short cloudlifeVersion = Short.parseShort(cloudMetadataCached.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
@@ -879,27 +903,49 @@ public class AzureCloudDestinationSync implements CloudDestination {
     throw new UnsupportedOperationException("updateBlobExpirationAsync will not be implemented for AzureCloudDestinationSync");
   }
 
+  /**
+   * Get azure-blob-properties and wraps it in ambry cloud-blob-metadata object.
+   * @param blobId
+   * @return
+   * @throws CloudStorageException
+   */
+  @Override
+  public CloudBlobMetadata getCloudBlobMetadata(BlobId blobId) throws CloudStorageException {
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    try {
+      AzureBlobProperties azureBlobProperties = getAzureBlobPropertiesCached(blobLayout);
+      if (azureBlobProperties.getProperties() == null) {
+        throw new CloudStorageException(String.format("Failed to find blob properties for %s due to %s",
+            blobLayout.blobFilePath, azureBlobProperties.getAzureStatus()));
+      }
+      return CloudBlobMetadata.fromMap(azureBlobProperties.getProperties().getMetadata());
+    } catch (CloudStorageException cse) {
+      throw cse;
+    } catch (Throwable t) {
+      throw new CloudStorageException(t.getMessage());
+    }
+  }
+
   @Override
   public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
-    /*
-        This is used by findMissingKeys, which doesn't even use the metadata provided.
-        It just discards it. But due to legacy reasons, we are required to impl this way.
-        We could use one-liner Azure SDK provided lightweight exists() method, which internally fetches blob-properties
-        and does the same thing that findMissingKeys does.
+    /**
+     * Just keeping this fn around for tests and legacy reasons but imo this is a horrible function.
+     * The fn takes a list as an arg, why not just a single blob ? It is only ever used to fetch metadata of a blob,
+     * not a list. And because of this design, the higher levels have to wrap the blob-id in a singleton-list.
+     * More importantly, the return type is map. The higher levels have to explicitly look for the result in the map
+     * with blob-id. If there is typo in the code in looking up the map, for eg. instead of storeKey.getId(),
+     * if we type storeKey() alone, then we make a mistake of thinking the blob is not found. Just stop using maps!
+     * Such lookup errors are easy to miss in code-reviews. And most legacy tests are broken beyond repair.
      */
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = new HashMap<>();
     for (BlobId blobId: blobIds) {
-      AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
-        BlobProperties blobPropertiesCached = getBlobPropertiesCached(blobLayout);
-        cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobPropertiesCached.getMetadata()));
-      } catch (CloudStorageException cse) {
-        throw cse;
+        CloudBlobMetadata cloudBlobMetadata = getCloudBlobMetadata(blobId);
+        if (cloudBlobMetadata != null) {
+          cloudBlobMetadataMap.put(blobId.getID(), cloudBlobMetadata);
+        }
       } catch (Throwable t) {
-        // Unknown error, increment the generic metric in azureMetrics
-        String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
-        logger.error(error);
-        throw new CloudStorageException(error);
+        throw t;
       }
     }
     return cloudBlobMetadataMap;

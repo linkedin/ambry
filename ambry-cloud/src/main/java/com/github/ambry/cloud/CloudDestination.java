@@ -156,6 +156,9 @@ public interface CloudDestination extends Closeable {
    * it will not be included in the returned map.
    */
   Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException;
+  default CloudBlobMetadata getCloudBlobMetadata(BlobId blobId) throws CloudStorageException {
+    return null;
+  }
 
   /**
    * Query the blob metadata for the specified blobs asynchronously.
@@ -238,7 +241,7 @@ public interface CloudDestination extends Closeable {
    * @param id
    * @return
    */
-  default boolean doesBlobExist(BlobId id) {return false;};
+  default boolean doesBlobExist(BlobId id) throws CloudStorageException {return false;};
 
   /**
    * Creates a table in Azure Table or gets a ref to it if it exists
