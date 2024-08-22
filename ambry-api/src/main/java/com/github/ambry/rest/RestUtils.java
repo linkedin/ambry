@@ -49,6 +49,7 @@ import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RequestPath.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
@@ -827,18 +828,13 @@ public class RestUtils {
   }
 
   /**
-   * Return true if the request set 100-continue in Except header and it's a named blob base put request or multi-upload post.
+   * Return true if the request set 100-continue in Except header and it's a S3 put request or S3 multi-upload post.
    * @param restRequest the {@link RestRequest}.
    * @return
    */
-  public static boolean isPutOrPostNonSignedUrlRequestAndExpectContinue(RestRequest restRequest) {
+  public static boolean isPutOrPostS3RequestAndExpectContinue(RestRequest restRequest) {
     return CONTINUE.equals(restRequest.getArgs().get(EXPECT)) && (restRequest.getRestMethod().equals(RestMethod.PUT)
-        || restRequest.getRestMethod().equals(RestMethod.POST)) && !isRequestSigned(restRequest);
-  }
-
-  public static boolean isRequestSigned(RestRequest restRequest) {
-    Map<String, Object> args = restRequest.getArgs();
-    return args.containsKey(RestUtils.Headers.URL_TYPE);
+        || restRequest.getRestMethod().equals(RestMethod.POST)) && isS3Prefix(restRequest);
   }
 
   /**
@@ -961,6 +957,22 @@ public class RestUtils {
    */
   public static boolean isS3Request(RestRequest restRequest) {
     return restRequest != null && restRequest.getArgs().containsKey(S3_REQUEST);
+  }
+
+  /**
+   * Determines if the request path is a S3 prefix request path.
+   * @param restRequest rest request
+   * @return {@code true} if the request path is a S3 prefix request path.
+   */
+  public static boolean isS3Prefix(RestRequest restRequest) {
+    String path;
+    try {
+      path = restRequest.getPath();
+    } catch (IllegalArgumentException e) {
+      logger.error("Invalid URI path for request " + restRequest);
+      return false;
+    }
+    return path.startsWith(S3_PATH) || path.startsWith(Operations.S3);
   }
 
   /**

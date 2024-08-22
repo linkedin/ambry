@@ -1113,7 +1113,7 @@ class NettyResponseChannel implements RestResponseChannel {
             //Don't close the request when we see 100-continue in EXPECT header.
             completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false,
                 !(nettyConfig.nettyEnableOneHundredContinue
-                    && RestUtils.isPutOrPostNonSignedUrlRequestAndExpectContinue(request)));
+                    && RestUtils.isPutOrPostS3RequestAndExpectContinue(request)));
           }
         } else {
           // otherwise there is some content to write.

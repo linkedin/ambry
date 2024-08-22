@@ -195,7 +195,7 @@ public class NettyMessageProcessorTest {
     EmbeddedChannel channel = createChannel(nettyConfig);
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.set(EXPECT, CONTINUE);
-    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", headers);
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/s3/", headers);
     httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
     httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
     channel.writeInbound(httpRequest);
@@ -228,7 +228,7 @@ public class NettyMessageProcessorTest {
     EmbeddedChannel channel = createChannel(nettyConfig);
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.set(EXPECT, CONTINUE);
-    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/s3/", headers);
     httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
     httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
     channel.writeInbound(httpRequest);

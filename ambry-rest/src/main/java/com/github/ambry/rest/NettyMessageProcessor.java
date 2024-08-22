@@ -378,7 +378,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       }
       boolean isPutOrPost = request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT);
       boolean isMultipart = request.isMultipart() && requestContentFullyReceived;
-      boolean hasContinueAndIsPutOrPost = RestUtils.isPutOrPostNonSignedUrlRequestAndExpectContinue(request);
+      boolean hasContinueAndIsPutOrPost = RestUtils.isPutOrPostS3RequestAndExpectContinue(request);
       if (success && (!isPutOrPost || isMultipart || hasContinueAndIsPutOrPost)) {
         if (nettyConfig.nettyEnableOneHundredContinue && hasContinueAndIsPutOrPost) {
           request.setArg(EXPECT, "");
