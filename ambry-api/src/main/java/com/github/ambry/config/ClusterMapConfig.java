@@ -416,7 +416,7 @@ public class ClusterMapConfig {
     clustermapRecoveryTestPartitionLayout =
         new JSONObject(verifiableProperties.getString("clustermap.recovery.test.partition.layout", "{}"));
     clustermapMaxDiskCapacityInBytes =
-        verifiableProperties.getLongInRange(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES, 20L * 1024 * 1024 * 1024 * 1024, 0,
+        verifiableProperties.getLongInRange(CLUSTERMAP_MAX_DISK_CAPACITY_IN_BYTES, 100L * 1024 * 1024 * 1024 * 1024, 0,
             Long.MAX_VALUE);
     clustermapEnableContainerDeletionAggregation =
         verifiableProperties.getBoolean("clustermap.enable.container.deletion.aggregation", false);
