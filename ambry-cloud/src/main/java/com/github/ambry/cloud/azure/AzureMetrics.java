@@ -24,14 +24,14 @@ public class AzureMetrics extends AzureMetricsOld {
   // Metric name constants
   public static final String BLOB_UPLOAD_SUCCESS_RATE = "BlobUploadSuccessRate";
   public static final String BLOB_UPDATE_TTL_SUCCESS_RATE = "BlobUpdateTTLSuccessRate";
-  public static final String BLOB_UPDATE_TTL_LATENCY = "blobUpdateTTLLatency";
+  public static final String BLOB_UPDATE_TTL_LATENCY = "BlobUpdateTTLLatency";
   public static final String BLOB_UPDATE_TTL_ERROR_COUNT = "BlobUpdateTTLErrorCount";
-  public static final String BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE = "BlobUpdateDeleteTimeSuccessRate";
-  public static final String BLOB_UPDATE_DELETE_TIME_LATENCY = "blobUpdateDeleteTimeLatency";
-  public static final String BLOB_UPDATE_DELETE_TIME_ERROR_COUNT = "BlobUpdateDeleteTimeErrorCount";
-  public static final String BLOB_UNDELETE_SUCCESS_RATE = "BlobUndeleteTimeSuccessRate";
-  public static final String BLOB_UNDELETE_LATENCY = "blobUndeleteLatency";
-  public static final String BLOB_UNDELETE_ERROR_COUNT = "blobUndeleteErrorCount";
+  public static final String BLOB_DELETE_SUCCESS_RATE = "BlobDeleteSuccessRate";
+  public static final String BLOB_DELETE_LATENCY = "BlobDeleteLatency";
+  public static final String BLOB_DELETE_ERROR_COUNT = "BlobDeleteErrorCount";
+  public static final String BLOB_UNDELETE_SUCCESS_RATE = "BlobUndeleteSuccessRate";
+  public static final String BLOB_UNDELETE_LATENCY = "BlobUndeleteLatency";
+  public static final String BLOB_UNDELETE_ERROR_COUNT = "BlobUndeleteErrorCount";
   public static final String BLOB_UPLOAD_ERROR_COUNT = "BlobUploadErrorCount";
   public static final String BLOB_GET_PROPERTIES_SUCCESS_RATE = "BlobGetPropertiesSuccessRate";
   public static final String BLOB_GET_PROPERTIES_LATENCY = "BlobGetPropertiesLatency";
@@ -112,9 +112,9 @@ public class AzureMetrics extends AzureMetricsOld {
     blobUndeleteErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UNDELETE_ERROR_COUNT));
     blobUndeleteLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UNDELETE_LATENCY));
     blobUndeleteSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UNDELETE_SUCCESS_RATE));
-    blobDeleteErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_DELETE_TIME_ERROR_COUNT));
-    blobDeleteLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_DELETE_TIME_LATENCY));
-    blobDeleteSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE));
+    blobDeleteErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_DELETE_ERROR_COUNT));
+    blobDeleteLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_DELETE_LATENCY));
+    blobDeleteSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_DELETE_SUCCESS_RATE));
     blobUpdateTTLErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_ERROR_COUNT));
     blobUpdateTTLLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_LATENCY));
     blobUpdateTTLSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_SUCCESS_RATE));
