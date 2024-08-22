@@ -168,7 +168,8 @@ class PostBlobHandler {
      */
     private Callback<Void> securityProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityProcessRequestMetrics, securityCheckResult -> {
-        if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
+        if (frontendConfig.oneHundredContinueEnable && CONTINUE.equals(restRequest.getArgs().get(EXPECT))
+            && !isRequestSigned(restRequest)) {
           restResponseChannel.setStatus(ResponseStatus.Continue);
           //We need to set the content length in order to be a full http response in NettyResponseChannel::maybeWriteResponseMetadata.
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);

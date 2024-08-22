@@ -44,6 +44,7 @@ public class FrontendConfig {
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
   public static final String CONTAINER_METRICS_ENABLED_REQUEST_TYPES = PREFIX + "container.metrics.enabled.request.types";
   public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = PREFIX + "container.metrics.enabled.get.request.types";
+  public static final String ONE_HUNDRED_CONTINUE_ENABLE = PREFIX + "one.hundred.continue.enable";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -57,7 +58,6 @@ public class FrontendConfig {
       "DeleteBlob,GetBlob,GetBlobInfo,GetSignedUrl,PostBlob,UpdateBlobTtl,UndeleteBlob,PutBlob";
 
   private static final String DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = "GetBlob,GetBlobInfo,GetSignedUrl";
-
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -265,6 +265,10 @@ public class FrontendConfig {
   @Default(DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES)
   public final String containerMetricsEnabledGetRequestTypes;
 
+  @Config(ONE_HUNDRED_CONTINUE_ENABLE)
+  @Default("false")
+  public final boolean oneHundredContinueEnable;
+
   /**
    * Can be set to a classname that implements {@link com.github.ambry.named.NamedBlobDbFactory} to enable named blob
    * support.
@@ -314,6 +318,7 @@ public class FrontendConfig {
         DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES);
     containerMetricsEnabledGetRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES,
         DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES);
+    oneHundredContinueEnable = verifiableProperties.getBoolean(ONE_HUNDRED_CONTINUE_ENABLE, false);
     urlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     urlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,

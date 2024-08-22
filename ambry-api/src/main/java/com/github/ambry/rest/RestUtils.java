@@ -831,9 +831,14 @@ public class RestUtils {
    * @param restRequest the {@link RestRequest}.
    * @return
    */
-  public static boolean isPutOrPostRequestAndExpectContinue(RestRequest restRequest) {
+  public static boolean isPutOrPostNonSignedUrlRequestAndExpectContinue(RestRequest restRequest) {
     return CONTINUE.equals(restRequest.getArgs().get(EXPECT)) && (restRequest.getRestMethod().equals(RestMethod.PUT)
-        || restRequest.getRestMethod().equals(RestMethod.POST));
+        || restRequest.getRestMethod().equals(RestMethod.POST)) && !isRequestSigned(restRequest);
+  }
+
+  public static boolean isRequestSigned(RestRequest restRequest) {
+    Map<String, Object> args = restRequest.getArgs();
+    return args.containsKey(RestUtils.Headers.URL_TYPE);
   }
 
   /**

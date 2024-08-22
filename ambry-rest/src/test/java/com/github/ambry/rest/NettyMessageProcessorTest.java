@@ -189,7 +189,10 @@ public class NettyMessageProcessorTest {
   @Test
   public void continueHeaderPutTest() throws Exception {
     notificationSystem.reset();
-    EmbeddedChannel channel = createChannel();
+    Properties properties = new Properties();
+    properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
+    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
+    EmbeddedChannel channel = createChannel(nettyConfig);
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.set(EXPECT, CONTINUE);
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", headers);
@@ -219,7 +222,10 @@ public class NettyMessageProcessorTest {
   @Test
   public void continueHeaderPostTest() throws Exception {
     notificationSystem.reset();
-    EmbeddedChannel channel = createChannel();
+    Properties properties = new Properties();
+    properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
+    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
+    EmbeddedChannel channel = createChannel(nettyConfig);
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.set(EXPECT, CONTINUE);
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
@@ -349,6 +355,12 @@ public class NettyMessageProcessorTest {
   private EmbeddedChannel createChannel() {
     NettyMessageProcessor processor =
         new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+  }
+
+  private EmbeddedChannel createChannel(NettyConfig nettyConfig) {
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 

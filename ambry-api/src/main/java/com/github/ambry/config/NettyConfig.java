@@ -40,6 +40,7 @@ public class NettyConfig {
   public static final String NETTY_METRICS_REFRESH_INTERVAL_SECONDS = "netty.metrics.refresh.interval.seconds";
   public static final String NETTY_METRICS_STOP_WAIT_TIMEOUT_SECONDS = "netty.metrics.stop.wait.timeout.seconds";
   public static final String NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS = "netty.server.close.delay.timeout.ms";
+  public static final String NETTY_ENABLE_ONE_HUNDRED_CONTINUE = "netty.enable.one.hundred.continue";
 
   /**
    * Number of netty boss threads.
@@ -169,6 +170,10 @@ public class NettyConfig {
   @Default("0")
   public final int nettyServerCloseDelayTimeoutMs;
 
+  @Config(NETTY_ENABLE_ONE_HUNDRED_CONTINUE)
+  @Default("false")
+  public final boolean nettyEnableOneHundredContinue;
+
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt(NETTY_SERVER_BOSS_THREAD_COUNT, 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt(NETTY_SERVER_IDLE_TIME_SECONDS, 60);
@@ -194,5 +199,6 @@ public class NettyConfig {
         verifiableProperties.getIntInRange(NETTY_METRICS_STOP_WAIT_TIMEOUT_SECONDS, 1, 0, Integer.MAX_VALUE);
     nettyServerCloseDelayTimeoutMs =
         verifiableProperties.getIntInRange(NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS, 0, 0, Integer.MAX_VALUE);
+    nettyEnableOneHundredContinue = verifiableProperties.getBoolean(NETTY_ENABLE_ONE_HUNDRED_CONTINUE, false);
   }
 }
