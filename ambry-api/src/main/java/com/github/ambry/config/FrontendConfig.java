@@ -58,7 +58,6 @@ public class FrontendConfig {
 
   private static final String DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = "GetBlob,GetBlobInfo,GetSignedUrl";
 
-
   /**
    * Cache validity in seconds for non-private blobs for GET.
    */
@@ -280,7 +279,13 @@ public class FrontendConfig {
   @Default("")
   public final List<String> containerMetricsExcludedAccounts;
 
+  /**
+   * This should be controlled by {@link NettyConfig}.nettyEnableOneHundredContinue
+   */
+  public final boolean oneHundredContinueEnable;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
+    NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
     enableNamedBlobCleanupTask = verifiableProperties.getBoolean("frontend.enable.named.blob.cleanup.task", false);
@@ -314,6 +319,7 @@ public class FrontendConfig {
         DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES);
     containerMetricsEnabledGetRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES,
         DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES);
+    oneHundredContinueEnable = nettyConfig.nettyEnableOneHundredContinue;
     urlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     urlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,
