@@ -44,7 +44,6 @@ public class FrontendConfig {
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
   public static final String CONTAINER_METRICS_ENABLED_REQUEST_TYPES = PREFIX + "container.metrics.enabled.request.types";
   public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = PREFIX + "container.metrics.enabled.get.request.types";
-  public static final String ONE_HUNDRED_CONTINUE_ENABLE = PREFIX + "one.hundred.continue.enable";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -265,10 +264,6 @@ public class FrontendConfig {
   @Default(DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES)
   public final String containerMetricsEnabledGetRequestTypes;
 
-  @Config(ONE_HUNDRED_CONTINUE_ENABLE)
-  @Default("false")
-  public final boolean oneHundredContinueEnable;
-
   /**
    * Can be set to a classname that implements {@link com.github.ambry.named.NamedBlobDbFactory} to enable named blob
    * support.
@@ -284,7 +279,13 @@ public class FrontendConfig {
   @Default("")
   public final List<String> containerMetricsExcludedAccounts;
 
+  /**
+   * This should be controlled by {@link NettyConfig}.nettyEnableOneHundredContinue
+   */
+  public final boolean oneHundredContinueEnable;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
+    NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
     enableNamedBlobCleanupTask = verifiableProperties.getBoolean("frontend.enable.named.blob.cleanup.task", false);
@@ -318,7 +319,7 @@ public class FrontendConfig {
         DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES);
     containerMetricsEnabledGetRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES,
         DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES);
-    oneHundredContinueEnable = verifiableProperties.getBoolean(ONE_HUNDRED_CONTINUE_ENABLE, false);
+    oneHundredContinueEnable = nettyConfig.nettyEnableOneHundredContinue;
     urlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     urlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,
