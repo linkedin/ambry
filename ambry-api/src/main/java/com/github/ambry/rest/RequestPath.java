@@ -40,7 +40,7 @@ public class RequestPath {
   private static final String PATH_SEPARATOR_STRING = String.valueOf(PATH_SEPARATOR_CHAR);
   private static final String SEGMENT = SubResource.Segment.toString();
   private static final Logger logger = LoggerFactory.getLogger(RequestPath.class);
-  private static final String S3_PATH = PATH_SEPARATOR_CHAR + Operations.S3;
+  static final String S3_PATH = PATH_SEPARATOR_CHAR + Operations.S3;
 
   /**
    * Parse the request path (and additional headers in some cases). The path will match the following regex-like
