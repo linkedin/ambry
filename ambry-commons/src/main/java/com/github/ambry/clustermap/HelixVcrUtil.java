@@ -314,25 +314,27 @@ public class HelixVcrUtil {
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
 
+    boolean status = true;
     for (String resource : srcResources) {
       if (!isPartitionResourceName(resource)) {
-        System.out.println("Resource " + resource + " from src cluster is ignored");
+        logger.error("[HelixSync] Ignore resource {} from source Ambry cluster", resource);
         continue;
       }
-      if (destResources.contains(resource)) {
-        // check if every partition exist.
-        Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
-        Set<String> destPartitions = destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet();
-        for (String partition : srcPartitions) {
-          if (!destPartitions.contains(partition)) {
-            return false;
-          }
+      if (!destResources.contains(resource)) {
+        logger.error("[HelixSync] Resource {} from source Ambry cluster is absent in VCR cluster", resource);
+        status = false;
+      }
+      // check if every partition exist.
+      Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
+      Set<String> destPartitions = destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet();
+      for (String partition : srcPartitions) {
+        if (!destPartitions.contains(partition)) {
+          logger.error("[HelixSync] Partition {} from source Ambry cluster is absent in VCR cluster", partition);
+          status = false;
         }
-      } else {
-        return false;
       }
     }
-    return true;
+    return status;
   }
 
   /**

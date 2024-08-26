@@ -296,7 +296,7 @@ public class VcrReplicationManager extends ReplicationEngine {
               isAmbryListenerToUpdateVcrHelixRegistered = true;
               // Schedule a fixed rate task to check if ambry helix and vcr helix on sync.
               ambryVcrHelixSyncCheckTaskFuture = scheduler.scheduleAtFixedRate(() -> checkAmbryHelixAndVcrHelixOnSync(),
-                  cloudConfig.vcrHelixSyncCheckIntervalInSeconds, cloudConfig.vcrHelixSyncCheckIntervalInSeconds,
+                  0, cloudConfig.vcrHelixSyncCheckIntervalInSeconds,
                   TimeUnit.SECONDS);
               logger.info("VCR updater registered.");
             }
@@ -537,13 +537,13 @@ public class VcrReplicationManager extends ReplicationEngine {
       String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
       isSrcAndDstSync = HelixVcrUtil.isSrcDestSync(localDcZkStr, clusterMapConfig.clusterMapClusterName,
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName);
-    } catch (Exception e) {
-      logger.warn("Ambry Helix and Vcr Helix sync check runs into exception: ", e);
-    }
-    if (vcrHelixUpdateFuture == null && !isSrcAndDstSync) {
-      logger.warn("Ambry Helix cluster and VCR helix cluster are not on sync");
-      // Raise alert on this metric
-      vcrMetrics.vcrHelixNotOnSync.inc();
+      if (vcrHelixUpdateFuture == null && !isSrcAndDstSync) {
+        logger.error("Ambry Helix cluster and VCR helix cluster are not on sync");
+        // Raise alert on this metric
+        vcrMetrics.vcrHelixNotOnSync.inc();
+      }
+    } catch (Throwable e) {
+      logger.error("Ambry Helix and Vcr Helix sync check runs into exception: ", e);
     }
   }
 
