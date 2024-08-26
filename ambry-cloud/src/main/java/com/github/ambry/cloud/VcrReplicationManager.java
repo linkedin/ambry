@@ -60,7 +60,6 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -91,9 +90,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   protected CloudDestination cloudDestination;
   private CloudStorageCompactor cloudStorageCompactor;
   protected ScheduledExecutorService cloudCompactionScheduler;
-
-  private CloudContainerCompactor cloudContainerCompactor;
-  private final boolean trackPerDatacenterLagInMetric;
   private final Lock vcrHelixUpdateLock = new ReentrantLock();
   private volatile boolean isVcrHelixUpdater = false;
   private volatile boolean isVcrHelixUpdateInProgress = false;
@@ -128,7 +124,6 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.vcrClusterParticipant = vcrClusterParticipant;
-    trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     try {
       vcrHelixConfig =
           new ObjectMapper().readValue(cloudConfig.vcrHelixUpdateConfig, HelixVcrUtil.VcrHelixConfig.class);
@@ -150,7 +145,6 @@ public class VcrReplicationManager extends ReplicationEngine {
       this.cloudCompactionScheduler = Utils.newScheduler(1, "cloud-compaction-controller-",true);
       logger.info("[COMPACT] Created CloudStorageCompactor and compactionScheduler");
     }
-    this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
     this.cloudDestination = cloudDestination;
     // Create the table at the start so that we can catch issues in creation, and the table is ready for threads to log
     this.cloudDestination.getTableClient(this.azureCloudConfig.azureTableNameCorruptBlobs);
@@ -308,6 +302,8 @@ public class VcrReplicationManager extends ReplicationEngine {
             }
             isVcrHelixUpdater = true;
             scheduleVcrHelix("VCR starts");
+          } catch (Throwable e) {
+            logger.error("Failed to start VCR updater due to {}", e);
           } finally {
             vcrHelixUpdateLock.unlock();
           }
@@ -327,6 +323,8 @@ public class VcrReplicationManager extends ReplicationEngine {
             if (ambryVcrHelixSyncCheckTaskFuture != null) {
               ambryVcrHelixSyncCheckTaskFuture.cancel(false);
             }
+          } catch (Throwable e) {
+            logger.error("Failed to stop VCR updater due to {}", e);
           } finally {
             vcrHelixUpdateLock.unlock();
           }
@@ -354,30 +352,6 @@ public class VcrReplicationManager extends ReplicationEngine {
       logger.info("[COMPACT] Waiting {} seconds to populate partitions for compaction", cloudConfig.cloudBlobCompactionStartupDelaySecs);
       cloudCompactionScheduler.scheduleWithFixedDelay(cloudStorageCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
           TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
-    }
-
-    // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
-    // after delay to allow startup to finish.
-    scheduleTask(() -> cloudContainerCompactor.compactAssignedDeprecatedContainers(
-            vcrClusterParticipant.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
-        cloudConfig.cloudContainerCompactionStartupDelaySecs,
-        TimeUnit.HOURS.toSeconds(cloudConfig.cloudContainerCompactionIntervalHours), "cloud container compaction");
-  }
-
-  /**
-   * Schedule the specified task if enabled with the specified delay and interval.
-   * @param task {@link Runnable} task to be scheduled.
-   * @param isEnabled flag indicating if the task is enabled. If false the task is not scheduled.
-   * @param delaySec initial delay to allow startup to finish before starting task.
-   * @param intervalSec period between successive executions.
-   * @param taskName name of the task being scheduled.
-   */
-  private void scheduleTask(Runnable task, boolean isEnabled, long delaySec, long intervalSec, String taskName) {
-    if (isEnabled) {
-      scheduler.scheduleAtFixedRate(task, delaySec, intervalSec, TimeUnit.SECONDS);
-      logger.info("Scheduled {} task to run every {} seconds starting in {} seconds.", taskName, intervalSec, delaySec);
-    } else {
-      logger.warn("Running with {} turned off!", taskName);
     }
   }
 
@@ -462,9 +436,6 @@ public class VcrReplicationManager extends ReplicationEngine {
       cloudStorageCompactor.shutdown();
       Utils.shutDownExecutorService(cloudCompactionScheduler, cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
           TimeUnit.SECONDS);
-    }
-    if (cloudContainerCompactor != null) {
-      cloudContainerCompactor.shutdown();
     }
     super.shutdown();
   }
