@@ -186,7 +186,6 @@ public class HelixVcrUtil {
     Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
-    logger.info("========VCR Helix Update Starts========");
     // Remove stale resources
     for (String resource : destResources) {
       if (!srcResources.contains(resource)) {
@@ -202,7 +201,6 @@ public class HelixVcrUtil {
     }
     for (String resource : srcResources) {
       if (!isPartitionResourceName(resource)) {
-        logger.info("Resource {} from src cluster is ignored", resource);
         continue;
       }
       boolean createNewResource = false;
@@ -245,12 +243,9 @@ public class HelixVcrUtil {
           destAdmin.rebalance(destClusterName, resource, config.getIdealStateConfigFields().getNumReplicas(), "", "");
           logger.info("Added Resource {}  with partition {}", resource, srcPartitions);
         }
-      } else {
-        logger.info("Resource {} is up to date. No action needed.", resource);
       }
     }
     logger.info("Cluster {} is updated successfully!", destClusterName);
-    logger.info("========VCR Helix Update Ends========");
   }
 
   /**

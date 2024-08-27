@@ -475,14 +475,12 @@ public class VcrReplicationManager extends ReplicationEngine {
   private void scheduleVcrHelix(String reason) {
     if (vcrHelixUpdateFuture != null && vcrHelixUpdateFuture.cancel(false)) {
       // If a vcrHelixUpdate task is scheduled, try to cancel it first.
-      logger.info("There was a scheduled vcrHelixUpdate task. Canceled.");
       vcrHelixUpdateFuture = null;
     }
     // either success cancel or not, we should schedule a new job to updateVcrHelix
     vcrHelixUpdateFuture =
         scheduler.schedule(() -> updateVcrHelix(reason), cloudConfig.vcrHelixUpdateDelayTimeInSeconds,
             TimeUnit.SECONDS);
-    logger.info("VcrHelixUpdate task scheduled. Will run in {} seconds.", cloudConfig.vcrHelixUpdateDelayTimeInSeconds);
   }
 
   /**
@@ -492,21 +490,18 @@ public class VcrReplicationManager extends ReplicationEngine {
     logger.info("Going to update VCR Helix Cluster. Reason: {}, Dryrun: {}", reason, cloudConfig.vcrHelixUpdateDryRun);
     int retryCount = 0;
     while (retryCount <= cloudConfig.vcrHelixLockMaxRetryCount && !vcrUpdateDistributedLock.tryLock()) {
-      logger.warn("Could not obtain vcr update distributed lock. Sleep and retry {}/{}.", retryCount,
-          cloudConfig.vcrHelixLockMaxRetryCount);
       try {
         Thread.sleep(cloudConfig.vcrWaitTimeIfHelixLockNotObtainedInMs);
       } catch (InterruptedException e) {
-        logger.warn("Vcr sleep on helix lock interrupted", e);
+        logger.error("Vcr sleep on helix lock interrupted", e);
       }
       retryCount++;
       if (retryCount == cloudConfig.vcrHelixLockMaxRetryCount) {
-        logger.warn("Still can't obtain lock after {} retries with backoff time {}ms", retryCount,
+        logger.error("Still can't obtain lock after {} retries with backoff time {}ms", retryCount,
             cloudConfig.vcrWaitTimeIfHelixLockNotObtainedInMs);
         return;
       }
     }
-    logger.info("vcrUpdateDistributedLock obtained");
     logger.debug("Current partitions in clustermap data structure: {}",
         clusterMap.getAllPartitionIds(null).stream().map(Object::toString).collect(Collectors.joining(",")));
     try {
@@ -519,7 +514,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     } catch (Exception e) {
       // SRE and DEVs should be alerted on this metric.
       vcrMetrics.vcrHelixUpdateFailCount.inc();
-      logger.warn("VCR Helix cluster update failed: ", e);
+      logger.error("VCR Helix cluster update failed: ", e);
     } finally {
       isVcrHelixUpdateInProgress = false;
       vcrUpdateDistributedLock.unlock();
