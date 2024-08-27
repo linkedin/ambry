@@ -107,7 +107,6 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
   @Override
   protected TableServiceClient buildTableServiceClient(HttpClient httpClient, Configuration configuration,
       RetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
-    return new TableServiceClientBuilder().connectionString(azureCloudConfig.azureTableConnectionString)
     try {
       return new TableServiceClientBuilder().connectionString(azureCloudConfig.azureTableConnectionString)
           .httpClient(httpClient)
