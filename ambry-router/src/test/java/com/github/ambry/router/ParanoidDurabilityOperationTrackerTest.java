@@ -53,6 +53,7 @@ public class ParanoidDurabilityOperationTrackerTest {
   private final LinkedList<ReplicaId> inflightReplicas = new LinkedList<>();
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
   private List<ReplicaId> responseReplicas = new ArrayList<>();
+  private NonBlockingRouterMetrics routerMetrics;
 
 
   public ParanoidDurabilityOperationTrackerTest() { }
@@ -263,6 +264,7 @@ public class ParanoidDurabilityOperationTrackerTest {
 
     responseReplicas.clear();
     ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 2, localReplicaSuccessTarget, remoteReplicaSuccessTarget, remoteAttemptLimit,  true);
+    long remoteRetriesExceededCountBefore = routerMetrics.paranoidDurabilityRemoteRetriesExceededCount.getCount();
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 4);
       for (int i = 0; i < 4; i++) {
@@ -277,6 +279,8 @@ public class ParanoidDurabilityOperationTrackerTest {
         //ot.onResponse(currentReplica, TrackedRequestFinalState.SUCCESS);
       }
     }
+    Assert.assertEquals("Metrics should remote retries exceeded", remoteRetriesExceededCountBefore + 1,
+        routerMetrics.paranoidDurabilityRemoteRetriesExceededCount.getCount());
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
     assertFalse("Operation should not have failed", ot.hasFailed());
@@ -316,7 +320,7 @@ public class ParanoidDurabilityOperationTrackerTest {
     props.setProperty(RouterConfig.ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET, Boolean.toString(useDynamicSuccessTarget));
 
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
-    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     return new ParanoidDurabilityOperationTracker(routerConfig, mockPartition, localDcName, routerMetrics);
   }
 
