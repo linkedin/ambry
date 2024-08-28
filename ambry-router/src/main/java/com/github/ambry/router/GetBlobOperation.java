@@ -1307,11 +1307,6 @@ class GetBlobOperation extends GetOperation {
               }
             }
           } else {
-            if (chunkBlobId.getBlobDataType() == BlobId.BlobDataType.DATACHUNK
-                && getError == ServerErrorCode.Blob_Not_Found) {
-              // Missing a data chunk
-              routerMetrics.missingDataChunkErrorCount.inc();
-            }
             // process and set the most relevant exception.
             RouterErrorCode routerErrorCode = processServerError(getError);
             if (getError == ServerErrorCode.Disk_Unavailable) {
