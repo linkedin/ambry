@@ -822,6 +822,7 @@ public class ReplicaThread implements Runnable {
           }
         }
       } else {
+        replicationMetrics.incrementReplicationErrorCount(replicatingFromRemoteColo, datacenterName);
         replicationMetrics.updateMetadataRequestError(remoteReplicaInfo.getReplicaId());
         logger.error("Remote node: {} Thread name: {} Remote replica: {} Server metadata-response error: {}",
             remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
@@ -1379,6 +1380,7 @@ public class ReplicaThread implements Runnable {
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                 exchangeMetadataResponse.getMissingStoreKeys());
           } else {
+            replicationMetrics.incrementReplicationErrorCount(replicatingFromRemoteColo, datacenterName);
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server get-response error: {}",
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());

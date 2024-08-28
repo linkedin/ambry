@@ -609,9 +609,8 @@ public class ReplicationMetrics {
     String metadataRequestErrorMetricName =
         remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
             + remoteReplica.getPartitionId().toString() + "-metadataRequestError";
-    Counter counter = metadataRequestErrorMap.get(metadataRequestErrorMetricName);
-    if (counter != null) {
-      counter.inc();
+    if (metadataRequestErrorMap.containsKey(metadataRequestErrorMetricName)) {
+      metadataRequestErrorMap.get(metadataRequestErrorMetricName).inc();
     }
   }
 
