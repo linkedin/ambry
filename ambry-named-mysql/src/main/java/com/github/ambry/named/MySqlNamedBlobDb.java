@@ -83,6 +83,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String BLOB_STATE = "blob_state";
   private static final String VERSION = "version";
   private static final String DELETED_TS = "deleted_ts";
+  private static final String BLOB_SIZE = "blob_size";
   // query building blocks
   private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
   private static final String STATE_MATCH = String.format("%s = %s", BLOB_STATE, NamedBlobState.READY.ordinal());
@@ -112,7 +113,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   // @formatter:off
   private static final String LIST_QUERY_V2 = String.format(""
-          + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
+          + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
           + "FROM named_blobs_v2 t1 "
           + "INNER JOIN "
           + "(SELECT account_id, container_id, blob_name, max(version) as version "
@@ -129,7 +130,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   // @formatter:off
   private static final String LIST_ALL_QUERY_V2 = String.format(""
-      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
+      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
       + "FROM named_blobs_v2 t1 "
       + "INNER JOIN "
       + "(SELECT account_id, container_id, blob_name, max(version) as version "
@@ -150,8 +151,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Attempt to insert a new mapping into the database.
    */
   private static final String INSERT_QUERY_V2 =
-      String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS, VERSION, BLOB_STATE);
+      String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS, VERSION, BLOB_STATE, BLOB_SIZE);
 
   /**
    * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.
@@ -654,9 +655,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
           long version = resultSet.getLong(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
+          long blobSize = resultSet.getLong(5);
+          Timestamp modifiedTime = resultSet.getTimestamp(6);
 
           entries.add(
-              new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version));
+              new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version,
+                  blobSize, timestampToMs(modifiedTime)));
         }
         return new Page<>(entries, nextContinuationToken);
       }
@@ -686,6 +690,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               record.getBlobId(), record.getExpirationTimeMs(), newVersion);
       statement.setLong(6, newVersion);
       statement.setInt(7, state.ordinal());
+      statement.setLong(8, record.getBlobSize());
       query = statement.toString();
       logger.debug("Putting blob name in MySql. Query {}", query);
       statement.executeUpdate();

@@ -249,6 +249,7 @@ public class NamedBlobPutHandler {
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
+        blobInfo.getBlobProperties().setBlobSize(restRequest.getBlobBytesReceived());
         idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
       }, uri, LOGGER, deleteDatasetCallback);
     }

@@ -28,6 +28,8 @@ public class NamedBlobRecord {
   private final long expirationTimeMs;
   private final long version;
   private final String blobId;
+  private final long blobSize;
+  private final long modifiedTimeMs;
 
   /**
    * @param accountName the account name.
@@ -51,12 +53,28 @@ public class NamedBlobRecord {
    */
   public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
       long expirationTimeMs, long version) {
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, version, 0, 0);
+  }
+
+  /**
+   * @param accountName      the account name.
+   * @param containerName    the container name.
+   * @param blobName         the blob name within the container.
+   * @param blobId           the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param version          the version of this named blob.
+   * @param blobSize         the size of the blob.
+   */
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long version, long blobSize, long modifiedTimeMs) {
     this.accountName = accountName;
     this.containerName = containerName;
     this.blobName = blobName;
     this.blobId = blobId;
     this.expirationTimeMs = expirationTimeMs;
     this.version = version;
+    this.blobSize = blobSize;
+    this.modifiedTimeMs = modifiedTimeMs;
   }
 
   /**
@@ -101,6 +119,13 @@ public class NamedBlobRecord {
     return expirationTimeMs;
   }
 
+  /**
+   * @return the blob size.
+   */
+  public long getBlobSize() {
+    return blobSize;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -122,7 +147,14 @@ public class NamedBlobRecord {
 
   @Override
   public String toString() {
-    return "NamedBlobRecord[accountName=" + accountName + ",containerName=" + containerName + ",blobName=" + blobName +
-        ",blobId=" + blobId + ",expirationTimeMs=" + expirationTimeMs + ",version=" + version + "]";
+    return "NamedBlobRecord[accountName=" + accountName + ",containerName=" + containerName + ",blobName=" + blobName
+        + ",blobId=" + blobId + ",expirationTimeMs=" + expirationTimeMs + ",version=" + version + "]";
+  }
+
+  /**
+   * @return the modified timestamp of this blob
+   */
+  public long getModifiedTimeMs() {
+    return modifiedTimeMs;
   }
 }
