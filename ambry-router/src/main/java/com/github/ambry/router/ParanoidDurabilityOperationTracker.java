@@ -298,6 +298,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       localInflightCount--;
     } else {
       remoteInflightCount--;
+      remoteAttempts++;
     }
 
     switch (trackedRequestFinalState) {
@@ -419,7 +420,6 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
         localReplicas.remove(lastReturnedByIterator);
       } else {
         remoteInflightCount++;
-        remoteAttempts++;
         remoteReplicas.remove(lastReturnedByIterator);
       }
     }
