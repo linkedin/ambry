@@ -49,6 +49,8 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   protected int remoteInflightCount = 0;
   protected int localReplicaSuccessCount = 0;
   protected int remoteReplicaSuccessCount = 0;
+  protected int remoteAttempts = 0;
+  protected int remoteAttemptLimit = 2;
   private int currentDatacenterIndex = 0;
   int totalLocalReplicaCount;
   int failedLocalReplicas = 0;
@@ -67,6 +69,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     remoteReplicaParallelism = routerConfig.routerPutRemoteRequestParallelism;
     localReplicaSuccessTarget = routerConfig.routerPutSuccessTarget;
     remoteReplicaSuccessTarget = routerConfig.routerPutRemoteSuccessTarget;
+    remoteAttemptLimit = routerConfig.routerPutRemoteAttemptLimit;
 
     // Calling getEligibleReplicas with null will return replicas from all data centers.
     List<ReplicaId> allEligibleReplicas = getEligibleReplicas(null, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
@@ -225,7 +228,6 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    */
   public boolean hasSucceeded() {
     if (hasSucceededLocally() && hasSucceededRemotely()) {
-      logger.info("Paranoid durability PUT succeeded for partition " + partitionId);
       routerMetrics.paranoidDurabilitySuccessCount.inc();
       return true;
     }
@@ -250,7 +252,21 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    * @return true if we have received enough successful responses from remote replicas, false otherwise.
    */
   private boolean hasSucceededRemotely() {
-    return remoteReplicaSuccessCount >= remoteReplicaSuccessTarget;
+    if (remoteReplicaSuccessCount >= remoteReplicaSuccessTarget) {
+      return true;
+    }
+    else if(remoteAttempts >= remoteAttemptLimit) {
+      // We want to limit the number of retries that we issue to remote colos. At times of excessive network latency,
+      // we may end up issuing a large number of retries to remote colos. This is undesirable, since it will lead to
+      // excessive direct memory usage, because ambry-frontend will hold the state for every request until it is completed.
+      // In incident-1455, this caused ambry-frontend to run out of direct memory.
+      logger.error("Paranoid durability PUT failed in remote data centers for partition "
+          + partitionId + " - gave up after " + remoteAttempts + " attempts. If the local writes succeeded, "
+          + "we will still return success to the client. This is likely a network issue.");
+      routerMetrics.paranoidDurabilityRemoteRetriesExceededCount.inc();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -334,7 +350,13 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    * succeed, false otherwise.
    */
   private boolean hasFailedRemotely() {
-    if ((remoteReplicaSuccessCount + remoteInflightCount + remoteReplicas.size()) < remoteReplicaSuccessTarget) {
+    // If we have exceeded the number of attempts to remote colos, we should give up and return success to the client.
+    // This situation may occur at times of excessive network latency, where we may end up issuing a large number of
+    // retries to remote colos. This is undesirable, since it will lead to excessive direct memory usage (incident-1455).
+    if (remoteAttempts >= remoteAttemptLimit) {
+      return false;
+    }
+    else if ((remoteReplicaSuccessCount + remoteInflightCount + remoteReplicas.size()) < remoteReplicaSuccessTarget) {
       logger.error("Paranoid durability PUT failed in remote data centers for partition " + partitionId);
       routerMetrics.paranoidDurabilityFailureCount.inc();
       return true;
@@ -400,6 +422,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
         localReplicas.remove(lastReturnedByIterator);
       } else {
         remoteInflightCount++;
+        remoteAttempts++;
         remoteReplicas.remove(lastReturnedByIterator);
       }
     }

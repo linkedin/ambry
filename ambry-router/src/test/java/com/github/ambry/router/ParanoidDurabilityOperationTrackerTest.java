@@ -64,6 +64,7 @@ public class ParanoidDurabilityOperationTrackerTest {
   public void basicSuccessTest() {
     int localReplicaSuccessTarget = 2;
     int remoteReplicaSuccessTarget = 1;
+    int remoteAttemptLimit = 2;
     localDcName = new String("dc-0");
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
@@ -83,7 +84,7 @@ public class ParanoidDurabilityOperationTrackerTest {
     populateReplicaList(testReplicas);
 
     responseReplicas.clear();
-    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, localReplicaSuccessTarget, remoteReplicaSuccessTarget, true);
+    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, localReplicaSuccessTarget, remoteReplicaSuccessTarget, remoteAttemptLimit, true);
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 3);
       for (int i = 0; i < 3; i++) {
@@ -121,7 +122,7 @@ public class ParanoidDurabilityOperationTrackerTest {
     populateReplicaList(testReplicas);
 
     try {
-      ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, true);
+      ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, 2, true);
       Assert.fail("Too few remote replicas should have resulted in IllegalArgumentException");
     } catch (IllegalArgumentException expected) { }
   }
@@ -150,7 +151,7 @@ public class ParanoidDurabilityOperationTrackerTest {
     populateReplicaList(testReplicas);
 
     try {
-      ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, true);
+      ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, 2, true);
       Assert.fail("Too few remote replicas should have resulted in IllegalArgumentException");
     } catch (IllegalArgumentException expected) { }
   }
@@ -180,7 +181,7 @@ public class ParanoidDurabilityOperationTrackerTest {
     populateReplicaList(testReplicas);
 
     responseReplicas.clear();
-    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, true);
+    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, 2, 1, 2, true);
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 3);
       for (int i = 0; i < 3; i++) {
@@ -203,6 +204,7 @@ public class ParanoidDurabilityOperationTrackerTest {
   public void justEnoughRemoteReplicasTest() {
     int localReplicaSuccessTarget = 2;
     int remoteReplicaSuccessTarget = 1;
+    int remoteAttemptLimit = 2;
     localDcName = new String("dc-0");
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
@@ -217,13 +219,62 @@ public class ParanoidDurabilityOperationTrackerTest {
     populateReplicaList(testReplicas);
 
     responseReplicas.clear();
-    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, localReplicaSuccessTarget, remoteReplicaSuccessTarget, true);
+    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 1, localReplicaSuccessTarget, remoteReplicaSuccessTarget, remoteAttemptLimit,  true);
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 3);
       for (int i = 0; i < 3; i++) {
         ReplicaId currentReplica = inflightReplicas.poll();
         responseReplicas.add(currentReplica);
         ot.onResponse(currentReplica, TrackedRequestFinalState.SUCCESS);
+      }
+    }
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+    assertFalse("Operation should not have failed", ot.hasFailed());
+    assertTrue(localReplicaSuccessTarget + " of the successful replicas should be local and " + (remoteReplicaSuccessTarget+1) +" should be remote",
+        verifySuccessfulReplicas(responseReplicas, localReplicaSuccessTarget, remoteReplicaSuccessTarget));
+  }
+
+  /**
+   * A test with 2 remote replicas, both of which time out. This should result in a successful outcome, triggering the
+   * remote attempt limit exceeded mechanism.
+   */
+  @Test
+  public void timedOutRemoteReplicasTest() {
+    int localReplicaSuccessTarget = 2;
+    int remoteReplicaSuccessTarget = 2;
+    int remoteAttemptLimit = 2;
+    localDcName = new String("dc-0");
+    String remoteDcName1 = new String("remote-1");
+    String remoteDcName2 = new String("remote-2");
+
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    List<ReplicaSpec> testReplicas = new ArrayList<ReplicaSpec>(Arrays.asList(new ReplicaSpec[] {
+        new ReplicaSpec(localDcName, ReplicaState.LEADER, portList, mountPaths),
+        new ReplicaSpec(localDcName, ReplicaState.STANDBY, portList, mountPaths),
+        new ReplicaSpec(localDcName, ReplicaState.STANDBY, portList, mountPaths),
+        new ReplicaSpec(remoteDcName1, ReplicaState.STANDBY, portList, mountPaths),
+        new ReplicaSpec(remoteDcName2, ReplicaState.STANDBY, portList, mountPaths)}));
+
+    mockPartition = new MockPartitionId();
+    mockClusterMap = new MockClusterMap(false, buildDataNodeList(testReplicas), 1, Collections.singletonList(mockPartition), localDcName);
+    populateReplicaList(testReplicas);
+
+    responseReplicas.clear();
+    ParanoidDurabilityOperationTracker ot = getParanoidDurabilityOperationTracker(2, 2, localReplicaSuccessTarget, remoteReplicaSuccessTarget, remoteAttemptLimit,  true);
+    while (!ot.hasSucceeded()) {
+      sendRequests(ot, 4);
+      for (int i = 0; i < 4; i++) {
+        ReplicaId currentReplica = inflightReplicas.poll();
+        responseReplicas.add(currentReplica);
+        if (currentReplica.getDataNodeId().getDatacenterName().equals(remoteDcName1) ||
+            currentReplica.getDataNodeId().getDatacenterName().equals(remoteDcName2) ) {
+          ot.onResponse(currentReplica, TrackedRequestFinalState.TIMED_OUT);
+        } else {
+          ot.onResponse(currentReplica, TrackedRequestFinalState.SUCCESS);
+        }
+        //ot.onResponse(currentReplica, TrackedRequestFinalState.SUCCESS);
       }
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
@@ -253,7 +304,7 @@ public class ParanoidDurabilityOperationTrackerTest {
    * @return {@link ParanoidDurabilityOperationTracker}.
    */
   private ParanoidDurabilityOperationTracker getParanoidDurabilityOperationTracker(int localParallelism, int remoteParallelism,
-      int localSuccessTarget, int remoteSuccessTarget, boolean useDynamicSuccessTarget) {
+      int localSuccessTarget, int remoteSuccessTarget, int remoteAttemptLimit, boolean useDynamicSuccessTarget) {
     Properties props = new Properties();
     props.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
     props.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, localDcName);
@@ -261,6 +312,7 @@ public class ParanoidDurabilityOperationTrackerTest {
     props.setProperty(RouterConfig.ROUTER_PUT_REMOTE_REQUEST_PARALLELISM, Integer.toString(remoteParallelism));
     props.setProperty(RouterConfig.ROUTER_PUT_SUCCESS_TARGET, Integer.toString(localSuccessTarget));
     props.setProperty(RouterConfig.ROUTER_PUT_REMOTE_SUCCESS_TARGET, Integer.toString(remoteSuccessTarget));
+    props.setProperty(RouterConfig.ROUTER_PUT_REMOTE_ATTEMPT_LIMIT, Integer.toString(remoteAttemptLimit));
     props.setProperty(RouterConfig.ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET, Boolean.toString(useDynamicSuccessTarget));
 
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
