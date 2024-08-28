@@ -63,6 +63,7 @@ public class RouterConfig {
   public static final String ROUTER_PUT_REMOTE_REQUEST_PARALLELISM = "router.put.remote.request.parallelism";
   public static final String ROUTER_PUT_SUCCESS_TARGET = "router.put.success.target";
   public static final String ROUTER_PUT_REMOTE_SUCCESS_TARGET = "router.put.remote.success.target";
+  public static final String ROUTER_PUT_REMOTE_ATTEMPT_LIMIT = "router.put.remote.attempt.limit";
   public static final String ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM = "router.replicate.blob.request.parallelism";
   public static final String ROUTER_REPLICATE_BLOB_SUCCESS_TARGET = "router.replicate.blob.success.target";
   public static final String ROUTER_MAX_SLIPPED_PUT_ATTEMPTS = "router.max.slipped.put.attempts";
@@ -279,6 +280,14 @@ public class RouterConfig {
   @Config(ROUTER_PUT_REMOTE_SUCCESS_TARGET)
   @Default("1")
   public final int routerPutRemoteSuccessTarget;
+
+  /**
+   * Paranoid durability: The maximum number of write attempts in remote data centers for a put operation. Once exceeded,
+   * no more remote writes will be attempted.
+   */
+  @Config(ROUTER_PUT_REMOTE_ATTEMPT_LIMIT)
+  @Default("2")
+  public final int routerPutRemoteAttemptLimit;
 
   /**
    * The maximum number of parallel requests issued at a time by the ReplicateBlob manager.
@@ -792,6 +801,7 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_PUT_REMOTE_REQUEST_PARALLELISM, 1, 1, Integer.MAX_VALUE);
     routerPutSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
     routerPutRemoteSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_REMOTE_SUCCESS_TARGET, 1, 1, Integer.MAX_VALUE);
+    routerPutRemoteAttemptLimit = verifiableProperties.getIntInRange(ROUTER_PUT_REMOTE_ATTEMPT_LIMIT, 2, 1, Integer.MAX_VALUE);
     routerReplicateBlobRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
     routerReplicateBlobSuccessTarget =

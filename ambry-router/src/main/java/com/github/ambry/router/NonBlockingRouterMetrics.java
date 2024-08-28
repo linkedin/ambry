@@ -257,6 +257,8 @@ public class NonBlockingRouterMetrics {
 
   // Number of times there are not enough replicas available to satisfy paranoid durability write requirements
   public final Counter paranoidDurabilityNotEnoughReplicasCount;
+  // Number of times we gave up on trying to satisfy paranoid durability write requirements
+  public final Counter paranoidDurabilityRemoteRetriesExceededCount;
 
 
   // Workload characteristics
@@ -640,7 +642,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilitySuccessCount"));
     paranoidDurabilityNotEnoughReplicasCount =
         metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilityNotEnoughReplicasCount"));
-
+    paranoidDurabilityRemoteRetriesExceededCount =
+        metricRegistry.counter(MetricRegistry.name(ParanoidDurabilityOperationTracker.class, "ParanoidDurabilityRemoteRetriesExceededCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
