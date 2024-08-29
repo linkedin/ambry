@@ -60,7 +60,7 @@ public class HelixVcrPopulateTool {
     OptionSet options = parser.parse(args);
 
     String[] destZkAndCluster = options.valueOf(destOpt).split(HelixVcrUtil.SEPARATOR);
-    // string could zkString/namespace/clusterName or zkString/clusterName
+    // string could be zk/namespace/clusterName or zk/clusterName
     int lastSeparator = destZkAndCluster[0].lastIndexOf(SEPARATOR);
     String destZkString = destZkAndCluster[0].substring(0, lastSeparator);
     String destClusterName = destZkAndCluster[0].substring(lastSeparator+1);
@@ -87,7 +87,7 @@ public class HelixVcrPopulateTool {
       boolean dryRun = options.has(dryRunOpt);
       if (options.has(srcOpt)) {
         String[] srcZkAndCluster = options.valueOf(srcOpt).split(SEPARATOR);
-        // string could zkString/namespace/clusterName or zkString/clusterName
+        // string could be zk/namespace/clusterName or zk/clusterName
         String srcZkString = srcZkAndCluster[0].substring(0, lastSeparator);
         String srcClusterName = srcZkAndCluster[0].substring(lastSeparator+1);;
         System.out.println("Updating cluster: " + destClusterName + " by checking " + srcClusterName);
