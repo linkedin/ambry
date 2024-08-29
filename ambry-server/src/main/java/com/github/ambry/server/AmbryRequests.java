@@ -550,7 +550,7 @@ public class AmbryRequests implements RequestAPI {
           }
           partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobsDeleteStatuses);
         } else {
-          partitionResponseInfo = processStoreBatchDelete(batchDeleteRequest, batchDeletePartitionRequestInfo);
+          partitionResponseInfo = batchDeleteForPartition(batchDeleteRequest, batchDeletePartitionRequestInfo);
         }
       } catch (Exception e) {
         // All blobs failed to delete in a partition
@@ -592,7 +592,7 @@ public class AmbryRequests implements RequestAPI {
    * @param batchDeletePartitionRequestInfo the {@Link BatchDeletePartitionRequestInfo} for the partition where Batch_Delete is to be performed.
    * @return the {@Link BatchDeletePartitionResponseInfo} having a list of {@Link BlobDeleteStatus} for the status of blobs requested to be deleted.
    */
-  private BatchDeletePartitionResponseInfo processStoreBatchDelete(BatchDeleteRequest batchDeleteRequest, BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo)
+  private BatchDeletePartitionResponseInfo batchDeleteForPartition(BatchDeleteRequest batchDeleteRequest, BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo)
       throws Exception {
     List<MessageInfo> infoList = new ArrayList<>();
     List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(batchDeletePartitionRequestInfo.getBlobIds());
