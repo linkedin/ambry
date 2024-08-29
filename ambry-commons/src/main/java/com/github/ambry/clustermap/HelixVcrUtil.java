@@ -309,7 +309,6 @@ public class HelixVcrUtil {
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
 
-    boolean status = true;
     for (String resource : srcResources) {
       if (!isPartitionResourceName(resource)) {
         logger.error("[HelixSync] Ignore resource {} from source Ambry cluster", resource);
@@ -317,7 +316,7 @@ public class HelixVcrUtil {
       }
       if (!destResources.contains(resource)) {
         logger.error("[HelixSync] Resource {} from source Ambry cluster is absent in VCR cluster", resource);
-        status = false;
+        return false;
       }
       // check if every partition exist.
       Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
@@ -325,11 +324,11 @@ public class HelixVcrUtil {
       for (String partition : srcPartitions) {
         if (!destPartitions.contains(partition)) {
           logger.error("[HelixSync] Partition {} from source Ambry cluster is absent in VCR cluster", partition);
-          status = false;
+          return false;
         }
       }
     }
-    return status;
+    return true;
   }
 
   /**
