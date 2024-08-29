@@ -51,6 +51,7 @@ import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
 
@@ -99,6 +100,9 @@ public class S3PutHandlerTest {
     FutureResult<Void> putResult = new FutureResult<>();
     s3PutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
+
+    // Verify Upsert header is set by default for S3 uploads.
+    assertTrue("Upsert header must be present", request.getArgs().containsKey(NAMED_UPSERT));
 
     // 2. Verify upload was successful
     String blobId = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);

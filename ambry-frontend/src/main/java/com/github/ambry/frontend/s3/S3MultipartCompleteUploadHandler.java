@@ -188,6 +188,8 @@ public class S3MultipartCompleteUploadHandler {
             restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
           }
           restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+          // Overwrites are allowed by default for S3 uploads
+          restRequest.setArg(NAMED_UPSERT, true);
           BlobInfo blobInfo = getBlobInfoFromRequest();
           securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
         }
