@@ -59,11 +59,11 @@ public class HelixVcrPopulateTool {
 
     OptionSet options = parser.parse(args);
 
-    String[] destZkAndCluster = options.valueOf(destOpt).split(HelixVcrUtil.SEPARATOR);
+    String destZkAndCluster = options.valueOf(destOpt);
     // string could be zk/namespace/clusterName or zk/clusterName
-    int lastSeparator = destZkAndCluster[0].lastIndexOf(SEPARATOR);
-    String destZkString = destZkAndCluster[0].substring(0, lastSeparator);
-    String destClusterName = destZkAndCluster[0].substring(lastSeparator+1);
+    int lastSeparator = destZkAndCluster.lastIndexOf(SEPARATOR);
+    String destZkString = destZkAndCluster.substring(0, lastSeparator);
+    String destClusterName = destZkAndCluster.substring(lastSeparator+1);
     if (!destClusterName.contains("VCR")) {
       errorAndExit("dest should be a VCR cluster.(VCR string should be included)");
     }
@@ -86,10 +86,10 @@ public class HelixVcrPopulateTool {
     if (options.has(updateClusterOpt)) {
       boolean dryRun = options.has(dryRunOpt);
       if (options.has(srcOpt)) {
-        String[] srcZkAndCluster = options.valueOf(srcOpt).split(SEPARATOR);
+        String srcZkAndCluster = options.valueOf(srcOpt);
         // string could be zk/namespace/clusterName or zk/clusterName
-        String srcZkString = srcZkAndCluster[0].substring(0, lastSeparator);
-        String srcClusterName = srcZkAndCluster[0].substring(lastSeparator+1);;
+        String srcZkString = srcZkAndCluster.substring(0, lastSeparator);
+        String srcClusterName = srcZkAndCluster.substring(lastSeparator+1);;
         System.out.println("Updating cluster: " + destClusterName + " by checking " + srcClusterName);
         updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, config, dryRun);
       } else {
