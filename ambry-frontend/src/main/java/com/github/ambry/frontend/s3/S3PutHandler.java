@@ -88,6 +88,9 @@ public class S3PutHandler extends S3BaseHandler<Void> {
     }
     restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
 
+    // Overwrites are allowed by default for S3 APIs https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
+    restRequest.setArg(NAMED_UPSERT, true);
+
     // 2. Upload the blob by following named blob PUT path
     namedBlobPutHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3PutHandleMetrics, (r) -> {
       if (restResponseChannel.getStatus() == ResponseStatus.Created) {
