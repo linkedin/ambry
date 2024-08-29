@@ -60,6 +60,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static org.junit.Assert.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
@@ -186,14 +187,15 @@ public class S3MultipartUploadTest {
     restResponseChannel = new MockRestResponseChannel();
     postResult = new FutureResult<>();
     s3PostHandler.handle(request, restResponseChannel, postResult::done);
+    // Verify Upsert header is set by default for S3 multipart uploads.
+    assertTrue("Upsert header must be present", request.getArgs().containsKey(NAMED_UPSERT));
     readableStreamChannel = postResult.get();
     byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
     byte[] byteArray = byteBuffer.array();
     CompleteMultipartUploadResult completeMultipartUploadResult =
         xmlMapper.readValue(byteArray, CompleteMultipartUploadResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
-    assertEquals("Mismatch in content type", XML_CONTENT_TYPE,
-        restResponseChannel.getHeader(Headers.CONTENT_TYPE));
+    assertEquals("Mismatch in content type", XML_CONTENT_TYPE, restResponseChannel.getHeader(Headers.CONTENT_TYPE));
     assertEquals("Mismatch on CompleteMultipartUploadResult.bucket", containerName,
         completeMultipartUploadResult.getBucket());
     assertEquals("Mismatch on CompleteMultipartUploadResult.key", blobName, completeMultipartUploadResult.getKey());
