@@ -103,8 +103,8 @@ public class MySqlNamedBlobDbIntegrationTest {
               i % 2 == 0 ? Utils.Infinite_Time : System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1);
           long blobSize = 20;
           NamedBlobRecord record =
-              new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime, 0, blobSize,
-                  0);
+              new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime, 0,
+                  blobSize);
           namedBlobDb.put(record).get();
           records.add(record);
         }

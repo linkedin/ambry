@@ -174,12 +174,13 @@ public class S3ListHandlerTest {
     // 1. Put a named blob
     String PREFIX = "directory-name";
     String KEY_NAME = PREFIX + SLASH + "key_name";
+    int BLOB_SIZE = 1024;
     String request_path =
         NAMED_BLOB_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + KEY_NAME;
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
         SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
-    byte[] content = TestUtils.getRandomBytes(1024);
+    byte[] content = TestUtils.getRandomBytes(BLOB_SIZE);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, request_path, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
     request.setArg(InternalKeys.REQUEST_PATH,
@@ -224,7 +225,7 @@ public class S3ListHandlerTest {
     assertEquals("Mismatch in key count", 2, listBucketResultV2.getKeyCount());
     assertEquals("Mismatch in delimiter", "/", listBucketResultV2.getDelimiter());
     assertEquals("Mismatch in encoding type", "url", listBucketResultV2.getEncodingType());
-    assertEquals("Mismatch in size", 0, listBucketResultV2.getContents().get(0).getSize());
+    assertEquals("Mismatch in size", BLOB_SIZE, listBucketResultV2.getContents().get(0).getSize());
 
     // 4. Get list of blobs with continuation-token
     s3_list_request_uri =

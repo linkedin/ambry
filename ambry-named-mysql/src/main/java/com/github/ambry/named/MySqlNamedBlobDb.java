@@ -148,7 +148,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   // @formatter:on
 
   /**
-   * Attempt to insert a new mapping into the database.
+   * Attempt to insert a new mapping into the database. The 'modified_ts' column in the DB will be auto-populated on
+   * the server side
    */
   private static final String INSERT_QUERY_V2 =
       String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

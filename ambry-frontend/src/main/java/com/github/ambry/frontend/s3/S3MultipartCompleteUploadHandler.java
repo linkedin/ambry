@@ -216,8 +216,10 @@ public class S3MultipartCompleteUploadHandler {
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics, bytesRead -> {
         PutBlobOptions options = new PutBlobOptionsBuilder().restRequest(restRequest).build();
-        router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
-            getChunksToStitch(parseCompleteMultipartUploadBody(channel)), options, routerStitchBlobCallback(blobInfo),
+        BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
+        router.stitchBlob(propertiesForRouterUpload, blobInfo.getUserMetadata(),
+            getChunksToStitch(parseCompleteMultipartUploadBody(channel)), options,
+            routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
       }, uri, LOGGER, finalCallback);
     }
@@ -225,13 +227,18 @@ public class S3MultipartCompleteUploadHandler {
     /**
      * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
      * that will be returned to the "ETag" header.
-     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @param blobInfo                       the {@link BlobInfo} to use for security checks.
+     * @param propertiesPassedInRouterUpload the {@link BlobProperties} instance that is passed to Router during upload
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId)), uri,
-          LOGGER, finalCallback);
+    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo,
+        BlobProperties propertiesPassedInRouterUpload) {
+      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
+        // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
+        // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
+        blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
+        idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -265,8 +272,9 @@ public class S3MultipartCompleteUploadHandler {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
         // Set the named blob state to be 'READY' after the Ttl update succeed
         if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
-          throw new RestServiceException("Internal key " + NAMED_BLOB_VERSION
-              + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
+          throw new RestServiceException(
+              "Internal key " + NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
+              RestServiceErrorCode.InternalServerError);
         }
         long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
         String blobIdClean = stripSlashAndExtensionFromId(blobId);

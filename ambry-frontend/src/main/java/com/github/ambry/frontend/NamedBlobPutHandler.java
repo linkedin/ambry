@@ -262,23 +262,30 @@ public class NamedBlobPutHandler {
      * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
-              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
-              routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
-          uri, LOGGER, deleteDatasetCallback);
+      return buildCallback(frontendMetrics.putReadStitchRequestMetrics, bytesRead -> {
+        BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
+        router.stitchBlob(propertiesForRouterUpload, blobInfo.getUserMetadata(),
+            getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
+            routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
+            QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+      }, uri, LOGGER, deleteDatasetCallback);
     }
 
     /**
      * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
      * that will be returned in the "Location" header.
-     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @param blobInfo                       the {@link BlobInfo} to use for security checks.
+     * @param propertiesPassedInRouterUpload the {@link BlobProperties} instance that is passed to Router during upload
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId)), uri,
-          LOGGER, deleteDatasetCallback);
+    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo,
+        BlobProperties propertiesPassedInRouterUpload) {
+      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
+        // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
+        // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
+        blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
+        idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
+      }, uri, LOGGER, deleteDatasetCallback);
     }
 
     /**

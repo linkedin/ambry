@@ -116,6 +116,6 @@ public class NamedBlobListEntry {
     }
     NamedBlobListEntry that = (NamedBlobListEntry) o;
     return expirationTimeMs == that.expirationTimeMs && Objects.equals(blobName, that.blobName)
-        && modifiedTimeMs == that.modifiedTimeMs && blobSize == that.getBlobSize();
+        && modifiedTimeMs == that.modifiedTimeMs && blobSize == that.blobSize;
   }
 }
