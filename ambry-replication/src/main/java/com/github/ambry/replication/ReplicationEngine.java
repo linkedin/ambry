@@ -804,7 +804,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             }
           }
           removeRemoteReplicaInfoFromReplicaThread(replicaInfosToRemove);
-          if (addedReplicas.size() + removedReplicas.size() > 0) {
+          if (addedPeerReplicas.size() + removedPeerReplicas.size() > 0) {
             // print only if something is added or removed
             logger.info("{} peer replicas are added and {} peer replicas are removed in replication manager",
                 addedPeerReplicas.size(), removedPeerReplicas.size());

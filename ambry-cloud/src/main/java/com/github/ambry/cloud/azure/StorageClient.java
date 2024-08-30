@@ -420,17 +420,16 @@ public abstract class StorageClient implements AzureStorageClient {
   }
 
   protected BlobServiceClient createBlobStorageSyncClient() {
-    try {
-      validateABSAuthConfigs(azureCloudConfig);
-      ProxyOptions proxyOptions = null;
-      if (cloudConfig.vcrProxyHost != null && !cloudConfig.vcrProxyHost.isEmpty()) {
-        logger.info("Using vcrProxyHost:vcrProxyPort {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-        proxyOptions = new ProxyOptions(ProxyOptions.Type.HTTP,
-            new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
-      } else {
-        logger.info("No vcrProxyHost provided");
-      }
-      HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
+    validateABSAuthConfigs(azureCloudConfig);
+    ProxyOptions proxyOptions = null;
+    if (cloudConfig.vcrProxyHost != null && !cloudConfig.vcrProxyHost.isEmpty()) {
+      logger.info("Using vcrProxyHost:vcrProxyPort {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
+      proxyOptions = new ProxyOptions(ProxyOptions.Type.HTTP,
+          new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
+    } else {
+      logger.info("No vcrProxyHost provided");
+    }
+    HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
       /*
        retryPolicyType – null defaults to EXPONENTIAL
        maxTries – null defaults to 4
@@ -440,14 +439,10 @@ public abstract class StorageClient implements AzureStorageClient {
        retryDelayInMs – null defaults to 4ms when retryPolicyType is EXPONENTIAL
        maxRetryDelayInMs – null defaults to 120ms
        */
-      RequestRetryOptions retryOptions =
-          new RequestRetryOptions(azureCloudConfig.azureRetryPolicy, azureCloudConfig.azureMaxTries, null,
-              azureCloudConfig.azureRetryDelayInSec, azureCloudConfig.azureMaxRetryDelayInSec, null);
-      return buildBlobServiceSyncClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
-    } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
-      logger.error("Error building ABS blob service client: {}", ex.getMessage());
-      throw new IllegalStateException(ex);
-    }
+    RequestRetryOptions retryOptions =
+        new RequestRetryOptions(azureCloudConfig.azureRetryPolicy, azureCloudConfig.azureMaxTries, null,
+            azureCloudConfig.azureRetryDelayInSec, azureCloudConfig.azureMaxRetryDelayInSec, null);
+    return buildBlobServiceSyncClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
   }
 
   public TableServiceClient getTableServiceClient() {
@@ -478,12 +473,7 @@ public abstract class StorageClient implements AzureStorageClient {
       default:
         throw new RuntimeException(String.format("Invalid azureRetryPolicy %s", azureCloudConfig.azureRetryPolicy));
     }
-    try {
-      return buildTableServiceClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
-    } catch (Exception e) {
-      logger.error("Error building Azure Table Service client: {}", e.getMessage());
-      throw e;
-    }
+    return buildTableServiceClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
   }
 
   /**
@@ -529,8 +519,7 @@ public abstract class StorageClient implements AzureStorageClient {
    * @return {@link BlobServiceAsyncClient} object.
    */
   protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
-      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
-      throws MalformedURLException, InterruptedException, ExecutionException {
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
     return null;
   }
 
