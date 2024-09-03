@@ -42,6 +42,11 @@ public abstract class GroupTracker {
     this.iterations++;
   }
 
+  public void finishIteration() {
+    remoteReplicaGroup = null;
+    inflightReplicas.clear();
+  }
+
   public boolean isAvailable() {
     return remoteReplicaGroup == null;
   }
