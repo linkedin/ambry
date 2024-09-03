@@ -17,11 +17,14 @@ import java.util.List;
 
 
 public class ActiveGroupTracker extends GroupTracker {
-
-  List<ReplicaTracker> preAssignedReplicas;
+  private final List<ReplicaTracker> preAssignedReplicas;
 
   ActiveGroupTracker(int groupId, List<ReplicaTracker> preAssignedReplicas) {
     super(groupId);
     this.preAssignedReplicas = preAssignedReplicas;
+  }
+
+  List<ReplicaTracker> getPreAssignedReplicas() {
+    return preAssignedReplicas;
   }
 }
