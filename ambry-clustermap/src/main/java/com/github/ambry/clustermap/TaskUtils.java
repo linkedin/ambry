@@ -14,6 +14,9 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.Pair;
+import java.util.Map;
+import java.util.Set;
+
 
 public class TaskUtils {
 
@@ -37,5 +40,29 @@ public class TaskUtils {
       }
     }
     return new Pair<>(hostname, port);
+  }
+
+  protected static boolean removeConfig(Set<String> config){
+    if (checkIfConfigPresent(config)) {
+      config.clear();
+      return true;
+    }
+    return false;
+  }
+
+  protected static boolean removeConfig(Map<String, DataNodeConfig.ReplicaConfig> config){
+    if (checkIfConfigPresent(config)) {
+      config.clear();
+      return true;
+    }
+    return false;
+  }
+
+  protected static boolean checkIfConfigPresent(Set<String> config) {
+    return config != null && !config.isEmpty();
+  }
+
+  protected static boolean checkIfConfigPresent(Map<String, DataNodeConfig.ReplicaConfig> config) {
+    return config != null && !config.isEmpty();
   }
 }

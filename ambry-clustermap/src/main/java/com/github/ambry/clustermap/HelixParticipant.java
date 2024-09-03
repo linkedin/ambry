@@ -146,6 +146,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
     registerStatsReportAggregationTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
+    registerPropertyStoreCleanUpTask(stateMachineEngine);
     try {
       // register server as a participant
       manager.connect();
@@ -777,6 +778,18 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
           new TaskStateModelFactory(manager, taskFactoryMap));
     }
+  }
+
+  /**
+   *
+   * @param engine
+   */
+  private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
+    Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
+    taskFactoryMap.put(String.format("%s_%s", PropertyStoreCleanUpTask.COMMAND, "task"),
+        context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig, metricRegistry));
+    engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+        new TaskStateModelFactory(manager, taskFactoryMap));
   }
 
   /**

@@ -37,6 +37,8 @@ public class ClusterMapConfig {
       "clustermap.enable.delete.invalid.data.in.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
+  public static final String ENABLE_PROPERTY_STORE_CLEAN_UP_TASK =
+      "clustermap.enable.property.store.clean.up.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -342,6 +344,10 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableDeleteInvalidDataInMysqlAggregationTask;
 
+  @Config(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK)
+  @Default("false")
+  public final boolean clustermapEnablePropertyStoreCleanUpTask;
+
   public static final String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
   /**
    * The lease timeout for distributed lock. For now, the lock is only used for removing host from account stats store.
@@ -356,7 +362,7 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapIgnoreDownwardStateTransition;
 
-  public ClusterMapConfig(VerifiableProperties verifiableProperties) {
+  public ClusterMapConfig(VerifiableProperties verifiableProperties, boolean clustermapEnablePropertyStoreCleanUpTask) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
     clusterMapResourceStatePolicyFactory = verifiableProperties.getString("clustermap.resourcestatepolicy.factory",
@@ -427,6 +433,8 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
+    clustermapEnablePropertyStoreCleanUpTask =
+        verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, false);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
     clustermapDistributedLockLeaseTimeoutInMs =
