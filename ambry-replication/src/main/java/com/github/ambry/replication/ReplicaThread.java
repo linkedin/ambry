@@ -1975,7 +1975,7 @@ public class ReplicaThread implements Runnable {
    * network client. After getting the response from tne network client, it handles the response and moves to DONE
    * state. Any error happens in the middle of processing would force group to DONE state.
    */
-  class RemoteReplicaGroup {
+  public class RemoteReplicaGroup {
     private final List<RemoteReplicaInfo> remoteReplicaInfos;
     private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
 
