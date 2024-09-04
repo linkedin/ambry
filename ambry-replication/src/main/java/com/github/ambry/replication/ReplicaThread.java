@@ -375,6 +375,9 @@ public class ReplicaThread implements Runnable {
     return replicas;
   }
 
+  /**
+   * Runs continuous replication if enabled otherwise runs cyclic replication
+   */
   public void replicate() {
     if (enableContinuousReplication) {
       replicateContinuous();
@@ -385,7 +388,7 @@ public class ReplicaThread implements Runnable {
 
   //TODO implement continuous replication inside this
   public void replicateContinuous() {
-    
+
   }
 
   /**
