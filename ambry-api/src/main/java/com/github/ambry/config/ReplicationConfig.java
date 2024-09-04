@@ -27,6 +27,7 @@ public class ReplicationConfig {
   public static final String REPLICATION_CLOUD_TOKEN_FACTORY = "replication.cloud.token.factory";
   public static final String REPLICA_TOKEN_FILE_NAME = "replicaTokens";
   public static final String REPLICATION_MODEL_ACROSS_DATACENTERS = "replication.model.across.datacenters";
+  public static final String REPLICATION_ENABLE_CONTINUOUS_REPLICATION = "replication.enable.continuous.replication";
   public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
       "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
 
@@ -49,6 +50,13 @@ public class ReplicationConfig {
   @Config(REPLICATION_CLOUD_TOKEN_FACTORY)
   @Default(DEFAULT_RECOVERY_TOKEN_FACTORY)
   public final String replicationCloudTokenFactory;
+
+  /**
+   * Config to enable/disable continuous replication
+   */
+  @Config(REPLICATION_ENABLE_CONTINUOUS_REPLICATION)
+  @Default("false")
+  public final boolean replicationEnableContinuousReplication;
 
   /**
    * The number of replica threads on each server that runs the replication protocol for intra dc replication
@@ -327,6 +335,8 @@ public class ReplicationConfig {
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
     replicationCloudTokenFactory = verifiableProperties.getString(REPLICATION_CLOUD_TOKEN_FACTORY,
         DEFAULT_RECOVERY_TOKEN_FACTORY);
+    replicationEnableContinuousReplication =
+        verifiableProperties.getBoolean(REPLICATION_ENABLE_CONTINUOUS_REPLICATION, false);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =
