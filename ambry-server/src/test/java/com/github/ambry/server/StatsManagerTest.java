@@ -49,6 +49,7 @@ import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
@@ -597,6 +598,11 @@ public class StatsManagerTest {
 
     @Override
     public void delete(List<MessageInfo> infos) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public StoreBatchDeleteInfo batchDelete(List<MessageInfo> infos) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 

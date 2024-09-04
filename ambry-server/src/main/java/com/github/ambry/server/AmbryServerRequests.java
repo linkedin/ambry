@@ -126,8 +126,9 @@ public class AmbryServerRequests extends AmbryRequests {
     this.clusterParticipant = clusterParticipant;
 
     for (RequestOrResponseType requestType : EnumSet.of(RequestOrResponseType.PutRequest,
-        RequestOrResponseType.GetRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.UndeleteRequest,
-        RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
+        RequestOrResponseType.GetRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.BatchDeleteRequest,
+        RequestOrResponseType.UndeleteRequest, RequestOrResponseType.ReplicaMetadataRequest,
+        RequestOrResponseType.TtlUpdateRequest)) {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
     StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
