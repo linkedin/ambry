@@ -26,11 +26,13 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.protocol.BatchDeletePartitionResponseInfo;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
@@ -717,6 +719,11 @@ public class CloudBlobStore implements Store {
       // Upload all live blobs
       return true;
     }
+  }
+
+  @Override
+  public StoreBatchDeleteInfo batchDelete(List<MessageInfo> infos) throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override

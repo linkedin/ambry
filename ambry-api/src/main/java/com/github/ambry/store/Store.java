@@ -62,6 +62,17 @@ public interface Store {
   void delete(List<MessageInfo> infosToDelete) throws StoreException;
 
   /**
+   * Deletes all the messages in the list. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this
+   * method is invoked by the responding to the frontend BATCH_DELETE request. Invocation in replication thread is not
+   * yet supported.
+   * @param infosToDelete The list of messages that need to be deleted.
+   *                      Only the StoreKey, OperationTime, LifeVersion should be used in this method.
+   * @return The {@link StoreBatchDeleteInfo} for the given ids
+   * @throws StoreException
+   */
+  StoreBatchDeleteInfo batchDelete(List<MessageInfo> infosToDelete) throws StoreException;
+
+  /**
    * Write a purge message for all the blob ids in the message info  list.
    * Blobs are purged when it has been determined that a chunk is no longer needed (i.e, is expired or deleted
    * and past retention window or maybe an orphan chunk). Once compaction sees a purge message, it will clean up the chunk
