@@ -103,6 +103,11 @@ public class BackupCheckerThread extends ReplicaThread {
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
+  @Override
+  protected boolean getEnableContinuousReplication(ReplicationConfig replicationConfig) {
+    return false;
+  }
+
   /**
    * Return the {@link BackupCheckerFileManager}. This is only for test
    * @return

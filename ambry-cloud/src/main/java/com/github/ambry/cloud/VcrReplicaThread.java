@@ -92,6 +92,11 @@ public class VcrReplicaThread extends ReplicaThread {
     comparator = new ReplicaComparator();
   }
 
+  @Override
+  protected boolean getEnableContinuousReplication(ReplicationConfig replicationConfig) {
+    return false;
+  }
+
   class ReplicaComparator implements Comparator<RemoteReplicaInfo> {
     @Override
     public int compare(RemoteReplicaInfo r1, RemoteReplicaInfo r2) {
