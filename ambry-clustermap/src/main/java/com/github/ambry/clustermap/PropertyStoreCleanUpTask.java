@@ -1,3 +1,16 @@
+/**
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.Counter;
@@ -11,8 +24,10 @@ import java.util.Set;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
+import org.apache.helix.HelixProperty;
 import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.IdealState;
+import org.apache.helix.model.LiveInstance;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskResult;
 import org.slf4j.Logger;
@@ -75,66 +90,41 @@ public class PropertyStoreCleanUpTask implements Task {
   public TaskResult run() {
     long startTimeMs = System.currentTimeMillis();
     try {
+      // Get all instances and live instances
       HelixDataAccessor dataAccessor = manager.getHelixDataAccessor();
-      HelixAdmin admin = manager.getClusterManagmentTool();
-      List<String> instances = dataAccessor.getProperty(dataAccessor.keyBuilder().instances());
-      Set<String> liveInstances = dataAccessor.getProperty(dataAccessor.keyBuilder().liveInstances());
+      List<String> instances = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
+      Set<String> liveInstances = new HashSet<>(dataAccessor.getChildNames(dataAccessor.keyBuilder().liveInstances()));
       metrics.instancesAndLiveInstancesFetchTimeInMs.update(System.currentTimeMillis() - startTimeMs);
 
-      Set<String> allInstancesInIdealState = new HashSet<>();
-      Set<String> allInstancesInExternalView = new HashSet<>();
-      List<String> resourcesInCluster = admin.getResourcesInCluster(manager.getClusterName());
+      //Get all instances in ideal state and external view for this cluster
+      Set<String> instancesInIdealStateAndExternalView = new HashSet<>();
+      dataAccessor.getChildValues(dataAccessor.keyBuilder().idealStates(), true).stream()
+          .map(IdealState.class::cast)
+          .forEach(idealState -> idealState.getPartitionSet().stream()
+              .map(idealState::getInstanceSet)
+              .forEach(instancesInIdealStateAndExternalView::addAll));
 
-      for (String resource : resourcesInCluster) {
-        IdealState idealState = admin.getResourceIdealState(manager.getClusterName(), resource);
-        Set<String> partitions = idealState.getPartitionSet();
-        for (String partition : partitions) {
-          allInstancesInIdealState.addAll(idealState.getInstanceSet(partition));
-        }
+      dataAccessor.getChildValues(dataAccessor.keyBuilder().externalViews(), true).stream()
+          .map(ExternalView.class::cast)
+          .forEach(externalView -> externalView.getPartitionSet().stream()
+              .map(externalView::getStateMap)
+              .forEach(stateMap -> instancesInIdealStateAndExternalView.addAll(stateMap.keySet())));
 
-        ExternalView externalView = admin.getResourceExternalView(manager.getClusterName(), resource);
-        Set<String> partitionSet = externalView.getPartitionSet();
-        for (String partition : partitionSet) {
-          allInstancesInExternalView.addAll(externalView.getStateMap(partition).keySet());
-        }
-      }
       metrics.idealStateAndExternalViewFetchTimeInMS.update(System.currentTimeMillis() - startTimeMs);
 
-      // Find instances that are not live and also not present in ideal state or external view
-
-      for (String instance : instances) {
-        if (!liveInstances.contains(instance) && !allInstancesInIdealState.contains(instance)
-            && !allInstancesInExternalView.contains(instance)) {
-          logger.info("Cleaning up property store for instance {}", instance);
-          // Do the cleanup
-          if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
-            try {
-              synchronized (helixAdministrationLock) {
-                DataNodeConfig dataNodeConfig = dataNodeConfigSource.get(instance);
-                if (dataNodeConfig == null) {
-                  continue;
-                }
-                boolean configChanged;
-                configChanged = TaskUtils.removeConfig(dataNodeConfig.getSealedReplicas());
-                configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getStoppedReplicas());
-                configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getPartiallySealedReplicas());
-                configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getDisabledReplicas());
-                Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
-                for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
-                  configChanged = configChanged || TaskUtils.removeConfig(diskConfig.getReplicaConfigs());
-                }
-                if (configChanged) {
-                  dataNodeConfigSource.set(dataNodeConfig);
-                }
-              }
-            } catch (Exception exception) {
-              logger.error("Exception thrown while cleaning PropertyStore for instance = {}", instance, exception);
-              metrics.propertyStoreCleanUpErrorCount.inc();
-            }
-          }
+      // Find instances that are not live and also not present in ideal state or external view and do cleanup
+      instances.stream().filter(instance -> !liveInstances.contains(instance) &&
+          !instancesInIdealStateAndExternalView.contains(instance)).
+          forEach(instance -> {
+            logger.info("Cleaning up property store for instance {}", instance);
+        try {
+          cleanupPropertyStore(instance);
+        } catch (Exception exception) {
+          logger.error("Exception thrown while cleaning PropertyStore for instance = {}", instance, exception);
+          metrics.propertyStoreCleanUpErrorCount.inc();
         }
-      }
-      metrics.propertyStoreCleanUpSuccessCount.inc();
+      });
+
       metrics.propertyStoreTaskTimeInMs.update(System.currentTimeMillis() - startTimeMs);
       return new TaskResult(TaskResult.Status.COMPLETED, "PropertyStoreCleanUpTask completed successfully");
     } catch (Exception exception) {
@@ -142,6 +132,40 @@ public class PropertyStoreCleanUpTask implements Task {
           ,manager.getClusterName(), exception);
       metrics.propertyStoreCleanUpErrorCount.inc();
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
+    }
+  }
+
+  /**
+   * Cleanup property store for the given instance
+   */
+  private void cleanupPropertyStore(String instance) {
+    if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
+        synchronized (helixAdministrationLock) {
+          DataNodeConfig dataNodeConfig = dataNodeConfigSource.get(instance);
+          if (dataNodeConfig == null) { return;}
+          boolean configChanged;
+          // Remove all sealed, stopped, partially sealed and disabled replicas for the instance in the property store
+          configChanged = TaskUtils.removeConfig(dataNodeConfig.getSealedReplicas());
+          configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getStoppedReplicas());
+          configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getPartiallySealedReplicas());
+          configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getDisabledReplicas());
+          Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
+
+          // Remove all replicas for each disk in the property store
+          for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
+            configChanged = configChanged || TaskUtils.removeConfig(diskConfig.getReplicaConfigs());
+          }
+          // Only set the config if it has changed
+          if (configChanged) {
+            if (dataNodeConfigSource.set(dataNodeConfig)) {
+              logger.info("PropertyStore cleanup successful for instance = {}", instance);
+              metrics.propertyStoreCleanUpSuccessCount.inc();
+            } else {
+              logger.error("PropertyStore cleanup failed for instance while setting config = {}", instance);
+              metrics.propertyStoreCleanUpErrorCount.inc();
+            }
+          }
+        }
     }
   }
 

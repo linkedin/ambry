@@ -362,7 +362,7 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapIgnoreDownwardStateTransition;
 
-  public ClusterMapConfig(VerifiableProperties verifiableProperties, boolean clustermapEnablePropertyStoreCleanUpTask) {
+  public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
     clusterMapResourceStatePolicyFactory = verifiableProperties.getString("clustermap.resourcestatepolicy.factory",
