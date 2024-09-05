@@ -182,13 +182,13 @@ public class ReplicaThread implements Runnable {
       idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
     }
-    this.enableContinuousReplication = getEnableContinuousReplication(replicationConfig);
+    this.enableContinuousReplication = isContinuousReplicationEnabled(replicationConfig);
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
   }
 
-  protected boolean getEnableContinuousReplication(ReplicationConfig replicationConfig) {
+  protected boolean isContinuousReplicationEnabled(ReplicationConfig replicationConfig) {
     return replicationConfig.replicationEnableContinuousReplication;
   }
 
