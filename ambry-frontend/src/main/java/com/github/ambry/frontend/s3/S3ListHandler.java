@@ -33,6 +33,7 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.List;
 import org.json.JSONObject;
@@ -110,11 +111,11 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     int keyCount = 0;
     for (NamedBlobListEntry namedBlobRecord : namedBlobRecordPage.getEntries()) {
       String blobName = namedBlobRecord.getBlobName();
-      String todayDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(Calendar.getInstance().getTime());
-      // Set size to 0 for now. Although this doesn't seem to be used by S3 clients, -1 is being treated an invalid value by s3 java client
-      // TODO: Flink team is requesting to send valid blob size and modified date in the Contents for debugging purposes.
-      //  This would need mysql schema change
-      contentsList.add(new Contents(blobName, todayDate, 0));
+      long blobSize = namedBlobRecord.getBlobSize();
+      long modifiedTimeMs = namedBlobRecord.getModifiedTimeMs();
+      Date modifiedDate = modifiedTimeMs != -1 ? new Date(modifiedTimeMs) : Calendar.getInstance().getTime();
+      String formattedModifiedDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(modifiedDate);
+      contentsList.add(new Contents(blobName, formattedModifiedDate, blobSize));
       if (++keyCount == maxKeysValue) {
         break;
       }
