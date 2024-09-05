@@ -457,6 +457,8 @@ class PutOperation {
       totalSize += chunkInfo.getChunkSizeInBytes();
     }
     blobSize = totalSize;
+    // Update blobSize in passedInBlobProperties. This can be used by Handlers after Router finishes stitching the blob
+    passedInBlobProperties.setBlobSize(blobSize);
     chunkFillingCompletedSuccessfully = true;
   }
 
