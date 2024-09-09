@@ -785,11 +785,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param engine
    */
   private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
-    Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    taskFactoryMap.put(String.format("%s_%s", PropertyStoreCleanUpTask.COMMAND, "task"),
-        context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig, metricRegistry));
-    engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
-        new TaskStateModelFactory(manager, taskFactoryMap));
+    if(clusterMapConfig.clustermapRegisterPropertyStoreTask) {
+      Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
+      taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
+          context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,
+              metricRegistry));
+      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+          new TaskStateModelFactory(manager, taskFactoryMap), PropertyStoreCleanUpTask.COMMAND);
+    }
   }
 
   /**

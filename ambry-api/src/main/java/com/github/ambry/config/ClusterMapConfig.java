@@ -39,6 +39,7 @@ public class ClusterMapConfig {
       "clustermap.enable.aggregated.monthly.account.report";
   public static final String ENABLE_PROPERTY_STORE_CLEAN_UP_TASK =
       "clustermap.enable.property.store.clean.up.task";
+  public static final String REGISTER_PROPERTY_STORE_TASK = "clustermap.register.property.store.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -344,9 +345,17 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableDeleteInvalidDataInMysqlAggregationTask;
 
+  /**
+   * True to enable property store clean up task.
+   */
   @Config(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK)
-  @Default("false")
   public final boolean clustermapEnablePropertyStoreCleanUpTask;
+
+  /**
+   * True to register property store task.
+   */
+  @Config(REGISTER_PROPERTY_STORE_TASK)
+  public final boolean clustermapRegisterPropertyStoreTask;
 
   public static final String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
   /**
@@ -435,6 +444,7 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
     clustermapEnablePropertyStoreCleanUpTask =
         verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, false);
+    clustermapRegisterPropertyStoreTask = verifiableProperties.getBoolean(REGISTER_PROPERTY_STORE_TASK, true);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
     clustermapDistributedLockLeaseTimeoutInMs =

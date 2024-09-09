@@ -42,6 +42,7 @@ import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
+import org.apache.helix.task.TaskConstants;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -397,6 +398,7 @@ public class HelixParticipantTest {
   public void testBadCases() {
     // Invalid state model def
     props.setProperty("clustermap.state.model.definition", "InvalidStateModelDef");
+    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(false));
     try {
       new ClusterMapConfig(new VerifiableProperties(props));
       fail("should fail due to invalid state model definition");
@@ -474,6 +476,7 @@ public class HelixParticipantTest {
    */
   @Test
   public void testHelixParticipant() throws Exception {
+    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(false));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory,
@@ -816,6 +819,45 @@ public class HelixParticipantTest {
     getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
     assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("offline", metricRegistry));
 
+    helixParticipant.close();
+  }
+
+  /**
+   * Test participate method with property store helix task enabled
+   * @throws Exception
+   */
+  @Test
+  public void testParticipateMethodWithHelixPropertyStoreTaskEnabled() throws Exception {
+    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(true));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
+    helixParticipant.participate( Collections.emptyList(), null, null);
+    assertNotNull("PropertyStoreCleanUpTask should be registered",
+        helixParticipant.getHelixManager().getStateMachineEngine()
+            .getStateModelFactory(TaskConstants.STATE_MODEL_NAME, PropertyStoreCleanUpTask.COMMAND));
+    helixParticipant.close();
+
+  }
+
+  /**
+   * Test participate method with property store helix task disabled
+   * @throws Exception
+   */
+  @Test
+  public void testParticipateMethodWithHelixPropertyStoreTaskDisabled() throws Exception {
+    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(false));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
+    helixParticipant.participate(Collections.emptyList(), null, null);
+    assertNull("PropertyStoreCleanUpTask should not be registered",
+        helixParticipant.getHelixManager().getStateMachineEngine()
+            .getStateModelFactory(TaskConstants.STATE_MODEL_NAME, PropertyStoreCleanUpTask.COMMAND));
     helixParticipant.close();
   }
 
