@@ -45,7 +45,7 @@ public class AzureStorageContainerMetricsCollector implements Runnable {
     logger.info("Started AzureStorageContainerMetricsCollector");
   }
 
-  public static AzureStorageContainerMetricsCollector getInstance(AzureMetrics metrics) {
+  public static synchronized AzureStorageContainerMetricsCollector getInstance(AzureMetrics metrics) {
     if (instance == null) {
       instance = new AzureStorageContainerMetricsCollector(metrics);
     }
