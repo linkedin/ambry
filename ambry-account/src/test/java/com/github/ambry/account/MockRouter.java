@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
@@ -99,7 +100,7 @@ public class MockRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+  public Future<String> putBlob(NamedBlobPath blobPath, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     lock.lock();
     try {

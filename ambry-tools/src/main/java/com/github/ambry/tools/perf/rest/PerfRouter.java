@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
@@ -102,6 +103,7 @@ class PerfRouter implements Router {
   /**
    * Consumes the data in {@code channel} and simply throws it away. {@code blobProperties} and {@code usermetadata} are
    * ignored.
+   * @param blobPath The path of a blob which includes blob name, account name and container name.
    * @param blobProperties The properties of the blob.
    * @param usermetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
@@ -110,7 +112,7 @@ class PerfRouter implements Router {
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
+  public Future<String> putBlob(NamedBlobPath blobPath, BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
       PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();

@@ -22,6 +22,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
@@ -338,16 +339,18 @@ public class NonBlockingRouter implements Router {
 
   /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobPath The path of a blob which includes blob name, account name and container name.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param userMetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+  public Future<String> putBlob(NamedBlobPath blobPath, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
