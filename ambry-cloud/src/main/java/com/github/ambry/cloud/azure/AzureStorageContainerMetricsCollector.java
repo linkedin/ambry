@@ -14,7 +14,6 @@
 package com.github.ambry.cloud.azure;
 
 import com.github.ambry.utils.Utils;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -30,8 +29,8 @@ import org.slf4j.LoggerFactory;
  * This is a singleton class to avoid multiple collector threads.
  */
 public class AzureStorageContainerMetricsCollector {
-  private final AzureMetrics azureMetrics;
-  private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> azureContainerMetricsMap;
+  private final AzureMetrics metrics;
+  private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> metricMap;
   private final Logger logger;
   private final Runnable collector;
   private final ScheduledExecutorService executor;
@@ -39,13 +38,13 @@ public class AzureStorageContainerMetricsCollector {
 
   private AzureStorageContainerMetricsCollector(AzureMetrics metrics) {
     logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
-    azureContainerMetricsMap = new ConcurrentHashMap<>();
-    azureMetrics = metrics;
+    metricMap = new ConcurrentHashMap<>();
+    this.metrics = metrics;
     collector = () -> {
-      Long totalDrift = azureContainerMetricsMap.values().stream()
+      Long totalDrift = metricMap.values().stream()
           .map(container -> container.getDrift())
           .reduce(0L, Long::sum);
-      azureMetrics.azureContainerDriftBytesCount.inc(totalDrift);
+      this.metrics.azureContainerDriftBytesCount.inc(totalDrift);
     };
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
     executor.scheduleWithFixedDelay(collector, 0, 2, TimeUnit.MINUTES);
@@ -65,11 +64,11 @@ public class AzureStorageContainerMetricsCollector {
   }
 
   public void addContainer(Long id) {
-    azureContainerMetricsMap.put(id, new AzureStorageContainerMetrics(id));
+    metricMap.put(id, new AzureStorageContainerMetrics(id));
   }
 
   public void removeContainer(Long id) {
-    azureContainerMetricsMap.remove(id);
+    metricMap.remove(id);
   }
 
   /**
@@ -82,7 +81,7 @@ public class AzureStorageContainerMetricsCollector {
    * @param drift
    */
   public void setContainerDrift(long id, long drift) {
-    AzureStorageContainerMetrics azureContainerMetrics = azureContainerMetricsMap.get(id);
+    AzureStorageContainerMetrics azureContainerMetrics = metricMap.get(id);
     Long oldDrift = azureContainerMetrics.getDrift();
     azureContainerMetrics.setDrift(oldDrift, Math.min(oldDrift, drift));
   }
