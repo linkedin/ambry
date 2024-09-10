@@ -17,6 +17,7 @@ package com.github.ambry.cloud;
 import com.azure.data.tables.models.TableEntity;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureMetrics;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -60,6 +61,7 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected final AzureStorageContainerMetricsCollector azureStorageContainerMetricsCollector;
   protected CloudConfig vcrNodeConfig;
   protected ReplicaComparator comparator;
   protected String azureTableNameReplicaTokens;
@@ -69,7 +71,6 @@ public class VcrReplicaThread extends ReplicaThread {
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
   protected int numReplIter;
-  protected VcrReplicationManager replicationManager;
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -77,7 +78,7 @@ public class VcrReplicaThread extends ReplicaThread {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin,
-      CloudDestination cloudDestination, VerifiableProperties properties, VcrReplicationManager vcrReplicationManager) {
+      CloudDestination cloudDestination, VerifiableProperties properties, AzureStorageContainerMetricsCollector collector) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         new ReplicationConfig(properties),
         new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList()), notification,
@@ -90,7 +91,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
     this.numReplIter = 0;
-    this.replicationManager = vcrReplicationManager;
+    this.azureStorageContainerMetricsCollector = collector;
     comparator = new ReplicaComparator();
   }
 
@@ -225,7 +226,7 @@ public class VcrReplicaThread extends ReplicaThread {
     StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
-    replicationManager.setPartitionDrift(remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
+    azureStorageContainerMetricsCollector.setContainerDrift(remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
         Math.max(0, exchangeMetadataResponse.getLocalLagFromRemoteInBytes()));
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {

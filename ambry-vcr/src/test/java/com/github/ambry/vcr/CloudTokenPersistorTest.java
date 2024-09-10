@@ -23,6 +23,7 @@ import com.github.ambry.cloud.VcrReplicationManager;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -149,7 +150,7 @@ public class CloudTokenPersistorTest {
     StoreFindToken token;
     Offset offset = new Offset(new LogSegmentName(3, 14), 36);
     ReplicaThread.ExchangeMetadataResponse response;;
-    VcrReplicationManager vcrReplicationManager = mock(VcrReplicationManager.class);
+    AzureStorageContainerMetricsCollector collector = mock(AzureStorageContainerMetricsCollector.class);
 
     // Create ReplicaThread
     VcrReplicaThread vcrReplicaThread =
@@ -159,7 +160,7 @@ public class CloudTokenPersistorTest {
             null, null, false,
             "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
             null, null, azuriteClient,
-            verifiableProperties, vcrReplicationManager);
+            verifiableProperties, collector);
 
     long lastOpTime = System.currentTimeMillis();
 
@@ -207,7 +208,7 @@ public class CloudTokenPersistorTest {
     StoreFindToken token;
     Offset offset = new Offset(new LogSegmentName(3, 14), 36);
     ReplicaThread.ExchangeMetadataResponse response;;
-    VcrReplicationManager vcrReplicationManager = mock(VcrReplicationManager.class);
+    AzureStorageContainerMetricsCollector collector = mock(AzureStorageContainerMetricsCollector.class);
 
     // Create ReplicaThread
     VcrReplicaThread vcrReplicaThread =
@@ -217,7 +218,7 @@ public class CloudTokenPersistorTest {
             null, null, false,
             "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
             null, null, azuriteClient,
-            verifiableProperties, vcrReplicationManager);
+            verifiableProperties, collector);
 
     // upload a dummy token; this must remain unchange in Azure Table through this test
     String partitionKey = String.valueOf(replica.getReplicaId().getPartitionId().getId());

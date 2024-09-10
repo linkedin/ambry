@@ -17,8 +17,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
-import com.github.ambry.cloud.azure.AzureContainerMetrics;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetrics;
 import com.github.ambry.cloud.azure.AzureMetrics;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
@@ -62,8 +63,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -86,6 +85,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
   private final String localDatacenterName;
+  protected final AzureStorageContainerMetricsCollector azureStorageContainerMetricsCollector;
   protected String azureTableNameReplicaTokens;
   protected AzureCloudConfig azureCloudConfig;
   protected AzureMetrics azureMetrics;
@@ -103,7 +103,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   private DistributedLock vcrUpdateDistributedLock = null;
   private final List<ReplicaThread> threadPool;
   private final AtomicInteger threadIndex;
-  private final ConcurrentHashMap<Long, AzureContainerMetrics> azureContainerMetricsMap;
 
   public static final String BACKUP_NODE = "backupNode";
   public static final String TOKEN_TYPE = "tokenType";
@@ -111,18 +110,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   public static final String OFFSET = "offset";
   public static final String STORE_KEY = "storeKey";
   public static final String BINARY_TOKEN = "binaryToken";
-
-  class AzureContainerMetricsCollector implements Runnable {
-    @Override
-    public void run() {
-      Long totalDrift = 0L;
-      for (Map.Entry<Long, AzureContainerMetrics> entry : azureContainerMetricsMap.entrySet()) {
-        AzureContainerMetrics azureContainerMetrics = entry.getValue();
-        totalDrift += azureContainerMetrics.getDrift();
-      }
-      azureMetrics.azureContainerDriftBytesCount.inc(totalDrift);
-    }
-  }
 
   public VcrReplicationManager(VerifiableProperties properties, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
@@ -139,6 +126,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureMetrics = new AzureMetrics(metricRegistry);
+    this.azureStorageContainerMetricsCollector = new AzureStorageContainerMetricsCollector(this.azureMetrics);
     this.vcrClusterParticipant = vcrClusterParticipant;
     try {
       vcrHelixConfig =
@@ -172,8 +160,6 @@ public class VcrReplicationManager extends ReplicationEngine {
         localDatacenterName);
     threadPool = createThreadPool(localDatacenterName, getNumReplThreads(cloudConfig.backupNodeCpuScale), false);
     threadIndex = new AtomicInteger(0);
-    azureContainerMetricsMap = new ConcurrentHashMap<>();
-    scheduler.scheduleWithFixedDelay(new AzureContainerMetricsCollector(), 0, 2, TimeUnit.MINUTES);
   }
 
   /**
@@ -189,7 +175,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         notification, storeKeyConverter, transformer, replicatingOverSsl, datacenterName, responseHandler, time,
-        replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, cloudDestination, properties, this);
+        replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, cloudDestination, properties, azureStorageContainerMetricsCollector);
   }
 
   /**
@@ -434,13 +420,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   protected void updatePartitionInfoMaps(List<RemoteReplicaInfo> serverReplicas, ReplicaId cloudReplica) {
     super.updatePartitionInfoMaps(serverReplicas, cloudReplica);
     PartitionId partition = cloudReplica.getPartitionId();
-    azureContainerMetricsMap.put(partition.getId(), new AzureContainerMetrics(partition.getId()));
-  }
-
-  public void setPartitionDrift(long id, long drift) {
-    AzureContainerMetrics azureContainerMetrics = azureContainerMetricsMap.get(id);
-    Long oldDrift = azureContainerMetrics.getDrift();
-    azureContainerMetrics.compareAndSet(oldDrift, Math.min(oldDrift, drift));
+    azureStorageContainerMetricsCollector.addContainer(partition.getId());
   }
 
   /**
@@ -455,7 +435,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       storeManager.shutdownBlobStore(partitionId);
       storeManager.removeBlobStore(partitionId);
       partitionInfo.setReplicaThread(null);
-      azureContainerMetricsMap.remove(partitionId.getId());
+      azureStorageContainerMetricsCollector.removeContainer(partitionId.getId());
       logger.info("Partition {} removed from {}", partitionId, dataNodeId);
     } catch (Throwable e) {
       // Helix will run into error state if exception throws in Helix context.

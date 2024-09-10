@@ -16,11 +16,11 @@ package com.github.ambry.cloud.azure;
 import java.util.concurrent.atomic.AtomicLong;
 
 
-public class AzureContainerMetrics {
+public class AzureStorageContainerMetrics {
   Long id;
   AtomicLong drift;
 
-  public AzureContainerMetrics(Long id) {
+  public AzureStorageContainerMetrics(Long id) {
     this.id = id;
     drift = new AtomicLong(0);
   }

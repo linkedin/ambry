@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzureMetrics;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -192,7 +193,7 @@ public class VcrReplicaThreadTest {
     AtomicInteger ai = new AtomicInteger(0);
     int Z = 'Z';
     clustermap.getDataNodes().forEach(d -> d.setHostname(String.valueOf((char)(Z - (ai.getAndIncrement() % 26)))));
-    VcrReplicationManager vcrReplicationManager = mock(VcrReplicationManager.class);
+    AzureStorageContainerMetricsCollector collector = mock(AzureStorageContainerMetricsCollector.class);
 
     // Create a test-thread
     VcrReplicaThread rthread =
@@ -201,7 +202,7 @@ public class VcrReplicaThreadTest {
             null, null, false,
             clustermap.getDataNodes().get(0).getDatacenterName(), null, null,
             null, null, null, null,
-            properties, vcrReplicationManager);
+            properties, collector);
 
     // Assign replicas to test-thread
     List<PartitionId> partitions = clustermap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
