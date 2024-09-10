@@ -347,17 +347,19 @@ public class NonBlockingRouter implements Router {
 
   /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
+   *
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
-   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
+   * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param callback       The {@link Callback} which will be invoked on the completion of the request .
+   * @param blobPath       The name of the blob path for named blob based upload.
    * @return A future that would contain the BlobId eventually.
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }

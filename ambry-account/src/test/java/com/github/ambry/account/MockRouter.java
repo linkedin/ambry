@@ -100,7 +100,7 @@ public class MockRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
     lock.lock();
     try {
       FutureResult<String> future = new FutureResult<>();

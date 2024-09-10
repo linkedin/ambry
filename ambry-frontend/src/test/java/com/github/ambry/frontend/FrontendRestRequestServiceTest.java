@@ -742,7 +742,7 @@ public class FrontendRestRequestServiceTest {
 
     // add dataset versio and mock router.putBlob failed.
     Router mockRouter = mock(Router.class);
-    when(mockRouter.putBlob(any(), any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
+    when(mockRouter.putBlob(any(), any(), any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, mockRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
@@ -4411,7 +4411,7 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 
