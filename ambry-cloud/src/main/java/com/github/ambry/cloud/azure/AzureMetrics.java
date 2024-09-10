@@ -21,7 +21,7 @@ import com.codahale.metrics.Timer;
 // extend AzureMetricsOld to not break old-code
 public class AzureMetrics extends AzureMetricsOld {
 
-  // Metric name constants
+  // Metric name constants - end only with "Count", "Rate" or "Latency"
   public static final String AZURE_CONTAINER_DRIFT_BYTES_COUNT = "AzureContainerDriftBytesCount";
   public static final String BLOB_UPLOAD_SUCCESS_RATE = "BlobUploadSuccessRate";
   public static final String BLOB_UPDATE_TTL_SUCCESS_RATE = "BlobUpdateTTLSuccessRate";

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.github.ambry.cloud.RecoveryThread;
 import com.github.ambry.utils.Utils;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,14 +35,12 @@ public class AzureStorageContainerMetricsCollector {
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> azureContainerMetricsMap;
   private static AzureStorageContainerMetricsCollector instance;
   private final ScheduledExecutorService executor;
-  private final Runnable runnable = new Runnable() {
+  private final Runnable collector = new Runnable() {
     @Override
     public void run() {
-      Long totalDrift = 0L;
-      for (Map.Entry<Long, AzureStorageContainerMetrics> entry : azureContainerMetricsMap.entrySet()) {
-        AzureStorageContainerMetrics azureContainerMetrics = entry.getValue();
-        totalDrift += azureContainerMetrics.getDrift();
-      }
+      Long totalDrift = azureContainerMetricsMap.values().stream()
+          .map(container -> container.getDrift())
+          .reduce(0L, Long::sum);
       azureMetrics.azureContainerDriftBytesCount.inc(totalDrift);
     }
   };
@@ -52,7 +49,7 @@ public class AzureStorageContainerMetricsCollector {
     azureContainerMetricsMap = new ConcurrentHashMap<>();
     azureMetrics = metrics;
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
-    executor.scheduleWithFixedDelay(runnable, 0, 2, TimeUnit.MINUTES);
+    executor.scheduleWithFixedDelay(collector, 0, 2, TimeUnit.MINUTES);
     logger.info("Started AzureStorageContainerMetricsCollector");
   }
 
