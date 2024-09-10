@@ -16,6 +16,9 @@ package com.github.ambry.cloud.azure;
 import java.util.concurrent.atomic.AtomicLong;
 
 
+/**
+ * A class that holds all metrics pertaining to one Azure Storage Container.
+ */
 public class AzureStorageContainerMetrics {
   Long id;
   AtomicLong drift;
@@ -29,7 +32,7 @@ public class AzureStorageContainerMetrics {
     return drift.get();
   }
 
-  public void compareAndSet(long expect, long update) {
+  public void setDrift(long expect, long update) {
     this.drift.compareAndSet(expect, update);
   }
 }

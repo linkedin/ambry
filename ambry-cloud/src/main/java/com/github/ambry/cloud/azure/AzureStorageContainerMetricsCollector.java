@@ -13,14 +13,24 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.github.ambry.cloud.RecoveryThread;
 import com.github.ambry.utils.Utils;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
+/**
+ * A class that aggregates container metrics. We do _NOT_ want to emit per-container metrics because then the number
+ * of metrics increases proportionally overwhelming telemetry. This was attempted and failed.
+ *
+ * A daemon will run at regular intervals emitting aggregate metrics in a controlled and predictable manner.
+ */
 public class AzureStorageContainerMetricsCollector implements Runnable {
+  private final Logger logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
   private final AzureMetrics azureMetrics;
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> azureContainerMetricsMap;
   ScheduledExecutorService executor;
@@ -30,6 +40,7 @@ public class AzureStorageContainerMetricsCollector implements Runnable {
     azureMetrics = metrics;
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
     executor.scheduleWithFixedDelay(this::run, 0, 2, TimeUnit.MINUTES);
+    logger.info("Started AzureStorageContainerMetricsCollector");
   }
 
   @Override
@@ -50,9 +61,18 @@ public class AzureStorageContainerMetricsCollector implements Runnable {
     azureContainerMetricsMap.remove(id);
   }
 
+  /**
+   * Sets the drift of azure-container from ambry-partition.
+   * We use a compare-set to guard against accidental multithreaded errors, although two threads will most likely
+   * not be responsible for a single partition in VCR. A single thread handles all replicas of a partition.
+   * Use min() as bootstrapping replicas can give a wrong picture and indicate a large drift even though the partition
+   * is fully backed up.
+   * @param id
+   * @param drift
+   */
   public void setContainerDrift(long id, long drift) {
     AzureStorageContainerMetrics azureContainerMetrics = azureContainerMetricsMap.get(id);
     Long oldDrift = azureContainerMetrics.getDrift();
-    azureContainerMetrics.compareAndSet(oldDrift, Math.min(oldDrift, drift));
+    azureContainerMetrics.setDrift(oldDrift, Math.min(oldDrift, drift));
   }
 }

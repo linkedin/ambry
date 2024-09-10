@@ -226,6 +226,7 @@ public class VcrReplicaThread extends ReplicaThread {
     StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
+    // The lag can be -1 at times, so just round up to 0 and move on
     azureStorageContainerMetricsCollector.setContainerDrift(remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
         Math.max(0, exchangeMetadataResponse.getLocalLagFromRemoteInBytes()));
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
