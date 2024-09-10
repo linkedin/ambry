@@ -30,18 +30,29 @@ import org.slf4j.LoggerFactory;
  * A daemon will run at regular intervals emitting aggregate metrics in a controlled and predictable manner.
  * This is a singleton class to avoid multiple collector threads.
  */
-public class AzureStorageContainerMetricsCollector implements Runnable {
+public class AzureStorageContainerMetricsCollector {
   private final Logger logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
   private final AzureMetrics azureMetrics;
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> azureContainerMetricsMap;
   private static AzureStorageContainerMetricsCollector instance;
-  ScheduledExecutorService executor;
+  private final ScheduledExecutorService executor;
+  private final Runnable runnable = new Runnable() {
+    @Override
+    public void run() {
+      Long totalDrift = 0L;
+      for (Map.Entry<Long, AzureStorageContainerMetrics> entry : azureContainerMetricsMap.entrySet()) {
+        AzureStorageContainerMetrics azureContainerMetrics = entry.getValue();
+        totalDrift += azureContainerMetrics.getDrift();
+      }
+      azureMetrics.azureContainerDriftBytesCount.inc(totalDrift);
+    }
+  };
 
   private AzureStorageContainerMetricsCollector(AzureMetrics metrics) {
     azureContainerMetricsMap = new ConcurrentHashMap<>();
     azureMetrics = metrics;
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
-    executor.scheduleWithFixedDelay(this::run, 0, 2, TimeUnit.MINUTES);
+    executor.scheduleWithFixedDelay(runnable, 0, 2, TimeUnit.MINUTES);
     logger.info("Started AzureStorageContainerMetricsCollector");
   }
 
@@ -55,16 +66,6 @@ public class AzureStorageContainerMetricsCollector implements Runnable {
       instance = new AzureStorageContainerMetricsCollector(metrics);
     }
     return instance;
-  }
-
-  @Override
-  public void run() {
-    Long totalDrift = 0L;
-    for (Map.Entry<Long, AzureStorageContainerMetrics> entry : azureContainerMetricsMap.entrySet()) {
-      AzureStorageContainerMetrics azureContainerMetrics = entry.getValue();
-      totalDrift += azureContainerMetrics.getDrift();
-    }
-    azureMetrics.azureContainerDriftBytesCount.inc(totalDrift);
   }
 
   public void addContainer(Long id) {
