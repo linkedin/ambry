@@ -32,7 +32,6 @@ public class AzureStorageContainerMetricsCollector {
   private final AzureMetrics metrics;
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> metricMap;
   private final Logger logger;
-  private final Runnable collector;
   private final ScheduledExecutorService executor;
   private static AzureStorageContainerMetricsCollector instance;
 
@@ -40,9 +39,8 @@ public class AzureStorageContainerMetricsCollector {
     logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
     metricMap = new ConcurrentHashMap<>();
     this.metrics = metrics;
-    collector = getCollector();
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
-    executor.scheduleWithFixedDelay(collector, 0, 2, TimeUnit.MINUTES);
+    executor.scheduleWithFixedDelay(getCollector(), 0, 2, TimeUnit.MINUTES);
     logger.info("Started AzureStorageContainerMetricsCollector");
   }
 
