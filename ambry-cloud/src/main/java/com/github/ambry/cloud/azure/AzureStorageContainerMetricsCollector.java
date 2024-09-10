@@ -13,6 +13,8 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -34,11 +36,13 @@ public class AzureStorageContainerMetricsCollector {
   private final Logger logger;
   private final ScheduledExecutorService executor;
   private static AzureStorageContainerMetricsCollector instance;
+  private final VerifiableProperties properties;
 
-  private AzureStorageContainerMetricsCollector(AzureMetrics metrics) {
+  private AzureStorageContainerMetricsCollector(MetricRegistry metrics, VerifiableProperties properties) {
     logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
     metricMap = new ConcurrentHashMap<>();
-    this.metrics = metrics;
+    this.metrics = new AzureMetrics(metrics);
+    this.properties = properties;
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
     executor.scheduleWithFixedDelay(getCollector(), 0, 2, TimeUnit.MINUTES);
     logger.info("Started AzureStorageContainerMetricsCollector");
@@ -58,9 +62,10 @@ public class AzureStorageContainerMetricsCollector {
    * @param metrics
    * @return collector instance
    */
-  public static synchronized AzureStorageContainerMetricsCollector getInstance(AzureMetrics metrics) {
+  public static synchronized AzureStorageContainerMetricsCollector getInstance(MetricRegistry metrics,
+      VerifiableProperties properties) {
     if (instance == null) {
-      instance = new AzureStorageContainerMetricsCollector(metrics);
+      instance = new AzureStorageContainerMetricsCollector(metrics, properties);
     }
     return instance;
   }
