@@ -126,7 +126,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureMetrics = new AzureMetrics(metricRegistry);
-    this.azureStorageContainerMetricsCollector = new AzureStorageContainerMetricsCollector(this.azureMetrics);
+    this.azureStorageContainerMetricsCollector = AzureStorageContainerMetricsCollector.getInstance(this.azureMetrics);
     this.vcrClusterParticipant = vcrClusterParticipant;
     try {
       vcrHelixConfig =

@@ -28,19 +28,28 @@ import org.slf4j.LoggerFactory;
  * of metrics increases proportionally overwhelming telemetry. This was attempted and failed.
  *
  * A daemon will run at regular intervals emitting aggregate metrics in a controlled and predictable manner.
+ * This is a singleton class to avoid multiple collector threads.
  */
 public class AzureStorageContainerMetricsCollector implements Runnable {
   private final Logger logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
   private final AzureMetrics azureMetrics;
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> azureContainerMetricsMap;
+  private static AzureStorageContainerMetricsCollector instance;
   ScheduledExecutorService executor;
 
-  public AzureStorageContainerMetricsCollector(AzureMetrics metrics) {
+  private AzureStorageContainerMetricsCollector(AzureMetrics metrics) {
     azureContainerMetricsMap = new ConcurrentHashMap<>();
     azureMetrics = metrics;
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
     executor.scheduleWithFixedDelay(this::run, 0, 2, TimeUnit.MINUTES);
     logger.info("Started AzureStorageContainerMetricsCollector");
+  }
+
+  public static AzureStorageContainerMetricsCollector getInstance(AzureMetrics metrics) {
+    if (instance == null) {
+      instance = new AzureStorageContainerMetricsCollector(metrics);
+    }
+    return instance;
   }
 
   @Override
