@@ -35,19 +35,17 @@ public class AzureStorageContainerMetricsCollector {
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> azureContainerMetricsMap;
   private static AzureStorageContainerMetricsCollector instance;
   private final ScheduledExecutorService executor;
-  private final Runnable collector = new Runnable() {
-    @Override
-    public void run() {
-      Long totalDrift = azureContainerMetricsMap.values().stream()
-          .map(container -> container.getDrift())
-          .reduce(0L, Long::sum);
-      azureMetrics.azureContainerDriftBytesCount.inc(totalDrift);
-    }
-  };
+  private final Runnable collector;
 
   private AzureStorageContainerMetricsCollector(AzureMetrics metrics) {
     azureContainerMetricsMap = new ConcurrentHashMap<>();
     azureMetrics = metrics;
+    collector = () -> {
+      Long totalDrift = azureContainerMetricsMap.values().stream()
+          .map(container -> container.getDrift())
+          .reduce(0L, Long::sum);
+      azureMetrics.azureContainerDriftBytesCount.inc(totalDrift);
+    };
     executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
     executor.scheduleWithFixedDelay(collector, 0, 2, TimeUnit.MINUTES);
     logger.info("Started AzureStorageContainerMetricsCollector");
