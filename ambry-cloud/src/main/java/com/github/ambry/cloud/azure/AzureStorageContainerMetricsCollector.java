@@ -45,6 +45,11 @@ public class AzureStorageContainerMetricsCollector implements Runnable {
     logger.info("Started AzureStorageContainerMetricsCollector");
   }
 
+  /**
+   * Thread-safe singleton initializer
+   * @param metrics
+   * @return collector instance
+   */
   public static synchronized AzureStorageContainerMetricsCollector getInstance(AzureMetrics metrics) {
     if (instance == null) {
       instance = new AzureStorageContainerMetricsCollector(metrics);
