@@ -30,14 +30,15 @@ import org.slf4j.LoggerFactory;
  * This is a singleton class to avoid multiple collector threads.
  */
 public class AzureStorageContainerMetricsCollector {
-  private final Logger logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
   private final AzureMetrics azureMetrics;
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> azureContainerMetricsMap;
-  private static AzureStorageContainerMetricsCollector instance;
-  private final ScheduledExecutorService executor;
+  private final Logger logger;
   private final Runnable collector;
+  private final ScheduledExecutorService executor;
+  private static AzureStorageContainerMetricsCollector instance;
 
   private AzureStorageContainerMetricsCollector(AzureMetrics metrics) {
+    logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
     azureContainerMetricsMap = new ConcurrentHashMap<>();
     azureMetrics = metrics;
     collector = () -> {
