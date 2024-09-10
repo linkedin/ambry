@@ -184,7 +184,7 @@ public class NamedBlobPutHandlerTest {
     assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
     assertEquals("Unexpected TTL in blob", TestUtils.TTL_SECS, blob.getBlobProperties().getTimeToLiveInSeconds());
     assertEquals("Unexpected TTL in named blob DB", TestUtils.TTL_SECS,
-        idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+        idConverterFactory.lastBlobProperties.getTimeToLiveInSeconds());
     assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
   }
 
@@ -440,7 +440,7 @@ public class NamedBlobPutHandlerTest {
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       FutureResult<Void> future = new FutureResult<>();
       idConverterFactory.lastInput = null;
-      idConverterFactory.lastBlobInfo = null;
+      idConverterFactory.lastBlobProperties = null;
       idConverterFactory.lastConvertedId = null;
       namedBlobPutHandler.handle(request, restResponseChannel, future::done);
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
@@ -457,7 +457,7 @@ public class NamedBlobPutHandlerTest {
       assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
           restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
       assertEquals("Unexpected TTL in named blob DB", -1,
-          idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+          idConverterFactory.lastBlobProperties.getTimeToLiveInSeconds());
       assertEquals("Unexpected TTL in blob", -1, blob.getBlobProperties().getTimeToLiveInSeconds());
     }
   }
@@ -482,7 +482,7 @@ public class NamedBlobPutHandlerTest {
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       FutureResult<Void> future = new FutureResult<>();
       idConverterFactory.lastInput = null;
-      idConverterFactory.lastBlobInfo = null;
+      idConverterFactory.lastBlobProperties = null;
       idConverterFactory.lastConvertedId = null;
       namedBlobPutHandler.handle(request, restResponseChannel, future::done);
       if (errorChecker == null) {
@@ -501,7 +501,7 @@ public class NamedBlobPutHandlerTest {
         assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
             restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
         assertEquals("Unexpected TTL in named blob DB", ttl,
-            idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+            idConverterFactory.lastBlobProperties.getTimeToLiveInSeconds());
         assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
       } else {
         TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
@@ -591,7 +591,7 @@ public class NamedBlobPutHandlerTest {
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> future = new FutureResult<>();
     idConverterFactory.lastInput = null;
-    idConverterFactory.lastBlobInfo = null;
+    idConverterFactory.lastBlobProperties = null;
     idConverterFactory.lastConvertedId = null;
     namedBlobPutHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
@@ -602,7 +602,7 @@ public class NamedBlobPutHandlerTest {
       assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
       assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
       assertEquals("Unexpected TTL in named blob DB", ttl,
-          idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+          idConverterFactory.lastBlobProperties.getTimeToLiveInSeconds());
       assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),

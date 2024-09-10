@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.commons.Callback;
 import java.io.Closeable;
@@ -53,24 +54,26 @@ public interface IdConverter extends Closeable {
 
   /**
    * Converts an ID.
-   * @param restRequest {@link RestRequest} representing the request.
-   * @param input the ID that needs to be converted.
-   * @param blobInfo the {@link BlobInfo} for an uploaded blob. Can be null for non-upload use cases.
-   * @param callback the {@link Callback} to invoke once the converted ID is available. Can be null.
+   *
+   * @param restRequest    {@link RestRequest} representing the request.
+   * @param input          the ID that needs to be converted.
+   * @param blobProperties the {@link BlobProperties} for an uploaded blob. Can be null for non-upload use cases.
+   * @param callback       the {@link Callback} to invoke once the converted ID is available. Can be null.
    * @return a {@link Future} that will eventually contain the converted ID.
    */
-  default Future<String> convert(RestRequest restRequest, String input, BlobInfo blobInfo, Callback<String> callback) {
+  default Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<String> callback) {
     return convert(restRequest, input, callback);
   }
 
   /**
    * Converts an ID.
-   * @param restRequest {@link RestRequest} representing the request.
-   * @param input the ID that needs to be converted.
-   * @param blobInfo the {@link BlobInfo} for an uploaded blob. Can be null for non-upload use cases.
+   *
+   * @param restRequest    {@link RestRequest} representing the request.
+   * @param input          the ID that needs to be converted.
+   * @param blobProperties the {@link BlobProperties} for an uploaded blob. Can be null for non-upload use cases.
    * @return a {@link CompletableFuture} that will eventually contain the converted ID.
    */
-  default CompletableFuture<String> convert(RestRequest restRequest, String input, BlobInfo blobInfo) {
+  default CompletableFuture<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties) {
     return convert(restRequest, input);
   }
 }
