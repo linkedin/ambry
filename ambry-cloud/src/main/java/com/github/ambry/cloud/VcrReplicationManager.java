@@ -419,8 +419,7 @@ public class VcrReplicationManager extends ReplicationEngine {
    */
   protected void updatePartitionInfoMaps(List<RemoteReplicaInfo> serverReplicas, ReplicaId cloudReplica) {
     super.updatePartitionInfoMaps(serverReplicas, cloudReplica);
-    PartitionId partition = cloudReplica.getPartitionId();
-    azureStorageContainerMetricsCollector.addContainer(partition.getId());
+    azureStorageContainerMetricsCollector.addContainer(cloudReplica.getPartitionId().getId());
   }
 
   /**
