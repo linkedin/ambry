@@ -40,15 +40,19 @@ public class AzureStorageContainerMetricsCollector {
     logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
     metricMap = new ConcurrentHashMap<>();
     this.metrics = metrics;
-    collector = () -> {
+    collector = getCollector();
+    executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
+    executor.scheduleWithFixedDelay(collector, 0, 2, TimeUnit.MINUTES);
+    logger.info("Started AzureStorageContainerMetricsCollector");
+  }
+
+  private Runnable getCollector() {
+    return () -> {
       Long totalDrift = metricMap.values().stream()
           .map(container -> container.getDrift())
           .reduce(0L, Long::sum);
       this.metrics.azureContainerDriftBytesCount.inc(totalDrift);
     };
-    executor = Utils.newScheduler(1, "azure_storage_container_metrics_collector_", true);
-    executor.scheduleWithFixedDelay(collector, 0, 2, TimeUnit.MINUTES);
-    logger.info("Started AzureStorageContainerMetricsCollector");
   }
 
   /**
