@@ -75,6 +75,7 @@ public class AzureStorageContainerMetricsCollector {
    * Sets the drift of azure-container from ambry-partition.
    * We use a compare-set to guard against accidental multithreaded errors, although two threads will most likely
    * not be responsible for a single partition in VCR. A single thread handles all replicas of a partition.
+   * However, we want to avoid any races between reader and writers.
    * Use min() as bootstrapping replicas can give a wrong picture and indicate a large drift even though the partition
    * is fully backed up.
    * @param id
