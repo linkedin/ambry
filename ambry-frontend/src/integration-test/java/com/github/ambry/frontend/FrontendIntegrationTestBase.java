@@ -1259,13 +1259,17 @@ public class FrontendIntegrationTestBase {
   static class NamedBlobEntry {
     private String blobName;
     private long expirationTimeMs;
+    private long blobSize;
+    private long modifiedTimeMs;
 
     public NamedBlobEntry() {
     }
 
-    public NamedBlobEntry(String blobName, long expiration) {
+    public NamedBlobEntry(String blobName, long expiration, long blobSize, long modifiedTimeMs) {
       this.blobName = blobName;
       this.expirationTimeMs = expiration;
+      this.blobSize = blobSize;
+      this.modifiedTimeMs = modifiedTimeMs;
     }
 
     public String getBlobName() {
@@ -1282,6 +1286,22 @@ public class FrontendIntegrationTestBase {
 
     public void setExpirationTimeMs(long expirationTimeMs) {
       this.expirationTimeMs = expirationTimeMs;
+    }
+
+    public long getBlobSize() {
+      return blobSize;
+    }
+
+    public void setBlobSize(long blobSize) {
+      this.blobSize = blobSize;
+    }
+
+    public long getModifiedTimeMs() {
+      return modifiedTimeMs;
+    }
+
+    public void setModifiedTimeMs(long modifiedTimeMs) {
+      this.modifiedTimeMs = modifiedTimeMs;
     }
   }
 

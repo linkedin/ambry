@@ -101,9 +101,10 @@ public class MySqlNamedBlobDbIntegrationTest {
           String blobName = "name/" + i + "/more path segments--";
           long expirationTime =
               i % 2 == 0 ? Utils.Infinite_Time : System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1);
+          long blobSize = 20;
           NamedBlobRecord record =
-              new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
-
+              new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime, 0,
+                  blobSize);
           namedBlobDb.put(record).get();
           records.add(record);
         }
@@ -146,6 +147,15 @@ public class MySqlNamedBlobDbIntegrationTest {
             namedBlobDb.list(account.getName(), container.getName(), null, null, 1).get();
         assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5,
             pageWithMaxKey.getEntries().size());
+        // Verify that blob size and modified ts is returned for all blobs
+        for (NamedBlobRecord record : pageWithToken.getEntries()) {
+          assertEquals("Mismatch in blob size", 20, record.getBlobSize());
+          assertNotEquals("Modified timestamp must be present", 0L, record.getModifiedTimeMs());
+        }
+        for (NamedBlobRecord record : pageWithMaxKey.getEntries()) {
+          assertEquals("Mismatch in blob size", 20, record.getBlobSize());
+          assertNotEquals("Modified timestamp must be present", 0L, record.getModifiedTimeMs());
+        }
       }
     }
 
