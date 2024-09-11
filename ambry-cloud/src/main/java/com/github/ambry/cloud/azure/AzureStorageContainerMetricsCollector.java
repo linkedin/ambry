@@ -33,13 +33,13 @@ import org.slf4j.LoggerFactory;
 public class AzureStorageContainerMetricsCollector {
   private final AzureMetrics metrics;
   private final ConcurrentHashMap<Long, AzureStorageContainerMetrics> metricMap;
-  private final Logger logger;
   private final ScheduledExecutorService executor;
   private static AzureStorageContainerMetricsCollector instance;
   private final VerifiableProperties properties;
 
+  public static final Logger logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
+
   private AzureStorageContainerMetricsCollector(MetricRegistry metrics, VerifiableProperties properties) {
-    logger = LoggerFactory.getLogger(AzureStorageContainerMetricsCollector.class);
     metricMap = new ConcurrentHashMap<>();
     this.metrics = new AzureMetrics(metrics);
     this.properties = properties;
