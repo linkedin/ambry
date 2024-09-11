@@ -23,6 +23,11 @@ import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.IdConverterFactory;
+import com.github.ambry.frontend.IdSigningService;
+import com.github.ambry.frontend.IdSigningServiceFactory;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.SocketNetworkClientFactory;
@@ -143,9 +148,25 @@ public class NonBlockingRouterFactory implements RouterFactory {
           logger.error("Failed to create RepairRequestsDbFactory", e);
         }
       }
+      IdConverterFactory idConverterFactory = null;
+      if (routerConfig.idConverterFactory != null) {
+        try {
+          IdSigningService idSigningService =
+              Utils.<IdSigningServiceFactory>getObj(routerConfig.idSigningServiceFactory, verifiableProperties,
+                  clusterMap.getMetricRegistry()).getIdSigningService();
+          NamedBlobDb namedBlobDb = Utils.isNullOrEmpty(routerConfig.namedBlobDbFactory) ? null
+              : Utils.<NamedBlobDbFactory>getObj(routerConfig.namedBlobDbFactory, verifiableProperties,
+                  clusterMap.getMetricRegistry(), accountService).getNamedBlobDb();
+          idConverterFactory =
+              Utils.getObj(routerConfig.idConverterFactory, verifiableProperties, clusterMap.getMetricRegistry(),
+                  idSigningService, namedBlobDb);
+        } catch (Exception e) {
+          logger.error("Failed to create idConverterFactory");
+        }
+      }
       return new NonBlockingRouter(routerConfig, repairRequestsDbFactory, routerMetrics, networkClientFactory,
           notificationSystem, clusterMap, kms, cryptoService, cryptoJobHandler, accountService, time,
-          defaultPartitionClass, blobMetadataCache);
+          defaultPartitionClass, blobMetadataCache, idConverterFactory);
     } catch (IOException | ReflectiveOperationException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

@@ -22,6 +22,8 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.IdConverter;
+import com.github.ambry.frontend.IdConverterFactory;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
@@ -77,32 +79,36 @@ public class NonBlockingRouter implements Router {
   public final AtomicInteger currentOperationsCount = new AtomicInteger(0);
 
   private RepairRequestsDb repairRequestsDb = null;
+  private IdConverter idConverter = null;
 
   /**
    * Constructs a NonBlockingRouter.
-   * @param routerConfig the configs for the router.
-   * @oaran repairRequestsDbFactory the {@link RepairRequestsDbFactory} use to create the {@link RepairRequestsDb}
-   * @param routerMetrics the metrics for the router.
-   * @param networkClientFactory the {@link NetworkClientFactory} used by the {@link OperationController} to create
-   *                             instances of {@link NetworkClient}.
-   * @param notificationSystem the notification system to use to notify about blob creations and deletions.
-   * @param clusterMap the cluster map for the cluster.
-   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
-   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param accountService the {@link AccountService} to use.
-   * @param time the time instance.
+   *
+   * @param routerConfig          the configs for the router.
+   * @param routerMetrics         the metrics for the router.
+   * @param networkClientFactory  the {@link NetworkClientFactory} used by the {@link OperationController} to create
+   *                              instances of {@link NetworkClient}.
+   * @param notificationSystem    the notification system to use to notify about blob creations and deletions.
+   * @param clusterMap            the cluster map for the cluster.
+   * @param kms                   {@link KeyManagementService} to assist in fetching container keys for encryption or
+   *                              decryption
+   * @param cryptoService         {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler      {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param accountService        the {@link AccountService} to use.
+   * @param time                  the time instance.
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
-   * @throws IOException if the OperationController could not be successfully created.
+   * @param idConverterFactory    the {@link IdConverterFactory} used to create the {@link IdConverter}
+   * @throws IOException                  if the OperationController could not be successfully created.
    * @throws ReflectiveOperationException if the OperationController could not be successfully created.
+   * @oaran repairRequestsDbFactory the {@link RepairRequestsDbFactory} use to create the {@link RepairRequestsDb}
    */
   public NonBlockingRouter(RouterConfig routerConfig, RepairRequestsDbFactory repairRequestsDbFactory,
       NonBlockingRouterMetrics routerMetrics, NetworkClientFactory networkClientFactory,
       NotificationSystem notificationSystem, ClusterMap clusterMap, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, AccountService accountService, Time time,
-      String defaultPartitionClass, AmbryCache blobMetadataCache) throws IOException, ReflectiveOperationException {
+      String defaultPartitionClass, AmbryCache blobMetadataCache, IdConverterFactory idConverterFactory) throws IOException, ReflectiveOperationException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
@@ -148,6 +154,9 @@ public class NonBlockingRouter implements Router {
         logger.error("RepairRequests: Cannot connect to the RepairRequestsDB. ", e);
       }
     }
+    if (idConverterFactory != null) {
+      idConverter = idConverterFactory.getIdConverter();
+    }
   }
 
   /**
@@ -175,7 +184,7 @@ public class NonBlockingRouter implements Router {
       AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
       throws IOException, ReflectiveOperationException {
     this(routerConfig, null, routerMetrics, networkClientFactory, notificationSystem, clusterMap, kms, cryptoService,
-        cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache);
+        cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache, null);
   }
 
   /**
@@ -338,17 +347,19 @@ public class NonBlockingRouter implements Router {
 
   /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
+   *
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
-   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
+   * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param callback       The {@link Callback} which will be invoked on the completion of the request .
+   * @param blobPath       The name of the blob path for named blob based upload.
    * @return A future that would contain the BlobId eventually.
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
