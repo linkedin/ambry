@@ -20,6 +20,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * A class that holds all metrics pertaining to one Azure Storage Container.
  */
 public class AzureStorageContainerMetrics {
+  /**
+   * id is the unique identifier of the azure-container or ambry-partition.
+   */
   Long id;
   /**
    * drift is the number of bytes that the azure-container is behind or ahead of the associated ambry-partition.
