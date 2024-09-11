@@ -742,7 +742,7 @@ public class FrontendRestRequestServiceTest {
 
     // add dataset versio and mock router.putBlob failed.
     Router mockRouter = mock(Router.class);
-    when(mockRouter.putBlob(any(), any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
+    when(mockRouter.putBlob(any(), any(), any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, mockRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
@@ -4205,7 +4205,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
   String translation = null;
   boolean returnInputIfTranslationNull = false;
   volatile String lastInput = null;
-  volatile BlobInfo lastBlobInfo = null;
+  volatile BlobProperties lastBlobProperties = null;
   volatile String lastConvertedId = null;
 
   @Override
@@ -4222,7 +4222,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
     }
 
     @Override
-    public Future<String> convert(RestRequest restRequest, String input, BlobInfo blobInfo, Callback<String> callback) {
+    public Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<String> callback) {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
@@ -4230,7 +4230,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
           && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
       }
-      return completeOperation(input, blobInfo, callback);
+      return completeOperation(input, blobProperties, callback);
     }
 
     @Override
@@ -4240,14 +4240,15 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
 
     /**
      * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
-     * @param input the original input ID received
-     * @param blobInfo the blob info received.
-     * @param callback the {@link Callback} to invoke. Can be null.
+     *
+     * @param input          the original input ID received
+     * @param blobProperties the blob info received.
+     * @param callback       the {@link Callback} to invoke. Can be null.
      * @return the created {@link Future}.
      */
-    private Future<String> completeOperation(String input, BlobInfo blobInfo, Callback<String> callback) {
+    private Future<String> completeOperation(String input, BlobProperties blobProperties, Callback<String> callback) {
       lastInput = input;
-      lastBlobInfo = blobInfo;
+      lastBlobProperties = blobProperties;
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
@@ -4410,7 +4411,7 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 

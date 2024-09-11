@@ -239,7 +239,7 @@ public class S3MultipartCompleteUploadHandler {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
-        idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
+        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo, blobId));
       }, uri, LOGGER, finalCallback);
     }
 
