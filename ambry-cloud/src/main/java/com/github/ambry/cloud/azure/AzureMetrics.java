@@ -22,7 +22,7 @@ import com.codahale.metrics.Timer;
 public class AzureMetrics extends AzureMetricsOld {
 
   // Metric name constants - end only with "Count", "Rate" or "Latency"
-  public static final String AZURE_CONTAINER_DRIFT_BYTES_COUNT = "AzureContainerDriftBytesCount";
+  public static final String AZURE_CONTAINER_LAG_BYTES_COUNT = "AzureContainerLagBytesCount";
   public static final String BLOB_UPLOAD_SUCCESS_RATE = "BlobUploadSuccessRate";
   public static final String BLOB_UPDATE_TTL_SUCCESS_RATE = "BlobUpdateTTLSuccessRate";
   public static final String BLOB_UPDATE_TTL_LATENCY = "BlobUpdateTTLLatency";
@@ -59,7 +59,7 @@ public class AzureMetrics extends AzureMetricsOld {
   public static final String BLOB_BATCH_UPLOAD_LATENCY = "BlobBatchUploadLatency";
 
   // Azure Storage metrics
-  public final Counter azureContainerDriftBytesCount;
+  public final Counter azureContainerLagBytesCount;
   public final Counter blobContainerErrorCount;
   public final Timer blobCompactionLatency;
   public final Timer partitionCompactionLatency;
@@ -99,7 +99,8 @@ public class AzureMetrics extends AzureMetricsOld {
     super(registry);
     // V2 metrics
     // These are registered in the closed-source version of Ambry
-    azureContainerDriftBytesCount = registry.counter(MetricRegistry.name(AzureMetrics.class, AZURE_CONTAINER_DRIFT_BYTES_COUNT));
+    azureContainerLagBytesCount = registry.counter(MetricRegistry.name(AzureMetrics.class,
+        AZURE_CONTAINER_LAG_BYTES_COUNT));
     blobBatchUploadLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_BATCH_UPLOAD_LATENCY));
     blobCheckError = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_CHECK_ERROR));
     blobCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_ERROR_COUNT));
