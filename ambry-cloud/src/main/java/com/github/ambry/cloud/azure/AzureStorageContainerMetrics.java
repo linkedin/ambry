@@ -21,6 +21,11 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class AzureStorageContainerMetrics {
   Long id;
+  /**
+   * drift is the number of bytes that the azure-container is behind or ahead of the associated ambry-partition.
+   * Although we don't emit a positive drift, it is possible to have a positive drift if the azure-container is ahead
+   * of a bootstrapping ambry-partition.
+   */
   AtomicLong drift;
 
   public AzureStorageContainerMetrics(Long id) {
