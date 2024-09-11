@@ -33,6 +33,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -354,12 +355,13 @@ public class NonBlockingRouter implements Router {
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback       The {@link Callback} which will be invoked on the completion of the request .
-   * @param blobPath       The name of the blob path for named blob based upload.
+   * @param restRequest    The {@link RestRequest} to put the blob.
    * @return A future that would contain the BlobId eventually.
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback,
+      RestRequest restRequest) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
@@ -374,15 +376,17 @@ public class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
+    Callback<String> wrappedCallback =
+        restRequest != null ? createIdConverterCallback(restRequest, blobProperties, futureResult, callback) : callback;
     if (isOpen.get()) {
-      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback,
+      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, wrappedCallback,
           quotaChargeCallback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), false);
-      completeOperation(futureResult, callback, null, routerException);
+      completeOperation(futureResult, wrappedCallback, null, routerException);
     }
     return futureResult;
   }
@@ -591,6 +595,10 @@ public class NonBlockingRouter implements Router {
     return routerConfig;
   }
 
+  public IdConverter getIdConverter() {
+    return idConverter;
+  }
+
   /**
    * Initiated deletes of the blobIds in the given list of ids via the {@link BackgroundDeleter}
    * @param deleteRequests the list of {@link BackgroundDeleteRequest}s to execute.
@@ -736,6 +744,14 @@ public class NonBlockingRouter implements Router {
         logger.error("Exception thrown on closing repair requests db", e);
       }
     }
+    if (idConverter != null) {
+      try {
+        idConverter.close();
+        idConverter = null;
+      } catch (Exception e) {
+        logger.error("Exception thrown on closing id converter", e);
+      }
+    }
     // close router metrics
     routerMetrics.close();
   }
@@ -751,6 +767,28 @@ public class NonBlockingRouter implements Router {
         Thread.currentThread().interrupt();
       }
     }
+  }
+
+  /**
+   * Create id converter callback after router put the blob.
+   * @param restRequest {@link RestRequest} to put the blob.
+   * @param blobProperties {@link BlobProperties} for the blob.
+   * @return
+   */
+  private Callback<String> createIdConverterCallback(RestRequest restRequest, BlobProperties blobProperties,
+      FutureResult<String> futureResult, Callback<String> callback) {
+    return (blobId, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        // Call idConverter.convert after putBlob succeeds
+        idConverter.convert(restRequest, blobId, blobProperties, callback);
+      }
+    };
   }
 
   /**

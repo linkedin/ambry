@@ -16,9 +16,11 @@ package com.github.ambry.router;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
@@ -56,11 +58,12 @@ public interface Router extends Closeable {
    * @param options             The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback            The {@link Callback} which will be invoked on the completion of the request .
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
-   * @param blobPath            The name of the blob path for named blob based upload.
+   * @param restRequest         The {@link RestRequest} to put the blob.
    * @return A future that would contain the BlobId eventually.
    */
   Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath);
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback,
+      RestRequest restRequest);
 
   /**
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
@@ -115,6 +118,12 @@ public interface Router extends Closeable {
    */
   Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback);
+
+  /**
+   * Return the {@link IdConverter} in router.
+   * @return
+   */
+  IdConverter getIdConverter();
 
   /**
    * Closes the router and releases any resources held by the router. If the router is already closed, then this

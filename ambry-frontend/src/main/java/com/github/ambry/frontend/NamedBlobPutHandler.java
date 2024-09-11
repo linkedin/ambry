@@ -48,6 +48,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -236,7 +237,7 @@ public class NamedBlobPutHandler {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true),
-              RestUtils.getRequestPath(restRequest).getOperationOrBlobId(false));
+              restRequest);
         }
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -248,12 +249,14 @@ public class NamedBlobPutHandler {
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
-        restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
-        blobInfo.getBlobProperties().setBlobSize(restRequest.getBlobBytesReceived());
-        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo, blobId));
-      }, uri, LOGGER, deleteDatasetCallback);
+      return buildCallback(frontendMetrics.putRouterPutBlobMetrics,
+          blobId -> {
+            restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
+            idConverterCallbackForPut(blobInfo).onCompletion(blobId, null);
+          },
+          uri, LOGGER, deleteDatasetCallback);
     }
+
 
     /**
      * After reading the body of the stitch request, parse the request body,
@@ -285,7 +288,7 @@ public class NamedBlobPutHandler {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
-        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo, blobId));
+        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallbackForStitch(blobInfo, blobId));
       }, uri, LOGGER, deleteDatasetCallback);
     }
 
@@ -293,12 +296,37 @@ public class NamedBlobPutHandler {
      * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @param blobId the blob ID returned by the router (without decoration or obfuscation by id converter).
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
+    private Callback<String> idConverterCallbackForPut(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        blobInfo.getBlobProperties().setBlobSize(restRequest.getBlobBytesReceived());
+        if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+          // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
+          // since the converted ID may be changed by the ID converter.
+          String serviceId = blobInfo.getBlobProperties().getServiceId();
+          retryExecutor.runWithRetries(retryPolicy,
+              callback -> router.updateBlobTtl(convertedBlobId, serviceId, Utils.Infinite_Time, callback,
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+              routerTtlUpdateCallback(blobInfo, convertedBlobId));
+        } else {
+          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            //Make sure to process response after delete finished
+            updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
+                deleteDatasetVersionOutOfRetentionCallback(blobInfo));
+          } else {
+            securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+                securityProcessResponseCallback());
+          }
+        }
+      }, uri, LOGGER, deleteDatasetCallback);
+    }
+
+    private Callback<String> idConverterCallbackForStitch(BlobInfo blobInfo, String blobId) {
+      return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        blobInfo.getBlobProperties().setBlobSize(restRequest.getBlobBytesReceived());
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.

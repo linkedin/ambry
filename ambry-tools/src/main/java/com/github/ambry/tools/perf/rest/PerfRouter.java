@@ -17,9 +17,11 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -108,12 +110,13 @@ class PerfRouter implements Router {
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        the {@link PutBlobOptions} for the blob.
    * @param callback       the {@link Callback} to invoke on operation completion.
-   * @param blobPath       The name of the blob path for named blob based upload.
+   * @param restRequest
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
+      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback,
+      RestRequest restRequest) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {
@@ -215,6 +218,11 @@ class PerfRouter implements Router {
 
   @Override
   public RouterConfig getRouterConfig() {
+    return null;
+  }
+
+  @Override
+  public IdConverter getIdConverter() {
     return null;
   }
 

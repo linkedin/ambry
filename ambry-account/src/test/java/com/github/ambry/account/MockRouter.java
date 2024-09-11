@@ -16,10 +16,12 @@ package com.github.ambry.account;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -100,7 +102,8 @@ public class MockRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback,
+      RestRequest restRequest) {
     lock.lock();
     try {
       FutureResult<String> future = new FutureResult<>();
@@ -177,6 +180,11 @@ public class MockRouter implements Router {
 
   @Override
   public RouterConfig getRouterConfig() {
+    return null;
+  }
+
+  @Override
+  public IdConverter getIdConverter() {
     return null;
   }
 

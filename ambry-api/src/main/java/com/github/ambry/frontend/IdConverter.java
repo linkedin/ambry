@@ -16,8 +16,10 @@ package com.github.ambry.frontend;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.rest.RestServiceException;
 import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -76,4 +78,11 @@ public interface IdConverter extends Closeable {
   default CompletableFuture<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties) {
     return convert(restRequest, input);
   }
+
+  /**
+   * Get the named blob db from IdConverter.
+   * @return {@link NamedBlobDb}
+   * @throws RestServiceException
+   */
+  public NamedBlobDb getNamedBlobDb() throws RestServiceException;
 }

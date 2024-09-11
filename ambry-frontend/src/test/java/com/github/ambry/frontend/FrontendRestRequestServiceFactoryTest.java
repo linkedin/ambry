@@ -74,10 +74,11 @@ public class FrontendRestRequestServiceFactoryTest {
     properties.setProperty("clustermap.datacenter.name", "Datacenter-Name");
     properties.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
 
     FrontendRestRequestServiceFactory frontendRestRequestServiceFactory =
         new FrontendRestRequestServiceFactory(verifiableProperties, new MockClusterMap(),
-            new InMemoryRouter(verifiableProperties, new MockClusterMap()), new InMemAccountService(false, true));
+            new InMemoryRouter(verifiableProperties, new MockClusterMap(), converterFactory), new InMemAccountService(false, true));
     RestRequestService ambryRestRequestService = frontendRestRequestServiceFactory.getRestRequestService();
     assertNotNull("No RestRequestService returned", ambryRestRequestService);
     assertEquals("Did not receive an FrontendRestRequestService instance",
@@ -94,7 +95,7 @@ public class FrontendRestRequestServiceFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ClusterMap clusterMap = new MockClusterMap();
-    Router router = new InMemoryRouter(verifiableProperties, clusterMap);
+    Router router = new InMemoryRouter(verifiableProperties, clusterMap, null);
     AccountService accountService = new InMemAccountService(false, true);
 
     // VerifiableProperties null.

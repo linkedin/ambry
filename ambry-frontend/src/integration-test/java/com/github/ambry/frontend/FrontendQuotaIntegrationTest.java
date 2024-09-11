@@ -163,6 +163,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   private static Properties buildFrontendVProps(File trustStoreFile, boolean enableUndelete, int plaintextServerPort,
       int sslServerPort) throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
+    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.frontend.TestNamedBlobDbFactory");
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");

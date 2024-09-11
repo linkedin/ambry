@@ -196,6 +196,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         if (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
           state = NamedBlobState.IN_PROGRESS;
+          //TODO: move logic in routerTtlUpdateCallback to id converter.
         }
         conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(
             result -> {
@@ -263,7 +264,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       return metadata != null ? idSigningService.getSignedId(blobId, metadata) : blobId;
     }
 
-    private NamedBlobDb getNamedBlobDb() throws RestServiceException {
+    @Override
+    public NamedBlobDb getNamedBlobDb() throws RestServiceException {
       if (namedBlobDb == null) {
         throw new RestServiceException("Named blob support not enabled", RestServiceErrorCode.BadRequest);
       }

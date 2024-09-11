@@ -68,7 +68,7 @@ public class AsyncRequestResponseHandlerTest {
   @BeforeClass
   public static void startRequestResponseHandler() throws InstantiationException, IOException {
     verifiableProperties = new VerifiableProperties(new Properties());
-    router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
+    router = new InMemoryRouter(verifiableProperties, new MockClusterMap(), null);
     restRequestService = new MockRestRequestService(verifiableProperties, router);
     asyncRequestResponseHandler =
         new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 5, restRequestService);
