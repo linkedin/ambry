@@ -467,12 +467,12 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
       long totalBytesRead) {
-    throw new UnsupportedOperationException("Unimplemented updateTotalBytesReadByRemoteReplica()");
+    throw new UnsupportedOperationException("Unimplemented updateTotalBytesReadByRemoteReplica() in VCR");
   }
 
   @Override
   public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
-    throw new UnsupportedOperationException("Unimplemented getRemoteReplicaLagFromLocalInBytes()");
+    throw new UnsupportedOperationException("Unimplemented getRemoteReplicaLagFromLocalInBytes() in VCR");
   }
 
   @Override

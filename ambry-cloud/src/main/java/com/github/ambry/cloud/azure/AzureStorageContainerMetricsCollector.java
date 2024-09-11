@@ -84,7 +84,7 @@ public class AzureStorageContainerMetricsCollector {
    * not be responsible for a single partition in VCR. A single thread handles all replicas of a partition.
    * However, we want to avoid any races between reader and writers.
    * Use min() as bootstrapping replicas can give a wrong picture and indicate a large drift even though the partition
-   * is fully backed up.
+   * is fully backed up in Azure.
    * @param id
    * @param drift
    */
