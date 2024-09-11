@@ -25,22 +25,22 @@ public class AzureStorageContainerMetrics {
    */
   Long id;
   /**
-   * drift is the number of bytes that the azure-container is behind or ahead of the associated ambry-partition.
+   * lag is the number of bytes that the azure-container is behind or ahead of the associated ambry-partition.
    * Although we don't emit a positive drift, it is possible to have a positive drift if the azure-container is ahead
    * of a bootstrapping ambry-partition.
    */
-  AtomicLong drift;
+  AtomicLong lag;
 
   public AzureStorageContainerMetrics(Long id) {
     this.id = id;
-    drift = new AtomicLong(0);
+    lag = new AtomicLong(0);
   }
 
-  public Long getDrift() {
-    return drift.get();
+  public Long getLag() {
+    return lag.get();
   }
 
-  public void setDrift(long expect, long update) {
-    this.drift.compareAndSet(expect, update);
+  public void setLag(long expect, long update) {
+    this.lag.compareAndSet(expect, update);
   }
 }

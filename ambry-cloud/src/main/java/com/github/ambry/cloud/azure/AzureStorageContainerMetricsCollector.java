@@ -50,10 +50,10 @@ public class AzureStorageContainerMetricsCollector {
 
   private Runnable getCollector() {
     return () -> {
-      Long totalDrift = metricMap.values().stream()
-          .map(container -> container.getDrift())
+      Long totalLag = metricMap.values().stream()
+          .map(container -> container.getLag())
           .reduce(0L, Long::sum);
-      this.metrics.azureContainerDriftBytesCount.inc(totalDrift);
+      this.metrics.azureContainerDriftBytesCount.inc(totalLag);
     };
   }
 
@@ -79,18 +79,18 @@ public class AzureStorageContainerMetricsCollector {
   }
 
   /**
-   * Sets the drift of azure-container from ambry-partition.
+   * Sets the lag of azure-container from ambry-partition.
    * We use a compare-set to guard against accidental multithreaded errors, although two threads will most likely
    * not be responsible for a single partition in VCR. A single thread handles all replicas of a partition.
    * However, we want to avoid any races between reader and writers.
-   * Use min() as bootstrapping replicas can give a wrong picture and indicate a large drift even though the partition
+   * Use min() as bootstrapping replicas can give a wrong picture and indicate a large lag even though the partition
    * is fully backed up in Azure.
    * @param id
-   * @param drift
+   * @param lag
    */
-  public void setContainerDrift(long id, long drift) {
+  public void setContainerLag(long id, long lag) {
     AzureStorageContainerMetrics azureContainerMetrics = metricMap.get(id);
-    Long oldDrift = azureContainerMetrics.getDrift();
-    azureContainerMetrics.setDrift(oldDrift, Math.min(oldDrift, drift));
+    Long oldLag = azureContainerMetrics.getLag();
+    azureContainerMetrics.setLag(oldLag, Math.min(oldLag, lag));
   }
 }

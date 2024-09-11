@@ -202,7 +202,7 @@ public class VcrReplicaThreadTest {
             null, null, false,
             clustermap.getDataNodes().get(0).getDatacenterName(), null, null,
             null, null, null, null,
-            properties, collector);
+            properties);
 
     // Assign replicas to test-thread
     List<PartitionId> partitions = clustermap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);

@@ -23,7 +23,6 @@ import com.github.ambry.cloud.VcrReplicationManager;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
-import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -33,6 +32,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -41,25 +41,34 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.LogSegmentName;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreFindTokenFactory;
+import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -150,7 +159,6 @@ public class CloudTokenPersistorTest {
     StoreFindToken token;
     Offset offset = new Offset(new LogSegmentName(3, 14), 36);
     ReplicaThread.ExchangeMetadataResponse response;;
-    AzureStorageContainerMetricsCollector collector = mock(AzureStorageContainerMetricsCollector.class);
 
     // Create ReplicaThread
     VcrReplicaThread vcrReplicaThread =
@@ -160,7 +168,7 @@ public class CloudTokenPersistorTest {
             null, null, false,
             "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
             null, null, azuriteClient,
-            verifiableProperties, collector);
+            verifiableProperties);
 
     long lastOpTime = System.currentTimeMillis();
 
@@ -208,7 +216,6 @@ public class CloudTokenPersistorTest {
     StoreFindToken token;
     Offset offset = new Offset(new LogSegmentName(3, 14), 36);
     ReplicaThread.ExchangeMetadataResponse response;;
-    AzureStorageContainerMetricsCollector collector = mock(AzureStorageContainerMetricsCollector.class);
 
     // Create ReplicaThread
     VcrReplicaThread vcrReplicaThread =
@@ -218,7 +225,7 @@ public class CloudTokenPersistorTest {
             null, null, false,
             "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
             null, null, azuriteClient,
-            verifiableProperties, collector);
+            verifiableProperties);
 
     // upload a dummy token; this must remain unchange in Azure Table through this test
     String partitionKey = String.valueOf(replica.getReplicaId().getPartitionId().getId());

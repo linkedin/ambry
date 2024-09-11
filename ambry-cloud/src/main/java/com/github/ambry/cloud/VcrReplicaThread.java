@@ -78,7 +78,7 @@ public class VcrReplicaThread extends ReplicaThread {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin,
-      CloudDestination cloudDestination, VerifiableProperties properties, AzureStorageContainerMetricsCollector collector) {
+      CloudDestination cloudDestination, VerifiableProperties properties) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         new ReplicationConfig(properties),
         new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList()), notification,
@@ -91,7 +91,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
     this.numReplIter = 0;
-    this.azureStorageContainerMetricsCollector = collector;
+    this.azureStorageContainerMetricsCollector = AzureStorageContainerMetricsCollector.getInstance(clusterMap.getMetricRegistry(), properties);;
     comparator = new ReplicaComparator();
   }
 
@@ -227,7 +227,7 @@ public class VcrReplicaThread extends ReplicaThread {
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
     // The lag can be -1 at times, so just round up to 0 and move on
-    azureStorageContainerMetricsCollector.setContainerDrift(remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
+    azureStorageContainerMetricsCollector.setContainerLag(remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
         Math.max(0, exchangeMetadataResponse.getLocalLagFromRemoteInBytes()));
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {

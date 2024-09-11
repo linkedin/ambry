@@ -175,7 +175,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         notification, storeKeyConverter, transformer, replicatingOverSsl, datacenterName, responseHandler, time,
-        replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, cloudDestination, properties, azureStorageContainerMetricsCollector);
+        replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, cloudDestination, properties);
   }
 
   /**
