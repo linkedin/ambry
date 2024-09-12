@@ -85,7 +85,9 @@ public class AzureStorageContainerMetricsCollector {
   public void removePartitionReplicas(List<RemoteReplicaInfo> remoteReplicaInfos) {
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       long pid = rinfo.getReplicaId().getPartitionId().toPathString().hashCode();
-      metricMap.get(pid).removePartitionReplica(rinfo.getReplicaId().getDataNodeId().getHostname());
+      if (metricMap.containsKey(pid)) {
+        metricMap.get(pid).removePartitionReplica(rinfo.getReplicaId().getDataNodeId().getHostname());
+      }
     }
   }
 
