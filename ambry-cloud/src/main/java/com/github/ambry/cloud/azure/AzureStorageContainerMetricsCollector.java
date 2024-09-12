@@ -15,7 +15,9 @@ package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.utils.Utils;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -51,9 +53,9 @@ public class AzureStorageContainerMetricsCollector {
   private Runnable getCollector() {
     return () -> {
       Long totalLag = metricMap.values().stream()
-          .map(container -> container.getLag())
+          .map(container -> container.getPartitionLag())
           .reduce(0L, Long::sum);
-      this.metrics.azureContainerDriftBytesCount.inc(totalLag);
+      this.metrics.azureContainerLagBytesCount.inc(totalLag);
     };
   }
 
@@ -70,11 +72,24 @@ public class AzureStorageContainerMetricsCollector {
     return instance;
   }
 
-  public void addContainer(Long id) {
-    metricMap.put(id, new AzureStorageContainerMetrics(id));
+  public void addPartitionReplicas(List<RemoteReplicaInfo> remoteReplicaInfos) {
+    for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+      // Don't store any references to PartitionId or RemoteReplicaInfo.
+      // With improper clean up, these references linger around and cause memory leaks.
+      long pid = rinfo.getReplicaId().getPartitionId().toPathString().hashCode();
+      metricMap.putIfAbsent(pid, new AzureStorageContainerMetrics(pid));
+      metricMap.get(pid).addPartitionReplica(rinfo.getReplicaId().getDataNodeId().getHostname());
+    }
   }
 
-  public void removeContainer(Long id) {
+  public void removePartitionReplicas(List<RemoteReplicaInfo> remoteReplicaInfos) {
+    for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+      long pid = rinfo.getReplicaId().getPartitionId().toPathString().hashCode();
+      metricMap.get(pid).removePartitionReplica(rinfo.getReplicaId().getDataNodeId().getHostname());
+    }
+  }
+
+  public void removePartition(Long id) {
     metricMap.remove(id);
   }
 
@@ -85,12 +100,11 @@ public class AzureStorageContainerMetricsCollector {
    * However, we want to avoid any races between reader and writers.
    * Use min() as bootstrapping replicas can give a wrong picture and indicate a large lag even though the partition
    * is fully backed up in Azure.
-   * @param id
-   * @param lag
+   * @param pid PartitionId
+   * @param rid ReplicaId
+   * @param lag Lag in bytes
    */
-  public void setContainerLag(long id, long lag) {
-    AzureStorageContainerMetrics azureContainerMetrics = metricMap.get(id);
-    Long oldLag = azureContainerMetrics.getLag();
-    azureContainerMetrics.setLag(oldLag, Math.min(oldLag, lag));
+  public synchronized void setPartitionReplicaLag(long pid, String rid, long lag) {
+    metricMap.get(pid).setPartitionReplicaLag(rid, lag);
   }
 }

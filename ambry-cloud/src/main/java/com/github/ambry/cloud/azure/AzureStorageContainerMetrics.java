@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -29,18 +30,27 @@ public class AzureStorageContainerMetrics {
    * Although we don't emit a positive drift, it is possible to have a positive drift if the azure-container is ahead
    * of a bootstrapping ambry-partition.
    */
-  AtomicLong lag;
+  ConcurrentHashMap<String, AtomicLong> replicaLag;
 
   public AzureStorageContainerMetrics(Long id) {
     this.id = id;
-    lag = new AtomicLong(0);
+    replicaLag = new ConcurrentHashMap<>();
   }
 
-  public Long getLag() {
-    return lag.get();
+  public void addPartitionReplica(String hostname) {
+    replicaLag.putIfAbsent(hostname, new AtomicLong(Long.MAX_VALUE));
   }
 
-  public void setLag(long expect, long update) {
-    this.lag.compareAndSet(expect, update);
+  public void removePartitionReplica(String hostname) {
+    replicaLag.remove(hostname);
   }
+
+  public Long getPartitionLag() {
+    return replicaLag.values().stream().map(AtomicLong::get).reduce(Long.MAX_VALUE, Long::min);
+  }
+
+  public void setPartitionReplicaLag(String hostname, long update) {
+    this.replicaLag.get(hostname).compareAndSet(this.replicaLag.get(hostname).get(), update);
+  }
+
 }

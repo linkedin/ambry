@@ -91,7 +91,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
     this.numReplIter = 0;
-    this.azureStorageContainerMetricsCollector = AzureStorageContainerMetricsCollector.getInstance(clusterMap.getMetricRegistry(), properties);;
+    this.azureStorageContainerMetricsCollector = AzureStorageContainerMetricsCollector.getInstance(clusterMap.getMetricRegistry(), properties);
     comparator = new ReplicaComparator();
   }
 
@@ -227,7 +227,9 @@ public class VcrReplicaThread extends ReplicaThread {
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
     // The lag can be -1 at times, so just round up to 0 and move on
-    azureStorageContainerMetricsCollector.setContainerLag(remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
+    azureStorageContainerMetricsCollector.setPartitionReplicaLag(
+        remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
         Math.max(0, exchangeMetadataResponse.getLocalLagFromRemoteInBytes()));
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {

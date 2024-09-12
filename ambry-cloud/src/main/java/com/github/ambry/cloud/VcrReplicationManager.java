@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
-import com.github.ambry.cloud.azure.AzureStorageContainerMetrics;
 import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.clustermap.CloudReplica;
@@ -220,6 +219,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       rinfo.setReplicaThread(rthread);
       logger.info("[PARTITION] Added replica {} to thread {}", rinfo, rthread.getName());
     }
+    azureStorageContainerMetricsCollector.addPartitionReplicas(remoteReplicaInfos);
     partitionToPartitionInfo.get(partitionId).setReplicaThread(rthread);
     rthread.startThread();
   }
@@ -250,6 +250,7 @@ public class VcrReplicationManager extends ReplicationEngine {
           }
           rthread.addRemoteReplicaInfo(rinfo);
           rinfo.setReplicaThread(rthread);
+          azureStorageContainerMetricsCollector.addPartitionReplicas(Collections.singletonList(rinfo));
           logger.info("[REPLICA] Added replica {} to thread {}", rinfo, rthread.getName());
         } catch (Throwable e) {
           vcrMetrics.addPartitionErrorCount.inc();
@@ -261,6 +262,17 @@ public class VcrReplicationManager extends ReplicationEngine {
       logger.error("Failed to add replica(s) due to {}", e);
     }
   }
+
+  /**
+   * Remove a list of {@link RemoteReplicaInfo} from each's {@link ReplicaThread}.
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} to remote.
+   */
+  @Override
+  protected void removeRemoteReplicaInfoFromReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos) {
+    super.removeRemoteReplicaInfoFromReplicaThread(remoteReplicaInfos);
+    azureStorageContainerMetricsCollector.removePartitionReplicas(remoteReplicaInfos);
+  }
+
 
   @Override
   public void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) {
@@ -413,16 +425,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   /**
-   * Update {@link PartitionInfo} related maps
-   * @param serverReplicas server replicas
-   * @param cloudReplica cloud replica
-   */
-  protected void updatePartitionInfoMaps(List<RemoteReplicaInfo> serverReplicas, ReplicaId cloudReplica) {
-    super.updatePartitionInfoMaps(serverReplicas, cloudReplica);
-    azureStorageContainerMetricsCollector.addContainer(cloudReplica.getPartitionId().getId());
-  }
-
-  /**
    * Remove a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionId the {@link PartitionId} of the replica to removed.
    */
@@ -434,7 +436,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       storeManager.shutdownBlobStore(partitionId);
       storeManager.removeBlobStore(partitionId);
       partitionInfo.setReplicaThread(null);
-      azureStorageContainerMetricsCollector.removeContainer(partitionId.getId());
+      azureStorageContainerMetricsCollector.removePartition(partitionId.getId());
       logger.info("Partition {} removed from {}", partitionId, dataNodeId);
     } catch (Throwable e) {
       // Helix will run into error state if exception throws in Helix context.
