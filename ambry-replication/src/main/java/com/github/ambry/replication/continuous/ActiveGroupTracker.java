@@ -16,15 +16,20 @@ package com.github.ambry.replication.continuous;
 import java.util.List;
 
 
+/**
+ * This class tracks for a current state for Active groups for a continuous replication cycle.
+ * Active group tracker will have preassigned replicas and from these replicas only we can create active group
+ * Any remote replica group created for this tracker will have replicas with ACTIVE state only
+ */
 public class ActiveGroupTracker extends GroupTracker {
   private final List<ReplicaTracker> preAssignedReplicas;
 
-  ActiveGroupTracker(int groupId, List<ReplicaTracker> preAssignedReplicas) {
+  public ActiveGroupTracker(int groupId, List<ReplicaTracker> preAssignedReplicas) {
     super(groupId);
     this.preAssignedReplicas = preAssignedReplicas;
   }
 
-  List<ReplicaTracker> getPreAssignedReplicas() {
+  public List<ReplicaTracker> getPreAssignedReplica() {
     return preAssignedReplicas;
   }
 }

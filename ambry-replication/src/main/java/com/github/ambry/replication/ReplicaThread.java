@@ -49,6 +49,10 @@ import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.replication.continuous.ActiveGroupTracker;
+import com.github.ambry.replication.continuous.DataNodeTracker;
+import com.github.ambry.replication.continuous.ReplicaTracker;
+import com.github.ambry.replication.continuous.StandByGroupTracker;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
@@ -1948,6 +1952,49 @@ public class ReplicaThread implements Runnable {
     shutdownLatch.await();
   }
 
+  /**
+   * This class is used to generate remote replica groups continuously for replication
+   * TODO -fill more details as we keep writing code
+   */
+  class RemoteReplicaGroupPoller {
+    private final List<DataNodeTracker> dataNodeTrackers;
+
+    RemoteReplicaGroupPoller() {
+      dataNodeTrackers = new ArrayList<>();
+      fillDataNodeTrackers();
+    }
+
+    public List<DataNodeTracker> getDataNodeTrackers() {
+      return dataNodeTrackers;
+    }
+
+    /**
+     * We will create Data node trackers for every data node
+     * Every tracker will have set active groups and standby groups
+     * Active groups will have {@link #maxReplicaCountPerRequest} maximum number of preassigned replicas
+     * For each data node tracker, we will have only one stand by group
+     * Across all datanode tracker group ids will be unique
+     */
+    private void fillDataNodeTrackers() {
+      Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
+
+      int currentStartGroupId = 0;
+
+      for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
+        DataNodeId remoteHost = entry.getKey();
+        List<RemoteReplicaInfo> remoteReplicasPerNode = entry.getValue();
+
+        DataNodeTracker dataNodeTracker =
+            new DataNodeTracker(remoteHost, remoteReplicasPerNode, maxReplicaCountPerRequest, currentStartGroupId);
+        logger.trace("Thread name: {} for datanode {} create datanode tracker {}", threadName, remoteHost,
+            dataNodeTracker);
+
+        dataNodeTrackers.add(dataNodeTracker);
+        currentStartGroupId = dataNodeTracker.getMaxGroupId() + 1;
+      }
+    }
+
+  }
   /**
    * ReplicaGroupReplicationState indicates different state of RemoteReplicaGroup in one replication cycle.
    * Each replication cycle, we will break all the replicas in order different groups and each group

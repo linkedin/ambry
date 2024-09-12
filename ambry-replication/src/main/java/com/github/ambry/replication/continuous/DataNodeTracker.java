@@ -14,19 +14,63 @@
 package com.github.ambry.replication.continuous;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
+/**
+ * This class tracks for a current state for a remote host for a continuous replication cycle.
+ * Each DataNode will have multiple active group trackers.
+ * Each DataNode will have only one Standby group for reducing cross colo calls.
+ * {@link #activeGroupTrackers} will have group trackers for groups with active replicas
+ * {@link #standByGroupTracker} will have group tracker for stand by group for this data node
+ */
 public class DataNodeTracker {
   private final DataNodeId dataNodeId;
   private final List<ActiveGroupTracker> activeGroupTrackers;
   private final StandByGroupTracker standByGroupTracker;
 
-  public DataNodeTracker(DataNodeId dataNodeId, List<ActiveGroupTracker> activeGroupTrackers,
-      StandByGroupTracker standByGroupTracker) {
+  /**
+   * Creating active group trackers and standByGroupTracker.
+   * All group trackers will have consecutive group id.
+   * @param dataNodeId remote host for which to create datanode tracker
+   * @param remoteReplicas remote replicas for this data node
+   * @param maxActiveGroupSize maximum count of replicas in active groups
+   * @param startGroupId group id from which we can start and increment and generate unique group id for each group
+   */
+  public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int maxActiveGroupSize,
+      int startGroupId) {
     this.dataNodeId = dataNodeId;
-    this.activeGroupTrackers = activeGroupTrackers;
-    this.standByGroupTracker = standByGroupTracker;
+    this.activeGroupTrackers = new ArrayList<>();
+
+    int currentGroupId = startGroupId;
+
+    // for this data node break a larger array of remote replicas to smaller multiple arrays of maxActiveGroupSize
+    List<List<RemoteReplicaInfo>> remoteReplicaSegregatedList =
+        maxActiveGroupSize > 0 ? Utils.partitionList(remoteReplicas, maxActiveGroupSize)
+            : Collections.singletonList(remoteReplicas);
+
+    // for each of smaller array of remote replicas create active group trackers with consecutive group ids
+    for (List<RemoteReplicaInfo> remoteReplicaList : remoteReplicaSegregatedList) {
+      ActiveGroupTracker activeGroupTracker = new ActiveGroupTracker(currentGroupId,
+          remoteReplicaList.stream().map(ReplicaTracker::new).collect(Collectors.toList()));
+      activeGroupTrackers.add(activeGroupTracker);
+      currentGroupId++;
+    }
+
+    // standby group id will have maximum group id
+    standByGroupTracker = new StandByGroupTracker(currentGroupId);
+  }
+
+  /**
+   * @return getting maximum group id for this data node
+   */
+  public int getMaxGroupId() {
+    return standByGroupTracker.getGroupId();
   }
 
   public DataNodeId getDataNodeId() {
