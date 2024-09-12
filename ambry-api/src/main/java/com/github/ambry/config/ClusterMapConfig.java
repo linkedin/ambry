@@ -39,7 +39,8 @@ public class ClusterMapConfig {
       "clustermap.enable.aggregated.monthly.account.report";
   public static final String ENABLE_PROPERTY_STORE_CLEAN_UP_TASK =
       "clustermap.enable.property.store.clean.up.task";
-  public static final String REGISTER_PROPERTY_STORE_TASK = "clustermap.register.property.store.task";
+  public static final String DELETE_DATA_FROM_DATANODE_CONFIG =
+      "clustermap.delete.data.from.datanode.config";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -352,10 +353,10 @@ public class ClusterMapConfig {
   public final boolean clustermapEnablePropertyStoreCleanUpTask;
 
   /**
-   * True to register property store task.
+   * True to remove data from datanode config when property store clean up task is enabled.
    */
-  @Config(REGISTER_PROPERTY_STORE_TASK)
-  public final boolean clustermapRegisterPropertyStoreTask;
+  @Config(DELETE_DATA_FROM_DATANODE_CONFIG)
+  public final boolean clustermapDeleteDataFromDatanodeConfig;
 
   public static final String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
   /**
@@ -443,8 +444,8 @@ public class ClusterMapConfig {
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
     clustermapEnablePropertyStoreCleanUpTask =
-        verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, false);
-    clustermapRegisterPropertyStoreTask = verifiableProperties.getBoolean(REGISTER_PROPERTY_STORE_TASK, true);
+        verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, true);
+    clustermapDeleteDataFromDatanodeConfig = verifiableProperties.getBoolean(DELETE_DATA_FROM_DATANODE_CONFIG, false);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
     clustermapDistributedLockLeaseTimeoutInMs =

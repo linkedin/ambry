@@ -48,6 +48,7 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
   private final String LIVEINSTANCE_PATH;
   private final String INSTANCECONFIG_PATH;
   private final String EXTERNALVIEW_PATH;
+  private final String IDEALSTATE_PATH;
   private final boolean isAggregatedViewCluster;
   private final String clusterName;
   private final PropertyKey.Builder propertyKeyBuilder;
@@ -63,6 +64,8 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
     LIVEINSTANCE_PATH = "/" + clusterName + "/LIVEINSTANCES";
     INSTANCECONFIG_PATH = "/" + clusterName + "/CONFIGS/PARTICIPANT";
     EXTERNALVIEW_PATH = "/" + clusterName + "/EXTERNALVIEW";
+    IDEALSTATE_PATH = "/" + clusterName + "/IDEALSTATES";
+
     this.mockHelixAdminList = mockHelixAdminList;
     this.isAggregatedViewCluster = isAggregatedViewCluster;
   }
@@ -264,7 +267,36 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public <T extends HelixProperty> List<T> getChildValues(PropertyKey key, boolean throwException) {
-    throw new UnsupportedOperationException("Unsupported in MockHelixDataAccessor");
+    List<T> result = new ArrayList<>();
+    if (key.toString().equals(EXTERNALVIEW_PATH)) {
+      if (isAggregatedViewCluster) {
+        // return external views from all DCs
+        for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+          for (String resourceName : mockHelixAdmin.getResourcesInCluster(clusterName)) {
+            ZNRecord record = new ZNRecord(resourceName);
+            record.setMapFields(mockHelixAdmin.getPartitionToReplicasMapForResource(resourceName));
+            result.add((T) new ExternalView(record));
+          }
+        }
+      } else {
+        for (String resourceName : mockLocalHelixAdmin.getResourcesInCluster(clusterName)) {
+          ZNRecord record = new ZNRecord(resourceName);
+          record.setMapFields(mockLocalHelixAdmin.getPartitionToReplicasMapForResource(resourceName));
+          result.add((T) new ExternalView(record));
+        }
+      }
+    }
+    else if(key.toString().equals(IDEALSTATE_PATH)){
+      if(isAggregatedViewCluster){
+        // return ideal states from all DCs
+        for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+            result.addAll((List<T>) mockHelixAdmin.getIdealStates());
+        }
+      } else {
+        result.addAll((List<T>) mockLocalHelixAdmin.getIdealStates());
+      }
+    }
+    return result;
   }
 
   @Override

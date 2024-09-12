@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2024 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,13 +21,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
-import org.apache.helix.HelixProperty;
 import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.IdealState;
-import org.apache.helix.model.LiveInstance;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskResult;
 import org.slf4j.Logger;
@@ -139,7 +136,8 @@ public class PropertyStoreCleanUpTask implements Task {
    * Cleanup property store for the given instance
    */
   private void cleanupPropertyStore(String instance) {
-    if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
+    if(clusterMapConfig.clustermapDeleteDataFromDatanodeConfig &&
+        clusterMapConfig.clusterMapDataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
         synchronized (helixAdministrationLock) {
           DataNodeConfig dataNodeConfig = dataNodeConfigSource.get(instance);
           if (dataNodeConfig == null) { return;}

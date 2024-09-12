@@ -781,11 +781,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   *
-   * @param engine
+   * Register Property Store Clean Up Task for cleaning up expired properties in Property Store.
+   * @param engine the {@link StateMachineEngine} to register the task state model.
    */
   private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
-    if(clusterMapConfig.clustermapRegisterPropertyStoreTask) {
+    if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
       Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
       taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
           context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,

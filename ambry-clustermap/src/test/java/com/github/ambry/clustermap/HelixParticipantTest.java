@@ -398,7 +398,7 @@ public class HelixParticipantTest {
   public void testBadCases() {
     // Invalid state model def
     props.setProperty("clustermap.state.model.definition", "InvalidStateModelDef");
-    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(false));
+    props.setProperty(ClusterMapConfig.ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, Boolean.toString(false));
     try {
       new ClusterMapConfig(new VerifiableProperties(props));
       fail("should fail due to invalid state model definition");
@@ -476,7 +476,7 @@ public class HelixParticipantTest {
    */
   @Test
   public void testHelixParticipant() throws Exception {
-    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(false));
+    props.setProperty(ClusterMapConfig.ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, Boolean.toString(false));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory,
@@ -828,7 +828,7 @@ public class HelixParticipantTest {
    */
   @Test
   public void testParticipateMethodWithHelixPropertyStoreTaskEnabled() throws Exception {
-    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(true));
+    props.setProperty(ClusterMapConfig.ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, Boolean.toString(true));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
     HelixParticipant helixParticipant =
@@ -848,7 +848,7 @@ public class HelixParticipantTest {
    */
   @Test
   public void testParticipateMethodWithHelixPropertyStoreTaskDisabled() throws Exception {
-    props.setProperty(ClusterMapConfig.REGISTER_PROPERTY_STORE_TASK, Boolean.toString(false));
+    props.setProperty(ClusterMapConfig.ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, Boolean.toString(false));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
     HelixParticipant helixParticipant =
