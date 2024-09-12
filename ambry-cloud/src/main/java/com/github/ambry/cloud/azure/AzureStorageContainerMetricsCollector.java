@@ -76,17 +76,19 @@ public class AzureStorageContainerMetricsCollector {
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       // Don't store any references to PartitionId or RemoteReplicaInfo.
       // With improper clean up, these references linger around and cause memory leaks.
-      long pid = rinfo.getReplicaId().getPartitionId().toPathString().hashCode();
+      long pid = rinfo.getReplicaId().getPartitionId().getId();
+      String rid = rinfo.getReplicaId().getDataNodeId().getHostname();
       metricMap.putIfAbsent(pid, new AzureStorageContainerMetrics(pid));
-      metricMap.get(pid).addPartitionReplica(rinfo.getReplicaId().getDataNodeId().getHostname());
+      metricMap.get(pid).addPartitionReplica(rid);
     }
   }
 
   public void removePartitionReplicas(List<RemoteReplicaInfo> remoteReplicaInfos) {
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
-      long pid = rinfo.getReplicaId().getPartitionId().toPathString().hashCode();
+      long pid = rinfo.getReplicaId().getPartitionId().getId();
+      String rid = rinfo.getReplicaId().getDataNodeId().getHostname();
       if (metricMap.containsKey(pid)) {
-        metricMap.get(pid).removePartitionReplica(rinfo.getReplicaId().getDataNodeId().getHostname());
+        metricMap.get(pid).removePartitionReplica(rid);
       }
     }
   }
@@ -102,11 +104,12 @@ public class AzureStorageContainerMetricsCollector {
    * However, we want to avoid any races between reader and writers.
    * Use min() as bootstrapping replicas can give a wrong picture and indicate a large lag even though the partition
    * is fully backed up in Azure.
-   * @param pid PartitionId
-   * @param rid ReplicaId
+   * @param rinfo RemoteReplicaInfo
    * @param lag Lag in bytes
    */
-  public synchronized void setPartitionReplicaLag(long pid, String rid, long lag) {
+  public synchronized void setPartitionReplicaLag(RemoteReplicaInfo rinfo, long lag) {
+    long pid = rinfo.getReplicaId().getPartitionId().getId();
+    String rid = rinfo.getReplicaId().getDataNodeId().getHostname();
     metricMap.get(pid).setPartitionReplicaLag(rid, lag);
   }
 }
