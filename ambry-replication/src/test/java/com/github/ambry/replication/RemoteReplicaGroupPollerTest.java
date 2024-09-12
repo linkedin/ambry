@@ -214,10 +214,11 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
       });
     });
 
-    // check if standby groups have 0 replicas and active groups have maximum replicas as maxPartitionCountPerRequest
+    // check if active groups have maximum replicas as maxPartitionCountPerRequest
     dataNodeTrackers.forEach(dataNodeTracker -> {
       dataNodeTracker.getActiveGroupTrackers().forEach(activeGroupTracker -> {
-        Assert.assertTrue("active groups should have max preassigned replicas",
+        Assert.assertTrue(
+            "active groups should have max preassigned replicas less than or equal to max partition per request",
             maxPartitionCountPerRequest >= activeGroupTracker.getPreAssignedReplica().size());
       });
     });
