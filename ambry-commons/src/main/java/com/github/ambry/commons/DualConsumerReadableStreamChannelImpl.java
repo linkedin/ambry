@@ -21,6 +21,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.util.Queue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -28,6 +29,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -79,9 +81,17 @@ public class DualConsumerReadableStreamChannelImpl implements ReadableStreamChan
   // Condition
   private final Condition destCallbackArrived = destCallbackLock.newCondition();
   private volatile boolean destCallbackTimedOut = false;
-  private volatile boolean secondaryDestClosed = false;
   // TODO: Make it configurable
   private final int destCallbackTimeOutMs = 500;
+
+  private final AtomicLong totalBytesReadByPrimary = new AtomicLong(0);
+  private final AtomicLong totalBytesReadBySecondary = new AtomicLong(0);
+
+  private final AtomicBoolean primaryDestCallbackInvoked = new AtomicBoolean(false);
+  private final AtomicBoolean secondaryDestCallbackInvoked = new AtomicBoolean(false);
+  private final AtomicBoolean secondaryDestClosed = new AtomicBoolean(false);
+
+  private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
 
   /**
    *
@@ -97,14 +107,12 @@ public class DualConsumerReadableStreamChannelImpl implements ReadableStreamChan
 
     AsyncWritableChannel localAsyncWritableChannel = new AsyncWritableChannelImpl();
     source.readInto(localAsyncWritableChannel, (result, exception) -> {
-      if (primaryDestFinalCallback != null) {
-        primaryDestFutureResult.done(result, exception);
-        primaryDestFinalCallback.onCompletion(result, exception);
-      }
+      invokePrimaryDestFinalCallback(result, exception);
+      invokeSecondaryDestFinalCallback(result, exception);
+      try {
+        close();
+      } catch (IOException ignored) {
 
-      if (secondaryDestFinalCallback != null) {
-        secondaryDestFutureResult.done(result, exception);
-        secondaryDestFinalCallback.onCompletion(result, exception);
       }
     });
 
@@ -160,7 +168,7 @@ public class DualConsumerReadableStreamChannelImpl implements ReadableStreamChan
 
   @Override
   public void close() throws IOException {
-
+    channelOpen.compareAndSet(true, false);
   }
 
   /**
@@ -229,14 +237,46 @@ public class DualConsumerReadableStreamChannelImpl implements ReadableStreamChan
       try {
         ResolvedChunkInfo resolvedChunkInfo = new ResolvedChunkInfo(srcCallback, result, exception, future);
         if (isPrimary) {
+          totalBytesReadByPrimary.getAndAdd(result);
           primaryResolvedChunks.add(resolvedChunkInfo);
         } else {
+          totalBytesReadBySecondary.getAndAdd(result);
           secondaryResolvedChunks.add(resolvedChunkInfo);
         }
         // Signal the resolver thread that callback from one of the destinations has arrived
         destCallbackArrived.signal();
       } finally {
         destCallbackLock.unlock();
+      }
+    }
+  }
+
+  /**
+   * Invokes the callback and updates the future of primary destination this is called. This function ensures that the
+   * callback is invoked just once.
+   * @param result
+   * @param exception
+   */
+  private void invokePrimaryDestFinalCallback(long result, Exception exception) {
+    if (primaryDestCallbackInvoked.compareAndSet(false, true)) {
+      primaryDestFutureResult.done(result, exception);
+      if (primaryDestFinalCallback != null) {
+        primaryDestFinalCallback.onCompletion(result, exception);
+      }
+    }
+  }
+
+  /**
+   * Invokes the callback and updates the future of secondary destination this is called. This function ensures that the
+   * callback is invoked just once.
+   * @param result
+   * @param exception
+   */
+  private void invokeSecondaryDestFinalCallback(long result, Exception exception) {
+    if (secondaryDestCallbackInvoked.compareAndSet(false, true)) {
+      secondaryDestFutureResult.done(result, exception);
+      if (secondaryDestFinalCallback != null) {
+        secondaryDestFinalCallback.onCompletion(result, exception);
       }
     }
   }
@@ -296,7 +336,7 @@ public class DualConsumerReadableStreamChannelImpl implements ReadableStreamChan
 
           if (primaryResolvedChunk == null) {
             destCallbackArrived.await();
-          } else if (!secondaryDestClosed && secondaryResolvedChunk == null) {
+          } else if (!secondaryDestClosed.get() && secondaryResolvedChunk == null) {
             if (!destCallbackArrived.await(destCallbackTimeOutMs, TimeUnit.MILLISECONDS)) {
               destCallbackTimedOut = true;
             }
@@ -310,21 +350,14 @@ public class DualConsumerReadableStreamChannelImpl implements ReadableStreamChan
             primaryResolvedChunk.future.done(bytesRead, exception);
             srcCallback.onCompletion(bytesRead, exception);
           }
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
           throw new RuntimeException(e);
         } finally {
-
-          if (destCallbackTimedOut && !secondaryDestClosed) {
-            try {
-              // If secondary destination write completion callback didn't arrive in time, close the secondary.
-              logger.error("Secondary destination timed out. Closing secondary");
-              secondaryDestClosed = true;
-              secondaryDest.close();
-            } catch (IOException e) {
-              logger.error("Exception while closing secondary", e);
-            }
+          if (destCallbackTimedOut && secondaryDestClosed.compareAndSet(false, true)) {
+            // If secondary destination write completion callback didn't arrive in time, close the secondary.
+            logger.error("Secondary destination timed out. Closing secondary");
+            invokeSecondaryDestFinalCallback(totalBytesReadBySecondary.get(), CLOSED_CHANNEL_EXCEPTION);
           }
-
           destCallbackLock.unlock();
         }
       }
