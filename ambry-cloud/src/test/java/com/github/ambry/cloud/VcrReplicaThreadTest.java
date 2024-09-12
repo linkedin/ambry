@@ -17,26 +17,34 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzureMetrics;
-import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -193,7 +201,6 @@ public class VcrReplicaThreadTest {
     AtomicInteger ai = new AtomicInteger(0);
     int Z = 'Z';
     clustermap.getDataNodes().forEach(d -> d.setHostname(String.valueOf((char)(Z - (ai.getAndIncrement() % 26)))));
-    AzureStorageContainerMetricsCollector collector = mock(AzureStorageContainerMetricsCollector.class);
 
     // Create a test-thread
     VcrReplicaThread rthread =
