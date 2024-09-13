@@ -17,6 +17,7 @@ package com.github.ambry.cloud;
 import com.azure.data.tables.models.TableEntity;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureMetrics;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -60,6 +61,7 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected final AzureStorageContainerMetricsCollector azureStorageContainerMetricsCollector;
   protected CloudConfig vcrNodeConfig;
   protected ReplicaComparator comparator;
   protected String azureTableNameReplicaTokens;
@@ -89,6 +91,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
     this.numReplIter = 0;
+    this.azureStorageContainerMetricsCollector = AzureStorageContainerMetricsCollector.getInstance(clusterMap.getMetricRegistry(), properties);
     comparator = new ReplicaComparator();
   }
 
@@ -223,6 +226,10 @@ public class VcrReplicaThread extends ReplicaThread {
     StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
+    // The lag can be -1 at times, so just round up to 0 and move on
+    azureStorageContainerMetricsCollector.setPartitionReplicaLag(
+        remoteReplicaInfo,
+        Math.max(0, exchangeMetadataResponse.getLocalLagFromRemoteInBytes()));
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {
       azureMetrics.replicaTokenWriteErrorCount.inc();
