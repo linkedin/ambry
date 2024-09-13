@@ -121,6 +121,7 @@ public class ReplicaThread implements Runnable {
   private final Condition pauseCondition = lock.newCondition();
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final int maxReplicaCountPerRequest;
+  private final boolean enableContinuousReplication;
   private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
@@ -181,9 +182,14 @@ public class ReplicaThread implements Runnable {
       idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
     }
+    this.enableContinuousReplication = getEnableContinuousReplication(replicationConfig);
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
+  }
+
+  protected boolean getEnableContinuousReplication(ReplicationConfig replicationConfig) {
+    return replicationConfig.replicationEnableContinuousReplication;
   }
 
   public boolean startThread() {
@@ -370,6 +376,22 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Runs continuous replication if enabled otherwise runs cyclic replication
+   */
+  public void replicate() {
+    if (enableContinuousReplication) {
+      replicateContinuous();
+    } else {
+      replicateCyclic();
+    }
+  }
+
+  //TODO implement continuous replication inside this
+  public void replicateContinuous() {
+
+  }
+
+  /**
    * Do replication for replicas grouped by {@link DataNodeId}
    * A replication cycle between two replicas involves the following steps:
    *    1. Exchange metadata : fetch the metadata of blobs added to remote replica since the last synchronization point
@@ -392,7 +414,7 @@ public class ReplicaThread implements Runnable {
    *     Standby: | metadata and data |  metadata and data  | metadata only     |   metadata only
    *
    */
-  public void replicate() {
+  public void replicateCyclic() {
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     long oneRoundStartTimeMs = time.milliseconds();
     logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
@@ -1826,6 +1848,10 @@ public class ReplicaThread implements Runnable {
       this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
     }
 
+    public long getLocalLagFromRemoteInBytes() {
+      return localLagFromRemoteInBytes;
+    }
+
     /**
      * Checks if there are any missing store messages in this metadata exchange.
      * @return set of missing store messages
@@ -1975,7 +2001,7 @@ public class ReplicaThread implements Runnable {
    * network client. After getting the response from tne network client, it handles the response and moves to DONE
    * state. Any error happens in the middle of processing would force group to DONE state.
    */
-  class RemoteReplicaGroup {
+  public class RemoteReplicaGroup {
     private final List<RemoteReplicaInfo> remoteReplicaInfos;
     private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
 

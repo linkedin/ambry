@@ -762,10 +762,29 @@ public class RouterConfig {
   public final boolean routerParanoidDurabilityEnabled;
 
   /**
+   * This is set in frontendConfig until id converter been fully migrate to router.
+   */
+  public final String idConverterFactory;
+
+  /**
+   * This is set in frontendConfig until id converter been fully migrate to router.
+   */
+  public final String idSigningServiceFactory;
+
+  /**
+   * This is set in frontendConfig until id converter been fully migrate to router.
+   */
+  public final String namedBlobDbFactory;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
+    FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
+    idConverterFactory = frontendConfig.idConverterFactory;
+    idSigningServiceFactory = frontendConfig.idSigningServiceFactory;
+    namedBlobDbFactory = frontendConfig.namedBlobDbFactory;
     routerBlobMetadataCacheId =
         verifiableProperties.getString(ROUTER_BLOB_METADATA_CACHE_ID, "routerBlobMetadataCache");
     routerMaxNumMetadataCacheEntries =

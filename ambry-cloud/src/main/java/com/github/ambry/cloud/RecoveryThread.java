@@ -83,6 +83,11 @@ public class RecoveryThread extends ReplicaThread {
     this.recoveryManager = recoveryManager;
   }
 
+  @Override
+  protected boolean getEnableContinuousReplication(ReplicationConfig replicationConfig) {
+    return false;
+  }
+
   /**
    * Persists token to disk in each replication cycle
    * @param remoteReplicaInfo Remote replica info object

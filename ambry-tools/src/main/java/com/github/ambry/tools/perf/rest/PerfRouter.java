@@ -102,16 +102,18 @@ class PerfRouter implements Router {
   /**
    * Consumes the data in {@code channel} and simply throws it away. {@code blobProperties} and {@code usermetadata} are
    * ignored.
+   *
    * @param blobProperties The properties of the blob.
-   * @param usermetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @param options the {@link PutBlobOptions} for the blob.
-   * @param callback the {@link Callback} to invoke on operation completion.
+   * @param usermetadata   Optional user metadata about the blob. This can be null.
+   * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options        the {@link PutBlobOptions} for the blob.
+   * @param callback       the {@link Callback} to invoke on operation completion.
+   * @param blobPath       The name of the blob path for named blob based upload.
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback, String blobPath) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {

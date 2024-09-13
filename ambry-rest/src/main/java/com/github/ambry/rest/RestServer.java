@@ -206,9 +206,17 @@ public class RestServer {
       routerSslFactory = sslFactory;
     }
 
-    RouterFactory routerFactory =
-        Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem,
-            routerSslFactory, accountService);
+    RouterFactory routerFactory;
+    if (restServerConfig.restServerEnableCompositeRouter) {
+      RouterFactory ambryRouterFactory =
+          Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap,
+              notificationSystem, routerSslFactory, accountService);
+      Router ambryRouter = ambryRouterFactory.getRouter();
+      routerFactory = Utils.getObj(restServerConfig.restServerCompositeRouterFactory, ambryRouter);
+    } else {
+      routerFactory = Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap,
+          notificationSystem, routerSslFactory, accountService);
+    }
     router = routerFactory.getRouter();
 
     // setup the router for the account service

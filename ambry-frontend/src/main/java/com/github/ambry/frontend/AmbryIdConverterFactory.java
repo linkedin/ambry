@@ -19,7 +19,6 @@ import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3BaseHandler;
-import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.DeleteResult;
@@ -89,19 +88,18 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     }
 
     /**
-     * {@inheritDoc}
-     * On {@link RestMethod#POST}, adds a leading slash to indicate that the ID represents the path of the resource
-     * created.
-     * On any other {@link RestMethod}, removes the leading slash in order to convert the path into an ID that the
-     * {@link com.github.ambry.router.Router} will understand.
-     * @param restRequest {@link RestRequest} representing the request.
-     * @param input the ID that needs to be converted.
-     * @param blobInfo the {@link BlobInfo} for an uploaded blob. This will be used for named blob PUT requests.
-     * @param callback the {@link Callback} to invoke once the converted ID is available. Can be null.
+     * {@inheritDoc} On {@link RestMethod#POST}, adds a leading slash to indicate that the ID represents the path of the
+     * resource created. On any other {@link RestMethod}, removes the leading slash in order to convert the path into an
+     * ID that the {@link com.github.ambry.router.Router} will understand.
+     *
+     * @param restRequest    {@link RestRequest} representing the request.
+     * @param input          the ID that needs to be converted.
+     * @param blobProperties the {@link BlobInfo} for an uploaded blob. This will be used for named blob PUT requests.
+     * @param callback       the {@link Callback} to invoke once the converted ID is available. Can be null.
      * @return a {@link Future} that will eventually contain the converted ID.
      */
     @Override
-    public Future<String> convert(RestRequest restRequest, String input, BlobInfo blobInfo, Callback<String> callback) {
+    public Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<String> callback) {
       final CompletableFuture<String> future = new CompletableFuture<>();
       String convertedId = null;
       Exception exception = null;
@@ -115,7 +113,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           // TODO [S3] Add ID conversion for S3 POST requests (coming during multipart uploads) as well
           convertedId = "/" + signIdIfRequired(restRequest, input);
         } else {
-          CallbackUtils.callCallbackAfter(convertId(input, restRequest, blobInfo),
+          CallbackUtils.callCallbackAfter(convertId(input, restRequest, blobProperties),
               (id, e) -> completeConversion(id, e, future, callback));
         }
       } catch (Exception e) {
@@ -153,13 +151,14 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     /**
      * Convert the input ID to the requested output. If it's the named blob request, return the blobId from NameBlobDb,
      * otherwise return the input with leading slash and extension be stripped.
-     * @param input the input blob ID.
-     * @param restRequest the {@link RestRequest} to set arguments in.
-     * @param blobInfo the {@link BlobInfo} for an uploaded blob. This will be used for named blob PUT requests.
+     *
+     * @param input          the input blob ID.
+     * @param restRequest    the {@link RestRequest} to set arguments in.
+     * @param blobProperties the {@link BlobProperties} for an uploaded blob. This will be used for named blob PUT requests.
      * @return the {@link CompletionStage} that will be completed with the converted ID
      * @throws RestServiceException
      */
-    private CompletionStage<String> convertId(String input, RestRequest restRequest, BlobInfo blobInfo)
+    private CompletionStage<String> convertId(String input, RestRequest restRequest, BlobProperties blobProperties)
         throws RestServiceException {
       CompletionStage<String> conversionFuture;
       LOGGER.debug("input for convertId : " + input);
@@ -185,16 +184,16 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
-        Objects.requireNonNull(blobInfo, "blobInfo cannot be null.");
+        Objects.requireNonNull(blobProperties, "blobProperties cannot be null.");
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String blobId = RestUtils.stripSlashAndExtensionFromId(input);
-        BlobProperties properties = blobInfo.getBlobProperties();
         long expirationTimeMs =
-            Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
+            Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
+        // Please note that the modified_ts column in DB will be auto-populated by the DB server.
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-            namedBlobPath.getBlobName(), blobId, expirationTimeMs);
+            namedBlobPath.getBlobName(), blobId, expirationTimeMs, 0, blobProperties.getBlobSize());
         NamedBlobState state = NamedBlobState.READY;
-        if (properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+        if (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
           state = NamedBlobState.IN_PROGRESS;
         }

@@ -14,6 +14,8 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.HttpClient;
+import com.azure.core.http.policy.HttpLogDetailLevel;
+import com.azure.core.http.policy.HttpLogOptions;
 import com.azure.core.http.policy.RetryOptions;
 import com.azure.core.util.Configuration;
 import com.azure.data.tables.TableClient;
@@ -105,11 +107,18 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
   @Override
   protected TableServiceClient buildTableServiceClient(HttpClient httpClient, Configuration configuration,
       RetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
-    return new TableServiceClientBuilder().connectionString(azureCloudConfig.azureTableConnectionString)
-        .httpClient(httpClient)
-        .retryOptions(retryOptions)
-        .configuration(configuration)
-        .buildClient();
+    try {
+      return new TableServiceClientBuilder().connectionString(azureCloudConfig.azureTableConnectionString)
+          .httpClient(httpClient)
+          .retryOptions(retryOptions)
+          .configuration(configuration)
+          .buildClient();
+    } catch (Throwable e) {
+      String err = String.format("Failed to build table service client with connection string %s due to %s",
+          azureCloudConfig.azureTableConnectionString, e.getMessage());
+      logger.error(err);
+      throw e;
+    }
   }
 
   /**
