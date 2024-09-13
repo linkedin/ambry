@@ -37,10 +37,6 @@ public class AzureStorageContainerMetrics {
     replicaLag = new ConcurrentHashMap<>();
   }
 
-  public void addPartitionReplica(String hostname) {
-    replicaLag.putIfAbsent(hostname, new AtomicLong(Long.MAX_VALUE));
-  }
-
   public void removePartitionReplica(String hostname) {
     replicaLag.remove(hostname);
   }
@@ -49,8 +45,16 @@ public class AzureStorageContainerMetrics {
     return replicaLag.values().stream().map(AtomicLong::get).reduce(Long.MAX_VALUE, Long::min);
   }
 
-  public void setPartitionReplicaLag(String hostname, long update) {
-    this.replicaLag.get(hostname).compareAndSet(this.replicaLag.get(hostname).get(), update);
+  public AzureStorageContainerMetrics setPartitionReplicaLag(String hostname, long update) {
+    this.replicaLag.compute(hostname, (key, value) -> {
+      if (value == null) {
+        return new AtomicLong(update);
+      } else {
+        value.set(update);
+        return value;
+      }
+    });
+    return this;
   }
 
 }

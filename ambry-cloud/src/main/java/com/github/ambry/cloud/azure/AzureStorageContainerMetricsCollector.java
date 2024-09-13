@@ -72,17 +72,6 @@ public class AzureStorageContainerMetricsCollector {
     return instance;
   }
 
-  public void addPartitionReplicas(List<RemoteReplicaInfo> remoteReplicaInfos) {
-    for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
-      // Don't store any references to PartitionId or RemoteReplicaInfo.
-      // With improper clean up, these references linger around and cause memory leaks.
-      long pid = rinfo.getReplicaId().getPartitionId().getId();
-      String rid = rinfo.getReplicaId().getDataNodeId().getHostname();
-      metricMap.putIfAbsent(pid, new AzureStorageContainerMetrics(pid));
-      metricMap.get(pid).addPartitionReplica(rid);
-    }
-  }
-
   public void removePartitionReplicas(List<RemoteReplicaInfo> remoteReplicaInfos) {
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       long pid = rinfo.getReplicaId().getPartitionId().getId();
@@ -110,6 +99,7 @@ public class AzureStorageContainerMetricsCollector {
   public synchronized void setPartitionReplicaLag(RemoteReplicaInfo rinfo, long lag) {
     long pid = rinfo.getReplicaId().getPartitionId().getId();
     String rid = rinfo.getReplicaId().getDataNodeId().getHostname();
-    metricMap.get(pid).setPartitionReplicaLag(rid, lag);
+    metricMap.compute(pid, (k, v) -> v == null ? new AzureStorageContainerMetrics(pid).setPartitionReplicaLag(rid, lag)
+        : v.setPartitionReplicaLag(rid, lag));
   }
 }
