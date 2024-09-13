@@ -23,6 +23,7 @@ import com.github.ambry.cloud.VcrReplicationManager;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -144,6 +145,8 @@ public class CloudTokenPersistorTest {
     // Create remote-replica info
     replica = new RemoteReplicaInfo(mockPartitionId.getReplicaIds().get(0), null, null,
         null, Long.MAX_VALUE, SystemTime.getInstance(), null);
+    AzureStorageContainerMetricsCollector.getInstance(mockClusterMap.getMetricRegistry(), verifiableProperties)
+        .addPartitionReplicas(Collections.singletonList(replica));
   }
 
   protected Pair<TableEntity, StoreFindToken> getTokenFromAzureTable() throws IOException {

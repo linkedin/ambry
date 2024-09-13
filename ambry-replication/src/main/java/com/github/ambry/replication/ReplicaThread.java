@@ -1848,6 +1848,10 @@ public class ReplicaThread implements Runnable {
       this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
     }
 
+    public long getLocalLagFromRemoteInBytes() {
+      return localLagFromRemoteInBytes;
+    }
+
     /**
      * Checks if there are any missing store messages in this metadata exchange.
      * @return set of missing store messages
