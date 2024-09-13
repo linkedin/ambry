@@ -265,6 +265,13 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
     throw new UnsupportedOperationException("Unsupported in MockHelixDataAccessor");
   }
 
+  /**
+   * Get the child values from ZK of the path specified in the key.
+   * @param key The key that specifies the path.
+   * @param throwException Whether to throw exception if the path does not exist.
+   * @return The list of child values.
+   * @param <T>
+   */
   @Override
   public <T extends HelixProperty> List<T> getChildValues(PropertyKey key, boolean throwException) {
     List<T> result = new ArrayList<>();

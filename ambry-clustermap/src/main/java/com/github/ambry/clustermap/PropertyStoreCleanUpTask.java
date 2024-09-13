@@ -139,21 +139,26 @@ public class PropertyStoreCleanUpTask implements Task {
     if(clusterMapConfig.clustermapDeleteDataFromDatanodeConfig &&
         clusterMapConfig.clusterMapDataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
         synchronized (helixAdministrationLock) {
+          // Get the DataNodeConfig for the instance from the ZK
           DataNodeConfig dataNodeConfig = dataNodeConfigSource.get(instance);
           if (dataNodeConfig == null) { return;}
+
+          /* We will first try to remove data from local DataNodeConfig object
+             and then set it back in ZK based on configChanged flag
+          */
           boolean configChanged;
-          // Remove all sealed, stopped, partially sealed and disabled replicas for the instance in the property store
-          configChanged = TaskUtils.removeConfig(dataNodeConfig.getSealedReplicas());
-          configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getStoppedReplicas());
-          configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getPartiallySealedReplicas());
-          configChanged = configChanged || TaskUtils.removeConfig(dataNodeConfig.getDisabledReplicas());
+          // Remove all sealed, stopped, partially sealed and disabled replicas from DataNodeConfig
+          configChanged = TaskUtils.removeIfPresent(dataNodeConfig.getSealedReplicas());
+          configChanged = configChanged || TaskUtils.removeIfPresent(dataNodeConfig.getStoppedReplicas());
+          configChanged = configChanged || TaskUtils.removeIfPresent(dataNodeConfig.getPartiallySealedReplicas());
+          configChanged = configChanged || TaskUtils.removeIfPresent(dataNodeConfig.getDisabledReplicas());
           Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
 
-          // Remove all replicas for each disk in the property store
+          // Remove all replicas for each disk in the DataNodeConfig
           for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
-            configChanged = configChanged || TaskUtils.removeConfig(diskConfig.getReplicaConfigs());
+            configChanged = configChanged || TaskUtils.removeIfPresent(diskConfig.getReplicaConfigs());
           }
-          // Only set the config if it has changed
+          // Only set the DatanodeConfig in ZK if it has changed
           if (configChanged) {
             if (dataNodeConfigSource.set(dataNodeConfig)) {
               logger.info("PropertyStore cleanup successful for instance = {}", instance);

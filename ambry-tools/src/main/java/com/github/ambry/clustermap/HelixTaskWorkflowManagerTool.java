@@ -149,7 +149,7 @@ public class HelixTaskWorkflowManagerTool {
     /** Task to sync deprecated containers to cloud. */
     DEPRECATED_CONTAINER_CLOUD_SYNC_TASK,
 
-    /**Task to clean up stale property store data. */
+    /** Task to clean up stale property store data. */
     PROPERTY_STORE_CLEANUP_TASK
   }
 
@@ -269,8 +269,8 @@ public class HelixTaskWorkflowManagerTool {
     workflowBuilder.addJob(jobId, jobConfigBuilder);
   }
 
-  /** Build the workflow for property store clean up task.
-   *
+  /**
+   * Build the workflow for property store clean up task.
    * @param workflowBuilder {@link Workflow.Builder} object.
    */
   private static void buildPropertyStoreCleanUpTaskWorkflow(Workflow.Builder workflowBuilder) {

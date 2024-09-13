@@ -42,27 +42,27 @@ public class TaskUtils {
     return new Pair<>(hostname, port);
   }
 
-  protected static boolean removeConfig(Set<String> config){
-    if (checkIfConfigPresent(config)) {
+  protected static boolean removeIfPresent(Set<String> config){
+    if (checkIfPresent(config)) {
       config.clear();
       return true;
     }
     return false;
   }
 
-  protected static boolean removeConfig(Map<String, DataNodeConfig.ReplicaConfig> config){
-    if (checkIfConfigPresent(config)) {
+  protected static boolean removeIfPresent(Map<String, DataNodeConfig.ReplicaConfig> config){
+    if (checkIfPresent(config)) {
       config.clear();
       return true;
     }
     return false;
   }
 
-  protected static boolean checkIfConfigPresent(Set<String> config) {
+  protected static boolean checkIfPresent(Set<String> config) {
     return config != null && !config.isEmpty();
   }
 
-  protected static boolean checkIfConfigPresent(Map<String, DataNodeConfig.ReplicaConfig> config) {
+  protected static boolean checkIfPresent(Map<String, DataNodeConfig.ReplicaConfig> config) {
     return config != null && !config.isEmpty();
   }
 }

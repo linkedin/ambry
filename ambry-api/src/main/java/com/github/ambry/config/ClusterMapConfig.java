@@ -444,7 +444,7 @@ public class ClusterMapConfig {
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
     clustermapEnablePropertyStoreCleanUpTask =
-        verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, true);
+        verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, false);
     clustermapDeleteDataFromDatanodeConfig = verifiableProperties.getBoolean(DELETE_DATA_FROM_DATANODE_CONFIG, false);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
