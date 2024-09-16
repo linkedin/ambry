@@ -95,13 +95,22 @@ public class DataNodeTracker {
     return standByGroupTracker;
   }
 
+  /**
+   * @return returns remote replica groups that are getting tracked in group trackers of
+   * this data node tracker
+   */
   public List<ReplicaThread.RemoteReplicaGroup> getInflightRemoteReplicaGroups() {
     return getGroupTrackers().stream()
-        .filter(GroupTracker::isIterating)
+        .filter(GroupTracker::isInFlight)
         .map(GroupTracker::getRemoteReplicaGroup)
         .collect(Collectors.toList());
   }
 
+  /**
+   * Iterates over all group trackers and if remote replica group is getting tracked by group tracker is done,
+   * removes it from group tracker
+   * @return returns list of remote replica groups removed from tracking
+   */
   public List<ReplicaThread.RemoteReplicaGroup> processFinishedGroups() {
     List<ReplicaThread.RemoteReplicaGroup> finishedGroups = new ArrayList<>();
     getGroupTrackers().forEach(groupTracker -> {
@@ -114,13 +123,20 @@ public class DataNodeTracker {
     return finishedGroups;
   }
 
+  /**
+   * @return Iterates over all group trackers and returns maximum iterations done by any group
+   */
   public int getMaxIterationAcrossGroups() {
     return getGroupTrackers().stream().map(GroupTracker::getIterations).max(Comparator.naturalOrder()).orElse(0);
   }
 
+  /**
+   * @return iterates over all active group trackers and returns trackers which are not tracking
+   * any remote replica group
+   */
   public List<ActiveGroupTracker> getFinishedActiveGroupTrackers() {
     return getActiveGroupTrackers().stream()
-        .filter(groupTracker -> !groupTracker.isIterating())
+        .filter(groupTracker -> !groupTracker.isInFlight())
         .collect(Collectors.toList());
   }
 }

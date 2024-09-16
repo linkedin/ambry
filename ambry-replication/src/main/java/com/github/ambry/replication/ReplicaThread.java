@@ -49,9 +49,7 @@ import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.replication.continuous.ActiveGroupTracker;
 import com.github.ambry.replication.continuous.DataNodeTracker;
-import com.github.ambry.replication.continuous.ReplicaTracker;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
@@ -127,7 +125,7 @@ public class ReplicaThread implements Runnable {
   private final int maxReplicaCountPerRequest;
   private final boolean enableContinuousReplication;
   private final Predicate<MessageInfo> skipPredicate;
-  private final int maxIterationsPerGroupPerCycle;
+  private final int continuousReplicationGroupIterationLimit;
   private volatile boolean terminateCurrentContinuousReplicationCycle = false;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
@@ -189,7 +187,7 @@ public class ReplicaThread implements Runnable {
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
     }
     this.enableContinuousReplication = isContinuousReplicationEnabled(replicationConfig);
-    this.maxIterationsPerGroupPerCycle = replicationConfig.replicationContinuousMaxIterationPerGroup;
+    this.continuousReplicationGroupIterationLimit = replicationConfig.replicationContinuousGroupIterationLimit;
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
@@ -2033,6 +2031,10 @@ public class ReplicaThread implements Runnable {
       }
     }
 
+    /**
+     * @return Iterates over all data nodes and returns list of all remote replica groups
+     * that are getting tracked
+     */
     private List<RemoteReplicaGroup> getInflightGroups() {
       List<RemoteReplicaGroup> allRemoteReplicaGroups = new ArrayList<>();
       dataNodeTrackers.forEach(dataNodeTracker -> {
@@ -2041,10 +2043,17 @@ public class ReplicaThread implements Runnable {
       return allRemoteReplicaGroups;
     }
 
+    /**
+     * @return returns true if there are any remote replica groups getting tracked, false otherwise
+     */
     boolean shouldContinue() {
       return !getInflightGroups().isEmpty();
     }
 
+    /**
+     * @return returns false if any group has reached iteration limit, thread is shutdown or signal to
+     * terminate cycle is received
+     */
     boolean shouldEnqueue() {
       if (!running || terminateCurrentContinuousReplicationCycle) {
         return false;
@@ -2053,9 +2062,14 @@ public class ReplicaThread implements Runnable {
           .map(DataNodeTracker::getMaxIterationAcrossGroups)
           .max(Comparator.naturalOrder())
           .orElse(0);
-      return maxIterationsDoneByAnyGroup < maxIterationsPerGroupPerCycle;
+      return maxIterationsDoneByAnyGroup < continuousReplicationGroupIterationLimit;
     }
 
+    /**
+     * For each data node tracker, if any remote replica group is done, removes remote replica group from tracking,
+     * throttles corresponding replica and moves its state to UNKNOWN
+     * For these finished groups, drops keys from store key converter
+     */
     void processFinishedGroups() {
       List<RemoteReplicaGroup> finishedGroups = dataNodeTrackers.stream()
           .map(DataNodeTracker::processFinishedGroups)
@@ -2068,15 +2082,15 @@ public class ReplicaThread implements Runnable {
     }
 
     void fillReplicaState() {
-
+      //TODO fill it
     }
 
     void fillActiveGroups() {
-
+      //TODO fill it
     }
 
     void fillStandByGroups() {
-
+      //TODO fill it
     }
 
     List<RemoteReplicaGroup> enqueue() {

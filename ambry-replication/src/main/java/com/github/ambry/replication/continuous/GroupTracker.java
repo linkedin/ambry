@@ -78,11 +78,11 @@ public abstract class GroupTracker {
     inflightReplicaTrackers.clear();
   }
 
-  public boolean isIterating() {
+  public boolean isInFlight() {
     return remoteReplicaGroup != null;
   }
 
   public boolean isGroupDone() {
-    return isIterating() && remoteReplicaGroup.isDone();
+    return isInFlight() && remoteReplicaGroup.isDone();
   }
 }

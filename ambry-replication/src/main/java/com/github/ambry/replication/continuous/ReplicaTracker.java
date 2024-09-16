@@ -52,6 +52,10 @@ public class ReplicaTracker {
     return time.milliseconds() <= throttledTill;
   }
 
+  /**
+   * whenever a group is finished, this method gets called for corresponding replica trackers,
+   * replica state is moved to unknown and replica is throttled
+   */
   public void finishIteration() {
     this.replicaState = ReplicaState.UNKNOWN;
     this.throttledTill = time.milliseconds() + throttleDurationMs;
