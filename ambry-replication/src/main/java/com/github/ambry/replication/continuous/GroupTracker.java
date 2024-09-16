@@ -69,7 +69,8 @@ public abstract class GroupTracker {
   }
 
   /**
-   *
+   * removes remote replica group from tracking, finishes iterations for inflight replicas
+   * and removes from tracking afterward
    */
   public void finishIteration() {
     remoteReplicaGroup = null;
@@ -78,10 +79,17 @@ public abstract class GroupTracker {
     inflightReplicaTrackers.clear();
   }
 
+  /**
+   * If remoteReplicaGroup is null, only then we consider group is not getting tracked
+   * @return returns true if group is getting tracked, false otherwise
+   */
   public boolean isInFlight() {
     return remoteReplicaGroup != null;
   }
 
+  /**
+   * @return checks and returns true if group is getting tracked and in done state, false otherwise
+   */
   public boolean isGroupDone() {
     return isInFlight() && remoteReplicaGroup.isDone();
   }

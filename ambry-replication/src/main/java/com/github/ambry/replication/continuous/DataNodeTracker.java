@@ -44,6 +44,8 @@ public class DataNodeTracker {
    * @param remoteReplicas remote replicas for this data node
    * @param maxActiveGroupSize maximum count of replicas in active groups
    * @param startGroupId group id from which we can start and increment and generate unique group id for each group
+   * @param time Ambry time
+   * @param replicaThrottleDurationMs throttle duration for replicas
    */
   public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int maxActiveGroupSize,
       int startGroupId, Time time, long replicaThrottleDurationMs) {
