@@ -199,7 +199,7 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
     Set<RemoteReplicaInfo> allRemoteReplicasInTrackers = new HashSet<>();
     dataNodeTrackers.forEach(dataNodeTracker -> {
       dataNodeTracker.getActiveGroupTrackers().forEach(activeGroupTracker -> {
-        activeGroupTracker.getPreAssignedReplica().forEach(replicaTracker -> {
+        activeGroupTracker.getPreAssignedReplicas().forEach(replicaTracker -> {
           Assert.assertEquals("Replica should be added to the tracker of data node on which it exists",
               dataNodeTracker.getDataNodeId(), replicaTracker.getRemoteReplicaInfo().getReplicaId().getDataNodeId());
           allRemoteReplicasInTrackers.add(replicaTracker.getRemoteReplicaInfo());
@@ -219,7 +219,7 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
       dataNodeTracker.getActiveGroupTrackers().forEach(activeGroupTracker -> {
         Assert.assertTrue(
             "active groups should have max preassigned replicas less than or equal to max partition per request",
-            maxPartitionCountPerRequest >= activeGroupTracker.getPreAssignedReplica().size());
+            maxPartitionCountPerRequest >= activeGroupTracker.getPreAssignedReplicas().size());
       });
     });
   }

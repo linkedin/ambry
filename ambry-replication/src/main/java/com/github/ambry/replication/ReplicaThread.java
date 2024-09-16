@@ -49,7 +49,11 @@ import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.replication.continuous.ActiveGroupTracker;
 import com.github.ambry.replication.continuous.DataNodeTracker;
+import com.github.ambry.replication.continuous.ReplicaStatus;
+import com.github.ambry.replication.continuous.ReplicaTracker;
+import com.github.ambry.replication.continuous.StandByGroupTracker;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
@@ -63,6 +67,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -436,9 +441,9 @@ public class ReplicaThread implements Runnable {
         DataNodeId remoteNode = entry.getKey();
         List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
         List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
-        List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+        List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress = new ArrayList<>();
         filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode,
-            standbyReplicasWithNoProgress);
+            standbyReplicasTimedOutOnNoProgress);
 
         if (activeReplicasPerNode.size() > 0) {
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
@@ -450,15 +455,13 @@ public class ReplicaThread implements Runnable {
             remoteReplicaGroups.add(group);
           }
         }
-        if (standbyReplicasWithNoProgress.size() > 0) {
-          List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
-              getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
-          if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
-            RemoteReplicaGroup group =
-                new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
-            remoteReplicaGroups.add(group);
-          }
+
+        if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
+          RemoteReplicaGroup group =
+              new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
+          remoteReplicaGroups.add(group);
         }
+
       }
       // A map from correlation id to RemoteReplicaGroup. This is used to find the group when response comes back.
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
@@ -727,43 +730,83 @@ public class ReplicaThread implements Runnable {
     }
   }
 
+  ReplicaStatus getReplicaStatus(RemoteReplicaInfo remoteReplicaInfo) {
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+    if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
+        || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
+      logger.debug(
+          "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
+              + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
+          replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
+          remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
+          replicationDisabledPartitions.contains(replicaId.getPartitionId()));
+      return ReplicaStatus.OFFLINE;
+    }
+
+    if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
+      // check if all missing keys for standby replicas from previous replication cycle are now obtained
+      // via leader replica. If we still have missing keys, don't include them in current replication cycle
+      // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
+      processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
+      if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
+
+        // Use case: In leader-based cross colo replication, non-leader replica pairs don't fetch blobs for missing keys
+        // found in metadata exchange and expect them to come from leader<->leader replication and intra-dc replication.
+        // However, if for any reason, some of their missing blobs never arrive via local leader, this is a safety feature
+        // for standbys to fetch the blobs themselves in order to avoid being stuck.
+
+        // Example scenario: For DELETE after PUT use case in remote data center, it is possible that standby replicas get
+        // only PUT record in its replication cycle (DELETE record will come in next cycle) while leader gets both
+        // PUT and DELETE together in its replication cycle. Due to that, deleted blob is not fetched by leader and is not
+        // replicated from leader to standby. As a result, the corresponding PUT record in standby's missing blobs set is
+        // never received.
+
+        // Time out period is configurable via replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds. If
+        // replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds == -1, this safety feature is disabled.
+
+        if (replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds != -1) {
+          ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
+          ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
+          ExchangeMetadataResponse exchangeMetadataResponse = remoteReplicaInfo.getExchangeMetadataResponse();
+          if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)
+              && exchangeMetadataResponse.hasMissingStoreMessages()
+              && (time.seconds() - exchangeMetadataResponse.lastMissingMessageReceivedTimeSec)
+              > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds) {
+            return ReplicaStatus.STANDBY_NO_PROGRESS_TIMED_OUT;
+          }
+        }
+        return ReplicaStatus.STANDBY_NO_PROGRESS;
+      }
+    }
+    return ReplicaStatus.ACTIVE;
+  }
+
   /**
    * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
    * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
    * but still have missing blobs from last ReplicaMetadataRequest when the leader based replication is enabled.
    * @param replicasToReplicatePerNode All the replicas.
    * @param activeReplicasPerNode A list to store all the active replicas after filtering.
-   * @param standbyReplicasWithNoProgress A list to store all the standby replicas that still have missing blobs from
-   *                                      previous ReplicaMetadataRequest.
+   * @param standbyReplicasTimedOutOnNoProgress A list to store all the standby replicas that still have missing blobs from
+   *                                      previous ReplicaMetadataRequest and are timed out
    */
   void filterRemoteReplicasToReplicate(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress) {
+      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress) {
     // Get a list of active replicas that needs be included for this replication cycle
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-      ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-      boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-      if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
-          || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-        logger.debug(
-            "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
-                + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
-            replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
-            remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
-            replicationDisabledPartitions.contains(replicaId.getPartitionId()));
-        continue;
+      ReplicaStatus replicaStatus = getReplicaStatus(remoteReplicaInfo);
+      switch (replicaStatus){
+        case OFFLINE:
+        case STANDBY_NO_PROGRESS:
+          break;
+        case ACTIVE:
+          activeReplicasPerNode.add(remoteReplicaInfo);
+          break;
+        case STANDBY_NO_PROGRESS_TIMED_OUT:
+          standbyReplicasTimedOutOnNoProgress.add(remoteReplicaInfo);
+          break;
       }
-
-      if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-        // check if all missing keys for standby replicas from previous replication cycle are now obtained
-        // via leader replica. If we still have missing keys, don't include them in current replication cycle
-        // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
-        processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
-        if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
-          standbyReplicasWithNoProgress.add(remoteReplicaInfo);
-          continue;
-        }
-      }
-      activeReplicasPerNode.add(remoteReplicaInfo);
     }
   }
 
@@ -1641,35 +1684,8 @@ public class ReplicaThread implements Runnable {
    * @return list of remote replica infos which have timed out due to no progress
    */
   List<RemoteReplicaInfo> getRemoteStandbyReplicasTimedOutOnNoProgress(List<RemoteReplicaInfo> remoteReplicaInfos) {
-
-    // Use case: In leader-based cross colo replication, non-leader replica pairs don't fetch blobs for missing keys
-    // found in metadata exchange and expect them to come from leader<->leader replication and intra-dc replication.
-    // However, if for any reason, some of their missing blobs never arrive via local leader, this is a safety feature
-    // for standbys to fetch the blobs themselves in order to avoid being stuck.
-
-    // Example scenario: For DELETE after PUT use case in remote data center, it is possible that standby replicas get
-    // only PUT record in its replication cycle (DELETE record will come in next cycle) while leader gets both
-    // PUT and DELETE together in its replication cycle. Due to that, deleted blob is not fetched by leader and is not
-    // replicated from leader to standby. As a result, the corresponding PUT record in standby's missing blobs set is
-    // never received.
-
-    // Time out period is configurable via replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds. If
-    // replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds == -1, this safety feature is disabled.
-
     List<RemoteReplicaInfo> remoteReplicasTimedOut = new ArrayList<>();
-    if (replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds != -1) {
-      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-        ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
-        ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
-        ExchangeMetadataResponse exchangeMetadataResponse = remoteReplicaInfo.getExchangeMetadataResponse();
-        if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)
-            && exchangeMetadataResponse.hasMissingStoreMessages()
-            && (time.seconds() - exchangeMetadataResponse.lastMissingMessageReceivedTimeSec)
-            > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds) {
-          remoteReplicasTimedOut.add(remoteReplicaInfo);
-        }
-      }
-    }
+    filterRemoteReplicasToReplicate(remoteReplicaInfos, new ArrayList<>(), remoteReplicasTimedOut);
     return remoteReplicasTimedOut;
   }
 
@@ -2069,23 +2085,78 @@ public class ReplicaThread implements Runnable {
       });
     }
 
-    void fillReplicaState() {
-      //TODO fill it
+
+    void fillReplicaStatus() {
+      dataNodeTrackers.forEach(dataNodeTracker -> {
+        List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
+
+        activeGroupTrackers.forEach(activeGroupTracker -> {
+          List<ReplicaTracker> replicaTrackers = activeGroupTracker.getPreAssignedReplicas(
+              Arrays.asList(ReplicaStatus.UNKNOWN, ReplicaStatus.OFFLINE, ReplicaStatus.STANDBY_NO_PROGRESS));
+
+          replicaTrackers.forEach(replicaTracker -> {
+            ReplicaStatus replicaStatus = getReplicaStatus(replicaTracker.getRemoteReplicaInfo());
+            replicaTracker.setReplicaStatus(replicaStatus);
+          });
+        });
+      });
     }
 
     void fillActiveGroups() {
-      //TODO fill it
+      dataNodeTrackers.forEach(dataNodeTracker -> {
+        List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
+
+        activeGroupTrackers.forEach(activeGroupTracker -> {
+          List<ReplicaTracker> replicaTrackers =
+              activeGroupTracker.getPreAssignedReplicas(Arrays.asList(ReplicaStatus.ACTIVE))
+                  .stream()
+                  .filter(replicaTracker -> !replicaTracker.isThrottled())
+                  .collect(Collectors.toList());
+
+          RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(
+              replicaTrackers.stream().map(ReplicaTracker::getRemoteReplicaInfo).collect(Collectors.toList()),
+              dataNodeTracker.getDataNodeId(), false, activeGroupTracker.getGroupId());
+
+          activeGroupTracker.startIteration(remoteReplicaGroup, replicaTrackers);
+        });
+      });
     }
 
     void fillStandByGroups() {
-      //TODO fill it
+      dataNodeTrackers.forEach(dataNodeTracker -> {
+        StandByGroupTracker standByGroupTracker = dataNodeTracker.getStandByGroupTracker();
+        if (standByGroupTracker.isInFlight()) {
+          return;
+        }
+
+        List<ReplicaTracker> standByTimedOutNoProgressReplicaTrackers = new ArrayList<>();
+        List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
+
+        activeGroupTrackers.forEach(activeGroupTracker -> {
+          List<ReplicaTracker> replicaTrackers =
+              activeGroupTracker.getPreAssignedReplicas(Arrays.asList(ReplicaStatus.STANDBY_NO_PROGRESS_TIMED_OUT))
+                  .stream()
+                  .filter(replicaTracker -> !replicaTracker.isThrottled())
+                  .collect(Collectors.toList());
+          standByTimedOutNoProgressReplicaTrackers.addAll(replicaTrackers);
+        });
+
+        if (standByTimedOutNoProgressReplicaTrackers.isEmpty()) {
+          return;
+        }
+
+        RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(standByTimedOutNoProgressReplicaTrackers.stream()
+            .map(ReplicaTracker::getRemoteReplicaInfo)
+            .collect(Collectors.toList()), dataNodeTracker.getDataNodeId(), true, standByGroupTracker.getGroupId());
+        standByGroupTracker.startIteration(remoteReplicaGroup, standByTimedOutNoProgressReplicaTrackers);
+      });
     }
 
     List<RemoteReplicaGroup> enqueue() {
       processFinishedGroups();
-      fillReplicaState();
+      fillReplicaStatus();
       fillActiveGroups();
-
+      fillStandByGroups();
       return getInflightGroups();
     }
   }
