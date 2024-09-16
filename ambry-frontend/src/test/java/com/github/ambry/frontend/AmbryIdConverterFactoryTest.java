@@ -254,7 +254,7 @@ public class AmbryIdConverterFactoryTest {
     }
     IdConversionCallback callback = new IdConversionCallback();
     assertEquals("Converted ID does not match expected (Future)", expectedOutput,
-        idConverter.convert(restRequest, input, blobInfo, callback).get(5, TimeUnit.SECONDS));
+        idConverter.convert(restRequest, input, blobInfo.getBlobProperties(), callback).get(5, TimeUnit.SECONDS));
     assertEquals("Converted ID does not match expected (Callback)", expectedOutput, callback.result);
     assertTrue("Named Blob Put request should have named blob version in its internal keys",
         restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION));
