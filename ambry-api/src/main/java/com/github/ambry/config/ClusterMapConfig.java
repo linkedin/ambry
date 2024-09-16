@@ -39,8 +39,8 @@ public class ClusterMapConfig {
       "clustermap.enable.aggregated.monthly.account.report";
   public static final String ENABLE_PROPERTY_STORE_CLEAN_UP_TASK =
       "clustermap.enable.property.store.clean.up.task";
-  public static final String DELETE_DATA_FROM_DATANODE_CONFIG =
-      "clustermap.delete.data.from.datanode.config";
+  public static final String DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK =
+      "clustermap.delete.data.from.datanode.config.in.property.store.clean.up.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -355,8 +355,8 @@ public class ClusterMapConfig {
   /**
    * True to remove data from datanode config when property store clean up task is enabled.
    */
-  @Config(DELETE_DATA_FROM_DATANODE_CONFIG)
-  public final boolean clustermapDeleteDataFromDatanodeConfig;
+  @Config(DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK)
+  public final boolean clustermapDeleteDataFromDatanodeConfigInPropertyStoreCleanUpTask;
 
   public static final String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
   /**
@@ -445,7 +445,8 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
     clustermapEnablePropertyStoreCleanUpTask =
         verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, false);
-    clustermapDeleteDataFromDatanodeConfig = verifiableProperties.getBoolean(DELETE_DATA_FROM_DATANODE_CONFIG, false);
+    clustermapDeleteDataFromDatanodeConfigInPropertyStoreCleanUpTask = verifiableProperties
+        .getBoolean(DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK, false);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
     clustermapDistributedLockLeaseTimeoutInMs =

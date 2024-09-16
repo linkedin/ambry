@@ -157,7 +157,7 @@ public class PropertyStoreCleanUpTaskTest {
   @Test
   public void testPropertyStoreCleanUpTaskDeleteDataFromDataNodeConfigFalse() throws IOException {
     Properties props = getProperties();
-    props.setProperty(ClusterMapConfig.DELETE_DATA_FROM_DATANODE_CONFIG, "false");
+    props.setProperty(ClusterMapConfig.DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK, "false");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     TestUtils.ZkInfo zkInfo =
         new TestUtils.ZkInfo(TestUtils.getTempDir(PropertyStoreCleanUpTask.COMMAND), DC, (byte) 1, ZK_PORT + '4', true);
@@ -289,7 +289,7 @@ public class PropertyStoreCleanUpTaskTest {
 
   private Properties getProperties() {
     Properties props = new Properties();
-    props.setProperty(ClusterMapConfig.DELETE_DATA_FROM_DATANODE_CONFIG, "true");
+    props.setProperty(ClusterMapConfig.DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK, "true");
     props.setProperty(ClusterMapConfig.ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, "true");
     props.setProperty(ClusterMapConfig.CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE,
         DataNodeConfigSourceType.PROPERTY_STORE.name());

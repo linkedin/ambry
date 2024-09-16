@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.model.ExternalView;
@@ -109,9 +110,8 @@ public class PropertyStoreCleanUpTask implements Task {
 
       metrics.idealStateAndExternalViewFetchTimeInMS.update(System.currentTimeMillis() - startTimeMs);
 
-      // Find instances that are not live and also not present in ideal state or external view and do cleanup
-      instances.stream().filter(instance -> !liveInstances.contains(instance) &&
-          !instancesInIdealStateAndExternalView.contains(instance)).
+      // Cleanup property store for instances that are not live and not present in ideal state or external view
+      instances.stream().filter(shouldDoCleanUpPropertyStore(liveInstances, instancesInIdealStateAndExternalView)).
           forEach(instance -> {
             logger.info("Cleaning up property store for instance {}", instance);
         try {
@@ -133,10 +133,22 @@ public class PropertyStoreCleanUpTask implements Task {
   }
 
   /**
+   * Predicate to determine if cleanup should be done for the given instance
+   * Cleanup should be done if the instance is not live and not present in ideal state or external view
+   * @param liveInstances Set of live instances
+   * @param instancesInIdealStateAndExternalView Set of instances in ideal state and external view
+   * @return
+   */
+  private Predicate<String> shouldDoCleanUpPropertyStore(Set<String> liveInstances,
+      Set<String> instancesInIdealStateAndExternalView) {
+    return instance -> !liveInstances.contains(instance) && !instancesInIdealStateAndExternalView.contains(instance);
+  }
+
+  /**
    * Cleanup property store for the given instance
    */
   private void cleanupPropertyStore(String instance) {
-    if(clusterMapConfig.clustermapDeleteDataFromDatanodeConfig &&
+    if(clusterMapConfig.clustermapDeleteDataFromDatanodeConfigInPropertyStoreCleanUpTask &&
         clusterMapConfig.clusterMapDataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
         synchronized (helixAdministrationLock) {
           // Get the DataNodeConfig for the instance from the ZK
