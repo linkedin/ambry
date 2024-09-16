@@ -21,7 +21,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.model.ExternalView;
@@ -111,16 +110,18 @@ public class PropertyStoreCleanUpTask implements Task {
       metrics.idealStateAndExternalViewFetchTimeInMS.update(System.currentTimeMillis() - startTimeMs);
 
       // Cleanup property store for instances that are not live and not present in ideal state or external view
-      instances.stream().filter(shouldDoCleanUpPropertyStore(liveInstances, instancesInIdealStateAndExternalView)).
-          forEach(instance -> {
+      instances.stream()
+          .filter(
+              instance -> shouldDoCleanUpPropertyStore(instance, liveInstances, instancesInIdealStateAndExternalView))
+          .forEach(instance -> {
             logger.info("Cleaning up property store for instance {}", instance);
-        try {
-          cleanupPropertyStore(instance);
-        } catch (Exception exception) {
-          logger.error("Exception thrown while cleaning PropertyStore for instance = {}", instance, exception);
-          metrics.propertyStoreCleanUpErrorCount.inc();
-        }
-      });
+            try {
+              cleanupPropertyStore(instance);
+            } catch (Exception exception) {
+              logger.error("Exception thrown while cleaning PropertyStore for instance = {}", instance, exception);
+              metrics.propertyStoreCleanUpErrorCount.inc();
+            }
+          });
 
       metrics.propertyStoreTaskTimeInMs.update(System.currentTimeMillis() - startTimeMs);
       return new TaskResult(TaskResult.Status.COMPLETED, "PropertyStoreCleanUpTask completed successfully");
@@ -133,15 +134,22 @@ public class PropertyStoreCleanUpTask implements Task {
   }
 
   /**
-   * Predicate to determine if cleanup should be done for the given instance
-   * Cleanup should be done if the instance is not live and not present in ideal state or external view
+   *  Cleanup should be done if the instance is not live and not present in ideal state or external view
    * @param liveInstances Set of live instances
    * @param instancesInIdealStateAndExternalView Set of instances in ideal state and external view
    * @return
    */
-  private Predicate<String> shouldDoCleanUpPropertyStore(Set<String> liveInstances,
+  private boolean shouldDoCleanUpPropertyStore(String instance, Set<String> liveInstances,
       Set<String> instancesInIdealStateAndExternalView) {
-    return instance -> !liveInstances.contains(instance) && !instancesInIdealStateAndExternalView.contains(instance);
+    if(liveInstances.contains(instance)) {
+      logger.trace("Instance {} is live, skipping cleanup", instance);
+      return false;
+    }
+    if(instancesInIdealStateAndExternalView.contains(instance)) {
+      logger.trace("Instance {} is present in ideal state or external view, skipping cleanup", instance);
+      return false;
+    }
+    return true;
   }
 
   /**
