@@ -27,10 +27,10 @@ import java.util.stream.Collectors;
 
 /**
  * This class tracks for a current state for a remote host for a continuous replication cycle.
- * Each DataNode will have multiple active group trackers.
- * Each DataNode will have only one Standby group for reducing cross colo calls.
- * {@link #activeGroupTrackers} will have group trackers for groups with active replicas
- * {@link #standByGroupTracker} will have group tracker for stand by group for this data node
+ * Each DataNode has multiple active group trackers.
+ * Each DataNode has only one Standby group for reducing cross colo calls.
+ * {@link #activeGroupTrackers} has group trackers for groups with active replicas
+ * {@link #standByGroupTracker} has group tracker for stand by group for this data node
  */
 public class DataNodeTracker {
   private final DataNodeId dataNodeId;
@@ -39,7 +39,7 @@ public class DataNodeTracker {
 
   /**
    * Creating active group trackers and standByGroupTracker.
-   * All group trackers will have consecutive group id.
+   * All group trackers have consecutive group id.
    * @param dataNodeId remote host for which to create datanode tracker
    * @param remoteReplicas remote replicas for this data node
    * @param maxActiveGroupSize maximum count of replicas in active groups
@@ -66,7 +66,7 @@ public class DataNodeTracker {
       currentGroupId++;
     }
 
-    // standby group id will have maximum group id
+    // standby group id has maximum group id
     standByGroupTracker = new StandByGroupTracker(currentGroupId);
   }
 

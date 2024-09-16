@@ -15,7 +15,7 @@ package com.github.ambry.replication.continuous;
 
 /**
  * This class tracks for a current state for StandBy groups for a continuous replication cycle.
- * In standby group will have replicas with STANDBY_TIMED_OUT state
+ * Standby group has  replicas with STANDBY_TIMED_OUT state only
  */
 public class StandByGroupTracker extends GroupTracker {
 

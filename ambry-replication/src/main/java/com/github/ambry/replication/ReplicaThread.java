@@ -2007,11 +2007,11 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     * We will create Data node trackers for every data node
-     * Every tracker will have set active groups and standby groups
-     * Active groups will have {@link #maxReplicaCountPerRequest} maximum number of preassigned replicas
-     * For each data node tracker, we will have only one stand by group
-     * Across all datanode tracker group ids will be unique
+     * Creates Data node trackers for every data node
+     * Every datanode tracker has  active groups and standby group
+     * For each data node tracker, only one stand by group is present to reduce cross colo requests
+     * Active groups have maximum {@link #maxReplicaCountPerRequest}  preassigned replicas
+     * Across all datanode tracker group ids are unique
      */
     private void fillDataNodeTrackers() {
       Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
