@@ -42,7 +42,7 @@ public class AzureStorageContainerMetrics {
   }
 
   public Long getPartitionLag() {
-    return replicaLag.values().stream().map(AtomicLong::get).reduce(Long.MAX_VALUE, Long::min);
+    return replicaLag.values().stream().map(AtomicLong::get).min(Long::compareTo).get();
   }
 
   public AzureStorageContainerMetrics setPartitionReplicaLag(String hostname, long update) {
