@@ -93,7 +93,7 @@ public class TtlUpdateHandlerTest {
             accountAndContainerInjector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager(), null, null);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
     blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null,
-        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);
+        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE), null).get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
   }
 

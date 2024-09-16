@@ -727,22 +727,6 @@ public class ReplicaThread implements Runnable {
     }
   }
 
-  boolean isReplicaOffline(RemoteReplicaInfo remoteReplicaInfo){
-    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-    boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-    if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
-        || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-      logger.debug(
-          "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
-              + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
-          replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
-          remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
-          replicationDisabledPartitions.contains(replicaId.getPartitionId()));
-      return true;
-    }
-    return false;
-  }
-
   /**
    * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
    * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
@@ -1886,6 +1870,10 @@ public class ReplicaThread implements Runnable {
       this.time = other.time;
       this.lastMissingMessageReceivedTimeSec = other.lastMissingMessageReceivedTimeSec;
       this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
+    }
+
+    public long getLocalLagFromRemoteInBytes() {
+      return localLagFromRemoteInBytes;
     }
 
     /**
