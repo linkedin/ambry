@@ -52,7 +52,6 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.continuous.ActiveGroupTracker;
 import com.github.ambry.replication.continuous.DataNodeTracker;
 import com.github.ambry.replication.continuous.ReplicaTracker;
-import com.github.ambry.replication.continuous.StandByGroupTracker;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
@@ -68,6 +67,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -127,6 +127,8 @@ public class ReplicaThread implements Runnable {
   private final int maxReplicaCountPerRequest;
   private final boolean enableContinuousReplication;
   private final Predicate<MessageInfo> skipPredicate;
+  private final int maxIterationsPerGroupPerCycle;
+  private volatile boolean terminateCurrentContinuousReplicationCycle = false;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
   protected Thread thread;
@@ -187,6 +189,7 @@ public class ReplicaThread implements Runnable {
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
     }
     this.enableContinuousReplication = isContinuousReplicationEnabled(replicationConfig);
+    this.maxIterationsPerGroupPerCycle = replicationConfig.replicationContinuousMaxIterationPerGroup;
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
@@ -238,6 +241,7 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+    terminateCurrentContinuousReplicationCycle = true;
   }
 
   /**
@@ -328,6 +332,7 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+    terminateCurrentContinuousReplicationCycle = true;
   }
 
   /**
@@ -352,6 +357,7 @@ public class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+    terminateCurrentContinuousReplicationCycle = true;
     logger.trace("RemoteReplicaInfo {} is added to ReplicaThread {}. Now working on {} dataNodeIds.", remoteReplicaInfo,
         threadName, replicasToReplicateGroupedByNode.keySet().size());
   }
@@ -392,7 +398,7 @@ public class ReplicaThread implements Runnable {
 
   //TODO implement continuous replication inside this
   public void replicateContinuous() {
-
+    terminateCurrentContinuousReplicationCycle = false;
   }
 
   /**
@@ -506,6 +512,22 @@ public class ReplicaThread implements Runnable {
       emitReplicationCycleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, time.milliseconds());
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
+  }
+
+
+  /**
+   * We should call this method to convert store keys, This will convert the keys and add the keys which were
+   * converted to the list.
+   * @param storeKeysToConvert store keys to convert
+   * @param storeKeysConversionLog list to store which keys were converted
+   * @return Map
+   * @throws Exception
+   */
+  Map<StoreKey, StoreKey> convertStoreKeys(Collection<StoreKey> storeKeysToConvert,
+      List<StoreKey> storeKeysConversionLog) throws Exception {
+    Map<StoreKey, StoreKey> conversionMap = this.storeKeyConverter.convert(storeKeysToConvert);
+    storeKeysConversionLog.addAll(new ArrayList<>(conversionMap.keySet()));
+    return conversionMap;
   }
 
   /**
@@ -707,6 +729,22 @@ public class ReplicaThread implements Runnable {
     }
   }
 
+  boolean isReplicaOffline(RemoteReplicaInfo remoteReplicaInfo){
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+    if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
+        || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
+      logger.debug(
+          "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
+              + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
+          replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
+          remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
+          replicationDisabledPartitions.contains(replicaId.getPartitionId()));
+      return true;
+    }
+    return false;
+  }
+
   /**
    * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
    * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
@@ -758,10 +796,10 @@ public class ReplicaThread implements Runnable {
    * @throws IOException
    */
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode) throws Exception {
+      List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode, List<StoreKey> storeKeysConversionLog) throws Exception {
     long startTimeInMs = time.milliseconds();
     List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<>();
-    Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response);
+    Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response, storeKeysConversionLog);
 
     for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
@@ -1166,7 +1204,7 @@ public class ReplicaThread implements Runnable {
    * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
-  Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response) throws Exception {
+  Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response, List<StoreKey> storeKeysConversionLog) throws Exception {
     List<StoreKey> storeKeysToConvert = new ArrayList<>();
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
       if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
@@ -1176,7 +1214,7 @@ public class ReplicaThread implements Runnable {
         }
       }
     }
-    return storeKeyConverter.convert(storeKeysToConvert);
+    return convertStoreKeys(storeKeysToConvert, storeKeysConversionLog);
   }
 
   /**
@@ -1985,7 +2023,8 @@ public class ReplicaThread implements Runnable {
         List<RemoteReplicaInfo> remoteReplicasPerNode = entry.getValue();
 
         DataNodeTracker dataNodeTracker =
-            new DataNodeTracker(remoteHost, remoteReplicasPerNode, maxReplicaCountPerRequest, currentStartGroupId);
+            new DataNodeTracker(remoteHost, remoteReplicasPerNode, maxReplicaCountPerRequest, currentStartGroupId, time,
+                threadThrottleDurationMs);
         logger.trace("Thread name: {} for datanode {} create datanode tracker {}", threadName, remoteHost,
             dataNodeTracker);
 
@@ -1994,7 +2033,61 @@ public class ReplicaThread implements Runnable {
       }
     }
 
+    private List<RemoteReplicaGroup> getInflightGroups() {
+      List<RemoteReplicaGroup> allRemoteReplicaGroups = new ArrayList<>();
+      dataNodeTrackers.forEach(dataNodeTracker -> {
+        allRemoteReplicaGroups.addAll(dataNodeTracker.getInflightRemoteReplicaGroups());
+      });
+      return allRemoteReplicaGroups;
+    }
+
+    boolean shouldContinue() {
+      return !getInflightGroups().isEmpty();
+    }
+
+    boolean shouldEnqueue() {
+      if (!running || terminateCurrentContinuousReplicationCycle) {
+        return false;
+      }
+      int maxIterationsDoneByAnyGroup = dataNodeTrackers.stream()
+          .map(DataNodeTracker::getMaxIterationAcrossGroups)
+          .max(Comparator.naturalOrder())
+          .orElse(0);
+      return maxIterationsDoneByAnyGroup < maxIterationsPerGroupPerCycle;
+    }
+
+    void processFinishedGroups() {
+      List<RemoteReplicaGroup> finishedGroups = dataNodeTrackers.stream()
+          .map(DataNodeTracker::processFinishedGroups)
+          .flatMap(List::stream)
+          .collect(Collectors.toList());
+
+      finishedGroups.forEach(remoteReplicaGroup -> {
+        storeKeyConverter.tryDropCache(remoteReplicaGroup.getStoreKeysConversionLog());
+      });
+    }
+
+    void fillReplicaState() {
+
+    }
+
+    void fillActiveGroups() {
+
+    }
+
+    void fillStandByGroups() {
+
+    }
+
+    List<RemoteReplicaGroup> enqueue() {
+      processFinishedGroups();
+      fillReplicaState();
+      fillActiveGroups();
+
+      return getInflightGroups();
+    }
   }
+
   /**
    * ReplicaGroupReplicationState indicates different state of RemoteReplicaGroup in one replication cycle.
    * Each replication cycle, we will break all the replicas in order different groups and each group
@@ -2060,6 +2153,7 @@ public class ReplicaThread implements Runnable {
     private long exchangeMetadataStartTimeInMs;
     private long fixMissingStoreKeysStartTimeInMs;
     private long finishTime;
+    private final List<StoreKey> storeKeysConversionLog;
 
     /**
      * Constructor of {@link RemoteReplicaGroup}.
@@ -2076,6 +2170,7 @@ public class ReplicaThread implements Runnable {
       this.remoteDataNode = dataNodeId;
       this.isNonProgressStandbyReplicaGroup = isNonProgressStandbyReplicaGroup;
       this.id = id;
+      storeKeysConversionLog = new ArrayList<>();
       finishTime = 0;
       if (isNonProgressStandbyReplicaGroup) {
         exchangeMetadataResponseList = remoteReplicaInfos.stream()
@@ -2088,7 +2183,7 @@ public class ReplicaThread implements Runnable {
         remoteReplicaInfosToSend = this.remoteReplicaInfos;
         exchangeMetadataResponseListToProcess = exchangeMetadataResponseList;
         try {
-          storeKeyConverter.convert(storeKeysToConvert);
+          convertStoreKeys(storeKeysToConvert, storeKeysConversionLog);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
         } catch (Exception e) {
           setException(e, "Failed to convert storeKeys");
@@ -2131,6 +2226,10 @@ public class ReplicaThread implements Runnable {
 
     public int getId() {
       return id;
+    }
+
+    public List<StoreKey> getStoreKeysConversionLog() {
+      return storeKeysConversionLog;
     }
 
     public List<ExchangeMetadataResponse> getExchangeMetadataResponseList() {
@@ -2242,7 +2341,7 @@ public class ReplicaThread implements Runnable {
                 response.getError());
           }
           exchangeMetadataResponseList =
-              ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode);
+              ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode, storeKeysConversionLog);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
           logger.trace(
               "Remote node: {} Thread name: {} RemoteReplicaGroup {} Handled ReplicaMetadataResponse for correlation id {}, set state to {}",

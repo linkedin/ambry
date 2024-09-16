@@ -28,6 +28,7 @@ public class ReplicationConfig {
   public static final String REPLICA_TOKEN_FILE_NAME = "replicaTokens";
   public static final String REPLICATION_MODEL_ACROSS_DATACENTERS = "replication.model.across.datacenters";
   public static final String REPLICATION_ENABLE_CONTINUOUS_REPLICATION = "replication.enable.continuous.replication";
+  public static final String REPLICATION_CONTINUOUS_MAX_ITERATION_PER_GROUP = "replication.continuous.max.iterations.per.group";
   public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
       "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
 
@@ -57,6 +58,13 @@ public class ReplicationConfig {
   @Config(REPLICATION_ENABLE_CONTINUOUS_REPLICATION)
   @Default("false")
   public final boolean replicationEnableContinuousReplication;
+
+  /**
+   * Config
+   */
+  @Config(REPLICATION_CONTINUOUS_MAX_ITERATION_PER_GROUP)
+  @Default("1")
+  public final int replicationContinuousMaxIterationPerGroup;
 
   /**
    * The number of replica threads on each server that runs the replication protocol for intra dc replication
@@ -337,6 +345,8 @@ public class ReplicationConfig {
         DEFAULT_RECOVERY_TOKEN_FACTORY);
     replicationEnableContinuousReplication =
         verifiableProperties.getBoolean(REPLICATION_ENABLE_CONTINUOUS_REPLICATION, false);
+    replicationContinuousMaxIterationPerGroup =
+        verifiableProperties.getInt(REPLICATION_CONTINUOUS_MAX_ITERATION_PER_GROUP, 1);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =

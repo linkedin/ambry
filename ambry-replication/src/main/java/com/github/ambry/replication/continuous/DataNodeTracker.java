@@ -15,9 +15,12 @@ package com.github.ambry.replication.continuous;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -43,7 +46,7 @@ public class DataNodeTracker {
    * @param startGroupId group id from which we can start and increment and generate unique group id for each group
    */
   public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int maxActiveGroupSize,
-      int startGroupId) {
+      int startGroupId, Time time, long replicaThrottleDurationMs) {
     this.dataNodeId = dataNodeId;
     this.activeGroupTrackers = new ArrayList<>();
 
@@ -56,8 +59,9 @@ public class DataNodeTracker {
 
     // for each of smaller array of remote replicas create active group trackers with consecutive group ids
     for (List<RemoteReplicaInfo> remoteReplicaList : remoteReplicaSegregatedList) {
-      ActiveGroupTracker activeGroupTracker = new ActiveGroupTracker(currentGroupId,
-          remoteReplicaList.stream().map(ReplicaTracker::new).collect(Collectors.toList()));
+      ActiveGroupTracker activeGroupTracker = new ActiveGroupTracker(currentGroupId, remoteReplicaList.stream()
+          .map(remoteReplicaInfo -> new ReplicaTracker(remoteReplicaInfo, time, replicaThrottleDurationMs))
+          .collect(Collectors.toList()));
       activeGroupTrackers.add(activeGroupTracker);
       currentGroupId++;
     }
@@ -77,11 +81,46 @@ public class DataNodeTracker {
     return dataNodeId;
   }
 
+  public List<GroupTracker> getGroupTrackers() {
+    List<GroupTracker> groupTrackers = new ArrayList<>(activeGroupTrackers);
+    groupTrackers.add(standByGroupTracker);
+    return groupTrackers;
+  }
+
   public List<ActiveGroupTracker> getActiveGroupTrackers() {
     return activeGroupTrackers;
   }
 
   public StandByGroupTracker getStandByGroupTracker() {
     return standByGroupTracker;
+  }
+
+  public List<ReplicaThread.RemoteReplicaGroup> getInflightRemoteReplicaGroups() {
+    return getGroupTrackers().stream()
+        .filter(GroupTracker::isIterating)
+        .map(GroupTracker::getRemoteReplicaGroup)
+        .collect(Collectors.toList());
+  }
+
+  public List<ReplicaThread.RemoteReplicaGroup> processFinishedGroups() {
+    List<ReplicaThread.RemoteReplicaGroup> finishedGroups = new ArrayList<>();
+    getGroupTrackers().forEach(groupTracker -> {
+      if (!groupTracker.isGroupDone()) {
+        return;
+      }
+      finishedGroups.add(groupTracker.getRemoteReplicaGroup());
+      groupTracker.finishIteration();
+    });
+    return finishedGroups;
+  }
+
+  public int getMaxIterationAcrossGroups() {
+    return getGroupTrackers().stream().map(GroupTracker::getIterations).max(Comparator.naturalOrder()).orElse(0);
+  }
+
+  public List<ActiveGroupTracker> getFinishedActiveGroupTrackers() {
+    return getActiveGroupTrackers().stream()
+        .filter(groupTracker -> !groupTracker.isIterating())
+        .collect(Collectors.toList());
   }
 }

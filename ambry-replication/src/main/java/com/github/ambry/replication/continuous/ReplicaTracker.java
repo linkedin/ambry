@@ -24,11 +24,15 @@ import com.github.ambry.utils.Time;
 public class ReplicaTracker {
   private final RemoteReplicaInfo remoteReplicaInfo;
   private ReplicaState replicaState;
+  private final Time time;
+  private final long throttleDurationMs;
   private long throttledTill;
 
-  public ReplicaTracker(RemoteReplicaInfo remoteReplicaInfo) {
+  public ReplicaTracker(RemoteReplicaInfo remoteReplicaInfo, Time time, long throttleDurationMs) {
     this.remoteReplicaInfo = remoteReplicaInfo;
     this.replicaState = ReplicaState.UNKNOWN;
+    this.time = time;
+    this.throttleDurationMs = throttleDurationMs;
     this.throttledTill = 0;
   }
 
@@ -44,11 +48,12 @@ public class ReplicaTracker {
     return replicaState;
   }
 
-  public boolean isThrottled(Time time) {
+  public boolean isThrottled() {
     return time.milliseconds() <= throttledTill;
   }
 
-  public void setThrottledTill(long throttledTill) {
-    this.throttledTill = throttledTill;
+  public void finishIteration() {
+    this.replicaState = ReplicaState.UNKNOWN;
+    this.throttledTill = time.milliseconds() + throttleDurationMs;
   }
 }
