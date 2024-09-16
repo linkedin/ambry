@@ -18,8 +18,8 @@ import java.util.List;
 
 /**
  * This class tracks for a current state for Active groups for a continuous replication cycle.
- * Active group tracker will have preassigned replicas and from these replicas only we can create active group
- * Any remote replica group created for this tracker will have replicas with ACTIVE state only
+ * Active group tracker have preassigned replicas and from these replicas only we create active remote replica groups
+ * Any remote replica group created for this tracker has replicas with ACTIVE state only
  */
 public class ActiveGroupTracker extends GroupTracker {
   private final List<ReplicaTracker> preAssignedReplicas;

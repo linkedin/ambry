@@ -22,10 +22,10 @@ import java.util.List;
  *   This class tracks for a current state for {@link com.github.ambry.replication.ReplicaThread.RemoteReplicaGroup}
  *   for continuous replication cycle.
  *
- *   {@link #groupId} will be group id assigned to remote replica group
- *   {@link #remoteReplicaGroup} will be group for which we have created this tracker
- *   {@link #inflightReplicas} will be replicas that are currently present in {@link #remoteReplicaGroup}
- *   {@link #iterations} will be total number of iterations for the group with {@link #groupId} group id
+ *   {@link #groupId} group id assigned to remote replica group
+ *   {@link #remoteReplicaGroup} group for which we have created this tracker
+ *   {@link #inflightReplicas} replicas that are currently present in {@link #remoteReplicaGroup}
+ *   {@link #iterations} total number of iterations for the remote replica group with {@link #groupId} group id
  */
 public abstract class GroupTracker {
   private final int groupId;
