@@ -96,7 +96,7 @@ public class VcrReplicaThread extends ReplicaThread {
   }
 
   @Override
-  protected boolean getEnableContinuousReplication(ReplicationConfig replicationConfig) {
+  protected boolean isContinuousReplicationEnabled(ReplicationConfig replicationConfig) {
     return false;
   }
 
