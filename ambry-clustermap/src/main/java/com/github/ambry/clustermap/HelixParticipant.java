@@ -781,7 +781,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Register Property Store Clean Up Task for cleaning up expired properties in Property Store.
+   * Register Property Store Clean Up Task for cleaning up expired {@link DataNodeConfig} in Property Store.
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
   private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){

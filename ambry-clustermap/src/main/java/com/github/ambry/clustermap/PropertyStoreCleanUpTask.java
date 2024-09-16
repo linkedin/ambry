@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * Task to clean up property store for instances that are not live and not present in ideal state or external view
  */
 public class PropertyStoreCleanUpTask implements Task {
-  public static String COMMAND = PropertyStoreCleanUpTask.class.getSimpleName();
+  public final static String COMMAND = PropertyStoreCleanUpTask.class.getSimpleName();
   private final HelixManager manager;
   private final DataNodeConfigSource dataNodeConfigSource;
   private final Object helixAdministrationLock = new Object();
