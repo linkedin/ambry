@@ -17,6 +17,10 @@ import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.utils.Time;
 
 
+/**
+ * This class tracks for a current state for continuous replication cycle.
+ * This also tracks whether a replicas is throttled or not in a continuous replication cycle.
+ */
 public class ReplicaTracker {
   private final RemoteReplicaInfo remoteReplicaInfo;
   private ReplicaState replicaState;
