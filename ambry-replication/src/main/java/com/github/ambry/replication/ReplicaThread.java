@@ -2003,6 +2003,21 @@ public class ReplicaThread implements Runnable {
   /**
    * This class is used to generate remote replica groups continuously for replication
    *
+   * Lifecycle of groups in this poller is as below
+   * 1. We create multiple sets of replicas and pre-assign group id to each set.
+   * 2. We pre-assign group id for standBy group for each datanode.
+   * 3. {@link #pollGroups()} would try to create (and add back) those groups for these sets and group ids and
+   *    store it in {@link #inflightGroups}.
+   * 4. Once a group finishes one iteration of work, include metadata exchange and data download,
+   *    we remove group id from the inflight group map and potentially backoff replicas in the group.
+   * 5. If  any of the replicas of this group need to go through another iteration,
+   *    the same group would be added back to inflight group map with the available replicas only.
+   * 6. While trying to create any group, if we find stand by replicas that have timed out, we will
+   *    add the replica to {@link #standByReplicaQueue}.
+   * 7. All standBy groups get created using the {@link #standByReplicaQueue} of the data node.
+   * 8. When there is a new replica added to the thread, or a replica removed from this thread,
+   *    or there is one group reaches max iteration, we don't create new groups, just return the existing ones,
+   *    and after they all finish current iteration, inflightGroupMap would become empty and do-while loop would break.
    */
   class RemoteReplicaGroupPoller {
     private final List<DataNodeTracker> dataNodeTrackers;
@@ -2191,8 +2206,8 @@ public class ReplicaThread implements Runnable {
      */
     List<RemoteReplicaGroup> enqueue() {
       allReplicasCaughtUpEarly = false;
-
       processFinishedGroups();
+
       if (!shouldEnqueue()) {
         return getInflightGroups();
       }
