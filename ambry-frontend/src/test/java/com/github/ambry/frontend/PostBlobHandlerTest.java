@@ -148,7 +148,7 @@ public class PostBlobHandlerTest {
     CommonTestUtils.populateRequiredRouterProps(props);
     props.setProperty(RouterConfig.RESERVED_METADATA_ENABLED, Boolean.toString(isReservedMetadataEnabled));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
+    router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP, idConverterFactory);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
     metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);

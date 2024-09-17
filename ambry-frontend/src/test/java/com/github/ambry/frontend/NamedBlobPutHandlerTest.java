@@ -143,7 +143,7 @@ public class NamedBlobPutHandlerTest {
     Properties props = new Properties();
     CommonTestUtils.populateRequiredRouterProps(props);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
+    router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP, idConverterFactory);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
     metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);

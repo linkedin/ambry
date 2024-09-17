@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
@@ -174,6 +175,11 @@ public class MockRouter implements Router {
   public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("Undelete is currently unsupported");
+  }
+
+  @Override
+  public IdConverter getIdConverter() {
+    return null;
   }
 
   @Override

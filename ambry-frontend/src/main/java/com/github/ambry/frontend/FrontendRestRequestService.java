@@ -181,7 +181,7 @@ class FrontendRestRequestService implements RestRequestService {
     } catch (Exception e) {
       throw new InstantiationException("FrontendRestRequestService Instantiation failed due to: " + e.getMessage());
     }
-    idConverter = idConverterFactory.getIdConverter();
+    idConverter = router.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     getSignedUrlHandler =
@@ -269,10 +269,6 @@ class FrontendRestRequestService implements RestRequestService {
       if (securityService != null) {
         securityService.close();
         securityService = null;
-      }
-      if (idConverter != null) {
-        idConverter.close();
-        idConverter = null;
       }
       if (accountStatsStore != null) {
         accountStatsStore.shutdown();

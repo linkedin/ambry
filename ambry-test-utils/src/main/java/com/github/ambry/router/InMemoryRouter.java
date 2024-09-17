@@ -20,6 +20,8 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.IdConverter;
+import com.github.ambry.frontend.IdConverterFactory;
 import com.github.ambry.frontend.PutBlobMetaInfo;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -60,6 +62,7 @@ public class InMemoryRouter implements Router {
   public final static String OPERATION_THROW_EARLY_RUNTIME_EXCEPTION = "routerThrowEarlyRuntimeException";
   public final static String OPERATION_THROW_LATE_RUNTIME_EXCEPTION = "routerThrowLateRuntimeException";
   public final static String OPERATION_THROW_ROUTER_EXCEPTION = "routerThrowRouterException";
+  public final static String ID_CONVERTER_FAIL_EXCEPTION = "idConverterFailException";
   private static final EnumSet<GetOption> ALLOW_EXPIRED_BLOB_GET =
       EnumSet.of(GetOption.Include_All, GetOption.Include_Expired_Blobs);
   private static final EnumSet<GetOption> ALLOW_DELETED_BLOB_GET =
@@ -73,6 +76,7 @@ public class InMemoryRouter implements Router {
   private final ClusterMap clusterMap;
   private VerifiableProperties verifiableProperties;
   private List<StoreKey> mockedBlobChunkIds;
+  private IdConverter idConverter = null;
 
   /**
    * Changes the {@link VerifiableProperties} instance with the router so that the behaviour can be changed on the fly.
@@ -92,26 +96,38 @@ public class InMemoryRouter implements Router {
 
   /**
    * Creates an instance of InMemoryRouter.
+   *
    * @param verifiableProperties properties map that defines the behavior of this instance.
-   * @param notificationSystem the notification system to use to notify creation/deletion of blobs.
-   * @param clusterMap the cluster map for the cluster.
+   * @param notificationSystem   the notification system to use to notify creation/deletion of blobs.
+   * @param clusterMap           the cluster map for the cluster.
+   * @param idConverterFactory
    */
   public InMemoryRouter(VerifiableProperties verifiableProperties, NotificationSystem notificationSystem,
-      ClusterMap clusterMap) {
+      ClusterMap clusterMap, IdConverterFactory idConverterFactory) {
     Objects.requireNonNull(clusterMap);
     setVerifiableProperties(verifiableProperties);
     operationPool = Executors.newFixedThreadPool(1);
     this.notificationSystem = notificationSystem;
     this.clusterMap = clusterMap;
+    if (idConverterFactory != null) {
+      try {
+        idConverter = idConverterFactory.getIdConverter();
+      } catch (InstantiationException e) {
+        throw new RuntimeException(ID_CONVERTER_FAIL_EXCEPTION);
+      }
+    }
   }
 
   /**
    * Creates an instance of InMemoryRouter.
+   *
    * @param verifiableProperties properties map that defines the behavior of this instance.
-   * @param clusterMap the cluster map for the cluster.
+   * @param clusterMap           the cluster map for the cluster.
+   * @param idConverterFactory   the {@link IdConverterFactory}
    */
-  public InMemoryRouter(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
-    this(verifiableProperties, null, clusterMap);
+  public InMemoryRouter(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      IdConverterFactory idConverterFactory) {
+    this(verifiableProperties, null, clusterMap, idConverterFactory);
   }
 
   /**
@@ -374,6 +390,11 @@ public class InMemoryRouter implements Router {
       completeOperation(futureResult, callback, null, exception);
     }
     return futureResult;
+  }
+
+  @Override
+  public IdConverter getIdConverter() {
+    return idConverter;
   }
 
   @Override

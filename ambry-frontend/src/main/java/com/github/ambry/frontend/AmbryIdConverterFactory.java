@@ -263,7 +263,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       return metadata != null ? idSigningService.getSignedId(blobId, metadata) : blobId;
     }
 
-    private NamedBlobDb getNamedBlobDb() throws RestServiceException {
+    @Override
+    public NamedBlobDb getNamedBlobDb() throws RestServiceException {
       if (namedBlobDb == null) {
         throw new RestServiceException("Named blob support not enabled", RestServiceErrorCode.BadRequest);
       }
