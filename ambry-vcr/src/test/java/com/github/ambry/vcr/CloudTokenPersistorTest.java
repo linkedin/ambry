@@ -145,8 +145,6 @@ public class CloudTokenPersistorTest {
     // Create remote-replica info
     replica = new RemoteReplicaInfo(mockPartitionId.getReplicaIds().get(0), null, null,
         null, Long.MAX_VALUE, SystemTime.getInstance(), null);
-    AzureStorageContainerMetricsCollector.getInstance(mockClusterMap.getMetricRegistry(), verifiableProperties)
-        .addPartitionReplicas(Collections.singletonList(replica));
   }
 
   protected Pair<TableEntity, StoreFindToken> getTokenFromAzureTable() throws IOException {
