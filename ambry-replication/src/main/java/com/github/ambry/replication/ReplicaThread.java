@@ -267,6 +267,14 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Only used in test.
+   * @param value
+   */
+  protected void setTerminateCurrentContinuousReplicationCycle(boolean value) {
+    terminateCurrentContinuousReplicationCycle = value;
+  }
+
+  /**
    * Logs replication progress of local node against some remote node
    * @param remoteReplicaInfo remote replica information
    * @param exchangeMetadataResponse metadata information from remote node
@@ -1994,18 +2002,24 @@ public class ReplicaThread implements Runnable {
 
   /**
    * This class is used to generate remote replica groups continuously for replication
-   * TODO -fill more details as we keep writing code
+   *
    */
   class RemoteReplicaGroupPoller {
     private final List<DataNodeTracker> dataNodeTrackers;
+    private boolean allReplicasCaughtUpEarly;
 
     RemoteReplicaGroupPoller() {
       dataNodeTrackers = new ArrayList<>();
       fillDataNodeTrackers();
+      allReplicasCaughtUpEarly = false;
     }
 
     public List<DataNodeTracker> getDataNodeTrackers() {
       return dataNodeTrackers;
+    }
+
+    boolean allReplicasCaughtUpEarly() {
+      return allReplicasCaughtUpEarly;
     }
 
     /**
@@ -2066,7 +2080,7 @@ public class ReplicaThread implements Runnable {
           .map(DataNodeTracker::getMaxIterationAcrossGroups)
           .max(Comparator.naturalOrder())
           .orElse(0);
-      return maxIterationsDoneByAnyGroup < continuousReplicationGroupIterationLimit;
+      return maxIterationsDoneByAnyGroup <= continuousReplicationGroupIterationLimit;
     }
 
     /**
@@ -2085,7 +2099,10 @@ public class ReplicaThread implements Runnable {
       });
     }
 
-
+    /**
+     * For each data node tracker, iterates over active group trackers that are not tracking any group,
+     * recheck and updates the state of preassigned replicas with UNKNOWN, OFFLINE and STANDBY_NO_PROGRESS status.
+     */
     void fillReplicaStatus() {
       dataNodeTrackers.forEach(dataNodeTracker -> {
         List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
@@ -2102,6 +2119,10 @@ public class ReplicaThread implements Runnable {
       });
     }
 
+    /**
+     * For each data node tracker, iterates over active group trackers and are not tracking any group,
+     * creates new RemoteReplicaGroup from preassigned replicas with ACTIVE status and adds it to tracker.
+     */
     void fillActiveGroups() {
       dataNodeTrackers.forEach(dataNodeTracker -> {
         List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
@@ -2113,6 +2134,10 @@ public class ReplicaThread implements Runnable {
                   .filter(replicaTracker -> !replicaTracker.isThrottled())
                   .collect(Collectors.toList());
 
+          if (replicaTrackers.isEmpty()) {
+            return;
+          }
+
           RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(
               replicaTrackers.stream().map(ReplicaTracker::getRemoteReplicaInfo).collect(Collectors.toList()),
               dataNodeTracker.getDataNodeId(), false, activeGroupTracker.getGroupId());
@@ -2122,6 +2147,10 @@ public class ReplicaThread implements Runnable {
       });
     }
 
+    /**
+     * For each data node tracker, iterates over all active group trackers and collects preassigned replicas with
+     * STANDBY_NO_PROGRESS_TIMED_OUT status and creates a standbyGroup and adds it to standby group tracker.
+     */
     void fillStandByGroups() {
       dataNodeTrackers.forEach(dataNodeTracker -> {
         StandByGroupTracker standByGroupTracker = dataNodeTracker.getStandByGroupTracker();
@@ -2130,7 +2159,7 @@ public class ReplicaThread implements Runnable {
         }
 
         List<ReplicaTracker> standByTimedOutNoProgressReplicaTrackers = new ArrayList<>();
-        List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
+        List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getActiveGroupTrackers();
 
         activeGroupTrackers.forEach(activeGroupTracker -> {
           List<ReplicaTracker> replicaTrackers =
@@ -2152,12 +2181,27 @@ public class ReplicaThread implements Runnable {
       });
     }
 
+    /**
+     * Checks and removes done remote replica groups from tracking
+     * Rechecks replica status for replicas which were preassigned to any finished group
+     * Creates new active groups
+     * Creates new standby groups
+     * @return List of remote replica groups that are getting tracked
+     */
     List<RemoteReplicaGroup> enqueue() {
       processFinishedGroups();
-      fillReplicaStatus();
-      fillActiveGroups();
-      fillStandByGroups();
-      return getInflightGroups();
+      if (shouldEnqueue()) {
+        fillReplicaStatus();
+        fillActiveGroups();
+        fillStandByGroups();
+      }
+
+      List<RemoteReplicaGroup> inflightGroups =  getInflightGroups();
+
+      if (inflightGroups.isEmpty()) {
+        allReplicasCaughtUpEarly = true;
+      }
+      return inflightGroups;
     }
   }
 
@@ -2299,6 +2343,10 @@ public class ReplicaThread implements Runnable {
 
     public int getId() {
       return id;
+    }
+
+    public boolean isNonProgressStandbyReplicaGroup() {
+      return isNonProgressStandbyReplicaGroup;
     }
 
     public List<StoreKey> getStoreKeysConversionLog() {
