@@ -2101,7 +2101,7 @@ public class ReplicaThread implements Runnable {
 
     /**
      * For each data node tracker, iterates over active group trackers that are not tracking any group,
-     * recheck and updates the state of preassigned replicas with UNKNOWN, OFFLINE and STANDBY_NO_PROGRESS status.
+     * recheck and updates the state of preassigned replicas with UNKNOWN, OFFLINE and STANDBY_NO_PROGRESS and ACTIVE status.
      */
     void fillReplicaStatus() {
       dataNodeTrackers.forEach(dataNodeTracker -> {
@@ -2109,7 +2109,7 @@ public class ReplicaThread implements Runnable {
 
         activeGroupTrackers.forEach(activeGroupTracker -> {
           List<ReplicaTracker> replicaTrackers = activeGroupTracker.getPreAssignedReplicas(
-              Arrays.asList(ReplicaStatus.UNKNOWN, ReplicaStatus.OFFLINE, ReplicaStatus.STANDBY_NO_PROGRESS));
+              Arrays.asList(ReplicaStatus.UNKNOWN, ReplicaStatus.OFFLINE, ReplicaStatus.STANDBY_NO_PROGRESS, ReplicaStatus.ACTIVE));
 
           replicaTrackers.forEach(replicaTracker -> {
             ReplicaStatus replicaStatus = getReplicaStatus(replicaTracker.getRemoteReplicaInfo());
@@ -2129,7 +2129,7 @@ public class ReplicaThread implements Runnable {
 
         activeGroupTrackers.forEach(activeGroupTracker -> {
           List<ReplicaTracker> replicaTrackers =
-              activeGroupTracker.getPreAssignedReplicas(Arrays.asList(ReplicaStatus.ACTIVE))
+              activeGroupTracker.getPreAssignedReplicas(Collections.singletonList(ReplicaStatus.ACTIVE))
                   .stream()
                   .filter(replicaTracker -> !replicaTracker.isThrottled())
                   .collect(Collectors.toList());
@@ -2163,7 +2163,8 @@ public class ReplicaThread implements Runnable {
 
         activeGroupTrackers.forEach(activeGroupTracker -> {
           List<ReplicaTracker> replicaTrackers =
-              activeGroupTracker.getPreAssignedReplicas(Arrays.asList(ReplicaStatus.STANDBY_NO_PROGRESS_TIMED_OUT))
+              activeGroupTracker.getPreAssignedReplicas(
+                      Collections.singletonList(ReplicaStatus.STANDBY_NO_PROGRESS_TIMED_OUT))
                   .stream()
                   .filter(replicaTracker -> !replicaTracker.isThrottled())
                   .collect(Collectors.toList());
@@ -2189,13 +2190,16 @@ public class ReplicaThread implements Runnable {
      * @return List of remote replica groups that are getting tracked
      */
     List<RemoteReplicaGroup> enqueue() {
+      allReplicasCaughtUpEarly = false;
+
       processFinishedGroups();
-      if (shouldEnqueue()) {
-        fillReplicaStatus();
-        fillActiveGroups();
-        fillStandByGroups();
+      if (!shouldEnqueue()) {
+        return getInflightGroups();
       }
 
+      fillReplicaStatus();
+      fillActiveGroups();
+      fillStandByGroups();
       List<RemoteReplicaGroup> inflightGroups =  getInflightGroups();
 
       if (inflightGroups.isEmpty()) {
