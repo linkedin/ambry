@@ -146,6 +146,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
     registerStatsReportAggregationTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
+    registerPropertyStoreCleanUpTask(stateMachineEngine);
     try {
       // register server as a participant
       manager.connect();
@@ -776,6 +777,21 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (!taskFactoryMap.isEmpty()) {
       engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
           new TaskStateModelFactory(manager, taskFactoryMap));
+    }
+  }
+
+  /**
+   * Register Property Store Clean Up Task for cleaning up expired {@link DataNodeConfig} in Property Store.
+   * @param engine the {@link StateMachineEngine} to register the task state model.
+   */
+  private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
+    if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
+      Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
+      taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
+          context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,
+              metricRegistry));
+      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+          new TaskStateModelFactory(manager, taskFactoryMap), PropertyStoreCleanUpTask.COMMAND);
     }
   }
 
