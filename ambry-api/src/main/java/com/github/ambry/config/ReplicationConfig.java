@@ -346,7 +346,7 @@ public class ReplicationConfig {
     replicationEnableContinuousReplication =
         verifiableProperties.getBoolean(REPLICATION_ENABLE_CONTINUOUS_REPLICATION, false);
     replicationContinuousGroupIterationLimit =
-        verifiableProperties.getInt(REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT, 1);
+        verifiableProperties.getIntInRange(REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT, 1, 1, Integer.MAX_VALUE);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =
