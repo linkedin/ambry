@@ -42,9 +42,7 @@ public class AzureStorageContainerMetrics {
   }
 
   public Long getPartitionLag() {
-    // -1L is returned if and only if there are no replicas for this partition.
-    // this may indicate an error with replication or cluster management.
-    return replicaLag.values().stream().map(AtomicLong::get).min(Long::compareTo).orElse(-1L);
+    return replicaLag.values().stream().map(AtomicLong::get).min(Long::compareTo).orElse(0L);
   }
 
   public AzureStorageContainerMetrics setPartitionReplicaLag(String hostname, long update) {

@@ -30,7 +30,7 @@ public class AzureStorageContainerMetricsTest {
   @Test
   public void testAzureStorageContainerMetrics() {
     // no replicas
-    assertEquals(Optional.of(-1L).get(), partitionMetrics.getPartitionLag());
+    assertEquals(Optional.of(0L).get(), partitionMetrics.getPartitionLag());
 
     // one replica
     partitionMetrics.setPartitionReplicaLag("localhost1", 100);
@@ -51,7 +51,7 @@ public class AzureStorageContainerMetricsTest {
 
     // both replicas removed
     partitionMetrics.removePartitionReplica("localhost1");
-    assertEquals(Optional.of(-1L).get(), partitionMetrics.getPartitionLag());
+    assertEquals(Optional.of(0L).get(), partitionMetrics.getPartitionLag());
   }
 
 }
