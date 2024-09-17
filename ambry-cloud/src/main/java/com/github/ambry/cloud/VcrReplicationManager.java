@@ -219,7 +219,6 @@ public class VcrReplicationManager extends ReplicationEngine {
       rinfo.setReplicaThread(rthread);
       logger.info("[PARTITION] Added replica {} to thread {}", rinfo, rthread.getName());
     }
-    azureStorageContainerMetricsCollector.addPartitionReplicas(remoteReplicaInfos);
     partitionToPartitionInfo.get(partitionId).setReplicaThread(rthread);
     rthread.startThread();
   }
@@ -250,7 +249,6 @@ public class VcrReplicationManager extends ReplicationEngine {
           }
           rthread.addRemoteReplicaInfo(rinfo);
           rinfo.setReplicaThread(rthread);
-          azureStorageContainerMetricsCollector.addPartitionReplicas(Collections.singletonList(rinfo));
           logger.info("[REPLICA] Added replica {} to thread {}", rinfo, rthread.getName());
         } catch (Throwable e) {
           vcrMetrics.addPartitionErrorCount.inc();
