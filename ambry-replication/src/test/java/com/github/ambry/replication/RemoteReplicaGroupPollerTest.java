@@ -64,15 +64,16 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
 
   int defaultIterationLimit;
 
-  public RemoteReplicaGroupPollerTest(short requestVersion, short responseVersion) {
-    super(requestVersion, responseVersion);
+  public RemoteReplicaGroupPollerTest(short requestVersion, short responseVersion, boolean enableContinuousReplication) {
+    super(requestVersion, responseVersion, enableContinuousReplication);
   }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
     //@formatter:off
     return Arrays.asList(new Object[][]{
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, true},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, false},
     });
     //@formatter:on
   }
@@ -91,7 +92,7 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
     properties.setProperty("replication.model.across.datacenters", "LEADER_BASED");
     maxPartitionCountPerRequest = 3;
     properties.setProperty("replication.max.partition.count.per.request", String.valueOf(maxPartitionCountPerRequest));
-    defaultIterationLimit = 2;
+    defaultIterationLimit = 3;
     properties.setProperty(ReplicationConfig.REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT,
         String.valueOf(defaultIterationLimit));
 

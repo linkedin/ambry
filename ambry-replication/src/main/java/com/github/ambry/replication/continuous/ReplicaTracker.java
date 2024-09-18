@@ -49,7 +49,7 @@ public class ReplicaTracker {
   }
 
   public boolean isThrottled() {
-    return time.milliseconds() <= throttledTill;
+    return time.milliseconds() < throttledTill;
   }
 
   /**
