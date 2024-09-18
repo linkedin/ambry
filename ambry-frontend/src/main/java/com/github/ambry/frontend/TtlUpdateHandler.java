@@ -173,18 +173,19 @@ class TtlUpdateHandler {
     private Callback<Void> routerCallback(BlobId convertedBlobId) {
       return buildCallback(metrics.updateBlobTtlRouterMetrics, result -> {
         if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
-          // Set the named blob state to be 'READY' after the Ttl update succeed
-          if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
-            throw new RestServiceException(
-                "Internal key " + NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
-                RestServiceErrorCode.InternalServerError);
-          }
-          long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-          NamedBlobPath namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
-          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
-          CallbackUtils.callCallbackAfter(namedBlobDb.updateBlobTtlAndStateToReady(record),
-              updateNamedBlobTtlCallback());
+//          // Set the named blob state to be 'READY' after the Ttl update succeed
+//          if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
+//            throw new RestServiceException(
+//                "Internal key " + NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
+//                RestServiceErrorCode.InternalServerError);
+//          }
+//          long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
+//          NamedBlobPath namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
+//          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+//              namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
+//          CallbackUtils.callCallbackAfter(namedBlobDb.updateBlobTtlAndStateToReady(record),
+//              updateNamedBlobTtlCallback());
+          idConverter.convert(restRequest, convertedBlobId.getID(), null, updateNamedBlobTtlCallback());
         } else {
           processResponseHelper();
         }
@@ -195,7 +196,7 @@ class TtlUpdateHandler {
      * After {@link NamedBlobDb#updateBlobTtlAndStateToReady(NamedBlobRecord)}, call {@link #updateNamedBlobTtlCallback()}.
      * @return a {@link Callback} to be used with {@link NamedBlobDb#updateBlobTtlAndStateToReady(NamedBlobRecord)}.
      */
-    private Callback<PutResult> updateNamedBlobTtlCallback() {
+    private Callback<String> updateNamedBlobTtlCallback() {
       return buildCallback(metrics.updateNamedBlobTtlCallbackMetrics, datasetVersion -> {
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           metrics.updateTtlDatasetVersionRate.mark();
