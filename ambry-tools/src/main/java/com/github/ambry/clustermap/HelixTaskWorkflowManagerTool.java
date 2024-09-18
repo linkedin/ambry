@@ -147,7 +147,10 @@ public class HelixTaskWorkflowManagerTool {
     AGGREGATE_TASK,
 
     /** Task to sync deprecated containers to cloud. */
-    DEPRECATED_CONTAINER_CLOUD_SYNC_TASK
+    DEPRECATED_CONTAINER_CLOUD_SYNC_TASK,
+
+    /** Task to clean up stale property store data. */
+    PROPERTY_STORE_CLEANUP_TASK
   }
 
   /**
@@ -191,6 +194,9 @@ public class HelixTaskWorkflowManagerTool {
                 break;
               case DEPRECATED_CONTAINER_CLOUD_SYNC_TASK:
                 buildDeprecatedContainerCloudSyncTaskWorkflow(workflowBuilder);
+                break;
+              case PROPERTY_STORE_CLEANUP_TASK:
+                buildPropertyStoreCleanUpTaskWorkflow(workflowBuilder);
                 break;
               default:
                 throw new IllegalArgumentException("Invalid task type: " + config.taskType);
@@ -258,6 +264,26 @@ public class HelixTaskWorkflowManagerTool {
     JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
     jobConfigBuilder.addTaskConfigs(taskConfigs);
     jobConfigBuilder.setCommand(DeprecatedContainerCloudSyncTask.COMMAND);
+
+    // add job into workflow
+    workflowBuilder.addJob(jobId, jobConfigBuilder);
+  }
+
+  /**
+   * Build the workflow for property store clean up task.
+   * @param workflowBuilder {@link Workflow.Builder} object.
+   */
+  private static void buildPropertyStoreCleanUpTaskWorkflow(Workflow.Builder workflowBuilder) {
+    // build task
+    String taskId = String.format("%s_%s", PropertyStoreCleanUpTask.COMMAND, TASK_SUFFIX);
+    String jobId = String.format("%s_%s", PropertyStoreCleanUpTask.COMMAND, JOB_SUFFIX);
+    List<TaskConfig> taskConfigs = new ArrayList<>();
+    taskConfigs.add(
+        new TaskConfig.Builder().setTaskId(taskId).setCommand(PropertyStoreCleanUpTask.COMMAND).build());
+    // build job
+    JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
+    jobConfigBuilder.addTaskConfigs(taskConfigs);
+    jobConfigBuilder.setCommand(PropertyStoreCleanUpTask.COMMAND);
 
     // add job into workflow
     workflowBuilder.addJob(jobId, jobConfigBuilder);

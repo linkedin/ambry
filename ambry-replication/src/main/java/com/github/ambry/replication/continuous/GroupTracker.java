@@ -18,6 +18,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 
+/**
+ *   This class tracks for a current state for {@link com.github.ambry.replication.ReplicaThread.RemoteReplicaGroup}
+ *   for continuous replication cycle.
+ *
+ *   {@link #groupId} group id assigned to remote replica group
+ *   {@link #remoteReplicaGroup} group for which we have created this tracker
+ *   {@link #inflightReplicas} replicas that are currently present in {@link #remoteReplicaGroup}
+ *   {@link #iterations} total number of iterations for the remote replica group with {@link #groupId} group id
+ */
 public abstract class GroupTracker {
   private final int groupId;
   private ReplicaThread.RemoteReplicaGroup remoteReplicaGroup;

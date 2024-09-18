@@ -18,6 +18,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureMetrics;
+import com.github.ambry.cloud.azure.AzureStorageContainerMetricsCollector;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
@@ -83,6 +84,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
   private final String localDatacenterName;
+  protected final AzureStorageContainerMetricsCollector azureStorageContainerMetricsCollector;
   protected String azureTableNameReplicaTokens;
   protected AzureCloudConfig azureCloudConfig;
   protected AzureMetrics azureMetrics;
@@ -123,6 +125,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureMetrics = new AzureMetrics(metricRegistry);
+    this.azureStorageContainerMetricsCollector = AzureStorageContainerMetricsCollector.getInstance(metricRegistry, properties);
     this.vcrClusterParticipant = vcrClusterParticipant;
     try {
       vcrHelixConfig =
@@ -257,6 +260,17 @@ public class VcrReplicationManager extends ReplicationEngine {
       logger.error("Failed to add replica(s) due to {}", e);
     }
   }
+
+  /**
+   * Remove a list of {@link RemoteReplicaInfo} from each's {@link ReplicaThread}.
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} to remote.
+   */
+  @Override
+  protected void removeRemoteReplicaInfoFromReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos) {
+    super.removeRemoteReplicaInfoFromReplicaThread(remoteReplicaInfos);
+    azureStorageContainerMetricsCollector.removePartitionReplicas(remoteReplicaInfos);
+  }
+
 
   @Override
   public void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) {
@@ -420,6 +434,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       storeManager.shutdownBlobStore(partitionId);
       storeManager.removeBlobStore(partitionId);
       partitionInfo.setReplicaThread(null);
+      azureStorageContainerMetricsCollector.removePartition(partitionId.getId());
       logger.info("Partition {} removed from {}", partitionId, dataNodeId);
     } catch (Throwable e) {
       // Helix will run into error state if exception throws in Helix context.
@@ -452,14 +467,12 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
       long totalBytesRead) {
-    // Since replica metadata request for a single partition can goto multiple vcr nodes, totalBytesReadByRemoteReplica
-    // cannot be  populated locally on any vcr node.
+    throw new UnsupportedOperationException("Unimplemented updateTotalBytesReadByRemoteReplica() in VCR");
   }
 
   @Override
   public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
-    // TODO get replica lag from cosmos?
-    return -1;
+    throw new UnsupportedOperationException("Unimplemented getRemoteReplicaLagFromLocalInBytes() in VCR");
   }
 
   @Override

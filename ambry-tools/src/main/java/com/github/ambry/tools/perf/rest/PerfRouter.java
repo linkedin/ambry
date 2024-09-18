@@ -110,7 +110,11 @@ class PerfRouter implements Router {
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        the {@link PutBlobOptions} for the blob.
    * @param callback       the {@link Callback} to invoke on operation completion.
+<<<<<<< HEAD
    * @param restRequest
+=======
+   * @param restRequest    The name of the blob path for named blob based upload.
+>>>>>>> master
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
