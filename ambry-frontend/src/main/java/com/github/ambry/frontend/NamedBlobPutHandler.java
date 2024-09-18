@@ -366,17 +366,18 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
-        // Set the named blob state to be 'READY' after the Ttl update succeed
-        if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
-          throw new RestServiceException("Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION
-              + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
-        }
-        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
-        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
+//        // Set the named blob state to be 'READY' after the Ttl update succeed
+//        if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
+//          throw new RestServiceException("Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION
+//              + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
+//        }
+//        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
+//        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
+//        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+//        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+//            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
+//        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
+        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), null).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
