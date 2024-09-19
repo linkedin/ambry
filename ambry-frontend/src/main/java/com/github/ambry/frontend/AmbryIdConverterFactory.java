@@ -67,7 +67,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     return new AmbryIdConverter(idSigningService, namedBlobDb, frontendMetrics);
   }
 
-  private static class AmbryIdConverter implements IdConverter {
+  private static class AmbryIdConverter<T> implements IdConverter<T> {
     private boolean isOpen = true;
     private final IdSigningService idSigningService;
     private final NamedBlobDb namedBlobDb;
@@ -85,7 +85,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     }
 
     @Override
-    public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
+    public Future<T> convert(RestRequest restRequest, String input, Callback<T> callback) {
       return convert(restRequest, input, null, callback);
     }
 
@@ -101,8 +101,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
      * @return a {@link Future} that will eventually contain the converted ID.
      */
     @Override
-    public Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<String> callback) {
-      final CompletableFuture<String> future = new CompletableFuture<>();
+    public Future<T> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<T> callback) {
+      final CompletableFuture<T> future = new CompletableFuture<>();
       String convertedId = null;
       Exception exception = null;
       frontendMetrics.idConverterRequestRate.mark();
@@ -116,14 +116,14 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           convertedId = "/" + signIdIfRequired(restRequest, input);
         } else {
           CallbackUtils.callCallbackAfter(convertId(input, restRequest, blobProperties),
-              (id, e) -> completeConversion(id, e, future, callback));
+              (id, e) -> completeConversion((T) id, e, future, callback));
         }
       } catch (Exception e) {
         exception = e;
       } finally {
         frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
         if (convertedId != null || exception != null) {
-          completeConversion(convertedId, exception, future, callback);
+          completeConversion((T) convertedId, exception, future, callback);
         }
       }
       return future;

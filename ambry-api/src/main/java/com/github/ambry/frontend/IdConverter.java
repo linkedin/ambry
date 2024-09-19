@@ -31,7 +31,7 @@ import java.util.concurrent.Future;
  * Typical usage will be to add extensions, tailor IDs for different use-cases, encrypt/obfuscate IDs or get name
  * mappings.
  */
-public interface IdConverter extends Closeable {
+public interface IdConverter<T> extends Closeable {
 
   /**
    * Converts an ID.
@@ -40,7 +40,7 @@ public interface IdConverter extends Closeable {
    * @param callback the {@link Callback} to invoke once the converted ID is available. Can be null.
    * @return a {@link Future} that will eventually contain the converted ID.
    */
-  Future<String> convert(RestRequest restRequest, String input, Callback<String> callback);
+  Future<T> convert(RestRequest restRequest, String input, Callback<T> callback);
 
   /**
    * Converts an ID.
@@ -48,8 +48,8 @@ public interface IdConverter extends Closeable {
    * @param input the ID that needs to be converted.
    * @return a {@link CompletableFuture} that will eventually contain the converted ID.
    */
-  default CompletableFuture<String> convert(RestRequest restRequest, String input) {
-    CompletableFuture<String> future = new CompletableFuture<>();
+  default CompletableFuture<T> convert(RestRequest restRequest, String input) {
+    CompletableFuture<T> future = new CompletableFuture<>();
     convert(restRequest, input, CallbackUtils.fromCompletableFuture(future));
     return future;
   }
@@ -63,7 +63,7 @@ public interface IdConverter extends Closeable {
    * @param callback       the {@link Callback} to invoke once the converted ID is available. Can be null.
    * @return a {@link Future} that will eventually contain the converted ID.
    */
-  default Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<String> callback) {
+  default Future<T> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<T> callback) {
     return convert(restRequest, input, callback);
   }
 
@@ -75,7 +75,7 @@ public interface IdConverter extends Closeable {
    * @param blobProperties the {@link BlobProperties} for an uploaded blob. Can be null for non-upload use cases.
    * @return a {@link CompletableFuture} that will eventually contain the converted ID.
    */
-  default CompletableFuture<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties) {
+  default CompletableFuture<T> convert(RestRequest restRequest, String input, BlobProperties blobProperties) {
     return convert(restRequest, input);
   }
 

@@ -342,6 +342,8 @@ public class InMemoryRouter implements Router {
       return futureResult;
     }
     Exception exception = null;
+    Callback<Void> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, callback) : callback;
     try {
       // to make sure Blob ID is ok
       checkBlobId(blobId);
@@ -363,7 +365,7 @@ public class InMemoryRouter implements Router {
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      completeOperation(futureResult, callback, null, exception);
+      completeOperation(futureResult, wrappedCallback, null, exception);
     }
     return futureResult;
   }
@@ -512,6 +514,22 @@ public class InMemoryRouter implements Router {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         // Call idConverter.convert after putBlob succeeds
         idConverter.convert(restRequest, blobId, blobProperties, callback);
+      }
+    };
+  }
+
+  private Callback<Void> createIdConverterCallbackForTtlUpdate(RestRequest restRequest, String blobId,
+      FutureResult<Void> futureResult, Callback<Void> callback) {
+    return (result, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        // Call idConverter.convert after putBlob succeeds
+        idConverter.convert(restRequest, blobId, null, callback);
       }
     };
   }

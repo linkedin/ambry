@@ -4215,16 +4215,16 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
     return new TestIdConverter();
   }
 
-  private class TestIdConverter implements IdConverter {
+  private class TestIdConverter<T> implements IdConverter<T> {
     private boolean isOpen = true;
 
     @Override
-    public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
+    public Future<T> convert(RestRequest restRequest, String input, Callback<T> callback) {
       return convert(restRequest, input, null, callback);
     }
 
     @Override
-    public Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<String> callback) {
+    public Future<T> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<T> callback) {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
@@ -4232,7 +4232,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
           && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
       }
-      return completeOperation(input, blobProperties, callback);
+      return completeOperation((T) input, blobProperties, callback);
     }
 
     @Override
@@ -4253,18 +4253,18 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
      * @param callback       the {@link Callback} to invoke. Can be null.
      * @return the created {@link Future}.
      */
-    private Future<String> completeOperation(String input, BlobProperties blobProperties, Callback<String> callback) {
-      lastInput = input;
+    private Future<T> completeOperation(T input, BlobProperties blobProperties, Callback<T> callback) {
+      lastInput = (String) input;
       lastBlobProperties = blobProperties;
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
-      FutureResult<String> futureResult = new FutureResult<String>();
-      String toReturn = null;
+      FutureResult<T> futureResult = new FutureResult<>();
+      T toReturn = null;
       if (exceptionToReturn == null) {
-        toReturn = translation == null ? returnInputIfTranslationNull ? input : null : translation;
+        toReturn = translation == null ? returnInputIfTranslationNull ? input : null : (T) translation;
       }
-      lastConvertedId = toReturn;
+      lastConvertedId = (String) toReturn;
       futureResult.done(toReturn, exceptionToReturn);
       if (callback != null) {
         callback.onCompletion(toReturn, exceptionToReturn);
