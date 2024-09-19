@@ -2357,7 +2357,7 @@ public class ReplicaThread implements Runnable {
      *    corresponding datanode tracker.
      * 2. Create single standby group from these replicas and store it in standby group tracker
      */
-    void fillStandByGroups() {
+    private void fillStandByGroups() {
       dataNodeTrackers.forEach(dataNodeTracker -> {
         logger.trace("Thread name: {} Trying to create standby group for data node {} ", threadName,
             dataNodeTracker.getDataNodeId());
