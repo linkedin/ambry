@@ -37,6 +37,10 @@ public class ClusterMapConfig {
       "clustermap.enable.delete.invalid.data.in.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
+  public static final String ENABLE_PROPERTY_STORE_CLEAN_UP_TASK =
+      "clustermap.enable.property.store.clean.up.task";
+  public static final String DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK =
+      "clustermap.delete.data.from.datanode.config.in.property.store.clean.up.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -342,6 +346,18 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableDeleteInvalidDataInMysqlAggregationTask;
 
+  /**
+   * True to enable property store clean up task.
+   */
+  @Config(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK)
+  public final boolean clustermapEnablePropertyStoreCleanUpTask;
+
+  /**
+   * True to remove data from datanode config when property store clean up task is enabled.
+   */
+  @Config(DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK)
+  public final boolean clustermapDeleteDataFromDatanodeConfigInPropertyStoreCleanUpTask;
+
   public static final String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
   /**
    * The lease timeout for distributed lock. For now, the lock is only used for removing host from account stats store.
@@ -427,6 +443,10 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
+    clustermapEnablePropertyStoreCleanUpTask =
+        verifiableProperties.getBoolean(ENABLE_PROPERTY_STORE_CLEAN_UP_TASK, false);
+    clustermapDeleteDataFromDatanodeConfigInPropertyStoreCleanUpTask = verifiableProperties
+        .getBoolean(DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK, false);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
     clustermapDistributedLockLeaseTimeoutInMs =
