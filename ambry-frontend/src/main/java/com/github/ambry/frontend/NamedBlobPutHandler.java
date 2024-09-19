@@ -28,7 +28,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
-import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
@@ -48,7 +47,6 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -308,7 +306,7 @@ public class NamedBlobPutHandler {
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(convertedBlobId, serviceId, Utils.Infinite_Time, callback,
-                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false), null), this::isRetriable,
               routerTtlUpdateCallback(blobInfo, convertedBlobId));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
@@ -333,7 +331,7 @@ public class NamedBlobPutHandler {
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false), null), this::isRetriable,
               routerTtlUpdateCallback(blobInfo, blobId));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
@@ -377,7 +375,6 @@ public class NamedBlobPutHandler {
 //        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
 //            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
 //        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
-        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), null).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(

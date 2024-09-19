@@ -58,7 +58,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
@@ -153,7 +152,7 @@ public class TtlUpdateManagerTest {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
       TestCallback<Void> callback = new TestCallback<>();
       notificationSystem.reset();
-      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, callback, quotaChargeCallback)
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, callback, quotaChargeCallback, null)
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       notificationSystem.checkNotifications(1, null, Utils.Infinite_Time);
       assertTrue("Callback was not called", callback.getLatch().await(10, TimeUnit.MILLISECONDS));

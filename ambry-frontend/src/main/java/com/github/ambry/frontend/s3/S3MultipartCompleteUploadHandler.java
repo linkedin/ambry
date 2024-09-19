@@ -258,7 +258,7 @@ public class S3MultipartCompleteUploadHandler {
         String serviceId = blobInfo.getBlobProperties().getServiceId();
         retryExecutor.runWithRetries(retryPolicy,
             callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false), null), this::isRetriable,
             routerTtlUpdateCallback(blobInfo, blobId));
       }, uri, LOGGER, finalCallback);
     }

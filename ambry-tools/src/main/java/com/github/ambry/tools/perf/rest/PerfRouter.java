@@ -181,15 +181,17 @@ class PerfRouter implements Router {
 
   /**
    * Does nothing. Simply indicates success immediately.
-   * @param blobId (ignored).
-   * @param serviceId (ignored).
+   *
+   * @param blobId      (ignored).
+   * @param serviceId   (ignored).
    * @param expiresAtMs (ignored).
-   * @param callback the {@link Callback} to invoke on operation completion.
+   * @param callback    the {@link Callback} to invoke on operation completion.
+   * @param restRequest
    * @return a {@link FutureResult} that will eventually contain the result of the operation.
    */
   @Override
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, RestRequest restRequest) {
     logger.trace("Received updateBlobTtl call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!routerOpen) {
