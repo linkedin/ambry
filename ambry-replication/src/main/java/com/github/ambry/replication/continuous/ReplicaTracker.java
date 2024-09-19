@@ -60,4 +60,10 @@ public class ReplicaTracker {
     this.replicaStatus = ReplicaStatus.UNKNOWN;
     this.throttledTill = time.milliseconds() + throttleDurationMs;
   }
+
+  @Override
+  public String toString() {
+    return "ReplicaTracker: [" + remoteReplicaInfo.toString() + " " + replicaStatus.toString() + " " + throttledTill
+        + "]";
+  }
 }

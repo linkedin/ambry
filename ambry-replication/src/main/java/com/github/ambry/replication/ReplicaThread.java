@@ -51,6 +51,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.continuous.ActiveGroupTracker;
 import com.github.ambry.replication.continuous.DataNodeTracker;
+import com.github.ambry.replication.continuous.GroupTracker;
 import com.github.ambry.replication.continuous.ReplicaStatus;
 import com.github.ambry.replication.continuous.ReplicaTracker;
 import com.github.ambry.replication.continuous.StandByGroupTracker;
@@ -130,7 +131,7 @@ public class ReplicaThread implements Runnable {
   private final int maxReplicaCountPerRequest;
   private final boolean enableContinuousReplication;
   private final Predicate<MessageInfo> skipPredicate;
-  private int continuousReplicationGroupIterationLimit;
+  private final int continuousReplicationGroupIterationLimit;
   private volatile boolean terminateCurrentContinuousReplicationCycle = false;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
@@ -200,11 +201,6 @@ public class ReplicaThread implements Runnable {
 
   protected boolean isContinuousReplicationEnabled(ReplicationConfig replicationConfig) {
     return replicationConfig.replicationEnableContinuousReplication;
-  }
-
-  // this will be used in test only
-  void setContinuousReplicationGroupIterationLimit(int value) {
-    continuousReplicationGroupIterationLimit = value;
   }
 
   public boolean startThread() {
@@ -412,7 +408,32 @@ public class ReplicaThread implements Runnable {
     }
   }
 
-  //TODO implement continuous replication inside this
+  /**
+   * Do replication for replicas grouped by {@link DataNodeId}
+   * We will keep trying to generate groups until we do not get any groups by calling generateRemoteReplicaGroups.
+   * We will generate requests and then process responses when received for these groups.
+   *
+   * A replication cycle between two replicas involves the following steps:
+   *    1. Exchange metadata : fetch the metadata of blobs added to remote replica since the last synchronization point
+   *    and filter the ones missing in local store.
+   *    2. Fetch missing blobs: fetch the missing blobs by issuing GET request to remote replica and write them to
+   *       the local store
+   *
+   *  During cross-colo replication, depending on the {@link ReplicationModelType}, the missing blobs are either fetched
+   *  from all remote replicas (if modelType == ALL_TO_ALL) or only fetched for local leader replicas from their remote
+   *  leader replicas (if modelType == LEADER_BASED). In the latter case, non-leader replica pairs (leader <-> standby,
+   *  standby <-> leader, standby <-> standby) will get their missing blobs from their corresponding leader<->leader
+   *  exchanges and intra-dc replication.
+   *
+   *  Here is a table listing on what is exchanged between local and remote replicas based on their roles
+   *  (leader/standby) when {@link ReplicationModelType is LEADER_BASED}.
+   *
+   *              |   Local Leader    |     Local Standby   |   Remote Leader   |  Remote Standby
+   *            -------------------------------------------------------------------------------------
+   *     Leader:  |        ---        |  metadata and data  | metadata and data |   metadata only
+   *     Standby: | metadata and data |  metadata and data  | metadata only     |   metadata only
+   *
+   */
   public void replicateContinuous() {
     long oneRoundStartTimeMs = time.milliseconds();
     terminateCurrentContinuousReplicationCycle = false;
@@ -421,6 +442,7 @@ public class ReplicaThread implements Runnable {
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
     boolean allReplicasCaughtEarly = false;
+    int allProcessedReplicaCount = 0;
 
     try {
       storeKeyConverter.dropCache();
@@ -485,6 +507,7 @@ public class ReplicaThread implements Runnable {
       } while (poller.shouldContinue());
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
       allReplicasCaughtEarly = poller.allReplicasCaughtUpEarly();
+      allProcessedReplicaCount = poller.getReplicaCount();
     } catch (Exception e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
@@ -493,7 +516,7 @@ public class ReplicaThread implements Runnable {
     }
 
     // check and make thread sleep and publish metrics for throttling
-    maybeSleepAfterReplication(allReplicasCaughtEarly);
+    maybeSleepAfterReplication(allReplicasCaughtEarly, allProcessedReplicaCount);
     logger.trace("Thread name: {} Exiting replication, all iterations Done!", threadName);
   }
 
@@ -608,7 +631,7 @@ public class ReplicaThread implements Runnable {
           datacenterName);
       emitCyclicReplicationIdleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, cycleEndTime);
     }
-    maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
+    maybeSleepAfterReplication(remoteReplicaGroups.isEmpty(), 1);
   }
 
 
@@ -800,15 +823,16 @@ public class ReplicaThread implements Runnable {
    * Maybe sleep for a while after one round of replication. If all the replicas are caught up and the configuration
    * shows we should sleep, then sleep for a while so we can save some CPU.
    * @param allCaughtUp True when all replicas are caught up.
+   * @param throttledReplicaCount total replicas which are getting throttled
    */
-  private void maybeSleepAfterReplication(boolean allCaughtUp) {
+  private void maybeSleepAfterReplication(boolean allCaughtUp, int throttledReplicaCount) {
     long sleepDurationMs = 0;
     if (allCaughtUp && replicationConfig.replicationReplicaThreadIdleSleepDurationMs > 0) {
       sleepDurationMs = replicationConfig.replicationReplicaThreadIdleSleepDurationMs;
       idleCount.inc();
     } else if (threadThrottleDurationMs > 0) {
       sleepDurationMs = threadThrottleDurationMs;
-      throttleCount.inc();
+      throttleCount.inc(throttledReplicaCount);
     }
 
     if (running && sleepDurationMs > 0) {
@@ -822,6 +846,23 @@ public class ReplicaThread implements Runnable {
     }
   }
 
+  /**
+   * performs below checks and gives status of replica
+   *
+   * 1. check if replica is OFFLINE then return OFFLINE status
+   *
+   * 2. check these conditions
+   *    1. check if we are doing cross colo replication
+   *    2. check if leader based replication is enabled
+   *    3. our local replica is not leader
+   *    4. we have missing blobs from last ReplicaMetadataRequest
+   *    return STANDBY_TIMED_OUT_ON_NO_PROGRESS if last missing blob arrived  before replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds
+   *    return STANDBY otherwise as we need to wait for data to come through intra colo replication
+   *
+   * 3. return ACTIVE status if above criteria are not met
+   *
+   *  We can pull data only from ACTIVE replicas and STANDBY_TIMED_OUT_ON_NO_PROGRESS replicas
+   */
   ReplicaStatus getReplicaStatus(RemoteReplicaInfo remoteReplicaInfo) {
     ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
     boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
@@ -865,10 +906,10 @@ public class ReplicaThread implements Runnable {
               && exchangeMetadataResponse.hasMissingStoreMessages()
               && (time.seconds() - exchangeMetadataResponse.lastMissingMessageReceivedTimeSec)
               > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds) {
-            return ReplicaStatus.STANDBY_NO_PROGRESS_TIMED_OUT;
+            return ReplicaStatus.STANDBY_TIMED_OUT_ON_NO_PROGRESS;
           }
         }
-        return ReplicaStatus.STANDBY_NO_PROGRESS;
+        return ReplicaStatus.STANDBY;
       }
     }
     return ReplicaStatus.ACTIVE;
@@ -885,17 +926,17 @@ public class ReplicaThread implements Runnable {
    */
   void filterRemoteReplicasToReplicate(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress) {
-    // Get a list of active replicas that needs be included for this replication cycle
+    // Get a list of active and standBy replicas that have timed out that needs be included for this replication cycle
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaStatus replicaStatus = getReplicaStatus(remoteReplicaInfo);
       switch (replicaStatus){
         case OFFLINE:
-        case STANDBY_NO_PROGRESS:
+        case STANDBY:
           break;
         case ACTIVE:
           activeReplicasPerNode.add(remoteReplicaInfo);
           break;
-        case STANDBY_NO_PROGRESS_TIMED_OUT:
+        case STANDBY_TIMED_OUT_ON_NO_PROGRESS:
           standbyReplicasTimedOutOnNoProgress.add(remoteReplicaInfo);
           break;
       }
@@ -909,6 +950,7 @@ public class ReplicaThread implements Runnable {
    * @param response The {@link ReplicaMetadataResponse}.
    * @param replicasToReplicatePerNode
    * @param remoteNode The remote {@link DataNodeId}.
+   * @param storeKeysConversionLog list to store storeKeys that were converted
    * @return A list of {@link ExchangeMetadataResponse}.
    * @throws IOException
    */
@@ -1318,6 +1360,7 @@ public class ReplicaThread implements Runnable {
    * Intention is that conversion is done all at once so that followup calls to
    * {@link StoreKeyConverter#getConverted(StoreKey)} will work
    * @param response the {@link ReplicaMetadataResponse} whose keys will be converted
+   * @param storeKeysConversionLog list to store storeKeys that were converted
    * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
@@ -2086,22 +2129,23 @@ public class ReplicaThread implements Runnable {
 
   /**
    * This class is used to generate remote replica groups continuously for replication
-   *
    * Lifecycle of groups in this poller is as below
-   * 1. We create multiple sets of replicas and pre-assign group id to each set.
-   * 2. We pre-assign group id for standBy group for each datanode.
-   * 3. {@link #pollGroups()} would try to create (and add back) those groups for these sets and group ids and
-   *    store it in {@link #inflightGroups}.
-   * 4. Once a group finishes one iteration of work, include metadata exchange and data download,
-   *    we remove group id from the inflight group map and potentially backoff replicas in the group.
-   * 5. If  any of the replicas of this group need to go through another iteration,
-   *    the same group would be added back to inflight group map with the available replicas only.
-   * 6. While trying to create any group, if we find stand by replicas that have timed out, we will
-   *    add the replica to {@link #standByReplicaQueue}.
-   * 7. All standBy groups get created using the {@link #standByReplicaQueue} of the data node.
-   * 8. When there is a new replica added to the thread, or a replica removed from this thread,
-   *    or there is one group reaches max iteration, we don't create new groups, just return the existing ones,
-   *    and after they all finish current iteration, inflightGroupMap would become empty and do-while loop would break.
+   *  1. For each data node, we create multiple sets of replicas and pre-assign group id to each set and store it in {@link ActiveGroupTracker#getPreAssignedReplicas()}
+   *     These sets are stored as {@link DataNodeTracker#getActiveGroupTrackers()}
+   *  2. We pre-assign group id for standBy group for each datanode and store it {@link DataNodeTracker#getStandByGroupTracker()}
+   *  3. {@link #enqueue()} would try to create (and add back) those groups for these sets and group ids and
+   *     store it in {@link DataNodeTracker#getActiveGroupTrackers()} and {@link DataNodeTracker#getStandByGroupTracker()}.
+   *  4. Once a group finishes one iteration of work, include metadata exchange and data download,
+   *     we remove group  from the {@link GroupTracker} and potentially backoff replicas in the group.
+   *  5. If  any of the replicas of this group need to go through another iteration, we create group with group id as same as {@link ActiveGroupTracker#getGroupId()}
+   *     the same group would be added back to {@link ActiveGroupTracker} with the available replicas only.
+   *  6. While trying to create any group, if we find stand by replicas that have timed out,
+   *     we will move replica to {@link ReplicaStatus#STANDBY_TIMED_OUT_ON_NO_PROGRESS} status.
+   *  7. All standBy groups get created using the replicas with status {@link ReplicaStatus#STANDBY_TIMED_OUT_ON_NO_PROGRESS}
+   *     of the data node and will be stored in {@link DataNodeTracker#getStandByGroupTracker()}
+   *  8. When there is a new replica added to the thread, or a replica removed from this thread,
+   *     or there is one group reaches max iteration, we don't create new groups, just return the existing ones,
+   *     and after they all finish current iteration, {@link GroupTracker} will not be tracking any group and do-while loop would break.
    */
   class RemoteReplicaGroupPoller {
     private final List<DataNodeTracker> dataNodeTrackers;
@@ -2122,8 +2166,18 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
+     * @return returns total count of replicas in the poller
+     */
+    int getReplicaCount() {
+      return dataNodeTrackers.stream()
+          .flatMap(dataNodeTracker -> dataNodeTracker.getActiveGroupTrackers().stream())
+          .mapToInt(activeGroupTracker -> activeGroupTracker.getPreAssignedReplicas().size())
+          .sum();
+    }
+
+    /**
      * Creates Data node trackers for every data node
-     * Every datanode tracker has  active groups and standby group
+     * Every datanode tracker has active groups and standby group
      * For each data node tracker, only one stand by group is present to reduce cross colo requests
      * Active groups have maximum {@link #maxReplicaCountPerRequest}  preassigned replicas
      * Across all datanode tracker group ids are unique
@@ -2168,26 +2222,43 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     * @return returns false if any group has reached iteration limit, thread is shutdown or signal to
-     * terminate cycle is received
+     * Conditions when we don't want to create new groups.
+     *
+     * 1. the process is shutting down, so no need to create new group even if we have more iteration for them to run,
+     *    just let existing groups finish.
+     * 2. terminateCurrentContinuousReplicationCycle is true, which means there are replicas added to this thread
+     *    or removed from this thread, don't create new group and just let existing groups finish,
+     *    so we can later create new groups with the new set of replicas in next cycle.
+     * 3. any group reaches max iteration, which means existing groups should just finish its current work and stop,
+     *    thus no new groups should be created.
+     * @return {@link boolean} returns true if new groups can be created, false otherwise
      */
-    boolean shouldEnqueue() {
+    private boolean shouldEnqueue() {
       if (!running || terminateCurrentContinuousReplicationCycle) {
+        logger.trace(
+            "Thread name: {} not creating new groups as thread is in shutdown mode {} or terminate cycle received {}",
+            threadName, !running, terminateCurrentContinuousReplicationCycle);
         return false;
       }
       int maxIterationsDoneByAnyGroup = dataNodeTrackers.stream()
           .map(DataNodeTracker::getMaxIterationAcrossGroups)
           .max(Comparator.naturalOrder())
           .orElse(0);
-      return maxIterationsDoneByAnyGroup < continuousReplicationGroupIterationLimit;
+      if (maxIterationsDoneByAnyGroup >= continuousReplicationGroupIterationLimit) {
+        logger.info("Thread name: {} not creating new groups as iteration limit {} reached", threadName,
+            maxIterationsDoneByAnyGroup);
+        return false;
+      }
+      return true;
     }
 
     /**
-     * For each data node tracker, if any remote replica group is done, removes remote replica group from tracking,
+     * For each data node tracker, if any remote replica group is done,
+     * removes remote replica group from tracking, throttles replicas added in this group,
      * throttles corresponding replica and moves its state to UNKNOWN
      * For these finished groups, drops keys from store key converter
      */
-    void processFinishedGroups() {
+    private void processFinishedGroups() {
       List<RemoteReplicaGroup> finishedGroups = dataNodeTrackers.stream()
           .map(DataNodeTracker::processFinishedGroups)
           .flatMap(List::stream)
@@ -2195,16 +2266,33 @@ public class ReplicaThread implements Runnable {
 
       finishedGroups.forEach(remoteReplicaGroup -> {
         storeKeyConverter.tryDropCache(remoteReplicaGroup.getStoreKeysConversionLog());
+        logger.trace("Thread name: {} group id {} is done and removed from group tracker", threadName, remoteReplicaGroup.getId());
       });
+
+      logger.trace("Thread name: {} Finished processing finished groups {}", threadName, dataNodeTrackers);
     }
 
-    List<ReplicaTracker> fillReplicaStatusForFinishedGroup(ActiveGroupTracker finishedActiveGroupTracker) {
+    /**
+     * For any active group tracker that is not tracking any group, does below things
+     *
+     * 1. Filter pre-assigned replicas with UNKNOWN, OFFLINE and STANDBY status
+     * 2. If any of these replica is throttled we increment throttling metric
+     * 3. For each of these replicas we check the status of replica and update in corresponding tracker
+     *
+     * whenever active group is free, no replica will be in ACTIVE status and whenever stand by group is free,
+     * it will pick up STANDBY_TIMED_OUT_ON_NO_PROGRESS replicas, so we do not need to recheck status of these.
+     *
+     * @param finishedActiveGroupTracker finished group tracker
+     * @return list of replica trackers updated
+     */
+    private List<ReplicaTracker> fillReplicaStatusForFinishedGroup(ActiveGroupTracker finishedActiveGroupTracker) {
 
       List<ReplicaTracker> replicaTrackers = finishedActiveGroupTracker.getPreAssignedReplicas(
-              Arrays.asList(ReplicaStatus.UNKNOWN, ReplicaStatus.OFFLINE, ReplicaStatus.STANDBY_NO_PROGRESS))
+              Arrays.asList(ReplicaStatus.UNKNOWN, ReplicaStatus.OFFLINE, ReplicaStatus.STANDBY))
           .stream()
           .filter(replicaTracker -> {
             if (replicaTracker.isThrottled()) {
+              logger.trace("Thread name: {} replica for tracker {} is throttled", threadName, replicaTracker);
               throttleCount.inc();
               return false;
             }
@@ -2214,24 +2302,38 @@ public class ReplicaThread implements Runnable {
 
       replicaTrackers.forEach(replicaTracker -> {
         ReplicaStatus replicaStatus = getReplicaStatus(replicaTracker.getRemoteReplicaInfo());
+
+        logger.trace("Thread name: {} Updated replica {} status from {} to {}", threadName,
+            replicaTracker.getRemoteReplicaInfo(), replicaTracker.getReplicaStatus(), replicaStatus);
+
         replicaTracker.setReplicaStatus(replicaStatus);
       });
       return replicaTrackers;
     }
 
     /**
-     * For each data node tracker, iterates over active group trackers and are not tracking any group,
-     * creates new RemoteReplicaGroup from preassigned replicas with ACTIVE status and adds it to tracker.
+     * For all active group trackers which are not tracking any remote replica group, does below things
+     *
+     * 1. updates status of preassigned available replicas with UNKNOWN, OFFLINE and STANDBY status.
+     * 2. Creates active remote replica group from updated replicas with status as ACTIVE.
+     * 3. Updates group tracker for newly created active groups.
      */
-    void fillActiveGroups() {
+    private void fillActiveGroups() {
       dataNodeTrackers.forEach(dataNodeTracker -> {
+        logger.trace("Thread name: {} Trying to create active group for data node {} ", threadName,
+            dataNodeTracker.getDataNodeId());
         List<ActiveGroupTracker> finishedActiveGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
 
         finishedActiveGroupTrackers.forEach(activeGroupTracker -> {
+          logger.trace("Thread name: {} Trying to create active group for active group tracker {} ", threadName,
+              activeGroupTracker);
 
           List<ReplicaTracker> activeReplicaTrackers = fillReplicaStatusForFinishedGroup(activeGroupTracker).stream()
               .filter(replicaTracker -> replicaTracker.getReplicaStatus().equals(ReplicaStatus.ACTIVE))
               .collect(Collectors.toList());
+
+          logger.trace("Thread name: {} trying to create group from active replicas {} for group id {} ",
+              threadName, activeReplicaTrackers, activeGroupTracker.getGroupId());
 
           if (activeReplicaTrackers.isEmpty()) {
             return;
@@ -2242,27 +2344,37 @@ public class ReplicaThread implements Runnable {
               dataNodeTracker.getDataNodeId(), false, activeGroupTracker.getGroupId());
 
           activeGroupTracker.startIteration(remoteReplicaGroup, activeReplicaTrackers);
+          logger.trace("Thread name: {} Created active remote replica group for group tracker {} ", threadName,
+              activeGroupTracker);
         });
       });
     }
 
     /**
-     * For each data node tracker, iterates over all active group trackers and collects preassigned replicas with
-     * STANDBY_NO_PROGRESS_TIMED_OUT status and creates a standbyGroup and adds it to standby group tracker.
+     * For all stand by tracker, which are not tracking any remote replica group, it does below things
+     *
+     * 1. Gets all preassigned replicas with STANDBY_TIMED_OUT_ON_NO_PROGRESS status from preassigned replicas of active group of
+     *    corresponding datanode tracker.
+     * 2. Create single standby group from these replicas and store it in standby group tracker
      */
     void fillStandByGroups() {
       dataNodeTrackers.forEach(dataNodeTracker -> {
+        logger.trace("Thread name: {} Trying to create standby group for data node {} ", threadName,
+            dataNodeTracker.getDataNodeId());
+
         StandByGroupTracker standByGroupTracker = dataNodeTracker.getStandByGroupTracker();
         if (standByGroupTracker.isInFlight()) {
           return;
         }
+        logger.trace("Thread name: {} Trying to create standby group for stand by group tracker {} ", threadName,
+            standByGroupTracker);
 
         List<ReplicaTracker> standByTimedOutNoProgressReplicaTrackers = new ArrayList<>();
         List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getActiveGroupTrackers();
 
         activeGroupTrackers.forEach(activeGroupTracker -> {
           List<ReplicaTracker> replicaTrackers = activeGroupTracker.getPreAssignedReplicas(
-                  Collections.singletonList(ReplicaStatus.STANDBY_NO_PROGRESS_TIMED_OUT));
+                  Collections.singletonList(ReplicaStatus.STANDBY_TIMED_OUT_ON_NO_PROGRESS));
 
           standByTimedOutNoProgressReplicaTrackers.addAll(replicaTrackers);
         });
@@ -2271,24 +2383,28 @@ public class ReplicaThread implements Runnable {
           return;
         }
 
+        logger.trace("Thread name: {} Trying to create standby group with replica trackers {} ", threadName,
+            standByTimedOutNoProgressReplicaTrackers);
+
         RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(standByTimedOutNoProgressReplicaTrackers.stream()
             .map(ReplicaTracker::getRemoteReplicaInfo)
             .collect(Collectors.toList()), dataNodeTracker.getDataNodeId(), true, standByGroupTracker.getGroupId());
         standByGroupTracker.startIteration(remoteReplicaGroup, standByTimedOutNoProgressReplicaTrackers);
+
+        logger.trace("Thread name: {} Created stand by remote replica group for stand by group tracker {} ", threadName,
+            standByGroupTracker);
       });
     }
 
     /**
-     * Checks and removes done remote replica groups from tracking
-     * Rechecks replica status for replicas which were preassigned to any finished group
-     * Creates new active groups
-     * Creates new standby groups
-     * @return List of remote replica groups that are getting tracked
+     * Tries to update remote replica groups currently in progress and
+     * creates new remote replica groups
      */
     List<RemoteReplicaGroup> enqueue() {
       processFinishedGroups();
 
       if (!shouldEnqueue()) {
+        logger.trace("Thread name: {} Not creating any new groups", threadName);
         return getInflightGroups();
       }
 
@@ -2296,8 +2412,10 @@ public class ReplicaThread implements Runnable {
       fillStandByGroups();
       List<RemoteReplicaGroup> inflightGroups = getInflightGroups();
 
+      // if we are not able to create any new group and no groups are remaining, all replicas caught up early
       if (inflightGroups.isEmpty()) {
         allReplicasCaughtUpEarly = true;
+        logger.trace("Thread name: {} All replicas marked to caught up early", threadName);
       }
       return inflightGroups;
     }

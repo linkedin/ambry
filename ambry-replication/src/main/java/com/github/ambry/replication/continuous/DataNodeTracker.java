@@ -141,4 +141,10 @@ public class DataNodeTracker {
         .filter(groupTracker -> !groupTracker.isInFlight())
         .collect(Collectors.toList());
   }
+
+  @Override
+  public String toString() {
+    return "DataNodeTracker :[" + dataNodeId.toString() + " " + activeGroupTrackers.toString() + " "
+        + standByGroupTracker.toString() + "]";
+  }
 }

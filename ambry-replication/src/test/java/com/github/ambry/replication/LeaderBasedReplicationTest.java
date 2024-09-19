@@ -905,7 +905,12 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "0");
     properties.setProperty("replication.max.partition.count.per.request", Integer.toString(3));
- //   properties.setProperty(ReplicationConfig.REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT, Integer.toString(ReplicaThread.ReplicaGroupReplicationState.values().length * (numOfMessagesOnRemoteNodeInLocalDC + numOfMessagesOnRemoteNodeInRemoteDC)));
+
+    //set iteration limit such that even if any group finishes in one step,
+    // all group will have minimum iterations as number of messages
+    properties.setProperty(ReplicationConfig.REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT, Integer.toString(
+        ReplicaThread.ReplicaGroupReplicationState.values().length * Integer.max(numOfMessagesOnRemoteNodeInLocalDC,
+            numOfMessagesOnRemoteNodeInRemoteDC)));
 
 
     replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
@@ -1024,10 +1029,6 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
         getRemoteLeaderReplicasWithLeaderPartitionsOnLocalNode(clusterMap, replicationManager.dataNodeId,
             remoteNodeInRemoteDC);
 
-    //set iteration limit such that even if any group finishes in one step,
-    // all group will have numOfMessagesOnRemoteNodeInRemoteDC iterations
-    crossColoReplicaThread.setContinuousReplicationGroupIterationLimit(
-        numOfMessagesOnRemoteNodeInRemoteDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
     // replicate with remote node in remote DC
     crossColoReplicaThread.replicate();
 
@@ -1043,10 +1044,6 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
       }
     }
 
-    //set iteration limit such that even if any group finishes in one step,
-    // all group will have at least numOfMessagesOnRemoteNodeInLocalDC iterations
-    intraColoReplicaThread.setContinuousReplicationGroupIterationLimit(
-        numOfMessagesOnRemoteNodeInLocalDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
     //Replicate with remote node in local dc
     intraColoReplicaThread.replicate();
 
@@ -1086,10 +1083,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
     // Attempt replication with remoteNodeInRemoteDC, we should not see any replication attempt for standby replicas
     // and their remote token stays as 0.
-    //set iteration limit such that even if any group finishes in one step,
-    // all group will have at least numOfMessagesOnRemoteNodeInRemoteDC iterations
-    crossColoReplicaThread.setContinuousReplicationGroupIterationLimit(
-        numOfMessagesOnRemoteNodeInRemoteDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
+
     crossColoReplicaThread.replicate();
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       if (!leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())) {
@@ -1113,10 +1107,6 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
             crossColoReplicaThread.getRemoteStandbyReplicasTimedOutOnNoProgress(remoteReplicaInfosForRemoteDC)),
         allStandbyReplicas);
 
-    //set iteration limit such that even if any group finishes in one step,
-    // all group will have at least numOfMessagesOnRemoteNodeInRemoteDC iterations
-    crossColoReplicaThread.setContinuousReplicationGroupIterationLimit(
-        numOfMessagesOnRemoteNodeInRemoteDC * ReplicaThread.ReplicaGroupReplicationState.values().length);
     crossColoReplicaThread.replicate();
 
     // token index for all standby replicas will move forward after fetching missing keys themselves

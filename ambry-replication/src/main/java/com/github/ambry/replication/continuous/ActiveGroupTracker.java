@@ -39,4 +39,9 @@ public class ActiveGroupTracker extends GroupTracker {
         .filter(replicaTracker -> statuses.contains(replicaTracker.getReplicaStatus()))
         .collect(Collectors.toList());
   }
+
+  @Override
+  public String toString() {
+    return "ActiveGroupTracker :[" + super.toString() + " " + preAssignedReplicas.toString() + "]";
+  }
 }

@@ -163,6 +163,10 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
 
     List<DataNodeTracker> dataNodeTrackers = remoteReplicaGroupPoller.getDataNodeTrackers();
 
+    // check if count of total replicas is returned correctly
+    Assert.assertEquals("Count of total replicas returned from poller should be same as thread", dataNodeToReplicaMap.values().stream().mapToInt(
+        List::size).sum(), remoteReplicaGroupPoller.getReplicaCount());
+
     // check if data node trackers are generated correctly
 
     Assert.assertEquals("Count of data nodes assigned to thread and count of data node trackers should be same",
@@ -401,7 +405,7 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
     dataNodeTrackers.forEach(dataNodeTracker -> {
       List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getActiveGroupTrackers();
       ReplicaTracker replicaTracker = activeGroupTrackers.get(0).getPreAssignedReplicas().get(0);
-      replicaTracker.setReplicaStatus(ReplicaStatus.STANDBY_NO_PROGRESS_TIMED_OUT);
+      replicaTracker.setReplicaStatus(ReplicaStatus.STANDBY_TIMED_OUT_ON_NO_PROGRESS);
     });
 
     // after this call, standby replicas will be added to inflight groups

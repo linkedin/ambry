@@ -93,4 +93,9 @@ public abstract class GroupTracker {
   public boolean isGroupDone() {
     return isInFlight() && remoteReplicaGroup.isDone();
   }
+
+  @Override
+  public String toString() {
+    return "GroupTracker: [" + groupId + " " + inflightReplicaTrackers.toString() + " " + iterations + "]";
+  }
 }
