@@ -123,6 +123,7 @@ public class ReplicaThread implements Runnable {
   private final long threadThrottleDurationMs;
   protected final Time time;
   private final Counter throttleCount;
+  private final Counter continuousReplicationReplicaThrottleCount;
   private final Counter syncedBackOffCount;
   private final Counter idleCount;
   private final ReentrantLock lock = new ReentrantLock();
@@ -186,11 +187,13 @@ public class ReplicaThread implements Runnable {
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
       idleCount = replicationMetrics.interColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.interColoReplicaThreadThrottleCount;
+      continuousReplicationReplicaThrottleCount = replicationMetrics.interColoContinuousReplicationReplicaThrottleCount;
     } else {
       threadThrottleDurationMs = replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.intraColoReplicaSyncedBackoffCount;
       idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
+      continuousReplicationReplicaThrottleCount = replicationMetrics.intraColoContinuousReplicationReplicaThrottleCount;
     }
     this.enableContinuousReplication = isContinuousReplicationEnabled(replicationConfig);
     this.continuousReplicationGroupIterationLimit = replicationConfig.replicationContinuousGroupIterationLimit;
@@ -442,7 +445,6 @@ public class ReplicaThread implements Runnable {
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
     boolean allReplicasCaughtEarly = false;
-    int allProcessedReplicaCount = 0;
 
     try {
       storeKeyConverter.dropCache();
@@ -507,7 +509,6 @@ public class ReplicaThread implements Runnable {
       } while (poller.shouldContinue());
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
       allReplicasCaughtEarly = poller.allReplicasCaughtUpEarly();
-      allProcessedReplicaCount = poller.getReplicaCount();
     } catch (Exception e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
@@ -516,7 +517,7 @@ public class ReplicaThread implements Runnable {
     }
 
     // check and make thread sleep and publish metrics for throttling
-    maybeSleepAfterReplication(allReplicasCaughtEarly, allProcessedReplicaCount);
+    maybeSleepAfterReplication(allReplicasCaughtEarly);
     logger.trace("Thread name: {} Exiting replication, all iterations Done!", threadName);
   }
 
@@ -631,7 +632,7 @@ public class ReplicaThread implements Runnable {
           datacenterName);
       emitCyclicReplicationIdleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, cycleEndTime);
     }
-    maybeSleepAfterReplication(remoteReplicaGroups.isEmpty(), 1);
+    maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
   }
 
 
@@ -823,16 +824,15 @@ public class ReplicaThread implements Runnable {
    * Maybe sleep for a while after one round of replication. If all the replicas are caught up and the configuration
    * shows we should sleep, then sleep for a while so we can save some CPU.
    * @param allCaughtUp True when all replicas are caught up.
-   * @param throttledReplicaCount total replicas which are getting throttled
    */
-  private void maybeSleepAfterReplication(boolean allCaughtUp, int throttledReplicaCount) {
+  private void maybeSleepAfterReplication(boolean allCaughtUp) {
     long sleepDurationMs = 0;
     if (allCaughtUp && replicationConfig.replicationReplicaThreadIdleSleepDurationMs > 0) {
       sleepDurationMs = replicationConfig.replicationReplicaThreadIdleSleepDurationMs;
       idleCount.inc();
     } else if (threadThrottleDurationMs > 0) {
       sleepDurationMs = threadThrottleDurationMs;
-      throttleCount.inc(throttledReplicaCount);
+      throttleCount.inc();
     }
 
     if (running && sleepDurationMs > 0) {
@@ -2166,16 +2166,6 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     * @return returns total count of replicas in the poller
-     */
-    int getReplicaCount() {
-      return dataNodeTrackers.stream()
-          .flatMap(dataNodeTracker -> dataNodeTracker.getActiveGroupTrackers().stream())
-          .mapToInt(activeGroupTracker -> activeGroupTracker.getPreAssignedReplicas().size())
-          .sum();
-    }
-
-    /**
      * Creates Data node trackers for every data node
      * Every datanode tracker has active groups and standby group
      * For each data node tracker, only one stand by group is present to reduce cross colo requests
@@ -2293,7 +2283,7 @@ public class ReplicaThread implements Runnable {
           .filter(replicaTracker -> {
             if (replicaTracker.isThrottled()) {
               logger.trace("Thread name: {} replica for tracker {} is throttled", threadName, replicaTracker);
-              throttleCount.inc();
+              continuousReplicationReplicaThrottleCount.inc();
               return false;
             }
             return true;
