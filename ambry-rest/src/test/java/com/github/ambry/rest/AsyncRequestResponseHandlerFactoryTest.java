@@ -38,7 +38,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
   public void getAsyncRequestResponseHandlerTest() throws InstantiationException, IOException {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    Router router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
+    Router router = new InMemoryRouter(verifiableProperties, new MockClusterMap(), null);
 
     RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
     AsyncRequestResponseHandlerFactory handlerFactory =
@@ -69,7 +69,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
   @Test
   public void getFactoryTestWithBadInputTest() throws IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
-    Router router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
+    Router router = new InMemoryRouter(verifiableProperties, new MockClusterMap(), null);
     RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
 
     // RestResponseHandlerFactory constructor.

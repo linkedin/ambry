@@ -46,7 +46,6 @@ import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
@@ -238,7 +237,6 @@ public class S3MultipartUploadTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     ClusterMap clusterMap = new MockClusterMap();
-    InMemoryRouter router = new InMemoryRouter(verifiableProperties, clusterMap);
     AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     IdSigningService idSigningService = new AmbryIdSigningService();
     FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
@@ -249,6 +247,7 @@ public class S3MultipartUploadTest {
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
     IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
+    InMemoryRouter router = new InMemoryRouter(verifiableProperties, clusterMap, ambryIdConverterFactory);
     NamedBlobPutHandler namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, injector,
             frontendConfig, metrics, CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);

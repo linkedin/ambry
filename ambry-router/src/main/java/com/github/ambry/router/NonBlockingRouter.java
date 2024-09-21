@@ -737,6 +737,14 @@ public class NonBlockingRouter implements Router {
         logger.error("Exception thrown on closing repair requests db", e);
       }
     }
+    if (idConverter != null) {
+      try {
+        idConverter.close();
+        idConverter = null;
+      } catch (Exception e) {
+        logger.error("Exception thrown on closing id converter", e);
+      }
+    }
     // close router metrics
     routerMetrics.close();
   }
@@ -782,6 +790,13 @@ public class NonBlockingRouter implements Router {
    */
   public int getOperationsCount() {
     return currentOperationsCount.get();
+  }
+
+  /**
+   * @return the {@link IdConverter} in the router.
+   */
+  public IdConverter getIdConverter() {
+    return idConverter;
   }
 
   void incrementOperationsCount(int delta) {

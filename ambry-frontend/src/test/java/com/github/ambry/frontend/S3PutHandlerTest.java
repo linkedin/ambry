@@ -146,7 +146,6 @@ public class S3PutHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     ClusterMap clusterMap = new MockClusterMap();
-    InMemoryRouter router = new InMemoryRouter(verifiableProperties, clusterMap);
     AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     IdSigningService idSigningService = new AmbryIdSigningService();
     FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
@@ -156,6 +155,7 @@ public class S3PutHandlerTest {
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
+    InMemoryRouter router = new InMemoryRouter(verifiableProperties, clusterMap, ambryIdConverterFactory);
     IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
     NamedBlobPutHandler namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, injector,
