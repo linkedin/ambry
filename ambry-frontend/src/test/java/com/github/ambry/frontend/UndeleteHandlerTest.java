@@ -79,7 +79,7 @@ public class UndeleteHandlerTest {
   }
 
   private final UndeleteHandler undeleteHandler;
-  private final InMemoryRouter router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP);
+  private final InMemoryRouter router;
   private final FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
   private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory();
   private String blobId;
@@ -89,6 +89,7 @@ public class UndeleteHandlerTest {
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), config);
     AccountAndContainerInjector accountAndContainerInjector =
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
+    router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP, idConverterFactory);
     undeleteHandler =
         new UndeleteHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
             accountAndContainerInjector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager());

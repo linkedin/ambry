@@ -79,7 +79,7 @@ public class TtlUpdateHandlerTest {
 
   private final TtlUpdateHandler ttlUpdateHandler;
   private final String blobId;
-  private final InMemoryRouter router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP);
+  private final InMemoryRouter router;
   private final FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
   private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory();
 
@@ -88,13 +88,14 @@ public class TtlUpdateHandlerTest {
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), config);
     AccountAndContainerInjector accountAndContainerInjector =
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
-    ttlUpdateHandler =
-        new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            accountAndContainerInjector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager(), null, null);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
+    router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP, idConverterFactory);
     blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null,
         QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE), null).get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
+    ttlUpdateHandler =
+        new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
+            accountAndContainerInjector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager(), null, null);
   }
 
   /**

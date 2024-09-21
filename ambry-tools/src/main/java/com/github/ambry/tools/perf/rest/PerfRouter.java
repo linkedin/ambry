@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
@@ -109,7 +110,7 @@ class PerfRouter implements Router {
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        the {@link PutBlobOptions} for the blob.
    * @param callback       the {@link Callback} to invoke on operation completion.
-   * @param restRequest    The name of the blob path for named blob based upload.
+   * @param restRequest    The {@link RestRequest} to put the blob.
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
@@ -216,6 +217,11 @@ class PerfRouter implements Router {
 
   @Override
   public RouterConfig getRouterConfig() {
+    return null;
+  }
+
+  @Override
+  public IdConverter getIdConverter() {
     return null;
   }
 

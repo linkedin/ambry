@@ -96,7 +96,7 @@ public class NettyMessageProcessorTest {
   public NettyMessageProcessorTest() throws InstantiationException, IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
-    router = new InMemoryRouter(verifiableProperties, notificationSystem, new MockClusterMap());
+    router = new InMemoryRouter(verifiableProperties, notificationSystem, new MockClusterMap(), null);
     restRequestService = new MockRestRequestService(verifiableProperties, router);
     requestHandler = new MockRestRequestResponseHandler(restRequestService);
     restRequestService.setupResponseHandler(requestHandler);
