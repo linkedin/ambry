@@ -281,7 +281,9 @@ public class InMemoryRouter implements Router {
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
-    PostData postData = new PostData(blobProperties, usermetadata, channel, null, options, callback, futureResult);
+    Callback<String> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+    PostData postData = new PostData(blobProperties, usermetadata, channel, null, options, wrappedCallback, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
@@ -481,6 +483,29 @@ public class InMemoryRouter implements Router {
     } catch (Exception e) {
       throw new RouterException("BlobId is invalid " + blobId, RouterErrorCode.InvalidBlobId);
     }
+  }
+
+  /**
+   * Create id converter callback after router put the blob.
+   * @param restRequest {@link RestRequest} to put the blob.
+   * @param blobProperties {@link BlobProperties} for the blob.
+   * @return
+   */
+  private Callback<String> createIdConverterCallbackForPut(RestRequest restRequest, BlobProperties blobProperties,
+      FutureResult<String> futureResult, Callback<String> callback) {
+    return (blobId, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        // Call idConverter.convert after putBlob succeeds
+        idConverter.convert(restRequest, blobId, blobProperties, callback);
+      }
+    };
   }
 
   /**

@@ -375,15 +375,17 @@ public class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
+    Callback<String> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
     if (isOpen.get()) {
-      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback,
+      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, wrappedCallback,
           quotaChargeCallback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), false);
-      completeOperation(futureResult, callback, null, routerException);
+      completeOperation(futureResult, wrappedCallback, null, routerException);
     }
     return futureResult;
   }
@@ -810,6 +812,28 @@ public class NonBlockingRouter implements Router {
    */
   int getBackgroundOperationsCount() {
     return currentBackgroundOperationsCount.get();
+  }
+
+  /**
+   * Create id converter callback after router put the blob.
+   * @param restRequest {@link RestRequest} to put the blob.
+   * @param blobProperties {@link BlobProperties} for the blob.
+   * @return
+   */
+  private Callback<String> createIdConverterCallbackForPut(RestRequest restRequest, BlobProperties blobProperties,
+      FutureResult<String> futureResult, Callback<String> callback) {
+    return (blobId, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        // Call idConverter.convert after putBlob succeeds
+        idConverter.convert(restRequest, blobId, blobProperties, callback);
+      }
+    };
   }
 
   /**
