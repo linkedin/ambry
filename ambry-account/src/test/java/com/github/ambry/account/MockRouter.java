@@ -167,7 +167,7 @@ public class MockRouter implements Router {
 
   @Override
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, RestRequest restRequest, Callback<String> idConverterCallback) {
     throw new UnsupportedOperationException("updateBlobTtl is not supported by this mock");
   }
 

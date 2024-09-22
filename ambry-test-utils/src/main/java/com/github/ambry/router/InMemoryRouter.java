@@ -333,11 +333,14 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback,
+      RestRequest restRequest, Callback<String> idConverterCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
+    Callback<Void> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, idConverterCallback) : callback;
     Exception exception = null;
     try {
       // to make sure Blob ID is ok
@@ -360,7 +363,7 @@ public class InMemoryRouter implements Router {
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      completeOperation(futureResult, callback, null, exception);
+      completeOperation(futureResult, wrappedCallback, null, exception);
     }
     return futureResult;
   }
@@ -504,6 +507,28 @@ public class InMemoryRouter implements Router {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         // Call idConverter.convert after putBlob succeeds
         idConverter.convert(restRequest, blobId, blobProperties, callback);
+      }
+    };
+  }
+
+  /**
+   * Create id converter callback after router ttl update.
+   * @param restRequest {@link RestRequest} to put the blob.
+   * @param blobId the blobId to update ttl.
+   * @return
+   */
+  private Callback<Void> createIdConverterCallbackForTtlUpdate(RestRequest restRequest, String blobId,
+      FutureResult<Void> futureResult, Callback<String> callback) {
+    return (result, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        // Call idConverter.convert after putBlob succeeds
+        idConverter.convert(restRequest, blobId, null, callback);
       }
     };
   }

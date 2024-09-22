@@ -96,16 +96,19 @@ public interface Router extends Closeable {
   /**
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
-   * @param blobId The ID of the blob that needs its TTL updated.
-   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
-   *                    permanent
-   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   *
+   * @param blobId              The ID of the blob that needs its TTL updated.
+   * @param serviceId           The service ID of the service updating the blob. This can be null if unknown.
+   * @param expiresAtMs         The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the
+   *                            blob permanent
+   * @param callback            The {@link Callback} which will be invoked on the completion of a request.
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
+   * @param restRequest
+   * @param idConverterCallback
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback);
+      QuotaChargeCallback quotaChargeCallback, RestRequest restRequest, Callback<String> idConverterCallback);
 
   /**
    * Requests for a blob to be undeleted asynchronously and invokes the {@link Callback} when the request completes.
@@ -225,7 +228,7 @@ public interface Router extends Closeable {
    */
   default CompletableFuture<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
     CompletableFuture<Void> future = new CompletableFuture<>();
-    updateBlobTtl(blobId, serviceId, expiresAtMs, CallbackUtils.fromCompletableFuture(future), null);
+    updateBlobTtl(blobId, serviceId, expiresAtMs, CallbackUtils.fromCompletableFuture(future), null, null, null);
     return future;
   }
 

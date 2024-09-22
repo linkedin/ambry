@@ -446,7 +446,7 @@ class RouterServerTestFramework {
   private void startTtlUpdate(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
     Future<Void> future = router.updateBlobTtl(opChain.blobId, null, Utils.Infinite_Time, callback,
-        quotaChargeCallback);
+        quotaChargeCallback, null, null);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("updateBlobTtl", false), opChain) {
       @Override
       void check() throws Exception {

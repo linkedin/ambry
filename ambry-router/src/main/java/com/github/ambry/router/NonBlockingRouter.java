@@ -553,16 +553,19 @@ public class NonBlockingRouter implements Router {
   /**
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
-   * @param blobId The ID of the blob that needs its TTL updated.
-   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
-   *                    permanent
-   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   *
+   * @param blobId              The ID of the blob that needs its TTL updated.
+   * @param serviceId           The service ID of the service updating the blob. This can be null if unknown.
+   * @param expiresAtMs         The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the
+   *                            blob permanent
+   * @param callback            The {@link Callback} which will be invoked on the completion of a request.
+   * @param restRequest         The {@link RestRequest} of updateBlobTtl
+   * @param idConverterCallback The id converter callback which take the String type instead of void.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   @Override
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, RestRequest restRequest, Callback<String> idConverterCallback) {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
@@ -570,21 +573,23 @@ public class NonBlockingRouter implements Router {
     routerMetrics.updateBlobTtlOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
+    Callback<Void> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, idConverterCallback) : callback;
     if (isOpen.get()) {
       if (notFoundCache.getIfPresent(blobId) != null) {
         // If we know that blob doesn't exist, complete the operation.
         logger.info("Blob {} is known to be missing in servers", blobId);
         RouterException routerException =
             new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
-        completeOperation(futureResult, callback, null, routerException);
+        completeOperation(futureResult, wrappedCallback, null, routerException);
       } else {
         getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult,
-            new BlobOperationCallbackWrapper<>(blobId, callback), quotaChargeCallback);
+            new BlobOperationCallbackWrapper<>(blobId, wrappedCallback), quotaChargeCallback);
       }
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-      completeUpdateBlobTtlOperation(routerException, futureResult, callback);
+      completeUpdateBlobTtlOperation(routerException, futureResult, wrappedCallback);
     }
     return futureResult;
   }
@@ -832,6 +837,28 @@ public class NonBlockingRouter implements Router {
       } else {
         // Call idConverter.convert after putBlob succeeds
         idConverter.convert(restRequest, blobId, blobProperties, callback);
+      }
+    };
+  }
+
+  /**
+   * Create id converter callback after router ttl update.
+   * @param restRequest {@link RestRequest} to put the blob.
+   * @param blobId the blobId to update ttl.
+   * @return
+   */
+  private Callback<Void> createIdConverterCallbackForTtlUpdate(RestRequest restRequest, String blobId,
+      FutureResult<Void> futureResult, Callback<String> callback) {
+    return (result, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        // Call idConverter.convert after putBlob succeeds
+        idConverter.convert(restRequest, blobId, null, callback);
       }
     };
   }

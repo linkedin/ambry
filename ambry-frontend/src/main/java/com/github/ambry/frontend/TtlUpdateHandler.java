@@ -161,7 +161,7 @@ class TtlUpdateHandler {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
         router.updateBlobTtl(convertedBlobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(convertedBlobId),
-            QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
+            QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false), null, null);
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 

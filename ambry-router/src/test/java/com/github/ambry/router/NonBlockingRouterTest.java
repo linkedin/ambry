@@ -1259,7 +1259,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         layout.getMockServers()
             .forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
         TestCallback<Void> testCallback = new TestCallback<>();
-        Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+        Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null,
+            null, null);
         assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
 
         // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
@@ -1269,7 +1270,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // bad blob id
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future =
-          router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback, null);
+          router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback, null, null, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
     } finally {
       if (router != null) {
@@ -1300,7 +1301,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.updateBlobTtl(blobId, null, Utils.Infinite_Time, (result, exception) -> {
           callbackCalled.countDown();
           throw new RuntimeException("Throwing an exception in the user callback");
-        }, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        }, null, null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertTrue("Callback not called.", callbackCalled.await(10, TimeUnit.MILLISECONDS));
         assertEquals("All operations should be finished.", 0, router.getOperationsCount());
         assertTrue("Router should not be closed", router.isOpen());
@@ -2428,7 +2429,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       layout.getMockServers()
           .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null, null,
+          null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.BlobDoesNotExist);
 
       // Verify that not-found cache is populated with the blob ID.
@@ -2451,7 +2453,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       TestCallback<Void> ttlUpdateTestCallback = new TestCallback<>();
       Future<Void> ttlUpdateFuture =
-          router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, ttlUpdateTestCallback, null);
+          router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, ttlUpdateTestCallback, null, null, null);
       assertFailureAndCheckErrorCode(ttlUpdateFuture, ttlUpdateTestCallback, RouterErrorCode.BlobDoesNotExist);
 
       TestCallback<Void> deleteTestCallback = new TestCallback<>();
@@ -2864,7 +2866,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null, null,
+          null);
       // It should return the error code of the TtlUpdate which is AmbryUnavailable,
       // shouldn't return the error code of the ReplicateBlob which is Unknown_Error.
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
@@ -2913,7 +2916,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null, null,
+          null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
 
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
@@ -2949,7 +2953,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null, null,
+          null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
 
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
