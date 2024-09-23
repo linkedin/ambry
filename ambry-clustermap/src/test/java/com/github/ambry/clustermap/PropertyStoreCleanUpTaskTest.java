@@ -72,12 +72,19 @@ public class PropertyStoreCleanUpTaskTest {
     //Replica should be removed from property store for down host -> localhost_2
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().isEmpty());
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().isEmpty());
 
     //Replica should be present in property store for up hosts -> localhost_1, localhost_3
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
+
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
   }
 
   /**
@@ -108,12 +115,19 @@ public class PropertyStoreCleanUpTaskTest {
     //Replica should be present in property store for down host -> localhost_2
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
 
     //Replica should be present in property store for up hosts -> localhost_1, localhost_3
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
+
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
   }
 
   /**
@@ -144,10 +158,18 @@ public class PropertyStoreCleanUpTaskTest {
     //Replica should be present in property store for all hosts -> localhost_1, localhost_2, localhost_3
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
+
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
+
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
   }
 
   /**
@@ -180,10 +202,18 @@ public class PropertyStoreCleanUpTaskTest {
     //Replica should be present in property store for all hosts -> localhost_1, localhost_2, localhost_3
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_1", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
+
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_2", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
+
     assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
         .getDiskConfigs().get("disk1").getReplicaConfigs().containsKey("partition1"));
+    assertTrue(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName("localhost_3", PORT))
+        .getDiskConfigs().get("disk2").getReplicaConfigs().containsKey("partition2"));
   }
 
   /**
@@ -210,8 +240,14 @@ public class PropertyStoreCleanUpTaskTest {
     admin.addResource(CLUSTER_NAME, "resource1", idealState);
 
     addReplicasToDisk(dataNodeConfigSource, "localhost_1", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_1", "disk2", "partition2");
+
     addReplicasToDisk(dataNodeConfigSource, "localhost_2", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_2", "disk2", "partition2");
+
     addReplicasToDisk(dataNodeConfigSource, "localhost_3", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_3", "disk2", "partition2");
+
 
   }
 
@@ -239,8 +275,13 @@ public class PropertyStoreCleanUpTaskTest {
 
     // Add replicas to property store
     addReplicasToDisk(dataNodeConfigSource, "localhost_1", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_1", "disk2", "partition2");
+
     addReplicasToDisk(dataNodeConfigSource, "localhost_2", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_2", "disk2", "partition2");
+
     addReplicasToDisk(dataNodeConfigSource, "localhost_3", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_3", "disk2", "partition2");
   }
 
   /**
@@ -264,12 +305,20 @@ public class PropertyStoreCleanUpTaskTest {
 
     // Add replicas to property store
     addReplicasToDisk(dataNodeConfigSource, "localhost_1", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_1", "disk2", "partition2");
+
     addReplicasToDisk(dataNodeConfigSource, "localhost_2", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_2", "disk2", "partition2");
+
     addReplicasToDisk(dataNodeConfigSource, "localhost_3", "disk1", "partition1");
+    addReplicasToDisk(dataNodeConfigSource, "localhost_3", "disk2", "partition2");
 
   }
 
-  private DataNodeConfig getDataNodeConfig(String host) {
+  private DataNodeConfig getDataNodeConfig(DataNodeConfigSource dataNodeConfigSource, String host) {
+    if(dataNodeConfigSource.get(ClusterMapUtils.getInstanceName(host, PORT)) != null) {
+      return dataNodeConfigSource.get(ClusterMapUtils.getInstanceName(host, PORT));
+    }
     String instanceName = ClusterMapUtils.getInstanceName(host, PORT);
     return new DataNodeConfig(instanceName, host, PORT, DC, PORT + 1, PORT + 2, "rack", ClusterMapUtils.DEFAULT_XID);
   }
@@ -283,7 +332,7 @@ public class PropertyStoreCleanUpTaskTest {
 
   private void addReplicasToDisk(DataNodeConfigSource dataNodeConfigSource, String host, String disk, String partition) {
     // Add replicas to property store
-    DataNodeConfig dataNodeConfig = getDataNodeConfig(host);
+    DataNodeConfig dataNodeConfig = getDataNodeConfig(dataNodeConfigSource, host);
     setDataNodeConfig(dataNodeConfig, disk, partition, dataNodeConfigSource);
   }
 
