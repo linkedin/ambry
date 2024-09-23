@@ -169,14 +169,14 @@ public class PropertyStoreCleanUpTask implements Task {
           boolean configChanged;
           // Remove all sealed, stopped, partially sealed and disabled replicas from DataNodeConfig
           configChanged = TaskUtils.removeIfPresent(dataNodeConfig.getSealedReplicas());
-          configChanged = configChanged || TaskUtils.removeIfPresent(dataNodeConfig.getStoppedReplicas());
-          configChanged = configChanged || TaskUtils.removeIfPresent(dataNodeConfig.getPartiallySealedReplicas());
-          configChanged = configChanged || TaskUtils.removeIfPresent(dataNodeConfig.getDisabledReplicas());
+          configChanged = TaskUtils.removeIfPresent(dataNodeConfig.getStoppedReplicas()) || configChanged;
+          configChanged = TaskUtils.removeIfPresent(dataNodeConfig.getPartiallySealedReplicas()) || configChanged;
+          configChanged = TaskUtils.removeIfPresent(dataNodeConfig.getDisabledReplicas()) || configChanged;
           Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
 
           // Remove all replicas for each disk in the DataNodeConfig
           for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
-            configChanged = configChanged || TaskUtils.removeIfPresent(diskConfig.getReplicaConfigs());
+            configChanged = TaskUtils.removeIfPresent(diskConfig.getReplicaConfigs()) || configChanged;
           }
           // Only set the DatanodeConfig in ZK if it has changed
           if (configChanged) {
