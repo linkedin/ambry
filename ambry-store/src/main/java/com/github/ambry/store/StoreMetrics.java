@@ -66,6 +66,7 @@ public class StoreMetrics {
   public final Counter generateTokenBasedOnCompactionHistoryCount;
   public final Counter offsetFoundInBeforeAfterMapCount;
   public final Counter beforeAndAfterOffsetSanityCheckFailureCount;
+  public final Counter getOutOfRetentionDeletedBlobCount;
   public final Timer recoveryTime;
   public final Timer findTime;
   public final Timer indexFlushTime;
@@ -189,6 +190,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "OffsetFoundInBeforeAfterMapCount"));
     beforeAndAfterOffsetSanityCheckFailureCount = registry.counter(
         MetricRegistry.name(PersistentIndex.class, name + "BeforeAndAfterOffsetSanityCheckFailureCount"));
+    getOutOfRetentionDeletedBlobCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "GetOutOfRetentionDeletedBlobCount"));
     recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexRecoveryTime"));
     findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFindTime"));
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));
