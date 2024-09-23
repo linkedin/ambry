@@ -48,14 +48,15 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private static final Logger logger = LoggerFactory.getLogger(PipedAsyncWritableChannel.class);
 
-  public PipedAsyncWritableChannel(ReadableStreamChannel sourceChannel, int numReadableStreamChannel) {
+  /**
+   * @param sourceChannel The channel that contains the stream of bytes to be read into primary and secondary destinations
+   * @param withSecondary if {@code true}, sends the bytes from source channel to secondary destination as well
+   */
+  public PipedAsyncWritableChannel(ReadableStreamChannel sourceChannel, boolean withSecondary) {
     this.sourceChannel = sourceChannel;
-    if (numReadableStreamChannel <= 0 || numReadableStreamChannel > 2) {
-      throw new IllegalArgumentException("Number of readable stream channel is not valid: " + numReadableStreamChannel);
-    }
 
     pipedPrimaryReadChannel = new PipedReadableStreamChannel(true);
-    if (numReadableStreamChannel == 2) {
+    if (withSecondary) {
       pipedSecondaryReadChannel = new PipedReadableStreamChannel(false);
     }
 
@@ -71,15 +72,15 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
   }
 
   /**
-   * @return {@link ReadableStreamChannel} that contains the bytes piped into this writable channel
+   * @return the primary {@link ReadableStreamChannel} that contains the bytes coming into this writable channel
    */
   public ReadableStreamChannel getPrimaryReadableStreamChannel() {
     return pipedPrimaryReadChannel;
   }
 
   /**
-   * @return {@link ReadableStreamChannel} that contains the bytes piped into this writable channel. If only one
-   * readable stream channels are allowed in this pipe, this will return null
+   * @return the secondary {@link ReadableStreamChannel} that contains the bytes coming into this writable channel. If
+   * this class was created without secondary destination, this will return null
    */
   public ReadableStreamChannel getSecondaryReadableStreamChannel() {
     return pipedSecondaryReadChannel;
@@ -105,8 +106,8 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
         // This writable channel is no longer open. Return with closed channel exception
         chunkData.resolveChunk(new ClosedChannelException());
       } else {
-        // Forward the bytes to piped readable channels. The readable channels will read the bytes into their destination
-        // writable channels
+        // Forward the bytes to underlying primary and secondary readable channels. The readable channels will read the
+        // bytes into their respective destination writable channels
         pipedPrimaryReadChannel.writeToChannel(chunkData);
         if (pipedSecondaryReadChannel != null) {
           pipedSecondaryReadChannel.writeToChannel(chunkData);
@@ -204,7 +205,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
           bufferedChunks.add(chunkData);
           return;
         }
-        // TODO: Reference count is being increased here. It should be decreased in callback
+        // Reference count is increased here. It will be decreased in callback received after write is successful
         writableChannel.write(chunkData.buf.retainedDuplicate(),
             chunkData.makeCallbackForReadableStreamChannel(primary, totalBytesRead));
       } finally {
@@ -300,6 +301,9 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
             totalBytesRead.getAndAdd(result);
           }
 
+          // Decrease the reference counter
+          buf.release();
+
           if (primary) {
             // This callback is coming from primary reader
             primaryWriteCallbackResult = new Result(result, exception);
@@ -308,22 +312,32 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
             secondaryWriteCallbackResult = new Result(result, exception);
           }
 
-          if (primaryWriteCallbackResult != null && (PipedAsyncWritableChannel.this.pipedSecondaryReadChannel == null
-              || secondaryWriteCallbackResult != null)) {
-            // If both primary and secondary callback came or secondary channel is absent, invoke source callback
-            if (primaryWriteCallbackResult.exception == null && secondaryWriteCallbackResult != null
-                && secondaryWriteCallbackResult.exception != null) {
-              // There is an exception when writing to secondary reader. Close the secondary.
-              PipedAsyncWritableChannel.this.closeSecondary(new ClosedChannelException());
-            }
+          if (PipedAsyncWritableChannel.this.pipedSecondaryReadChannel == null) {
             future.done(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
             if (callback != null) {
               callback.onCompletion(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
             }
-            // TODO: Should we decrease the reference count here?
             buf = null;
-          } else if (primaryWriteCallbackResult != null) {
-            // TODO Primary result came but secondary didn't come, start a timer here
+          } else {
+            if (primaryWriteCallbackResult != null && secondaryWriteCallbackResult != null) {
+              if (primaryWriteCallbackResult.exception == null && secondaryWriteCallbackResult.exception != null) {
+                // There is an exception when writing to secondary reader. Close the secondary.
+                PipedAsyncWritableChannel.this.closeSecondary(new ClosedChannelException());
+              }
+              // Both primary and secondary callback came. Invoke source Readable Channel callback informing that
+              // reading of these bytes is completed
+              future.done(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
+              if (callback != null) {
+                callback.onCompletion(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
+              }
+              buf = null;
+            } else if (primaryWriteCallbackResult != null) {
+              // TODO Write successful callback came from primary but not from secondary. We will "start a timer" to wait
+              //  for result from secondary. If we time out waiting for the result, we will close secondary and send the
+              //  remaining bytes to primary alone so that primary upload SLA is not affected.
+            } else {
+              // Do nothing. Callback from Secondary came. We will wait for callback to come from primary
+            }
           }
         } finally {
           lock.unlock();
