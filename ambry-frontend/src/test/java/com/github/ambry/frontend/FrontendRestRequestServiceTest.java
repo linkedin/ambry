@@ -164,10 +164,10 @@ public class FrontendRestRequestServiceTest {
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
   private final FrontendMetrics frontendMetrics;
-  private final IdConverterFactory idConverterFactory;
+  private IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
   private final FrontendTestResponseHandler responseHandler;
-  private final InMemoryRouter router;
+  private InMemoryRouter router;
   private final MockClusterMap clusterMap;
   private final AccountStatsStore accountStatsStore;
   private final BlobId referenceBlobId;
@@ -237,7 +237,7 @@ public class FrontendRestRequestServiceTest {
       }
     }
     blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
-    router = new InMemoryRouter(verifiableProperties, clusterMap);
+    router = new InMemoryRouter(verifiableProperties, clusterMap, idConverterFactory);
     accountStatsStore = mock(AccountStatsStore.class);
     responseHandler = new FrontendTestResponseHandler();
     frontendRestRequestService = getFrontendRestRequestService();
@@ -1830,7 +1830,7 @@ public class FrontendRestRequestServiceTest {
    * @throws JSONException
    */
   @Test
-  public void misbehavingIdConverterTest() throws InstantiationException, JSONException {
+  public void misbehavingIdConverterTest() throws Exception {
     FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
     String exceptionMsg = TestUtils.getRandomString(10);
     converterFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
@@ -1843,7 +1843,7 @@ public class FrontendRestRequestServiceTest {
    * @throws JSONException
    */
   @Test
-  public void idConverterExceptionPipelineTest() throws InstantiationException, JSONException {
+  public void idConverterExceptionPipelineTest() throws Exception {
     FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
     String exceptionMsg = TestUtils.getRandomString(10);
     converterFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
@@ -1856,7 +1856,7 @@ public class FrontendRestRequestServiceTest {
    * @throws JSONException
    */
   @Test
-  public void misbehavingSecurityServiceTest() throws InstantiationException, JSONException {
+  public void misbehavingSecurityServiceTest() throws Exception {
     FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
     String exceptionMsg = TestUtils.getRandomString(10);
     securityFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
@@ -1869,7 +1869,7 @@ public class FrontendRestRequestServiceTest {
    * @throws JSONException
    */
   @Test
-  public void securityServiceExceptionPipelineTest() throws InstantiationException, JSONException {
+  public void securityServiceExceptionPipelineTest() throws Exception {
     FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
     String exceptionMsg = TestUtils.getRandomString(10);
     securityFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
@@ -1882,7 +1882,7 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void misbehavingRouterTest() throws Exception {
-    FrontendTestRouter testRouter = new FrontendTestRouter();
+    FrontendTestRouter testRouter = new FrontendTestRouter(idConverterFactory);
     String exceptionMsg = TestUtils.getRandomString(10);
     testRouter.exceptionToThrow = new IllegalStateException(exceptionMsg);
     doRouterExceptionPipelineTest(testRouter, exceptionMsg);
@@ -1895,7 +1895,7 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void routerExceptionPipelineTest() throws Exception {
-    FrontendTestRouter testRouter = new FrontendTestRouter();
+    FrontendTestRouter testRouter = new FrontendTestRouter(idConverterFactory);
     String exceptionMsg = TestUtils.getRandomString(10);
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError);
     doRouterExceptionPipelineTest(testRouter, exceptionMsg + " Error: " + RouterErrorCode.UnexpectedInternalError);
@@ -1928,7 +1928,7 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void deleteServiceIdTest() throws Exception {
-    FrontendTestRouter testRouter = new FrontendTestRouter();
+    FrontendTestRouter testRouter = new FrontendTestRouter(idConverterFactory);
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
@@ -2417,13 +2417,13 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void updateTtlRejectedTest() throws Exception {
-    FrontendTestRouter testRouter = new FrontendTestRouter();
+    FrontendTestRouter testRouter = new FrontendTestRouter(idConverterFactory);
     String exceptionMsg = TestUtils.getRandomString(10);
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.BlobUpdateNotAllowed);
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
             accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
@@ -3503,10 +3503,11 @@ public class FrontendRestRequestServiceTest {
    * @throws JSONException
    */
   private void doIdConverterExceptionTest(FrontendTestIdConverterFactory converterFactory, String expectedExceptionMsg)
-      throws InstantiationException, JSONException {
+      throws InstantiationException, JSONException, RestServiceException {
+    router = new InMemoryRouter(verifiableProperties, clusterMap, converterFactory);
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, converterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            securityServiceFactory, urlSigningService, idSigningService, router.getIdConverter().getNamedBlobDb(), accountService,
             accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
@@ -3522,7 +3523,7 @@ public class FrontendRestRequestServiceTest {
    * @throws JSONException
    */
   private void doSecurityServiceExceptionTest(FrontendTestSecurityServiceFactory securityFactory, String exceptionMsg)
-      throws InstantiationException, JSONException {
+      throws InstantiationException, JSONException, RestServiceException {
     for (FrontendTestSecurityServiceFactory.Mode mode : FrontendTestSecurityServiceFactory.Mode.values()) {
       securityFactory.mode = mode;
       RestMethod[] restMethods;
@@ -3536,9 +3537,11 @@ public class FrontendRestRequestServiceTest {
       } else {
         restMethods = RestMethod.values();
       }
+      Router testRouter = new FrontendTestRouter(idConverterFactory);
       frontendRestRequestService =
-          new FrontendRestRequestService(frontendConfig, frontendMetrics, new FrontendTestRouter(), clusterMap,
-              idConverterFactory, securityFactory, urlSigningService, idSigningService, null, accountService,
+          new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap,
+              idConverterFactory, securityFactory, urlSigningService, idSigningService, testRouter.getIdConverter()
+              .getNamedBlobDb(), accountService,
               accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
       frontendRestRequestService.setupResponseHandler(responseHandler);
       frontendRestRequestService.start();
@@ -4234,6 +4237,11 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
     }
 
     @Override
+    public NamedBlobDb getNamedBlobDb() {
+      return null;
+    }
+
+    @Override
     public void close() {
       isOpen = false;
     }
@@ -4386,6 +4394,19 @@ class FrontendTestRouter implements Router {
   String deleteServiceId = null;
   String ttlUpdateServiceId = null;
   String undeleteServiceId = null;
+  IdConverter idConverter;
+
+  public FrontendTestRouter(IdConverterFactory idConverterFactory) {
+    if (idConverterFactory != null) {
+      try {
+        idConverter = idConverterFactory.getIdConverter();
+      } catch (InstantiationException e) {
+        throw new RuntimeException(e);
+      }
+    } else {
+      idConverter = new FrontendTestIdConverterFactory().getIdConverter();
+    }
+  }
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
@@ -4448,8 +4469,20 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
+  public IdConverter getIdConverter() {
+    return idConverter;
+  }
+
+  @Override
   public void close() {
     isOpen = false;
+    if (idConverter != null) {
+      try {
+        idConverter.close();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   /**
