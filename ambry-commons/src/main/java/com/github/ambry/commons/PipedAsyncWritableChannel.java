@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
 public class PipedAsyncWritableChannel implements AsyncWritableChannel {
 
   private final ReadableStreamChannel sourceChannel;
-  private PipedReadableStreamChannel pipedPrimaryReadChannel = null;
+  private final PipedReadableStreamChannel pipedPrimaryReadChannel;
   private PipedReadableStreamChannel pipedSecondaryReadChannel = null;
   private final ReentrantLock lock = new ReentrantLock();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
@@ -313,26 +313,31 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
           }
 
           if (PipedAsyncWritableChannel.this.pipedSecondaryReadChannel == null) {
+            // Either there is no secondary or secondary failed with an exception. Invoke "sourceChannel" callback
+            // informing that reading of these bytes is completed. This will send more bytes
             future.done(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
             if (callback != null) {
               callback.onCompletion(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
             }
-            buf = null;
           } else {
             if (primaryWriteCallbackResult != null && secondaryWriteCallbackResult != null) {
-              if (primaryWriteCallbackResult.exception == null && secondaryWriteCallbackResult.exception != null) {
-                // There is an exception when writing to secondary reader. Close the secondary.
+              // Both primary and secondary callback came. Invoke "sourceChannel" callback informing that
+              // reading of these bytes is completed. This will send more bytes
+              if (primaryWriteCallbackResult.exception != null || secondaryWriteCallbackResult.exception != null) {
+                // If primary or secondary fails, close the secondary with closed channel exception.
+                String message = primaryWriteCallbackResult.exception != null ? "Primary failed with an exception "
+                    + primaryWriteCallbackResult.exception
+                    : "Secondary failed with an exception " + secondaryWriteCallbackResult.exception
+                        + ". Closing secondary channel";
+                logger.error(message);
                 PipedAsyncWritableChannel.this.closeSecondary(new ClosedChannelException());
               }
-              // Both primary and secondary callback came. Invoke source Readable Channel callback informing that
-              // reading of these bytes is completed
               future.done(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
               if (callback != null) {
                 callback.onCompletion(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
               }
-              buf = null;
             } else if (primaryWriteCallbackResult != null) {
-              // TODO Write successful callback came from primary but not from secondary. We will "start a timer" to wait
+              // TODO: Write successful callback came from primary but not from secondary. We will "start a timer" to wait
               //  for result from secondary. If we time out waiting for the result, we will close secondary and send the
               //  remaining bytes to primary alone so that primary upload SLA is not affected.
             } else {
