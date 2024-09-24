@@ -156,7 +156,8 @@ public class AmbrySecurityServiceTest {
           RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
       RESERVED_METADATA_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
-              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null, DEFAULT_RESERVED_METADATAID),
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null, DEFAULT_RESERVED_METADATAID,
+              null),
           RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
       RANDOM_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",

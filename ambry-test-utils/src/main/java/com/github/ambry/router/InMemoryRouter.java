@@ -147,7 +147,7 @@ public class InMemoryRouter implements Router {
               blobProperties.getContentType(), blobProperties.isPrivate(), blobProperties.getTimeToLiveInSeconds(),
               blobProperties.getCreationTimeInMs(), blobProperties.getAccountId(), blobProperties.getContainerId(),
               blobProperties.isEncrypted(), blobProperties.getExternalAssetTag(), blobProperties.getContentEncoding(),
-              blobProperties.getFilename(), blobProperties.getReservedMetadataBlobId());
+              blobProperties.getFilename(), blobProperties.getReservedMetadataBlobId(), blobProperties.getReservedUuid());
       this.userMetadata = userMetadata;
       this.blob = blob;
       this.stitchedChunks = stitchedChunks;
@@ -531,9 +531,17 @@ public class InMemoryRouter implements Router {
       String operationResult = null;
       Exception exception = null;
       try {
-        String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
-            postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
-            getPartitionForPut(), false, BlobId.BlobDataType.DATACHUNK).getID();
+        String blobId = null;
+        if (postData.getBlobProperties().getReservedUuid() != null) {
+          blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
+              postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
+              getPartitionForPut(), false, BlobId.BlobDataType.DATACHUNK,
+              postData.getBlobProperties().getReservedUuid()).getID();
+        } else {
+          blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
+              postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
+              getPartitionForPut(), false, BlobId.BlobDataType.DATACHUNK).getID();
+        }
         if (blobs.containsKey(blobId)) {
           exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
         }
