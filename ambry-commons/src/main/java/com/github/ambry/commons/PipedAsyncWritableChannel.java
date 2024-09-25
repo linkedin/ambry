@@ -22,7 +22,6 @@ import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Queue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -104,6 +103,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
       ChunkData chunkData = new ChunkData(src, callback);
       if (!isOpen()) {
         // This writable channel is no longer open. Return with closed channel exception
+        logger.error("Cannot be written to this channel. Writable channel is already closed");
         chunkData.resolveChunk(new ClosedChannelException());
       } else {
         // Forward the bytes to underlying primary and secondary readable channels. The readable channels will read the
@@ -172,20 +172,22 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
     public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
       lock.lock();
       try {
-        if (!isOpen()) {
-          logger.error("Piped Channel | channel already closed");
-          CompletableFuture<Long> future = new CompletableFuture<>();
-          callback.onCompletion(0L, new ClosedChannelException());
-          future.completeExceptionally(new ClosedChannelException());
-          return future;
-        } else if (this.writableChannel != null) {
+        if (this.writableChannel != null) {
           throw new IllegalStateException("AsyncWritableChannel already exist for this ReadableStreamChannel");
         }
-        this.writableChannel = asyncWritableChannel;
-        this.writableChannelFinalCallback = callback;
-        ChunkData chunkData;
-        while ((chunkData = bufferedChunks.poll()) != null) {
-          writeToChannel(chunkData);
+        if (!isOpen()) {
+          logger.error("Cannot be read from this channel. Readable channel is already closed");
+          if (callback != null) {
+            callback.onCompletion(0L, new ClosedChannelException());
+          }
+          writableChannelFutureResult.done(0L, new ClosedChannelException());
+        } else {
+          this.writableChannel = asyncWritableChannel;
+          this.writableChannelFinalCallback = callback;
+          ChunkData chunkData;
+          while ((chunkData = bufferedChunks.poll()) != null) {
+            writeToChannel(chunkData);
+          }
         }
         return writableChannelFutureResult;
       } finally {
