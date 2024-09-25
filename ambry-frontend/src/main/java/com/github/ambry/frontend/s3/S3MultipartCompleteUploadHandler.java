@@ -257,8 +257,8 @@ public class S3MultipartCompleteUploadHandler {
         // since the converted ID may be changed by the ID converter.
         String serviceId = blobInfo.getBlobProperties().getServiceId();
         retryExecutor.runWithRetries(retryPolicy,
-            callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false), null, null), this::isRetriable,
+            callback -> router.updateBlobTtl(null, blobId, serviceId, Utils.Infinite_Time, callback,
+                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
             routerTtlUpdateCallback(blobInfo, blobId));
       }, uri, LOGGER, finalCallback);
     }

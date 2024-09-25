@@ -101,8 +101,8 @@ public class MockRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, RestRequest restRequest) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     lock.lock();
     try {
       FutureResult<String> future = new FutureResult<>();
@@ -166,8 +166,8 @@ public class MockRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback, RestRequest restRequest, Callback<String> idConverterCallback) {
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("updateBlobTtl is not supported by this mock");
   }
 

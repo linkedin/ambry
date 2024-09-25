@@ -275,8 +275,8 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, RestRequest restRequest) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
@@ -333,14 +333,19 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback,
-      RestRequest restRequest, Callback<String> idConverterCallback) {
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
+    Callback<String> stringCallback = (result, exception) -> {
+      // Create a new Callback<Void> and call it, ignoring the String result.
+      callback.onCompletion(null, exception);
+    };
     Callback<Void> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, idConverterCallback) : callback;
+        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
+            : callback;
     Exception exception = null;
     try {
       // to make sure Blob ID is ok

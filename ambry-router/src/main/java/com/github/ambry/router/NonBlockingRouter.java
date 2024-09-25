@@ -349,18 +349,18 @@ public class NonBlockingRouter implements Router {
   /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
    *
+   * @param restRequest    The {@link RestRequest} to put the blob.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param userMetadata   Optional user metadata about the blob. This can be null.
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback       The {@link Callback} which will be invoked on the completion of the request .
-   * @param restRequest    The {@link RestRequest} to put the blob.
    * @return A future that would contain the BlobId eventually.
    */
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, RestRequest restRequest) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
@@ -554,18 +554,19 @@ public class NonBlockingRouter implements Router {
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
    *
-   * @param blobId              The ID of the blob that needs its TTL updated.
-   * @param serviceId           The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs         The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the
-   *                            blob permanent
-   * @param callback            The {@link Callback} which will be invoked on the completion of a request.
-   * @param restRequest         The {@link RestRequest} of updateBlobTtl
-   * @param idConverterCallback The id converter callback which take the String type instead of void.
+   * @param restRequest The {@link RestRequest} of updateBlobTtl
+   * @param blobId      The ID of the blob that needs its TTL updated.
+   * @param serviceId   The service ID of the service updating the blob. This can be null if unknown.
+   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+   *                    permanent
+   * @param callback    The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback, RestRequest restRequest, Callback<String> idConverterCallback) {
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    //TODO: once the id converter logic moved in for router.updateTTL, we need to pass in internal header with blob id,
+    //and use it to gate if we want to convert to get the blob id before the actual blob updated ttl.
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
@@ -573,8 +574,12 @@ public class NonBlockingRouter implements Router {
     routerMetrics.updateBlobTtlOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
+    Callback<String> stringCallback = (result, exception) -> {
+      // Create a new Callback<Void> and call it, ignoring the String result.
+      callback.onCompletion(null, exception);
+    };
     Callback<Void> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, idConverterCallback) : callback;
+        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback) : callback;
     if (isOpen.get()) {
       if (notFoundCache.getIfPresent(blobId) != null) {
         // If we know that blob doesn't exist, complete the operation.

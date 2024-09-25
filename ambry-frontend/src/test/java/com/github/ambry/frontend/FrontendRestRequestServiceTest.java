@@ -4432,8 +4432,8 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, RestRequest restRequest) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 
@@ -4451,8 +4451,8 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback, RestRequest restRequest, Callback<String> idConverterCallback) {
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);
   }
