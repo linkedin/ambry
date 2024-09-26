@@ -376,11 +376,13 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
         request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(chunkProcessingTime);
       }
-      boolean isPutOrPost = request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT);
+      boolean isPutOrPost =
+          request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT);
       boolean isMultipart = request.isMultipart() && requestContentFullyReceived;
-      boolean hasContinueAndIsPutOrPost = RestUtils.isPutOrPostS3RequestAndExpectContinue(request);
+      boolean hasContinueAndIsPutOrPost =
+          nettyConfig.nettyEnableOneHundredContinue && RestUtils.isPutOrPostS3RequestAndExpectContinue(request);
       if (success && (!isPutOrPost || isMultipart || hasContinueAndIsPutOrPost)) {
-        if (nettyConfig.nettyEnableOneHundredContinue && hasContinueAndIsPutOrPost) {
+        if (hasContinueAndIsPutOrPost) {
           request.setArg(EXPECT, "");
           removeInternalKeyFromRequest();
           responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
