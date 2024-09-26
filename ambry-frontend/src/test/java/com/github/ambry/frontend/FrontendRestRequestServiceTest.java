@@ -1495,6 +1495,7 @@ public class FrontendRestRequestServiceTest {
     setAmbryHeadersForPut(headers, blobTtl, testContainer.isCacheable(), serviceId, contentType, ownerId, null, null,
         null);
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    headers.put(DATASET_VERSION_TTL_ENABLED, true);
     restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
     restResponseChannel = new MockRestResponseChannel();
 
@@ -1506,7 +1507,7 @@ public class FrontendRestRequestServiceTest {
         router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
     reset(namedBlobDb);
     namedBlobRecord = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName,
-        blobIdFromRouter, Utils.Infinite_Time);
+        blobIdFromRouter, blobTtl);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
     when(namedBlobDb.delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
@@ -4431,8 +4432,8 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, RestRequest restRequest) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 
@@ -4450,7 +4451,7 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);
