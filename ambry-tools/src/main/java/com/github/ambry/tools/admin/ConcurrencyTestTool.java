@@ -655,7 +655,7 @@ public class ConcurrencyTestTool {
       try {
         final long startTimeInMs = SystemTime.getInstance().milliseconds();
         ByteBufferReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob));
-        router.putBlob(props, usermetadata, putChannel, new PutBlobOptionsBuilder().build(), new Callback<String>() {
+        router.putBlob(null, props, usermetadata, putChannel, new PutBlobOptionsBuilder().build(), new Callback<String>() {
           @Override
           public void onCompletion(String result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeInMs;
@@ -674,7 +674,7 @@ public class ConcurrencyTestTool {
               callback.onCompletion(toReturn, exceptionToReturn);
             }
           }
-        }, QUOTA_CHARGE_EVENT_LISTENER, null);
+        }, QUOTA_CHARGE_EVENT_LISTENER);
       } catch (Exception e) {
         futureResult.done(null, e);
         if (callback != null) {
