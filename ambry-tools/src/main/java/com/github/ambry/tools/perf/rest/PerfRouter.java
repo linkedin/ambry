@@ -142,7 +142,7 @@ class PerfRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received stitchBlob call");
     final FutureResult<String> futureResult = new FutureResult<>();
@@ -178,14 +178,13 @@ class PerfRouter implements Router {
    * Does nothing. Simply indicates success immediately.
    *
    * @param restRequest The {@link RestRequest} of updateBlobTtl
-   * @param blobId      (ignored).
    * @param serviceId   (ignored).
    * @param expiresAtMs (ignored).
    * @param callback    the {@link Callback} to invoke on operation completion.
    * @return a {@link FutureResult} that will eventually contain the result of the operation.
    */
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String serviceId, long expiresAtMs, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received updateBlobTtl call");
     FutureResult<Void> futureResult = new FutureResult<Void>();

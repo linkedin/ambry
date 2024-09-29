@@ -29,7 +29,9 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -52,6 +54,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -290,7 +294,7 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
@@ -333,43 +337,51 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
+
+    // Perform pre-checks
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
-    Callback<String> stringCallback = (result, exception) -> {
-      // Create a new Callback<Void> and call it, ignoring the String result.
-      callback.onCompletion(null, exception);
-    };
-    Callback<Void> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
-            : callback;
-    Exception exception = null;
-    try {
-      // to make sure Blob ID is ok
-      checkBlobId(blobId);
-      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
-        InMemoryBlob blob = blobs.get(blobId);
-        BlobProperties currentProps = blob.blobProperties;
-        long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
-        blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
-        if (notificationSystem != null) {
-          notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs, null, null);
-        }
-      } else if (deletedBlobs.contains(blobId)) {
-        exception = new RouterException("Blob has been deleted", RouterErrorCode.BlobDeleted);
-      } else {
-        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+
+//    if (isMultipartCompleteUploadRequest(restRequest)) {
+//      String blobId = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
+//      proceedWithTtlUpdate(blobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
+//    } else {
+    // Extract blobId or convert it if necessary
+    if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+      // Blob ID is already available
+      String blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
+      blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+      proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult);
+    } else {
+      // Blob ID is not available, use idConverter to get it
+      try {
+        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+
+        // Call idConverter to get blobId asynchronously
+        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+          @Override
+          public void onCompletion(String convertedBlobId, Exception exception) {
+            if (exception != null) {
+              // Handle error in conversion
+              callback.onCompletion(null, exception);
+            } else {
+              // Continue with TTL update once blobId is available
+              proceedWithTtlUpdate(convertedBlobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
+            }
+          }
+        });
+      } catch (Exception e) {
+        // Handle synchronous errors during header extraction
+        callback.onCompletion(null, e);
+        return futureResult;
       }
-    } catch (RouterException e) {
-      exception = e;
-    } catch (Exception e) {
-      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-    } finally {
-      completeOperation(futureResult, wrappedCallback, null, exception);
     }
+
     return futureResult;
   }
 
@@ -485,6 +497,57 @@ public class InMemoryRouter implements Router {
     return continueOp;
   }
 
+  private static boolean isMultipartCompleteUploadRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  }
+
+  /**
+   * Helper method to perform TTL update once blobId is available
+   */
+  private void proceedWithTtlUpdate(String blobId, RestRequest restRequest, String serviceId, long expiresAtMs,
+      Callback<Void> callback, FutureResult<Void> futureResult) {
+    Callback<String> stringCallback = (r, e) -> {
+      // Create a new Callback<Void> and call it, ignoring the String result.
+      callback.onCompletion(null, e);
+    };
+
+    Callback<Void> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
+            : callback;
+
+    Exception exception = null;
+
+    try {
+      // Check blobId before performing the update
+      checkBlobId(blobId);
+
+      // Perform TTL update if blob is not deleted and exists
+      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
+        InMemoryBlob blob = blobs.get(blobId);
+        BlobProperties currentProps = blob.blobProperties;
+        long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
+        blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
+
+        // Notify the notification system if applicable
+        if (notificationSystem != null) {
+          notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs, null, null);
+        }
+      } else if (deletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob has been deleted", RouterErrorCode.BlobDeleted);
+      } else {
+        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+      }
+    } catch (RouterException e) {
+      exception = e;
+    } catch (Exception e) {
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+    } finally {
+      // Complete the operation by calling the callback
+      completeOperation(futureResult, wrappedCallback, null, exception);
+    }
+  }
+
   private void checkBlobId(String blobId) throws RouterException {
     try {
       new BlobId(blobId, clusterMap);
@@ -510,6 +573,8 @@ public class InMemoryRouter implements Router {
         }
       } else {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
         idConverter.convert(restRequest, blobId, blobProperties, callback);
       }
