@@ -84,8 +84,8 @@ public class DataNodeTracker {
   }
 
   public List<GroupTracker> getGroupTrackers() {
-    List<GroupTracker> groupTrackers = new ArrayList<>(activeGroupTrackers);
-    groupTrackers.add(standByGroupTracker);
+    List<GroupTracker> groupTrackers = new ArrayList<>(getActiveGroupTrackers());
+    groupTrackers.add(getStandByGroupTracker());
     return groupTrackers;
   }
 

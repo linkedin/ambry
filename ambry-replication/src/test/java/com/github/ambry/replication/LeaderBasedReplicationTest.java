@@ -908,7 +908,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
     //set iteration limit such that even if any group finishes in one step,
     // all group will have minimum iterations as number of messages
-    properties.setProperty(ReplicationConfig.REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT, Integer.toString(
+    properties.setProperty(ReplicationConfig.REPLICATION_GROUP_ITERATION_LIMIT, Integer.toString(
         ReplicaThread.ReplicaGroupReplicationState.values().length * Integer.max(numOfMessagesOnRemoteNodeInLocalDC,
             numOfMessagesOnRemoteNodeInRemoteDC)));
 

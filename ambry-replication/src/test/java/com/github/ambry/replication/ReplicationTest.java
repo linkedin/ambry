@@ -1969,7 +1969,7 @@ public class ReplicationTest extends ReplicationTestHelper {
 
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
     properties.setProperty("replication.max.partition.count.per.request", Integer.toString(3));
-    properties.setProperty(ReplicationConfig.REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT, Integer.toString(6));
+    properties.setProperty(ReplicationConfig.REPLICATION_GROUP_ITERATION_LIMIT, Integer.toString(6));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
 

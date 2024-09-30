@@ -28,7 +28,7 @@ public class ReplicationConfig {
   public static final String REPLICA_TOKEN_FILE_NAME = "replicaTokens";
   public static final String REPLICATION_MODEL_ACROSS_DATACENTERS = "replication.model.across.datacenters";
   public static final String REPLICATION_ENABLE_CONTINUOUS_REPLICATION = "replication.enable.continuous.replication";
-  public static final String REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT = "replication.continuous.group.iteration.limit";
+  public static final String REPLICATION_GROUP_ITERATION_LIMIT = "replication.group.iteration.limit";
   public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
       "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
 
@@ -61,10 +61,14 @@ public class ReplicationConfig {
 
   /**
    * Maximum number of iterations per remote replica group in a continuous replication cycle
+   * This is valid only when continuous replication is enabled.
+   * Its default value is 1, to make it compatible with old cyclic replication logic.
+   * When value is set to 1, each group does 1 iteration in a cycle(continuous replication call)
+   * as in the beginning of cycle, all groups will get created and all will reach limit of 1.
    */
-  @Config(REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT)
+  @Config(REPLICATION_GROUP_ITERATION_LIMIT)
   @Default("1")
-  public final int replicationContinuousGroupIterationLimit;
+  public final int replicationGroupIterationLimit;
 
   /**
    * The number of replica threads on each server that runs the replication protocol for intra dc replication
@@ -345,8 +349,7 @@ public class ReplicationConfig {
         DEFAULT_RECOVERY_TOKEN_FACTORY);
     replicationEnableContinuousReplication =
         verifiableProperties.getBoolean(REPLICATION_ENABLE_CONTINUOUS_REPLICATION, false);
-    replicationContinuousGroupIterationLimit =
-        verifiableProperties.getInt(REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT, 1);
+    replicationGroupIterationLimit = verifiableProperties.getInt(REPLICATION_GROUP_ITERATION_LIMIT, 1);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =

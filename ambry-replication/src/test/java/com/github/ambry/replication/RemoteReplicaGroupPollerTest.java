@@ -93,7 +93,7 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
     maxPartitionCountPerRequest = 3;
     properties.setProperty("replication.max.partition.count.per.request", String.valueOf(maxPartitionCountPerRequest));
     defaultIterationLimit = 3;
-    properties.setProperty(ReplicationConfig.REPLICATION_CONTINUOUS_GROUP_ITERATION_LIMIT,
+    properties.setProperty(ReplicationConfig.REPLICATION_GROUP_ITERATION_LIMIT,
         String.valueOf(defaultIterationLimit));
 
     replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));

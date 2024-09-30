@@ -196,7 +196,7 @@ public class ReplicaThread implements Runnable {
       continuousReplicationReplicaThrottleCount = replicationMetrics.intraColoContinuousReplicationReplicaThrottleCount;
     }
     this.enableContinuousReplication = isContinuousReplicationEnabled(replicationConfig);
-    this.continuousReplicationGroupIterationLimit = replicationConfig.replicationContinuousGroupIterationLimit;
+    this.continuousReplicationGroupIterationLimit = replicationConfig.replicationGroupIterationLimit;
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
@@ -456,6 +456,9 @@ public class ReplicaThread implements Runnable {
       // we keep polling groups until we can, i.e. there are no more inflight groups
 
       do {
+        if (!running) {
+          break;
+        }
         List<RemoteReplicaGroup> inflightRemoteReplicaGroups = poller.enqueue();
 
         // get request infos from all inflight remote replica groups
@@ -2214,20 +2217,17 @@ public class ReplicaThread implements Runnable {
     /**
      * Conditions when we don't want to create new groups.
      *
-     * 1. the process is shutting down, so no need to create new group even if we have more iteration for them to run,
-     *    just let existing groups finish.
-     * 2. terminateCurrentContinuousReplicationCycle is true, which means there are replicas added to this thread
+     * 1. terminateCurrentContinuousReplicationCycle is true, which means there are replicas added to this thread
      *    or removed from this thread, don't create new group and just let existing groups finish,
      *    so we can later create new groups with the new set of replicas in next cycle.
-     * 3. any group reaches max iteration, which means existing groups should just finish its current work and stop,
+     * 2. any group reaches max iteration, which means existing groups should just finish its current work and stop,
      *    thus no new groups should be created.
      * @return {@link boolean} returns true if new groups can be created, false otherwise
      */
     private boolean shouldEnqueue() {
-      if (!running || terminateCurrentContinuousReplicationCycle) {
-        logger.trace(
-            "Thread name: {} not creating new groups as thread is in shutdown mode {} or terminate cycle received {}",
-            threadName, !running, terminateCurrentContinuousReplicationCycle);
+      if (terminateCurrentContinuousReplicationCycle) {
+        logger.trace("Thread name: {} not creating new groups as terminate cycle received {}", threadName,
+            terminateCurrentContinuousReplicationCycle);
         return false;
       }
       int maxIterationsDoneByAnyGroup = dataNodeTrackers.stream()
