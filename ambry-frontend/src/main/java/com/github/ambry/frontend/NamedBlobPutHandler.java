@@ -249,7 +249,6 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
-        blobInfo.getBlobProperties().setBlobSize(restRequest.getBlobBytesReceived());
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
@@ -314,7 +313,6 @@ public class NamedBlobPutHandler {
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
-        blobInfo.getBlobProperties().setBlobSize(restRequest.getBlobBytesReceived());
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
