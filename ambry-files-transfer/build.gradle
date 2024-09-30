@@ -1,0 +1,19 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.github.ambry'
+version = '0.4.432'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.9.1')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+test {
+    useJUnitPlatform()
+}

@@ -106,4 +106,10 @@ public interface RequestAPI {
   default void handleUndeleteRequest(NetworkRequest request) throws InterruptedException, IOException {
     throw new UnsupportedOperationException("Undelete request not supported on this node");
   }
+
+  void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException;
+
+  void handleFileChunkRequest(NetworkRequest request) throws InterruptedException, IOException;
+
+  void handleStopCompactionRequest(NetworkRequest request) throws InterruptedException, IOException;
 }
