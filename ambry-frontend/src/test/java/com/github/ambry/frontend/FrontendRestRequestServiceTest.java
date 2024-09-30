@@ -4451,7 +4451,7 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String serviceId, long expiresAtMs, Callback<Void> callback,
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);

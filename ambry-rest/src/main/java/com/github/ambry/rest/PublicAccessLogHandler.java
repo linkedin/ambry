@@ -34,6 +34,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.StringMapMessage;
 
+import static com.github.ambry.rest.RestUtils.*;
+
 
 /**
  * Captures headers and other required info from request and responses, to make public access log entries
@@ -114,6 +116,10 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
           responseFirstChunkStartTimeInMs = System.currentTimeMillis();
         } else {
           shouldReset = true;
+        }
+        //If it's 100-continue response, do not reset
+        if (response.status().code() == 100) {
+          shouldReset = false;
         }
       } else if (!(msg instanceof HttpContent)) {
         logger.error(

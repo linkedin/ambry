@@ -69,6 +69,7 @@ public class S3PutHandler extends S3BaseHandler<Void> {
           (result, exception) -> callback.onCompletion(null, exception));
       return;
     }
+
     // 1. Add headers required by Ambry. These become the blob properties.
     NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
     String accountName = namedBlobPath.getAccountName();

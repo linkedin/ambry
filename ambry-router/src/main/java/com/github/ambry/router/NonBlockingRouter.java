@@ -24,7 +24,6 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.frontend.IdConverterFactory;
-import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
@@ -34,7 +33,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
-import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
@@ -47,7 +45,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -460,15 +457,17 @@ public class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
+    Callback<String> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForStitch(restRequest, blobProperties, futureResult, callback) : callback;
     if (isOpen.get()) {
-      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, options, futureResult, callback,
+      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, options, futureResult, wrappedCallback,
           quotaChargeCallback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), true);
-      completeOperation(futureResult, callback, null, routerException);
+      completeOperation(futureResult, wrappedCallback, null, routerException);
     }
     return futureResult;
   }
@@ -559,6 +558,7 @@ public class NonBlockingRouter implements Router {
    * about whether the request succeeded or not.
    *
    * @param restRequest The {@link RestRequest} of updateBlobTtl
+   * @param blobId      The ID of the blob that needs its TTL updated.
    * @param serviceId   The service ID of the service updating the blob. This can be null if unknown.
    * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
    *                    permanent
@@ -566,44 +566,45 @@ public class NonBlockingRouter implements Router {
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String serviceId, long expiresAtMs,
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
-    String blobId = null;
-
-    if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-      String blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
-      blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
-      proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
+    if (restRequest == null) {
+      if (blobId == null) {
+        throw new IllegalArgumentException("blobId must not be null");
+      }
+      proceedWithTtlUpdate(blobId, restRequest, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
     } else {
-      try {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+        String blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
         blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
-        // Convert asynchronously and proceed once blobId is available
-        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
-          @Override
-          public void onCompletion(String convertedBlobId, Exception exception) {
-            if (exception != null) {
-              callback.onCompletion(null, exception);
-            } else {
-              // Call proceedWithTtlUpdate once blobId is available
-              proceedWithTtlUpdate(convertedBlobId, restRequest, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
+        proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult,
+            quotaChargeCallback);
+      } else {
+        try {
+          String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+          blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+          // Convert asynchronously and proceed once blobId is available
+          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+            @Override
+            public void onCompletion(String convertedBlobId, Exception exception) {
+              if (exception != null) {
+                callback.onCompletion(null, exception);
+              } else {
+                // Call proceedWithTtlUpdate once blobId is available
+                proceedWithTtlUpdate(convertedBlobId, restRequest, serviceId, expiresAtMs, callback, futureResult,
+                    quotaChargeCallback);
+              }
             }
-          }
-        });
-        return futureResult; // Return early since we're waiting for the async operation
-      } catch (Exception e) {
-        callback.onCompletion(null, e);
-        return futureResult;
+          });
+          return futureResult; // Return early since we're waiting for the async operation
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+          return futureResult;
+        }
       }
     }
 
-    if (blobId == null) {
-      throw new IllegalArgumentException("blobId must not be null");
-    }
-
-    // Proceed with TTL update if blobId is directly available
-    proceedWithTtlUpdate(blobId, restRequest, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
     return futureResult;
   }
 
@@ -791,14 +792,20 @@ public class NonBlockingRouter implements Router {
     routerMetrics.updateBlobTtlOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
 
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
+
     Callback<String> stringCallback = (r, e) -> {
       // Create a new Callback<Void> and call it, ignoring the String result.
-      callback.onCompletion(null, e);
+      if (callback != null) {
+        callback.onCompletion(null, e);
+      }
     };
 
     Callback<Void> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
-            : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId,
+            futureResult, stringCallback) : callback;
 
     if (isOpen.get()) {
       if (notFoundCache.getIfPresent(blobId) != null) {
@@ -885,7 +892,30 @@ public class NonBlockingRouter implements Router {
         }
       } else {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
-        // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
+        // Call idConverter.convert after putBlob succeeds
+        idConverter.convert(restRequest, blobId, blobProperties, callback);
+      }
+    };
+  }
+
+  /**
+   * Create id converter callback after router stitch the blob.
+   * @param restRequest {@link RestRequest} to stitch the blob.
+   * @param blobProperties {@link BlobProperties} for the blob.
+   * @return
+   */
+  private Callback<String> createIdConverterCallbackForStitch(RestRequest restRequest, BlobProperties blobProperties,
+      FutureResult<String> futureResult, Callback<String> callback) {
+    return (blobId, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        blobProperties.setBlobSize(blobProperties.getBlobSize());
         restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
         idConverter.convert(restRequest, blobId, blobProperties, callback);

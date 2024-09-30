@@ -239,7 +239,7 @@ public class S3MultipartCompleteUploadHandler {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
-        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo));
+        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo,  blobId));
       }, uri, LOGGER, finalCallback);
     }
 
@@ -249,18 +249,16 @@ public class S3MultipartCompleteUploadHandler {
      * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo) {
+    private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(Headers.LOCATION, convertedBlobId);
         // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
         // since the converted ID may be changed by the ID converter.
         String serviceId = blobInfo.getBlobProperties().getServiceId();
-        //TODO: set this in stitch blob.
-        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, convertedBlobId);
         retryExecutor.runWithRetries(retryPolicy,
-            callback -> router.updateBlobTtl(restRequest, serviceId, Utils.Infinite_Time, callback,
+            callback -> router.updateBlobTtl(null, blobId, serviceId, Utils.Infinite_Time, callback,
                 QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-            routerTtlUpdateCallback(blobInfo));
+            routerTtlUpdateCallback(blobInfo, blobId));
       }, uri, LOGGER, finalCallback);
     }
 
@@ -268,10 +266,22 @@ public class S3MultipartCompleteUploadHandler {
      * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
+     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(RestRequest, String, String, long)}.
      */
-    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo) {
+    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        // Set the named blob state to be 'READY' after the Ttl update succeed
+        if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
+          throw new RestServiceException(
+              "Internal key " + NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
+              RestServiceErrorCode.InternalServerError);
+        }
+        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
+        String blobIdClean = stripSlashAndExtensionFromId(blobId);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
+        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }

@@ -18,10 +18,7 @@ import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.named.NamedBlobDb;
-import com.github.ambry.named.NamedBlobRecord;
-import com.github.ambry.named.PutResult;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -38,7 +35,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
-import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -153,7 +149,7 @@ class TtlUpdateHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        router.updateBlobTtl(restRequest, serviceId, Utils.Infinite_Time, routerCallback(),
+        router.updateBlobTtl(restRequest, null, serviceId, Utils.Infinite_Time, routerCallback(),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }

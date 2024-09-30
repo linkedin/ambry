@@ -300,8 +300,10 @@ public class InMemoryRouter implements Router {
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
+    Callback<String> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
     PostData postData =
-        new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, callback,
+        new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, wrappedCallback,
             futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
@@ -337,51 +339,48 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String serviceId, long expiresAtMs,
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
-
     // Perform pre-checks
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
-
-//    if (isMultipartCompleteUploadRequest(restRequest)) {
-//      String blobId = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
-//      proceedWithTtlUpdate(blobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
-//    } else {
-    // Extract blobId or convert it if necessary
-    if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-      // Blob ID is already available
-      String blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
-      blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
-      proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult);
+    if (restRequest == null) {
+      proceedWithTtlUpdate(blobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
     } else {
-      // Blob ID is not available, use idConverter to get it
-      try {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+      // Extract blobId or convert it if necessary
+      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+        // Blob ID is already available
+        String blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
         blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+        proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult);
+      } else {
+        // Blob ID is not available, use idConverter to get it
+        try {
+          String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+          blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
 
-        // Call idConverter to get blobId asynchronously
-        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
-          @Override
-          public void onCompletion(String convertedBlobId, Exception exception) {
-            if (exception != null) {
-              // Handle error in conversion
-              callback.onCompletion(null, exception);
-            } else {
-              // Continue with TTL update once blobId is available
-              proceedWithTtlUpdate(convertedBlobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
+          // Call idConverter to get blobId asynchronously
+          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+            @Override
+            public void onCompletion(String convertedBlobId, Exception exception) {
+              if (exception != null) {
+                // Handle error in conversion
+                callback.onCompletion(null, exception);
+              } else {
+                // Continue with TTL update once blobId is available
+                proceedWithTtlUpdate(convertedBlobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
+              }
             }
-          }
-        });
-      } catch (Exception e) {
-        // Handle synchronous errors during header extraction
-        callback.onCompletion(null, e);
-        return futureResult;
+          });
+        } catch (Exception e) {
+          // Handle synchronous errors during header extraction
+          callback.onCompletion(null, e);
+          return futureResult;
+        }
       }
     }
-
     return futureResult;
   }
 
@@ -497,16 +496,14 @@ public class InMemoryRouter implements Router {
     return continueOp;
   }
 
-  private static boolean isMultipartCompleteUploadRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
-        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
-  }
-
   /**
    * Helper method to perform TTL update once blobId is available
    */
   private void proceedWithTtlUpdate(String blobId, RestRequest restRequest, String serviceId, long expiresAtMs,
       Callback<Void> callback, FutureResult<Void> futureResult) {
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
     Callback<String> stringCallback = (r, e) -> {
       // Create a new Callback<Void> and call it, ignoring the String result.
       callback.onCompletion(null, e);
@@ -515,7 +512,6 @@ public class InMemoryRouter implements Router {
     Callback<Void> wrappedCallback =
         restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
             : callback;
-
     Exception exception = null;
 
     try {
