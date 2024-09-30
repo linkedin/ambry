@@ -1373,6 +1373,11 @@ public class PersistentIndex implements LogSegmentSizeProvider {
         if (!getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
           throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
         } else {
+          if (value.getOperationTimeInMs() + TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes)
+              < time.milliseconds()) {
+            // fetching a blob that was deleted more than the retention minutes.
+            metrics.getOutOfRetentionDeletedBlobCount.inc();
+          }
           readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
         }
       } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
