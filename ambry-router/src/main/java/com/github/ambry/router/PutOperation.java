@@ -1350,17 +1350,10 @@ class PutOperation {
           chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
         } else {
           partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
-          if (passedInBlobProperties.getReservedUuid() != null) {
-            chunkBlobId =
-                new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                    passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
-                    passedInBlobProperties.isEncrypted(), blobDataType, passedInBlobProperties.getReservedUuid());
-          } else {
-            chunkBlobId =
-                new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                    passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
-                    passedInBlobProperties.isEncrypted(), blobDataType);
-          }
+          chunkBlobId =
+              new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+                  passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
+                  passedInBlobProperties.isEncrypted(), blobDataType);
         }
 
         // To ensure previously attempted partitions are not retried for this PUT after a failure.
@@ -1372,7 +1365,7 @@ class PutOperation {
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-            passedInBlobProperties.getFilename(), resolveReservedMetadataId(), passedInBlobProperties.getReservedUuid());
+            passedInBlobProperties.getFilename(), resolveReservedMetadataId(), null);
         operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
