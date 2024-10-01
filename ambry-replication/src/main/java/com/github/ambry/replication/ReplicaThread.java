@@ -412,6 +412,76 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Polls the give remote replica groups for requests, submits these requests to networkClient,
+   * gets responses from networkClient and submits these to corresponding remote replica groups
+   *
+   * @param remoteReplicaGroups remoteReplica groups
+   * @param correlationIdToReplicaGroup map of correlation id to remote replica group
+   * @param correlationIdToRequestInfo map of correlation id to request info
+   */
+  private void pollRequestsAndSubmitResponses(List<RemoteReplicaGroup> remoteReplicaGroups,
+      Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup,
+      Map<Integer, RequestInfo> correlationIdToRequestInfo) {
+
+    List<RequestInfo> requestInfos =
+        pollRemoteReplicaGroups(remoteReplicaGroups, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+    logger.trace("Thread name: {} Requests generated", threadName);
+
+    // generate responses for requests that are timed out
+    List<ResponseInfo> responseInfosForTimedOutRequests =
+        filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
+    logger.trace("Thread name: {} Filtered timed out Requests", threadName);
+
+    // mark timed out requests to be dropped by network client
+    Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
+        .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
+        .collect(Collectors.toSet());
+
+    if (!requestsToDrop.isEmpty()) {
+      replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
+          datacenterName);
+    }
+
+    final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
+
+    // submit requests and get response for earlier submitted requests
+    List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
+    logger.trace("Thread name: {} received {} responses from network client", threadName, responseInfos.size());
+    responseInfos.addAll(responseInfosForTimedOutRequests);
+    // process responses
+    onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+  }
+
+  /**
+   * Computes the exchangeMetaDataResponse for each cycle
+   * Prints logs for remote replica groups which have errors
+   *
+   * @param remoteReplicaGroups remoteReplica groups
+   * @param groupsAddedToExchangeMetadatResponse set of group ids for which exchange metadata is added to {@link #exchangeMetadataResponsesInEachCycle}
+   */
+  private void processFinishedGroups(List<RemoteReplicaGroup> remoteReplicaGroups,
+      Set<Integer> groupsAddedToExchangeMetadatResponse) {
+
+    /*for each data node we are caching the first metadata responses received for remote replica groups.
+     this will be used in tests only.
+     */
+    remoteReplicaGroups.stream()
+        .filter(g -> !groupsAddedToExchangeMetadatResponse.contains(g.id) && g.isDone()
+            && g.getExchangeMetadataResponseList() != null)
+        .forEach(g -> {
+          exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
+              .addAll(g.getExchangeMetadataResponseList());
+          groupsAddedToExchangeMetadatResponse.add(g.id);
+        });
+
+    // print logs for groups which have error
+    remoteReplicaGroups.stream()
+        .filter(g -> g.isDone() && g.getException() != null)
+        .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
+            g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
+  }
+
+  /**
    * Do replication for replicas grouped by {@link DataNodeId}
    * We will keep trying to generate groups until we do not get any groups by calling generateRemoteReplicaGroups.
    * We will generate requests and then process responses when received for these groups.
@@ -461,53 +531,10 @@ public class ReplicaThread implements Runnable {
         }
         List<RemoteReplicaGroup> inflightRemoteReplicaGroups = poller.enqueue();
 
-        // get request infos from all inflight remote replica groups
-        List<RequestInfo> requestInfos =
-            pollRemoteReplicaGroups(inflightRemoteReplicaGroups, correlationIdToRequestInfo,
-                correlationIdToReplicaGroup);
-        logger.trace("Thread name: {} Requests generated", threadName);
+        pollRequestsAndSubmitResponses(inflightRemoteReplicaGroups, correlationIdToReplicaGroup,
+            correlationIdToRequestInfo);
 
-        // generate responses for requests that are timed out
-        List<ResponseInfo> responseInfosForTimedOutRequests =
-            filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
-        logger.trace("Thread name: {} Filtered timed out Requests", threadName);
-
-        // mark timed out requests to be dropped by network client
-        Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
-            .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
-            .collect(Collectors.toSet());
-
-        if (!requestsToDrop.isEmpty()) {
-          replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
-              datacenterName);
-        }
-
-        final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
-
-        // submit requests and get response for earlier submitted requests
-        List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
-        logger.trace("Thread name: {} received {} responses from network client", threadName, responseInfos.size());
-        responseInfos.addAll(responseInfosForTimedOutRequests);
-        // process responses
-        onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
-
-         /* for each data node we are caching the first metadata responses received for remote replica groups.
-           this will be used in tests only.
-        */
-        inflightRemoteReplicaGroups.stream()
-            .filter(g -> !groupsAddedToExchangeMetadatResponse.contains(g.id) && g.isDone()
-                && g.getExchangeMetadataResponseList() != null)
-            .forEach(g -> {
-              exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
-                  .addAll(g.getExchangeMetadataResponseList());
-              groupsAddedToExchangeMetadatResponse.add(g.id);
-            });
-
-        // print logs for groups which have error
-        inflightRemoteReplicaGroups.stream()
-            .filter(g -> g.isDone() && g.getException() != null)
-            .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
-                g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
+        processFinishedGroups(inflightRemoteReplicaGroups, groupsAddedToExchangeMetadatResponse);
         logger.trace("Thread name: {} Finish one iteration for RemoteReplicaGroup replication", threadName);
       } while (poller.shouldContinue());
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
