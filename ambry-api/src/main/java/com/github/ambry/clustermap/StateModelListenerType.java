@@ -31,6 +31,11 @@ public enum StateModelListenerType {
    * keeps checking replication lag of this replica and ensures it catches up with its peer replicas.
    */
   ReplicationManagerListener,
+
+  /**
+   *
+   */
+  FileCopyManagerListener,
   /**
    * The partition state change listener owned by stats manager. It takes actions when new replica is added (OFFLINE ->
    * BOOTSTRAP) or old replica is removed (INACTIVE -> OFFLINE)

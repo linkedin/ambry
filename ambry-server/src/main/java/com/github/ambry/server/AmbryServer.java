@@ -15,6 +15,7 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
+import com.github.ambry.FileCopyManager;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
@@ -43,6 +44,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
@@ -223,6 +225,8 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
+      FileCopyConfig fileCopyConfig = new FileCopyConfig(properties);
+
       // verify the configs
       properties.verify();
 
@@ -256,6 +260,7 @@ public class AmbryServer {
             new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
+
         networkClientFactory =
             new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
         recoveryManager =
@@ -361,6 +366,9 @@ public class AmbryServer {
                 skipPredicate);
         replicationManager.start();
 
+        FileCopyManager fileCopyManager = new FileCopyManager(fileCopyConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+            clusterMap, scheduler, nodeId, networkClientFactory, registry, clusterParticipant);
+        fileCopyManager.start();
 
         logger.info("Creating StatsManager to publish stats");
 

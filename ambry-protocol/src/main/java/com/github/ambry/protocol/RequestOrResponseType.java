@@ -40,9 +40,8 @@ public enum RequestOrResponseType {
   BatchDeleteResponse,
   FileMetaDataRequest,
   FileMetaDataResponse,
-
   FileChunkRequest,
   FileChunkResponse,
-  StopCompactionRequest,
-  StopCompactionResponse
+  EnableDisableCompactionRequest,
+  EnableDisableCompactionResponse
 }

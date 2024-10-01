@@ -833,6 +833,41 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
+  public void onPartitionBecomeHydrateFromOffline(String partitionName) {
+    PartitionStateChangeListener fileCopyListener =
+        partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
+    try{
+      if(fileCopyListener !=null){
+        //fileCopyListener.();
+      }
+    }
+  }
+
+  @Override
+  public void onPartitionBecomeBootstrapFromHydrate(String partitionName) {
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    try {
+      if (replicationManagerListener != null) {
+
+        replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+        // after bootstrap is initiated in ReplicationManager, transition is blocked here and wait until local replica has
+        // caught up with enough peer replicas.
+        replicaSyncUpManager.waitBootstrapCompleted(partitionName);
+      }
+    } catch (InterruptedException e) {
+      logger.error("Bootstrap was interrupted on partition {}", partitionName);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+      throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
+    } catch (StateTransitionException e) {
+      logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+      throw e;
+    }
+    localPartitionAndState.put(partitionName, ReplicaState.STANDBY);
+  }
+
+  @Override
   public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
     PartitionStateChangeListener replicationManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
