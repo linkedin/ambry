@@ -246,9 +246,9 @@ public class ReplicaThread implements Runnable {
         }
       }
     } finally {
+      terminateCurrentContinuousReplicationCycle = true;
       lock.unlock();
     }
-    terminateCurrentContinuousReplicationCycle = true;
   }
 
   /**
@@ -345,9 +345,9 @@ public class ReplicaThread implements Runnable {
             threadName, dataNodeId, remoteReplicaInfo);
       }
     } finally {
+      terminateCurrentContinuousReplicationCycle = true;
       lock.unlock();
     }
-    terminateCurrentContinuousReplicationCycle = true;
   }
 
   /**
@@ -370,9 +370,9 @@ public class ReplicaThread implements Runnable {
         logger.warn("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
       }
     } finally {
+      terminateCurrentContinuousReplicationCycle = true;
       lock.unlock();
     }
-    terminateCurrentContinuousReplicationCycle = true;
     logger.trace("RemoteReplicaInfo {} is added to ReplicaThread {}. Now working on {} dataNodeIds.", remoteReplicaInfo,
         threadName, replicasToReplicateGroupedByNode.keySet().size());
   }
