@@ -347,19 +347,23 @@ public class InMemoryRouter implements Router {
       return futureResult;
     }
     if (restRequest == null) {
-      proceedWithTtlUpdate(blobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
+      if (blobId == null) {
+        throw new IllegalArgumentException("blobId must not be null");
+      }
+      proceedWithTtlUpdate(blobId, null, serviceId, expiresAtMs, callback, futureResult);
     } else {
       // Extract blobId or convert it if necessary
       if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
         // Blob ID is already available
-        String blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
-        blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+        String blobIdStr =
+            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
         proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult);
       } else {
         // Blob ID is not available, use idConverter to get it
         try {
-          String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
-          blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+          //If the blobId is named blob, need to go through convert first.
+          String blobIdStr =
+              removeLeadingSlashIfNeeded(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
 
           // Call idConverter to get blobId asynchronously
           idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
@@ -542,6 +546,10 @@ public class InMemoryRouter implements Router {
       // Complete the operation by calling the callback
       completeOperation(futureResult, wrappedCallback, null, exception);
     }
+  }
+
+  private String removeLeadingSlashIfNeeded(String blobId) {
+    return blobId.startsWith("/") ? blobId.substring(1) : blobId;
   }
 
   private void checkBlobId(String blobId) throws RouterException {

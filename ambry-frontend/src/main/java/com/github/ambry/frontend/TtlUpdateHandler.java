@@ -128,12 +128,13 @@ class TtlUpdateHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
         if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
           accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.updateBlobTtlMetricsGroup);
         } else {
           blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
           BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(blobIdStr, clusterMap);
+          restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, convertedBlobId);
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(convertedBlobId, restRequest,
               metrics.updateBlobTtlMetricsGroup);
         }
@@ -160,11 +161,16 @@ class TtlUpdateHandler {
      */
     private Callback<Void> routerCallback() {
       return buildCallback(metrics.updateBlobTtlRouterMetrics, result -> {
-        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+        if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB) && RestUtils.isDatasetVersionQueryEnabled(
+            restRequest.getArgs())) {
           metrics.updateTtlDatasetVersionRate.mark();
           updateTtlForDatasetVersion();
         }
-        processResponseHelper();
+        LOGGER.debug("Updated TTL of {}",
+            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
+        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
@@ -175,18 +181,6 @@ class TtlUpdateHandler {
     private Callback<Void> securityProcessResponseCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessResponseMetrics,
           securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
-    }
-
-    /**
-     * Helper method to set the response channel and process response.
-     * @throws RestServiceException
-     */
-    private void processResponseHelper() throws RestServiceException {
-      LOGGER.debug("Updated TTL of {}",
-          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-      securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
     }
 
     /**

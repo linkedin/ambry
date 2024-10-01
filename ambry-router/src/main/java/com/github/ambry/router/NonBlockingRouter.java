@@ -377,7 +377,8 @@ public class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForPut(restRequest, blobProperties,
+            futureResult, callback) : callback;
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, wrappedCallback,
           quotaChargeCallback);
@@ -458,7 +459,8 @@ public class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForStitch(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForStitch(restRequest, blobProperties,
+            futureResult, callback) : callback;
     if (isOpen.get()) {
       getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, options, futureResult, wrappedCallback,
           quotaChargeCallback);
@@ -573,17 +575,20 @@ public class NonBlockingRouter implements Router {
       if (blobId == null) {
         throw new IllegalArgumentException("blobId must not be null");
       }
-      proceedWithTtlUpdate(blobId, restRequest, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
+      proceedWithTtlUpdate(blobId, null, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
     } else {
+      //if the blobId is not named blob based, it could bypass the first round of d converter logic by checking InternalKeys.BLOB_ID.
+      //First round is to convert named blob to blob Id.
       if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-        String blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
-        blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+        String blobIdStr =
+            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
         proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult,
             quotaChargeCallback);
       } else {
         try {
-          String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
-          blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+          //If the blobId is named blob, need to go through convert first.
+          String blobIdStr =
+              removeLeadingSlashIfNeeded(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
           // Convert asynchronously and proceed once blobId is available
           idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
             @Override
@@ -915,6 +920,8 @@ public class NonBlockingRouter implements Router {
           callback.onCompletion(null, exception);
         }
       } else {
+        // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
+        // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobProperties.setBlobSize(blobProperties.getBlobSize());
         restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
@@ -943,6 +950,10 @@ public class NonBlockingRouter implements Router {
         idConverter.convert(restRequest, blobId, null, callback);
       }
     };
+  }
+
+  private String removeLeadingSlashIfNeeded(String blobId) {
+    return blobId.startsWith("/") ? blobId.substring(1) : blobId;
   }
 
   /**

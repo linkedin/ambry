@@ -69,7 +69,7 @@ public interface Router extends Closeable {
    * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
    * by this operation can be used to fetch the chunks as if they were a single blob.
    *
-   * @param restRequest
+   * @param restRequest         The {@link RestRequest} to stitch blob.
    * @param blobProperties      The properties of the blob. Note that the size specified in the properties is ignored.
    *                            The channel is consumed fully, and the size of the blob is the number of bytes read from
    *                            it.
@@ -224,7 +224,7 @@ public interface Router extends Closeable {
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
    *
-   * @param restRequest The ID of the blob that needs its TTL updated.
+   * @param restRequest The {@link RestRequest} to update blob ttl.
    * @param blobId      The ID of the blob that needs its TTL updated.
    * @param serviceId   The service ID of the service updating the blob. This can be null if unknown.
    * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob

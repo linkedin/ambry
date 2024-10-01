@@ -645,7 +645,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       } catch (IllegalArgumentException expected) {
       }
       try {
-        router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(null), null, null, Utils.Infinite_Time);
+        router.updateBlobTtl(null, null, null, Utils.Infinite_Time);
         Assert.fail("null blobId should have resulted in IllegalArgumentException");
       } catch (IllegalArgumentException expected) {
       }

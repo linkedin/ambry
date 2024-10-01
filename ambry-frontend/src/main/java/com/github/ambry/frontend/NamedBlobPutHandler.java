@@ -282,8 +282,7 @@ public class NamedBlobPutHandler {
         BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
         router.stitchBlob(restRequest, propertiesForRouterUpload, blobInfo.getUserMetadata(),
             getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
-            routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
-            QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+            routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
       }, uri, LOGGER, deleteDatasetCallback);
     }
 
@@ -291,27 +290,13 @@ public class NamedBlobPutHandler {
      * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
      * that will be returned in the "Location" header.
      * @param blobInfo                       the {@link BlobInfo} to use for security checks.
-     * @param propertiesPassedInRouterUpload the {@link BlobProperties} instance that is passed to Router during upload
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo,
-        BlobProperties propertiesPassedInRouterUpload) {
+    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
-        idConverterCallback(blobInfo, blobId).onCompletion(blobId, null);
-      }, uri, LOGGER, deleteDatasetCallback);
-    }
-
-    /**
-     * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
-     * request time security checks that rely on the request being fully parsed and any additional arguments set.
-     * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
-     */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
-      return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
-        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
