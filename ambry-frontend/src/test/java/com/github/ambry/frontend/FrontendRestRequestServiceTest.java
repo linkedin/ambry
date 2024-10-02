@@ -1807,7 +1807,7 @@ public class FrontendRestRequestServiceTest {
         new BlobProperties(0, "userMetadataTestOldStyleServiceID", Account.UNKNOWN_ACCOUNT_ID,
             Container.UNKNOWN_CONTAINER_ID, false);
     byte[] usermetadata = TestUtils.getRandomBytes(25);
-    String blobId = router.putBlob(null, blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content),
+    String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content),
         new PutBlobOptionsBuilder().build()).get();
 
     RestUtils.SubResource[] subResources = {RestUtils.SubResource.UserMetadata, RestUtils.SubResource.BlobInfo};

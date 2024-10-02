@@ -29,7 +29,6 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
@@ -54,8 +53,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.github.ambry.rest.RestUtils.*;
-import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -347,17 +344,14 @@ public class InMemoryRouter implements Router {
       return futureResult;
     }
     if (restRequest == null) {
-      if (blobId == null) {
-        throw new IllegalArgumentException("blobId must not be null");
-      }
-      proceedWithTtlUpdate(blobId, null, serviceId, expiresAtMs, callback, futureResult);
+      proceedWithTtlUpdate(null, blobId, serviceId, expiresAtMs, callback, futureResult);
     } else {
       // Extract blobId or convert it if necessary
       if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
         // Blob ID is already available
         String blobIdStr =
             removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
-        proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult);
+        proceedWithTtlUpdate(restRequest, blobIdStr, serviceId, expiresAtMs, callback, futureResult);
       } else {
         // Blob ID is not available, use idConverter to get it
         try {
@@ -374,7 +368,7 @@ public class InMemoryRouter implements Router {
                 callback.onCompletion(null, exception);
               } else {
                 // Continue with TTL update once blobId is available
-                proceedWithTtlUpdate(convertedBlobId, restRequest, serviceId, expiresAtMs, callback, futureResult);
+                proceedWithTtlUpdate(restRequest, convertedBlobId, serviceId, expiresAtMs, callback, futureResult);
               }
             }
           });
@@ -503,7 +497,7 @@ public class InMemoryRouter implements Router {
   /**
    * Helper method to perform TTL update once blobId is available
    */
-  private void proceedWithTtlUpdate(String blobId, RestRequest restRequest, String serviceId, long expiresAtMs,
+  private void proceedWithTtlUpdate(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, FutureResult<Void> futureResult) {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");

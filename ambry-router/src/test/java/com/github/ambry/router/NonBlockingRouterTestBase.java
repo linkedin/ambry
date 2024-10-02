@@ -36,9 +36,6 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.repair.RepairRequestsDbFactory;
-import com.github.ambry.rest.MockRestRequest;
-import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
@@ -66,7 +63,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -574,7 +570,7 @@ public class NonBlockingRouterTestBase {
    */
   protected void assertClosed() {
     Future<String> future =
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
     Assert.assertTrue(future.isDone());
     try {
       ((CompletableFuture<?>) future).join();
@@ -601,11 +597,10 @@ public class NonBlockingRouterTestBase {
     setOperationParams();
     Assert.assertFalse("The original ttl should not be infinite for this test to work",
         putBlobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertTtl(router, Collections.singleton(blobId), TTL_SECS);
-    router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
-        Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     // if more than one chunk is created, also account for metadata blob
     notificationSystem.checkNotifications(numChunks == 1 ? 1 : numChunks + 1, updateServiceId, Utils.Infinite_Time);
     assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
@@ -617,9 +612,7 @@ public class NonBlockingRouterTestBase {
     }
     router.close();
     // check that ttl update won't work after router close
-    CompletableFuture<Void> future =
-        router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
-            Utils.Infinite_Time);
+    CompletableFuture<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time);
     Assert.assertTrue(future.isDone());
     try {
       future.join();
@@ -748,14 +741,5 @@ public class NonBlockingRouterTestBase {
           break;
       }
     }
-  }
-
-  private RestRequest createRestRequestForTtlUpdateAndStitchOperation(String blobId) throws Exception {
-    JSONObject request = new JSONObject();
-    JSONObject headers = new JSONObject();
-    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
-    request.put(MockRestRequest.HEADERS_KEY, headers);
-    RestRequest restRequest = new MockRestRequest(request, null);
-    return restRequest;
   }
 }

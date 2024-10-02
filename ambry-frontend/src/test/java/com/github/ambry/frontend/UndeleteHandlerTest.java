@@ -101,7 +101,7 @@ public class UndeleteHandlerTest {
    */
   public void setupBlob() throws Exception {
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
-    blobId = router.putBlob(null, BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
+    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
         .get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
     router.deleteBlob(blobId, SERVICE_ID, null, QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE))

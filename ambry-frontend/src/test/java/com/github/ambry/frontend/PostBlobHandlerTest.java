@@ -502,7 +502,7 @@ public class PostBlobHandlerTest {
               creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null, null,
               null, null);
       String blobId =
-          router.putBlob(null, blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
+          router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
       chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs),

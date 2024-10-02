@@ -39,7 +39,7 @@ public enum RouterErrorCode {
 
   /**
    * Caller passed in an illegal argument for
-   * {@link Router#putBlob(com.github.ambry.rest.RestRequest, com.github.ambry.messageformat.BlobProperties, byte[], ReadableStreamChannel, PutBlobOptions)}
+   * {@link Router#putBlob(com.github.ambry.messageformat.BlobProperties, byte[], ReadableStreamChannel, PutBlobOptions)}
    * operation (and its variant).
    */
   InvalidPutArgument,

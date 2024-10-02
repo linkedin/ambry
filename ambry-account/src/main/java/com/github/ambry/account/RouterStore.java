@@ -234,7 +234,7 @@ class RouterStore extends AccountMetadataStore {
     ByteBufferReadableStreamChannel channel =
         new ByteBufferReadableStreamChannel(ByteBuffer.wrap(object.toString().getBytes(Charsets.UTF_8)));
     BlobProperties properties = new BlobProperties(channel.getSize(), SERVICE_ID, ACCOUNT_ID, CONTAINER_ID, false);
-    return router.putBlob(null, properties, null, channel, PutBlobOptions.DEFAULT).get();
+    return router.putBlob(properties, null, channel, PutBlobOptions.DEFAULT).get();
   }
 
   /**

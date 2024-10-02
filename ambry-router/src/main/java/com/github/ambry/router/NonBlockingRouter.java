@@ -575,14 +575,14 @@ public class NonBlockingRouter implements Router {
       if (blobId == null) {
         throw new IllegalArgumentException("blobId must not be null");
       }
-      proceedWithTtlUpdate(blobId, null, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
+      proceedWithTtlUpdate(null, blobId, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
     } else {
       //if the blobId is not named blob based, it could bypass the first round of d converter logic by checking InternalKeys.BLOB_ID.
       //First round is to convert named blob to blob Id.
       if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
         String blobIdStr =
             removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
-        proceedWithTtlUpdate(blobIdStr, restRequest, serviceId, expiresAtMs, callback, futureResult,
+        proceedWithTtlUpdate(restRequest, blobIdStr, serviceId, expiresAtMs, callback, futureResult,
             quotaChargeCallback);
       } else {
         try {
@@ -597,7 +597,7 @@ public class NonBlockingRouter implements Router {
                 callback.onCompletion(null, exception);
               } else {
                 // Call proceedWithTtlUpdate once blobId is available
-                proceedWithTtlUpdate(convertedBlobId, restRequest, serviceId, expiresAtMs, callback, futureResult,
+                proceedWithTtlUpdate(restRequest, convertedBlobId, serviceId, expiresAtMs, callback, futureResult,
                     quotaChargeCallback);
               }
             }
@@ -791,7 +791,7 @@ public class NonBlockingRouter implements Router {
   /**
    * Helper method to perform TTL update once blobId is available
    */
-  private void proceedWithTtlUpdate(String blobId, RestRequest restRequest, String serviceId, long expiresAtMs,
+  private void proceedWithTtlUpdate(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     currentOperationsCount.incrementAndGet();
     routerMetrics.updateBlobTtlOperationRate.mark();

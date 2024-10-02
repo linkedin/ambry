@@ -30,9 +30,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
-import com.github.ambry.rest.MockRestRequest;
-import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
@@ -46,8 +43,6 @@ import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,7 +54,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.json.JSONObject;
 import org.junit.Assert;
 
 
@@ -452,8 +446,7 @@ class RouterServerTestFramework {
   private void startTtlUpdate(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
     Future<Void> future =
-        router.updateBlobTtl(null, opChain.blobId, null,
-            Utils.Infinite_Time, callback, quotaChargeCallback);
+        router.updateBlobTtl(null, opChain.blobId, null, Utils.Infinite_Time, callback, quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("updateBlobTtl", false), opChain) {
       @Override
       void check() throws Exception {

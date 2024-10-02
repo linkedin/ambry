@@ -263,7 +263,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       RestRequest restRequest = createRestRequestForPutOperation();
       PutBlobOptions putBlobOptions = new PutBlobOptionsBuilder().restRequest(restRequest).build();
-      String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, putBlobOptions).get();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putBlobOptions).get();
       if (testEncryption) {
         Assert.assertEquals(restRequest, kms.getCurrentRestRequest());
       }
@@ -279,8 +279,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         Assert.assertEquals(restRequest, kms.getCurrentRestRequest());
       }
 
-      restRequest = createRestRequestForTtlUpdateAndStitchOperation(blobId);
-      router.updateBlobTtl(restRequest, blobId, null, Utils.Infinite_Time).get();
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time).get();
       router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
       router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
           .get();
@@ -306,19 +305,18 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     LinkedList<String> blobIds = new LinkedList<>();
     for (int i = 0; i < 2; i++) {
       setOperationParams();
-      String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
       logger.debug("Put blob {}", blobId);
       blobIds.add(blobId);
     }
     setOperationParams();
-    String stitchedBlobId = router.stitchBlob(null, putBlobProperties, putUserMetadata, blobIds.stream()
+    String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, blobIds.stream()
         .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
         .collect(Collectors.toList())).get();
 
     // Test router for individual blob operations on the stitched blob's chunks.
     router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build()).get();
-    router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(stitchedBlobId), stitchedBlobId, null,
-        Utils.Infinite_Time).get();
+    router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time).get();
     router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build()).get();
     router.getBlob(stitchedBlobId,
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()).get();
@@ -344,9 +342,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     };
     for (String blobId : blobIds) {
       deletedBlobHandlerConsumer.accept(() -> router.getBlob(blobId, new GetBlobOptionsBuilder().build()));
-      deletedBlobHandlerConsumer.accept(
-          () -> router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, null,
-              Utils.Infinite_Time));
+      deletedBlobHandlerConsumer.accept(() -> router.updateBlobTtl(blobId, null, Utils.Infinite_Time));
       router.deleteBlob(blobId, null).get();
       router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
       router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
@@ -374,7 +370,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       List<String> blobIds = new ArrayList<>();
       for (int i = 0; i < 2; i++) {
         setOperationParams();
-        String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
+        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
         ensurePutInAllServers(blobId, mockServerLayout);
         logger.debug("Put blob {}", blobId);
         blobIds.add(blobId);
@@ -383,7 +379,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       List<ChunkInfo> chunksToStitch = blobIds.stream()
           .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
           .collect(Collectors.toList());
-      String stitchedBlobId = router.stitchBlob(null, putBlobProperties, putUserMetadata, chunksToStitch).get();
+      String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get();
       ensureStitchInAllServers(stitchedBlobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
       blobIds.add(stitchedBlobId);
 
@@ -413,7 +409,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // 2. Test undelete a simple blob
       setOperationParams();
       String simpleBlobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
       ensurePutInAllServers(simpleBlobId, mockServerLayout);
       router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
       router.deleteBlob(simpleBlobId, null).get();
@@ -455,8 +451,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       router.undeleteBlob(simpleBlobId, "undelete_server_id").get();
 
       // 6. Test ttl update after undelete
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(simpleBlobId), simpleBlobId, null,
-          Utils.Infinite_Time);
+      router.updateBlobTtl(simpleBlobId, null, Utils.Infinite_Time);
       router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
     } finally {
       if (router != null) {
@@ -492,7 +487,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       List<String> blobIds = new ArrayList<>();
       for (int i = 0; i < 4; i++) {
         setOperationParams();
-        String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
+        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
         ensurePutInAllServers(blobId, mockServerLayout);
         blobIds.add(blobId);
       }
@@ -500,7 +495,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       List<ChunkInfo> chunksToStitch = blobIds.stream()
           .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
           .collect(Collectors.toList());
-      String blobId = router.stitchBlob(null, putBlobProperties, putUserMetadata, chunksToStitch).get();
+      String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get();
       ensureStitchInAllServers(blobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
       blobIds.add(blobId);
       Set<String> blobsToBeUndeleted = getBlobsInServers(mockServerLayout);
@@ -559,7 +554,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // 2. Test not-deleted blob
       setOperationParams();
       String notDeletedBlobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
       ensurePutInAllServers(notDeletedBlobId, mockServerLayout);
       router.getBlob(notDeletedBlobId, new GetBlobOptionsBuilder().build()).get();
       try {
@@ -573,7 +568,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // 3. Test lifeVersion conflict blob
       setOperationParams();
       String conflictBlobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
       ensurePutInAllServers(conflictBlobId, mockServerLayout);
       router.getBlob(conflictBlobId, new GetBlobOptionsBuilder().build()).get();
       router.deleteBlob(conflictBlobId, null).get();
@@ -630,12 +625,12 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       } catch (IllegalArgumentException expected) {
       }
       try {
-        router.putBlob(null, putBlobProperties, putUserMetadata, null, new PutBlobOptionsBuilder().build());
+        router.putBlob(putBlobProperties, putUserMetadata, null, new PutBlobOptionsBuilder().build());
         Assert.fail("null channel should have resulted in IllegalArgumentException");
       } catch (IllegalArgumentException expected) {
       }
       try {
-        router.putBlob(null, null, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
+        router.putBlob(null, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
         Assert.fail("null blobProperties should have resulted in IllegalArgumentException");
       } catch (IllegalArgumentException expected) {
       }
@@ -645,7 +640,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       } catch (IllegalArgumentException expected) {
       }
       try {
-        router.updateBlobTtl(null, null, null, Utils.Infinite_Time);
+        router.updateBlobTtl(null, null, Utils.Infinite_Time);
         Assert.fail("null blobId should have resulted in IllegalArgumentException");
       } catch (IllegalArgumentException expected) {
       }
@@ -656,7 +651,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       } catch (IllegalArgumentException expected) {
       }
       // null user metadata should work.
-      router.putBlob(null, putBlobProperties, null, putChannel, new PutBlobOptionsBuilder().build()).get();
+      router.putBlob(putBlobProperties, null, putChannel, new PutBlobOptionsBuilder().build()).get();
     } finally {
       if (router != null) {
         router.close();
@@ -677,7 +672,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       mockClusterMap.markAllPartitionsUnavailable();
       try {
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
         Assert.fail("Put should have failed if there are no partitions");
       } catch (Exception e) {
         RouterException r = (RouterException) e.getCause();
@@ -706,7 +701,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setRouter(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem());
       setOperationParams();
       try {
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
         Assert.fail("Put should have failed if there are no partitions");
       } catch (Exception e) {
         RouterException r = (RouterException) e.getCause();
@@ -743,7 +738,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
     setOperationParams();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
-    Future future = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
+    Future future = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
     try {
       while (!future.isDone()) {
         mockTime.sleep(1000);
@@ -757,7 +752,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
     setOperationParams();
     mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
-    future = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
+    future = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
 
     Thread requestResponseHandlerThreadRegular = TestUtils.getThreadByThisName("RequestResponseHandlerThread-0");
     Thread requestResponseHandlerThreadBackground =
@@ -840,7 +835,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // Submit the put operation and wait for it to fail.
       try {
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       } catch (ExecutionException e) {
         Assert.assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
       }
@@ -948,7 +943,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // Submit the put operation and wait for it to succeed.
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
 
       // Now, wait until at least one delete happens within AWAIT_TIMEOUT_MS.
       Assert.assertTrue("Some blobs should have been deleted within " + AWAIT_TIMEOUT_MS,
@@ -1025,7 +1020,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       String deleteServiceId = "delete-service";
       Set<String> blobsToBeDeleted = getBlobsInServers(mockServerLayout);
       int getRequestCount = mockServerLayout.getCount(RequestOrResponseType.GetRequest);
@@ -1038,7 +1033,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0,
               Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
           blobId =
-              router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+              router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
           Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
           allBlobsInServer.removeAll(blobsToBeDeleted);
           blobsToBeDeleted = allBlobsInServer;
@@ -1117,7 +1112,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setRouter(props, new MockServerLayout(mockClusterMap), deleteTrackingNotificationSystem);
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       router.deleteBlob(blobId, deleteServiceId).get();
       long waitStart = SystemTime.getInstance().milliseconds();
       while (router.getBackgroundOperationsCount() != 0
@@ -1186,7 +1181,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           while (chunkSizeIter.hasNext()) {
             long chunkSize = chunkSizeIter.nextLong();
             setOperationParams((int) chunkSize, TTL_SECS);
-            String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel,
+            String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel,
                 new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(PUT_CONTENT_SIZE).build())
                 .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             long expirationTime = Utils.addSecondsToEpochTime(putBlobProperties.getCreationTimeInMs(),
@@ -1198,7 +1193,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
           // Stitch the chunks together
           setOperationParams(0, TTL_SECS / 2);
-          String stitchedBlobId = router.stitchBlob(null, putBlobProperties, putUserMetadata, chunksToStitch)
+          String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch)
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
           // Fetch the stitched blob
@@ -1214,8 +1209,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           RouterTestHelpers.compareContent(expectedContent, null, getBlobResult.getBlobDataChannel());
 
           // TtlUpdate the blob.
-          router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(stitchedBlobId), stitchedBlobId,
-              "update-service", Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          router.updateBlobTtl(stitchedBlobId, "update-service", Utils.Infinite_Time)
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
           // Ensure that TTL was updated on the metadata blob and all data chunks
           Set<String> allBlobIds = chunksToStitch.stream().map(ChunkInfo::getBlobId).collect(Collectors.toSet());
@@ -1251,7 +1246,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
       testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
@@ -1266,7 +1261,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
             .forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
         TestCallback<Void> testCallback = new TestCallback<>();
         Future<Void> future =
-            router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
+            router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
                 Utils.Infinite_Time, testCallback, null);
         assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
 
@@ -1277,7 +1272,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // bad blob id
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future =
-          router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation("bad-blob-id"), "bad-blob-id",
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation("bad-blob-id"), "bad-blob-id",
               updateServiceId, Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
     } finally {
@@ -1298,15 +1293,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setRouter(getNonBlockingRouterProperties(localDcName), serverLayout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
       String blobIdCheck =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null, expectedError -> {
         final CountDownLatch callbackCalled = new CountDownLatch(1);
-        router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, null, Utils.Infinite_Time,
+        router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, null, Utils.Infinite_Time,
             (result, exception) -> {
               callbackCalled.countDown();
               throw new RuntimeException("Throwing an exception in the user callback");
@@ -1317,8 +1312,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
 
         //Test that TtlUpdateManager is still functional
-        router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobIdCheck), blobIdCheck, null,
-            Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        router.updateBlobTtl(blobIdCheck, null, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertTtl(router, Collections.singleton(blobIdCheck), Utils.Infinite_Time);
       });
     } finally {
@@ -1342,7 +1336,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       // PutBlob to the three local replicas
       String blobIdStr =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult localGetBlobResult =
           router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
@@ -1413,7 +1407,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       // PutBlob to the three local replicas
       String blobIdStr =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult localGetBlobResult =
           router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
@@ -1470,10 +1464,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       // PutBlob to the three local replicas
       String blobIdStr =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobIdStr), blobIdStr, serviceId,
-          Utils.Infinite_Time);
+      router.updateBlobTtl(blobIdStr, serviceId, Utils.Infinite_Time);
       GetBlobResult localGetBlobResult =
           router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
 
@@ -1550,7 +1543,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       // PutBlob to the three local replicas
       String blobIdStr =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
 
@@ -1592,7 +1585,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       // PutBlob to the three local replicas
       String blobIdStr =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult localGetBlobResult =
           router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
@@ -1653,7 +1646,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       // PutBlob to the three local replicas
       String blobIdStr =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
 
@@ -1699,7 +1692,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       // PutBlob to the three local replicas
       String compositeBlobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult localGetBlobResult =
           router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
@@ -1805,7 +1798,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // Submit a few jobs so that all the scaling units get exercised.
       for (int i = 0; i < SCALING_UNITS * 10; i++) {
         setOperationParams();
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       }
     } finally {
       if (router != null) {
@@ -1915,7 +1908,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
       // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
       String blobIdStr =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
       router.close();
       for (MockServer mockServer : mockServerLayout.getMockServers()) {
@@ -2001,7 +1994,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // put a simple blob and test it is absent in the metadata cache
       setOperationParams(PUT_CONTENT_SIZE, TTL_SECS);
-      blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+      blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // get the entire simple blob, and it's metadata must be absent from cache
@@ -2068,7 +2061,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         // put few composite blob and test it is absent in the metadata cache
         setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
         String blobId =
-            router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+            router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
                 .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         blobIds.add(blobId);
       }
@@ -2125,7 +2118,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         // put few composite blob and test it is absent in the metadata cache
         setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
         String blobId =
-            router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+            router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
                 .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         blobIds.add(blobId);
       }
@@ -2165,7 +2158,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // put a composite blob and test it is absent in the metadata cache
       setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // get the entire composite blob, and it's metadata must be absent from cache
@@ -2220,7 +2213,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // put a composite blob and test it is absent in the metadata cache
       setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // get the one byte from composite blob, and it's metadata must be present in cache
@@ -2258,7 +2251,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // put a composite blob and test it is absent in the metadata cache
       setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
 
@@ -2273,8 +2266,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // update TTL and make it permanent
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, null, Utils.Infinite_Time)
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
 
       // get one byte from composite blob, and it's metadata must be present in cache
@@ -2301,7 +2293,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // put a composite blob and test it is absent in the metadata cache
       setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // successful get
@@ -2377,7 +2369,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // put a composite blob and test it is absent in the metadata cache
       setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // successful get
@@ -2433,7 +2425,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
       testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
@@ -2442,7 +2434,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future =
-          router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
               Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.BlobDoesNotExist);
 
@@ -2466,7 +2458,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       TestCallback<Void> ttlUpdateTestCallback = new TestCallback<>();
       Future<Void> ttlUpdateFuture =
-          router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
               Utils.Infinite_Time, ttlUpdateTestCallback, null);
       assertFailureAndCheckErrorCode(ttlUpdateFuture, ttlUpdateTestCallback, RouterErrorCode.BlobDoesNotExist);
 
@@ -2480,8 +2472,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // wait for auto expiration of blob ID in cache
       Thread.sleep(NOT_FOUND_CACHE_TTL_MS + 100);
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, null, Utils.Infinite_Time)
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
 
       router.deleteBlob(blobId, null).get();
@@ -2511,7 +2502,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       int numberOfChunks = 1;
       setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult result = router.getBlob(blobId,
           new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
@@ -2534,7 +2525,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       int numberOfChunks = 4;
       setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult result = router.getBlob(blobId,
           new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
@@ -2559,15 +2550,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     return new MockRestRequest(header, null);
   }
 
-  private RestRequest createRestRequestForTtlUpdateAndStitchOperation(String blobId) throws Exception {
-    JSONObject request = new JSONObject();
-    JSONObject headers = new JSONObject();
-    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
-    request.put(MockRestRequest.HEADERS_KEY, headers);
-    RestRequest restRequest = new MockRestRequest(request, null);
-    return restRequest;
-  }
-
   /**
    * TtlUpdate first hits 503. Then it's either fixed by ODR or by offline repair.
    * @param enableODR enable On demand replication
@@ -2582,7 +2564,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
         layout, new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertTtl(router, Collections.singleton(blobId), TimeUnit.DAYS.toSeconds(7));
 
@@ -2600,8 +2582,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
 
     try {
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
-          Utils.Infinite_Time).get();
+      router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get();
       if (!enableODR && !enableOfflineRepair) {
         fail("Should fail with un-available if ODR and offline repair are disabled.");
       }
@@ -2709,7 +2690,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertTtl(router, Collections.singleton(compositeBlobId), TimeUnit.DAYS.toSeconds(7));
 
@@ -2725,8 +2706,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           }
         }
       }
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(compositeBlobId), compositeBlobId,
-          updateServiceId, Utils.Infinite_Time).get();
+      router.updateBlobTtl(compositeBlobId, updateServiceId, Utils.Infinite_Time).get();
 
       // simulate Replica_Unavailable for all local replicas. Then verify ttl from the remote replica
       for (MockServer server : layout.getMockServers()) {
@@ -2763,7 +2743,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertTtl(router, Collections.singleton(compositeBlobId), TimeUnit.DAYS.toSeconds(7));
 
@@ -2783,8 +2763,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         }
       }
       try {
-        router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(compositeBlobId), compositeBlobId,
-            updateServiceId, Utils.Infinite_Time).get();
+        router.updateBlobTtl(compositeBlobId, updateServiceId, Utils.Infinite_Time).get();
       } catch (Exception e) {
         assertTrue(e.getCause() instanceof RouterException);
         assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
@@ -2813,7 +2792,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertTtl(router, Collections.singleton(blobId), TimeUnit.DAYS.toSeconds(7));
 
@@ -2831,8 +2810,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           }
         }
       }
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
-          Utils.Infinite_Time).get();
+      router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get();
 
       // simulate Replica_Unavailable for the source host node. Read from the other two.
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
@@ -2868,7 +2846,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // Since 1 success, 1 Blob_Not_Found, 1 Disk_Unavailable
@@ -2895,7 +2873,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future =
-          router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
               Utils.Infinite_Time, testCallback, null);
       // It should return the error code of the TtlUpdate which is AmbryUnavailable,
       // shouldn't return the error code of the ReplicateBlob which is Unknown_Error.
@@ -2924,7 +2902,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // set error status for all the replicas except one local replica
@@ -2946,7 +2924,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future =
-          router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
               Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
 
@@ -2973,7 +2951,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       for (MockServer server : layout.getMockServers()) {
@@ -2984,7 +2962,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future =
-          router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
               Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
 
@@ -3013,7 +2991,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
         layout, new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // set two local replicas Replica_Unavailable.
@@ -3137,7 +3115,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         new LoggingNotificationSystem());
     setOperationParams();
     String compositeBlobId =
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // set two replicas Replica_Unavailable. Leave one local replica available as the source of the ReplicationBlob
@@ -3192,7 +3170,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // set error status for all the replicas except one local replica
@@ -3284,7 +3262,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         new LoggingNotificationSystem());
     setOperationParams();
     String compositeBlobId =
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // set two replicas Replica_Unavailable. Leave one local replica available as the source of the ReplicationBlob
@@ -3344,7 +3322,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
         layout, new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // for the three local replicas, two replicas return Blob_Not_Found due to host swap.
@@ -3435,7 +3413,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // set error status for all the replicas except one local replica
@@ -3524,7 +3502,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair, false),
         layout, new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     for (MockServer server : layout.getMockServers()) {
@@ -3579,7 +3557,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // two local replicas are unavailable. Remote replica doesn't have the Blob.
@@ -3698,7 +3676,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // Submit the put operation and wait for it to fail.
       try {
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
         fail("putBlob should fail");
       } catch (ExecutionException e) {
         Assert.assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
@@ -3755,7 +3733,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false, false), layout,
         new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // set two local replicas Replica_Unavailable.
@@ -4144,5 +4122,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       assertEquals(expectedRecord.getLifeVersion(), record.getLifeVersion());
       assertEquals(expectedRecord.getExpirationTimeMs(), record.getExpirationTimeMs());
     }
+  }
+
+  private RestRequest createRestRequestForTtlUpdateOperation(String blobId) throws Exception {
+    JSONObject request = new JSONObject();
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    RestRequest restRequest = new MockRestRequest(request, null);
+    return restRequest;
   }
 }

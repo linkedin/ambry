@@ -262,7 +262,7 @@ public class GetManagerTest {
     router = getNonBlockingRouter();
     setOperationParams(blobSize, options);
     String blobId =
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     getBlobAndCompareContent(blobId, -1);
     // Test GetBlobInfoOperation, regardless of options passed in.
     this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
@@ -290,14 +290,14 @@ public class GetManagerTest {
       byteBuffer.put(putContent);
       curBlobSize -= curChunkSize;
       stitchBlobsIds.add(
-          router.putBlob(null, putBlobProperties, putUserMetadata, putChannel,
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel,
               new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(CHUNK_SIZE).build()).get());
       chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L, null));
     }
     setOperationParams(blobSize, null);
     this.options = new GetBlobOptionsBuilder().build();
     putContent = byteBuffer.array();
-    return router.stitchBlob(null, putBlobProperties, putUserMetadata, chunkInfos).get();
+    return router.stitchBlob(putBlobProperties, putUserMetadata, chunkInfos).get();
   }
 
   /**
@@ -382,7 +382,7 @@ public class GetManagerTest {
     setOperationParams(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().build());
     final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
     String blobId =
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     List<Future<GetBlobResult>> getBlobInfoFutures = new ArrayList<>();
     List<Future<GetBlobResult>> getBlobDataFutures = new ArrayList<>();
     GetBlobOptions infoOptions =
@@ -420,7 +420,7 @@ public class GetManagerTest {
 
     // Test that GetManager is still operational
     setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
-    blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+    blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     getBlobAndCompareContent(blobId, -1);
     this.options = infoOptions;
     getBlobAndCompareContent(blobId, -1);
@@ -437,7 +437,7 @@ public class GetManagerTest {
     router = getNonBlockingRouter();
     setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
     String blobId =
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     Future future;
     try {

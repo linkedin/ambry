@@ -266,7 +266,7 @@ public class S3MultipartCompleteUploadHandler {
      * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(RestRequest, String, String, long)}.
+     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {

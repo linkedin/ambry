@@ -131,15 +131,6 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
     return new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString();
   }
 
-  private RestRequest createRestRequestForTtlUpdateAndStitchOperation(String blobId) throws Exception {
-    JSONObject request = new JSONObject();
-    JSONObject headers = new JSONObject();
-    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
-    request.put(MockRestRequest.HEADERS_KEY, headers);
-    RestRequest restRequest = new MockRestRequest(request, null);
-    return restRequest;
-  }
-
   /**
    * Test Router with single scaling unit for correct accounting in {@link QuotaChargeCallback}.
    */
@@ -220,7 +211,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       for (String blobId : blobIds) {
         router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
-        router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
+        router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
@@ -272,12 +263,12 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
       assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE * stitchedBlobCount), listenerCalledCount.get());
 
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(stitchedBlobId), stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
+      router.updateBlobTtl(createRestRequestForTtlUpdateOperation(stitchedBlobId), stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount += (quotaAccountingSize * numChunks), listenerCalledCount.get());
       assertEquals(0, routerMetrics.updateOptimizedCount.getCount());
       assertEquals(0, routerMetrics.updateUnOptimizedCount.getCount());
 
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(stitchedBlobId), stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
+      router.updateBlobTtl(createRestRequestForTtlUpdateOperation(stitchedBlobId), stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount += (quotaAccountingSize * numChunks), listenerCalledCount.get());
       assertEquals(0, routerMetrics.updateOptimizedCount.getCount());
       assertEquals(1, routerMetrics.updateUnOptimizedCount.getCount());
@@ -361,20 +352,20 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 
       // Do the ttl update for the first time. All the chunk's ttl udpate quota usage should be charged.
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(compositeBlobId), compositeBlobId, null,
+      router.updateBlobTtl(createRestRequestForTtlUpdateOperation(compositeBlobId), compositeBlobId, null,
           Utils.Infinite_Time, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount += (quotaAccountingSize * (numChunks + 1)), listenerCalledCount.get());
       assertEquals(0, routerMetrics.updateOptimizedCount.getCount());
       assertEquals(0, routerMetrics.updateUnOptimizedCount.getCount());
 
       // Do the ttl update again. This time only one chunk's ttl udpate quota usage should be charged.
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(compositeBlobId), compositeBlobId, null,
+      router.updateBlobTtl(createRestRequestForTtlUpdateOperation(compositeBlobId), compositeBlobId, null,
           Utils.Infinite_Time, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
       assertEquals(1, routerMetrics.updateOptimizedCount.getCount());
       assertEquals(0, routerMetrics.updateUnOptimizedCount.getCount());
 
-      router.deleteBlob(compositeBlobId, compositeBlobId, null, quotaChargeCallback).get();
+      router.deleteBlob(compositeBlobId, null, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
     } finally {
       router.close();
@@ -536,7 +527,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       // Submit a few jobs so that all the scaling units get exercised.
       for (int i = 0; i < SCALING_UNITS * 10; i++) {
         setOperationParams();
-        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       }
     } finally {
       if (router != null) {
@@ -617,5 +608,14 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       }
       throw new IllegalStateException("could not find TestCUQuotaSource in QuotaManager.");
     }
+  }
+
+  private RestRequest createRestRequestForTtlUpdateOperation(String blobId) throws Exception {
+    JSONObject request = new JSONObject();
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    RestRequest restRequest = new MockRestRequest(request, null);
+    return restRequest;
   }
 }

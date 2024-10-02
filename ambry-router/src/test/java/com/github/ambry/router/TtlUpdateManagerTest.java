@@ -119,7 +119,7 @@ public class TtlUpdateManagerTest {
       ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(PUT_CONTENT));
       BlobProperties putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
           Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(null, putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
     }
@@ -156,22 +156,13 @@ public class TtlUpdateManagerTest {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
       TestCallback<Void> callback = new TestCallback<>();
       notificationSystem.reset();
-      router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, null, Utils.Infinite_Time,
+      router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, null, Utils.Infinite_Time,
           callback, quotaChargeCallback).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       notificationSystem.checkNotifications(1, null, Utils.Infinite_Time);
       assertTrue("Callback was not called", callback.getLatch().await(10, TimeUnit.MILLISECONDS));
       assertNull("There should be no exception in the callback", callback.getException());
       assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
     }
-  }
-
-  private RestRequest createRestRequestForTtlUpdateAndStitchOperation(String blobId) throws Exception {
-    JSONObject request = new JSONObject();
-    JSONObject headers = new JSONObject();
-    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
-    request.put(MockRestRequest.HEADERS_KEY, headers);
-    RestRequest restRequest = new MockRestRequest(request, null);
-    return restRequest;
   }
 
   /**
@@ -695,6 +686,15 @@ public class TtlUpdateManagerTest {
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
+  }
+
+  private RestRequest createRestRequestForTtlUpdateOperation(String blobId) throws Exception {
+    JSONObject request = new JSONObject();
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    RestRequest restRequest = new MockRestRequest(request, null);
+    return restRequest;
   }
 
   static {
