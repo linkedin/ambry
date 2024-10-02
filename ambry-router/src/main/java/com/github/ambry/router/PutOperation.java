@@ -1350,10 +1350,18 @@ class PutOperation {
           chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
         } else {
           partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
-          chunkBlobId =
-              new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                  passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
-                  passedInBlobProperties.isEncrypted(), blobDataType);
+          if (BlobDataType.DATACHUNK.equals(blobDataType) || passedInBlobProperties.getReservedUuid() == null) {
+            chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE,
+                clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
+                passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted(),
+                blobDataType);
+          } else {
+            //We should only reserve uuid for METADATA and SIMPLE blob type.
+            chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE,
+                clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
+                passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted(),
+                blobDataType, passedInBlobProperties.getReservedUuid());
+          }
         }
 
         // To ensure previously attempted partitions are not retried for this PUT after a failure.
@@ -2164,7 +2172,7 @@ class PutOperation {
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
-              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null, passedInBlobProperties.getReservedUuid());
+              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null, null);
 
       if (options.skipCompositeChunk()) {
         // close the request as the single blob. we don't generate the composite blob.
