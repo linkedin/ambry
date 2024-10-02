@@ -38,6 +38,7 @@ public class BlobProperties {
   // Non persistent blob properties.
   private final String externalAssetTag;
   private final String reservedMetadataBlobId;
+  private final String reservedUuid;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -48,7 +49,7 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId, isEncrypted, null, null, null, null);
+        accountId, containerId, isEncrypted, null, null, null, null, null);
   }
 
   /**
@@ -62,7 +63,7 @@ public class BlobProperties {
   public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted,
       long creationTimeInMs) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, creationTimeInMs, accountId, containerId,
-        isEncrypted, null, null, null, null);
+        isEncrypted, null, null, null, null, null);
   }
 
   /**
@@ -84,51 +85,56 @@ public class BlobProperties {
       String contentEncoding, String filename) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
-        filename, null);
+        filename, null, null);
   }
 
   /**
-   * @param blobSize The size of the blob in bytes
-   * @param serviceId The service id that is creating this blob
-   * @param ownerId The owner of the blob (For example , memberId or groupId)
-   * @param contentType The content type of the blob (eg: mime). Can be Null
-   * @param isPrivate Is the blob secure
-   * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
-   * @param accountId accountId of the user who owns the blob
-   * @param containerId containerId of the blob
-   * @param isEncrypted whether this blob is encrypted.
-   * @param externalAssetTag externalAssetTag for this blob. This is a non-persistent field.
-   * @param contentEncoding the field to identify if the blob is compressed.
-   * @param reservedMetadataBlobId the reserved metadata blob id for chunked uploads or stitched blobs. Can be {@code null}.
-   * @param filename the name of the file.
+   * @param blobSize               The size of the blob in bytes
+   * @param serviceId              The service id that is creating this blob
+   * @param ownerId                The owner of the blob (For example , memberId or groupId)
+   * @param contentType            The content type of the blob (eg: mime). Can be Null
+   * @param isPrivate              Is the blob secure
+   * @param timeToLiveInSeconds    The time to live, in seconds, relative to blob creation time.
+   * @param accountId              accountId of the user who owns the blob
+   * @param containerId            containerId of the blob
+   * @param isEncrypted            whether this blob is encrypted.
+   * @param externalAssetTag       externalAssetTag for this blob. This is a non-persistent field.
+   * @param contentEncoding        the field to identify if the blob is compressed.
+   * @param filename               the name of the file.
+   * @param reservedMetadataBlobId the reserved metadata blob id for chunked uploads or stitched blobs. Can be
+   *                               {@code null}.
+   * @param reservedUuid           the reserved uuid for blob id.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, short accountId, short containerId, boolean isEncrypted, String externalAssetTag,
-      String contentEncoding, String filename, String reservedMetadataBlobId) {
+      String contentEncoding, String filename, String reservedMetadataBlobId, String reservedUuid) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
-        filename, reservedMetadataBlobId);
+        filename, reservedMetadataBlobId, reservedUuid);
   }
 
   /**
-   * @param blobSize The size of the blob in bytes
-   * @param serviceId The service id that is creating this blob
-   * @param ownerId The owner of the blob (For example , memberId or groupId)
-   * @param contentType The content type of the blob (eg: mime). Can be Null
-   * @param isPrivate Is the blob secure
-   * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
-   * @param creationTimeInMs The time at which the blob is created.
-   * @param accountId accountId of the user who owns the blob
-   * @param containerId containerId of the blob
-   * @param isEncrypted whether this blob is encrypted.
-   * @param externalAssetTag externalAssetTag for this blob. This is a non-persistent field.
-   * @param contentEncoding the field to identify if the blob is compressed.
-   * @param filename the name of the file.
-   * @param reservedMetadataBlobId the reserved metadata blob id for chunked uploads or stitched blobs. Can be {@code null}.
+   * @param blobSize               The size of the blob in bytes
+   * @param serviceId              The service id that is creating this blob
+   * @param ownerId                The owner of the blob (For example , memberId or groupId)
+   * @param contentType            The content type of the blob (eg: mime). Can be Null
+   * @param isPrivate              Is the blob secure
+   * @param timeToLiveInSeconds    The time to live, in seconds, relative to blob creation time.
+   * @param creationTimeInMs       The time at which the blob is created.
+   * @param accountId              accountId of the user who owns the blob
+   * @param containerId            containerId of the blob
+   * @param isEncrypted            whether this blob is encrypted.
+   * @param externalAssetTag       externalAssetTag for this blob. This is a non-persistent field.
+   * @param contentEncoding        the field to identify if the blob is compressed.
+   * @param filename               the name of the file.
+   * @param reservedMetadataBlobId the reserved metadata blob id for chunked uploads or stitched blobs. Can be
+   *                               {@code null}.
+   * @param reservedUuid           the reserved uuid for blob id.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, boolean isEncrypted,
-      String externalAssetTag, String contentEncoding, String filename, String reservedMetadataBlobId) {
+      String externalAssetTag, String contentEncoding, String filename, String reservedMetadataBlobId,
+      String reservedUuid) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -143,6 +149,7 @@ public class BlobProperties {
     this.contentEncoding = contentEncoding;
     this.filename = filename;
     this.reservedMetadataBlobId = reservedMetadataBlobId;
+    this.reservedUuid = reservedUuid;
   }
 
   /**
@@ -152,7 +159,7 @@ public class BlobProperties {
   public BlobProperties(BlobProperties other) {
     this(other.blobSize, other.serviceId, other.ownerId, other.contentType, other.isPrivate, other.timeToLiveInSeconds,
         other.creationTimeInMs, other.accountId, other.containerId, other.isEncrypted, other.externalAssetTag,
-        other.contentEncoding, other.filename, other.reservedMetadataBlobId);
+        other.contentEncoding, other.filename, other.reservedMetadataBlobId, other.reservedUuid);
   }
 
   public long getTimeToLiveInSeconds() {
@@ -162,6 +169,8 @@ public class BlobProperties {
   public long getBlobSize() {
     return blobSize;
   }
+
+  public String getReservedUuid() { return reservedUuid; }
 
   /**
    * This should only be used to determine the "virtual container" for blobs with V1 IDs.
@@ -263,7 +272,8 @@ public class BlobProperties {
     sb.append(", ").append("Filename=").append(getFilename());
     sb.append(", ")
         .append("ReservedMetadataBlobId=")
-        .append(nullOrEmptry(getReservedMetadataBlobId())? "null" : getReservedMetadataBlobId());
+        .append(nullOrEmptry(getReservedMetadataBlobId()) ? "null" : getReservedMetadataBlobId());
+    sb.append(", ").append("ReservedUuId=").append(nullOrEmptry(getReservedUuid()) ? "null" : getReservedUuid());
     sb.append("]");
     return sb.toString();
   }
@@ -282,7 +292,8 @@ public class BlobProperties {
         && timeToLiveInSeconds == that.timeToLiveInSeconds && Objects.equals(serviceId, that.serviceId)
         && Objects.equals(ownerId, that.ownerId) && Objects.equals(contentType, that.contentType) && Objects.equals(
         contentEncoding, that.contentEncoding) && Objects.equals(filename, that.filename) && Objects.equals(
-        externalAssetTag, that.externalAssetTag) && Objects.equals(reservedMetadataBlobId, that.reservedMetadataBlobId);
+        externalAssetTag, that.externalAssetTag) && Objects.equals(reservedMetadataBlobId, that.reservedMetadataBlobId)
+        && Objects.equals(reservedUuid, that.reservedUuid);
   }
 
   /**
@@ -320,6 +331,7 @@ public class BlobProperties {
         && Objects.equals(contentEncoding, that.contentEncoding)
         && Objects.equals(filename, that.filename)
         && Objects.equals(externalAssetTag, that.externalAssetTag)
-        && Objects.equals(reservedMetadataBlobId, that.reservedMetadataBlobId);
+        && Objects.equals(reservedMetadataBlobId, that.reservedMetadataBlobId)
+        && Objects.equals(reservedUuid, that.reservedUuid);
   }
 }
