@@ -153,18 +153,21 @@ public interface Router extends Closeable {
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
    * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
    * by this operation can be used to fetch the chunks as if they were a single blob.
+   *
+   * @param restRequest    The {@link RestRequest} to stitch blob.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
-   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
-   *                       fields are set accurately.
+   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these fields
+   *                       are set accurately.
    * @return A future that would contain the BlobId eventually.
    */
-  default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
-      List<ChunkInfo> chunksToStitch) {
+  default CompletableFuture<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties,
+      byte[] userMetadata, List<ChunkInfo> chunksToStitch) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    stitchBlob(null, blobProperties, userMetadata, chunksToStitch, null, CallbackUtils.fromCompletableFuture(future), null);
+    stitchBlob(restRequest, blobProperties, userMetadata, chunksToStitch, null,
+        CallbackUtils.fromCompletableFuture(future), null);
     return future;
   }
 
@@ -173,6 +176,7 @@ public interface Router extends Closeable {
    * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
    * by this operation can be used to fetch the chunks as if they were a single blob.
    *
+   * @param restRequest    The {@link RestRequest} to stitch blob.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param userMetadata   Optional user metadata about the blob. This can be null.
@@ -182,10 +186,10 @@ public interface Router extends Closeable {
    * @param options        the {@link PutBlobOptions}.
    * @return A future that would contain the BlobId eventually.
    */
-  default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
-      List<ChunkInfo> chunksToStitch, PutBlobOptions options) {
+  default CompletableFuture<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties,
+      byte[] userMetadata, List<ChunkInfo> chunksToStitch, PutBlobOptions options) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    stitchBlob(null, blobProperties, userMetadata, chunksToStitch, options, CallbackUtils.fromCompletableFuture(future),
+    stitchBlob(restRequest, blobProperties, userMetadata, chunksToStitch, options, CallbackUtils.fromCompletableFuture(future),
         null);
     return future;
   }
@@ -193,17 +197,20 @@ public interface Router extends Closeable {
   /**
    * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of
    * the new blob on a successful response.
+   *
+   * @param restRequest    The {@link RestRequest} to put the blob.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
+   * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @return A future that would contain the BlobId eventually.
    */
-  default CompletableFuture<String> putBlob(BlobProperties blobProperties, byte[] userMetadata,
+  default CompletableFuture<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata,
       ReadableStreamChannel channel, PutBlobOptions options) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    putBlob(null, blobProperties, userMetadata, channel, options, CallbackUtils.fromCompletableFuture(future), null);
+    putBlob(restRequest, blobProperties, userMetadata, channel, options, CallbackUtils.fromCompletableFuture(future),
+        null);
     return future;
   }
 

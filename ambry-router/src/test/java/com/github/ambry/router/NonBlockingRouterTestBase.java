@@ -574,7 +574,7 @@ public class NonBlockingRouterTestBase {
    */
   protected void assertClosed() {
     Future<String> future =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
+        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
     Assert.assertTrue(future.isDone());
     try {
       ((CompletableFuture<?>) future).join();
@@ -601,7 +601,7 @@ public class NonBlockingRouterTestBase {
     setOperationParams();
     Assert.assertFalse("The original ttl should not be infinite for this test to work",
         putBlobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    String blobId = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertTtl(router, Collections.singleton(blobId), TTL_SECS);
     router.updateBlobTtl(createRestRequestForTtlUpdateAndStitchOperation(blobId), blobId, updateServiceId,

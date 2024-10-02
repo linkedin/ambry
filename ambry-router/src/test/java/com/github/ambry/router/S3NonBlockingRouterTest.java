@@ -121,7 +121,7 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
     RestRequest request = createRestRequestForPutOperation();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(request, null, CLUSTER_NAME));
     PutBlobOptions putBlobOptions = new PutBlobOptionsBuilder().restRequest(request).build();
-    String blobID = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putBlobOptions)
+    String blobID = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, putBlobOptions)
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // Get Data Chunk List
@@ -185,7 +185,7 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
       request.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(request, null, CLUSTER_NAME));
       PutBlobOptions putBlobOptions = new PutBlobOptionsBuilder().restRequest(request).skipCompositeChunk(true).build();
       ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-      String compositeBlobInfo = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putBlobOptions)
+      String compositeBlobInfo = router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, putBlobOptions)
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       PutBlobMetaInfo metaInfo = PutBlobMetaInfo.deserialize(compositeBlobInfo);
 
@@ -237,7 +237,7 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
     PutBlobOptions options = new PutBlobOptionsBuilder().restRequest(request).build();
     List<ChunkInfo> chunksToStitch = getChunksToStitch(completeMultipartUpload);
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(request, null, CLUSTER_NAME));
-    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch, options).get();
+    String blobId = router.stitchBlob(null, putBlobProperties, putUserMetadata, chunksToStitch, options).get();
 
     router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
   }

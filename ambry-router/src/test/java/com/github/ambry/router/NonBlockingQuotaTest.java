@@ -536,7 +536,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       // Submit a few jobs so that all the scaling units get exercised.
       for (int i = 0; i < SCALING_UNITS * 10; i++) {
         setOperationParams();
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(null, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       }
     } finally {
       if (router != null) {

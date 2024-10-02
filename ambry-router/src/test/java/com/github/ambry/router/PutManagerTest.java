@@ -711,7 +711,7 @@ public class PutManagerTest {
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
     CompletableFuture<String> future =
-        router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+        router.putBlob(null, requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
             requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
@@ -731,7 +731,7 @@ public class PutManagerTest {
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     CompletableFuture<String> future =
-        router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+        router.putBlob(null, requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
             requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
 
@@ -839,7 +839,7 @@ public class PutManagerTest {
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     CompletableFuture<String> future =
-        router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+        router.putBlob(null, requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
             requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
@@ -1066,11 +1066,11 @@ public class PutManagerTest {
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
           if (requestAndResult.chunksToStitch == null) {
             requestAndResult.result =
-                router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+                router.putBlob(null, requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
                     requestAndResult.options);
           } else {
             requestAndResult.result =
-                router.stitchBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+                router.stitchBlob(null, requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
                     requestAndResult.chunksToStitch);
           }
           BlobId blobId = new BlobId(requestAndResult.result.get(MAX_WAIT_MS, TimeUnit.MILLISECONDS), mockClusterMap);
