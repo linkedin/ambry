@@ -3555,7 +3555,8 @@ public class FrontendRestRequestServiceTest {
             accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
-    RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    //Regular blob delete won't need to go through id converter
+    RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
   }
 
@@ -4487,7 +4488,7 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
+  public Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     deleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.DeleteBlob);

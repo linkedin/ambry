@@ -30,6 +30,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -52,6 +53,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -305,30 +307,46 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
-    Exception exception = null;
-    try {
-      checkBlobId(blobId);
-      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
-        deletedBlobs.add(blobId);
-        undeletedBlobs.remove(blobId);
-        if (notificationSystem != null) {
-          notificationSystem.onBlobDeleted(blobId, serviceId, null, null);
+    if (restRequest == null) {
+      proceedWithDelete(blobId, serviceId, callback, futureResult);
+    } else {
+      // Extract blobId or convert it if necessary
+      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+        // Blob ID is already available
+        String blobIdStr =
+            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
+        proceedWithDelete(blobIdStr, serviceId, callback, futureResult);
+      } else {
+        try {
+          //If the blobId is named blob, need to go through convert first.
+          String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(true);
+
+          // Call idConverter to get blobId asynchronously
+          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+            @Override
+            public void onCompletion(String convertedBlobId, Exception exception) {
+              if (exception != null) {
+                // Handle error in conversion
+                callback.onCompletion(null, exception);
+              } else {
+                // Continue with TTL update once blobId is available
+                proceedWithDelete(convertedBlobId, serviceId, callback, futureResult);
+              }
+            }
+          });
+        } catch (Exception e) {
+          // Handle synchronous errors during header extraction
+          callback.onCompletion(null, e);
+          return futureResult;
         }
-      } else if (!deletedBlobs.contains(blobId)) {
-        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
       }
-    } catch (RouterException e) {
-      exception = e;
-    } catch (Exception e) {
-      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-    } finally {
-      completeOperation(futureResult, callback, null, exception);
     }
+    // Blob ID is not available, use idConverter to get it
     return futureResult;
   }
 
@@ -551,6 +569,40 @@ public class InMemoryRouter implements Router {
     futureResult.done(operationResult, exception);
     if (callback != null) {
       callback.onCompletion(operationResult, exception);
+    }
+  }
+
+  private String removeLeadingSlashIfNeeded(String blobId) {
+    return blobId.startsWith("/") ? blobId.substring(1) : blobId;
+  }
+
+  /**
+   * Helper method to perform delete once the blob Id is available.
+   */
+  private void proceedWithDelete(String blobId, String serviceId, Callback<Void> callback,
+      FutureResult<Void> futureResult) {
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
+    Exception exception = null;
+
+    try {
+      checkBlobId(blobId);
+      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
+        deletedBlobs.add(blobId);
+        undeletedBlobs.remove(blobId);
+        if (notificationSystem != null) {
+          notificationSystem.onBlobDeleted(blobId, serviceId, null, null);
+        }
+      } else if (!deletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+      }
+    } catch (RouterException e) {
+      exception = e;
+    } catch (Exception e) {
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+    } finally {
+      completeOperation(futureResult, callback, null, exception);
     }
   }
 

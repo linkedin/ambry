@@ -116,40 +116,26 @@ public class DeleteBlobHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.deleteBlobSecurityProcessRequestMetrics, result -> {
         String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
-        idConverter.convert(restRequest, blobIdStr, idConverterCallback());
-        LOGGER.debug("Blob Id to convert: " + blobIdStr);
-      }, restRequest.getUri(), LOGGER, finalCallback);
-    }
-
-    /**
-     * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
-     * request time security checks that rely on the request being fully parsed and any additional arguments set.
-     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
-     */
-    private Callback<String> idConverterCallback() {
-      return buildCallback(metrics.deleteBlobIdConversionMetrics, convertedBlobId -> {
-        BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
-        if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) == null) {
-          // Inject account and container when they are missing from the rest request.
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
-              metrics.deleteBlobMetricsGroup);
+        if (!RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
+          blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+          BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(blobIdStr, clusterMap);
+          restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, convertedBlobId);
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(convertedBlobId, restRequest,
+              metrics.updateBlobTtlMetricsGroup);
         }
-        LOGGER.debug("Converted Blob Id: " + blobId);
-        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
+        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
      * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#deleteBlob} to delete
      * the blob in the storage layer.
-     * @param blobId the {@link BlobId} to undelete
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
      */
-    private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
+    private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.deleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, false);
-        LOGGER.debug("Start deleting the blob for blobId " + blobId);
-        router.deleteBlob(blobId.getID(), serviceId, routerCallback(),
+        router.deleteBlob(restRequest, null, serviceId, routerCallback(),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
