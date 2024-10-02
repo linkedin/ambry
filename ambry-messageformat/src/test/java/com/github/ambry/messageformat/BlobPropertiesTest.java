@@ -88,7 +88,8 @@ public class BlobPropertiesTest {
         new MockPartitionId(), false, BlobId.BlobDataType.METADATA).getID();
 
     BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
-        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, null, null, null);
+        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, null, null, null,
+        null);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     ByteBuffer serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
@@ -98,7 +99,7 @@ public class BlobPropertiesTest {
 
     blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
-        filename, null);
+        filename, null, null);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
@@ -110,7 +111,7 @@ public class BlobPropertiesTest {
 
     blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
-        filename, null);
+        filename, null, null);
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
@@ -133,7 +134,7 @@ public class BlobPropertiesTest {
     long creationTimeMs = SystemTime.getInstance().milliseconds();
     blobProperties =
         new BlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, creationTimeMs,
-            accountId, containerId, isEncrypted, "some-external-asset-tag", contentEncoding, filename, null);
+            accountId, containerId, isEncrypted, "some-external-asset-tag", contentEncoding, filename, null, null);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
 
@@ -155,7 +156,7 @@ public class BlobPropertiesTest {
     for (long ttl : validTTLs) {
       blobProperties =
           new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs, accountId,
-              containerId, isEncrypted, null, contentEncoding, filename, null);
+              containerId, isEncrypted, null, contentEncoding, filename, null, null);
       serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
       blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
           new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
@@ -165,7 +166,7 @@ public class BlobPropertiesTest {
 
     blobProperties =
         new BlobProperties(blobSize, serviceId, null, null, false, timeToLiveInSeconds, creationTimeMs, accountId,
-            containerId, isEncrypted, externalAssetTag, contentEncoding, filename, null);
+            containerId, isEncrypted, externalAssetTag, contentEncoding, filename, null, null);
     verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds, accountId,
         containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, null);
     blobProperties.setTimeToLiveInSeconds(timeToLiveInSeconds + 1);
@@ -188,7 +189,8 @@ public class BlobPropertiesTest {
 
     blobProperties =
         new BlobProperties(blobSize, serviceId, null, null, false, timeToLiveInSeconds,
-            creationTimeMs, accountId, containerId, isEncrypted, externalAssetTag, contentEncoding, filename, blobId);
+            creationTimeMs, accountId, containerId, isEncrypted, externalAssetTag, contentEncoding, filename, blobId,
+            null);
     verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds, accountId,
         containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, blobId);
     blobProperties.setTimeToLiveInSeconds(timeToLiveInSeconds + 1);

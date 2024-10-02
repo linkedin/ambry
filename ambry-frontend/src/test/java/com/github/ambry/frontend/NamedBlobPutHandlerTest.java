@@ -24,10 +24,12 @@ import com.github.ambry.account.DatasetBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
@@ -49,7 +51,9 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -216,6 +220,36 @@ public class NamedBlobPutHandlerTest {
     idConverterFactory.returnInputIfTranslationNull = true;
     putBlobAndVerify(null, TestUtils.TTL_SECS);
     putBlobAndVerify(null, Utils.Infinite_Time);
+  }
+
+  /**
+   * Test put named blob with reserved UUID in blob properties.
+   * @throws Exception
+   */
+  @Test
+  public void putNamedBlobTestWithReservedUuid() throws Exception {
+    idConverterFactory.returnInputIfTranslationNull = true;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, Utils.Infinite_Time, !REF_CONTAINER.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
+    byte[] content = TestUtils.getRandomBytes(10);
+    RestRequest request = getRestRequest(headers, request_path, content);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> future = new FutureResult<>();
+    idConverterFactory.lastInput = null;
+    idConverterFactory.lastBlobProperties = null;
+    idConverterFactory.lastConvertedId = null;
+    namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+    future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+    String blobId = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+    InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+    BlobProperties blobProperties = blob.getBlobProperties();
+    ClusterMap referenceClusterMap = new MockClusterMap();
+    BlobId blobIdSerDed =
+        new BlobId(new DataInputStream(new ByteArrayInputStream(new BlobId(blobId, referenceClusterMap).toBytes())),
+            referenceClusterMap);
+    assertEquals("blobId's UUID should match with the blob properties", blobIdSerDed.getUuid(),
+        blobProperties.getReservedUuid());
   }
 
   /**
@@ -547,7 +581,7 @@ public class NamedBlobPutHandlerTest {
       BlobProperties blobProperties =
           new BlobProperties(-1, SERVICE_ID, OWNER_ID, CONTENT_TYPE, !container.isCacheable(), blobTtlSecs,
               creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null, null,
-              null, null);
+              null, null, null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);

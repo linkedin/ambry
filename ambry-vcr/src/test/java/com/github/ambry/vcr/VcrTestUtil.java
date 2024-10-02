@@ -36,7 +36,6 @@ import com.github.ambry.server.MockNotificationSystem;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,11 +59,9 @@ import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
 import org.apache.helix.zookeeper.api.client.HelixZkClient;
 import org.apache.helix.zookeeper.impl.factory.DedicatedZkClientFactory;
-import org.junit.Test;
 
 import static com.github.ambry.server.ServerTestUtil.*;
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 
 
 /**
@@ -245,7 +242,7 @@ public class VcrTestUtil {
     long ttl = doTtlUpdate ? TimeUnit.DAYS.toMillis(1) : Utils.Infinite_Time;
     BlobProperties properties =
         new BlobProperties(blobSize, "serviceid1", null, null, false, ttl, cluster.time.milliseconds(), accountId,
-            containerId, false, null, null, null, null);
+            containerId, false, null, null, null, null, null);
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 

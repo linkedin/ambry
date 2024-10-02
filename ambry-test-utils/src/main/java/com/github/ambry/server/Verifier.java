@@ -36,7 +36,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -262,7 +261,7 @@ class Verifier implements Runnable {
                     new BlobProperties(old.getBlobSize(), old.getServiceId(), old.getOwnerId(), old.getContentType(),
                         old.isEncrypted(), Utils.Infinite_Time, old.getCreationTimeInMs(), old.getAccountId(),
                         old.getContainerId(), old.isEncrypted(), old.getExternalAssetTag(), old.getContentEncoding(),
-                        old.getFilename(), old.getReservedMetadataBlobId());
+                        old.getFilename(), old.getReservedMetadataBlobId(), old.getReservedUuid());
               }
             } catch (Exception e) {
               if (channel1 != null) {
