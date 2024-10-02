@@ -140,7 +140,7 @@ public class MockRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
+  public Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     lock.lock();
     try {

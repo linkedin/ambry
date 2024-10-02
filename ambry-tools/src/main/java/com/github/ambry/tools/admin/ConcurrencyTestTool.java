@@ -838,7 +838,7 @@ public class ConcurrencyTestTool {
       final FutureResult futureResult = new FutureResult();
       try {
         final Long startTimeGetBlobInMs = SystemTime.getInstance().milliseconds();
-        router.deleteBlob(blobId, null, new Callback<Void>() {
+        router.deleteBlob(null, blobId, null, new Callback<Void>() {
           @Override
           public void onCompletion(Void result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeGetBlobInMs;

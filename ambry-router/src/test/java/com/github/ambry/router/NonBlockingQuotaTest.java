@@ -218,7 +218,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
         router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
             null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
-        router.deleteBlob(blobId, null, null, quotaChargeCallback).get();
+        router.deleteBlob(null, blobId, null, null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         try {
           router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
@@ -273,7 +273,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       assertEquals(0, routerMetrics.updateOptimizedCount.getCount());
       assertEquals(1, routerMetrics.updateUnOptimizedCount.getCount());
 
-      router.deleteBlob(stitchedBlobId, null, null, quotaChargeCallback).get();
+      router.deleteBlob(null, stitchedBlobId, null, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
     } finally {
       router.close();
@@ -363,7 +363,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       assertEquals(1, routerMetrics.updateOptimizedCount.getCount());
       assertEquals(0, routerMetrics.updateUnOptimizedCount.getCount());
 
-      router.deleteBlob(compositeBlobId, null, null, quotaChargeCallback).get();
+      router.deleteBlob(null, compositeBlobId, null, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
     } finally {
       router.close();

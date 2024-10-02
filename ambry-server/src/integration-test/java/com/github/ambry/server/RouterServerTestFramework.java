@@ -429,7 +429,7 @@ class RouterServerTestFramework {
       opChain.testFutures.add(testFuture);
       return;
     }
-    Future<Void> future = router.deleteBlob(fraudId.getID(), null, callback, quotaChargeCallback);
+    Future<Void> future = router.deleteBlob(null, fraudId.getID(), null, callback, quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlobAuthorizationFail", true), opChain) {
       @Override
       void check() throws Exception {
@@ -463,7 +463,7 @@ class RouterServerTestFramework {
    */
   private void startDeleteBlob(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    Future<Void> future = router.deleteBlob(opChain.blobId, null, callback, quotaChargeCallback);
+    Future<Void> future = router.deleteBlob(null, opChain.blobId, null, callback, quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", false), opChain) {
       @Override
       void check() throws Exception {
