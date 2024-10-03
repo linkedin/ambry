@@ -392,6 +392,8 @@ public class NonBlockingRouter implements Router {
     return futureResult;
   }
 
+
+
   /**
    * Requests for a blob to be replicated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
@@ -899,7 +901,11 @@ public class NonBlockingRouter implements Router {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, blobProperties, callback);
+        try {
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }
@@ -925,7 +931,11 @@ public class NonBlockingRouter implements Router {
         blobProperties.setBlobSize(blobProperties.getBlobSize());
         restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, blobProperties, callback);
+        try {
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }
@@ -947,7 +957,11 @@ public class NonBlockingRouter implements Router {
         }
       } else {
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, null, callback);
+        try {
+          idConverter.convert(restRequest, blobId, null, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }

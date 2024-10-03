@@ -580,6 +580,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
+    properties.put("frontend.id.signing.service.factory", "com.github.ambry.frontend.AmbryIdSigningServiceFactory");
+    properties.put("frontend.id.converter.factory", "com.github.ambry.frontend.AmbryIdConverterFactory");
     properties.put("rest.server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
     properties.put("netty.server.port", Integer.toString(plaintextServerPort));
     properties.put("netty.server.ssl.port", Integer.toString(sslServerPort));

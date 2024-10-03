@@ -283,7 +283,7 @@ public class InMemoryRouter implements Router {
       return futureResult;
     }
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
     PostData postData = new PostData(blobProperties, usermetadata, channel, null, options, wrappedCallback, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
@@ -298,7 +298,7 @@ public class InMemoryRouter implements Router {
       return futureResult;
     }
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
     PostData postData =
         new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, wrappedCallback,
             futureResult);
@@ -574,7 +574,11 @@ public class InMemoryRouter implements Router {
         // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
         restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, blobProperties, callback);
+        try {
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }
@@ -596,7 +600,11 @@ public class InMemoryRouter implements Router {
         }
       } else {
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, null, callback);
+        try {
+          idConverter.convert(restRequest, blobId, null, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }

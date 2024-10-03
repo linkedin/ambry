@@ -194,8 +194,8 @@ class PostBlobHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          router.putBlob(restRequest, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+              idConverterCallbackForPut(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -209,35 +209,23 @@ class PostBlobHandler {
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
+          bytesRead -> router.stitchBlob(restRequest, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
-              routerStitchBlobCallback(blobInfo),
-              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER,
-          finalCallback);
+              idConverterCallbackForStitch(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)),
+          uri, LOGGER, finalCallback);
     }
 
     /**
-     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
-     * that will be returned in the "Location" header.
-     * @param blobInfo the {@link BlobInfo} to make the router call with.
-     * @return a {@link Callback} to be used with {@link Router#putBlob}.
+     * After {@link IdConverter#convert} finishes, set the "Location" header and call
+     * {@link SecurityService#processResponse}.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo)), uri, LOGGER,
-          finalCallback);
-    }
-
-    /**
-     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
-     * that will be returned in the "Location" header.
-     * @param blobInfo the {@link BlobInfo} to make the router call with.
-     * @return a {@link Callback} to be used with {@link Router#putBlob}.
-     */
-    private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
+    private Callback<String> idConverterCallbackForPut(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
         setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
-        idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }
 
@@ -247,7 +235,7 @@ class PostBlobHandler {
      * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo) {
+    private Callback<String> idConverterCallbackForStitch(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
