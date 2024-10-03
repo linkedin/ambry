@@ -786,6 +786,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
     if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
+      logger.info("Registering PropertyStoreCleanUpTask");
       Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
       taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
           context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,
