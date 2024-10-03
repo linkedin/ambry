@@ -24,6 +24,7 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.frontend.IdConverterFactory;
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
@@ -34,6 +35,8 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
@@ -43,7 +46,9 @@ import com.google.common.cache.CacheBuilder;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -97,7 +102,7 @@ public class NonBlockingRouter implements Router {
    * @param cryptoService         {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler      {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param accountService        the {@link AccountService} to use.
-   * @param time                  the time instance.
+   * @param time                  the {@link Time} instance.
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
@@ -173,7 +178,7 @@ public class NonBlockingRouter implements Router {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param accountService the {@link AccountService} to use.
-   * @param time the time instance.
+   * @param time           the {@link Time} instance.
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
@@ -357,11 +362,12 @@ public class NonBlockingRouter implements Router {
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback       The {@link Callback} which will be invoked on the completion of the request .
+   * @param time           The {@link Time} instance.
    * @return A future that would contain the BlobId eventually.
    */
   @Override
   public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, Time time) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
@@ -378,7 +384,7 @@ public class NonBlockingRouter implements Router {
     FutureResult<String> futureResult = new FutureResult<>();
     Callback<String> wrappedCallback =
         restRequest != null && idConverter != null ? createIdConverterCallbackForPut(restRequest, blobProperties,
-            futureResult, callback) : callback;
+            futureResult, callback, time) : callback;
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, wrappedCallback,
           quotaChargeCallback);
@@ -884,12 +890,14 @@ public class NonBlockingRouter implements Router {
 
   /**
    * Create id converter callback after router put the blob.
-   * @param restRequest {@link RestRequest} to put the blob.
+   *
+   * @param restRequest    {@link RestRequest} to put the blob.
    * @param blobProperties {@link BlobProperties} for the blob.
+   * @param time           The {@link Time} instance.
    * @return
    */
   private Callback<String> createIdConverterCallbackForPut(RestRequest restRequest, BlobProperties blobProperties,
-      FutureResult<String> futureResult, Callback<String> callback) {
+      FutureResult<String> futureResult, Callback<String> callback, Time time) {
     return (blobId, exception) -> {
       if (exception != null) {
         // If putBlob fails, complete the future and callback with an error
@@ -902,6 +910,7 @@ public class NonBlockingRouter implements Router {
         restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
         try {
+          setSignedIdMetadata(restRequest, blobProperties, time);
           idConverter.convert(restRequest, blobId, blobProperties, callback);
         } catch (Exception e) {
           callback.onCompletion(null, e);
@@ -938,6 +947,36 @@ public class NonBlockingRouter implements Router {
         }
       }
     };
+  }
+
+  /**
+   * Attach the metadata to include in a signed ID to the {@link RestRequest} if the request is for a chunk upload. This
+   * will tell the ID converter that it needs to produce a signed ID to give back to the client.
+   *
+   * @param blobProperties the {@link BlobProperties} from the request.
+   * @param time The {@link Time} instance.
+   * @throws RestServiceException
+   */
+  private void setSignedIdMetadata(RestRequest restRequest, BlobProperties blobProperties, Time time)
+      throws RestServiceException {
+    if (RestUtils.isChunkUpload(restRequest.getArgs())) {
+      Map<String, String> metadata = new HashMap<>(2);
+      metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
+      metadata.put(RestUtils.Headers.SESSION,
+          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
+      metadata.put(RouterUtils.EXPIRATION_TIME_MS_KEY,
+          Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
+      if (blobProperties.getReservedMetadataBlobId() != null) {
+        metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, blobProperties.getReservedMetadataBlobId());
+      } else {
+        ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+            routerMetrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.inc();
+        RouterUtils.throwRestServiceExceptionIfEnabled(
+            new RestServiceException("No reserved metadata id present to set in chunked upload response",
+                RestServiceErrorCode.BadRequest), getRouterConfig().routerReservedMetadataEnabled);
+      }
+      restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
+    }
   }
 
   /**

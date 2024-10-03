@@ -90,6 +90,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.google.common.collect.Lists;
 import java.io.ByteArrayInputStream;
@@ -742,7 +743,7 @@ public class FrontendRestRequestServiceTest {
 
     // add dataset versio and mock router.putBlob failed.
     Router mockRouter = mock(Router.class);
-    when(mockRouter.putBlob(any(), any(), any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
+    when(mockRouter.putBlob(any(), any(), any(), any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, mockRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
@@ -4433,7 +4434,7 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, Time time) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 

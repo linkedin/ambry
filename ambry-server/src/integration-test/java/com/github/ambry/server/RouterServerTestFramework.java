@@ -299,7 +299,7 @@ class RouterServerTestFramework {
     };
     Future<String> future =
         router.putBlob(null, opChain.properties, opChain.userMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            callback, quotaChargeCallback);
+            callback, quotaChargeCallback, null);
     TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", false), opChain) {
       @Override
       void check() throws Exception {

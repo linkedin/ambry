@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.LocalNetworkClient;
@@ -33,7 +32,7 @@ import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.Response;
-import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -54,6 +53,7 @@ import org.slf4j.LoggerFactory;
 public class RouterUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(RouterUtils.class);
+  public static final String EXPIRATION_TIME_MS_KEY = "et";
 
   /**
    * Get {@link BlobId} from a blob string.
@@ -333,6 +333,19 @@ public class RouterUtils {
   public static boolean isOriginatingDcRemote(BlobId blobId, ClusterMap clusterMap) {
     return blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
         && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId();
+  }
+
+  /**
+   * Throws the specified {@link RestServiceException} if isEnabled is {@code true}. No-op otherwise.
+   * @param restServiceException {@link RestServiceException} object to throw.
+   * @param isEnabled if {@code true} then throw the specified exception. do nothing otherwise.
+   * @throws RestServiceException the exception to throw.
+   */
+  static void throwRestServiceExceptionIfEnabled(RestServiceException restServiceException, boolean isEnabled)
+      throws RestServiceException {
+    if (isEnabled) {
+      throw restServiceException;
+    }
   }
 
   /**

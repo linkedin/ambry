@@ -234,7 +234,8 @@ public class NamedBlobPutHandler {
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(restRequest, getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true),
+              null);
         }
       }, uri, LOGGER, deleteDatasetCallback);
     }
