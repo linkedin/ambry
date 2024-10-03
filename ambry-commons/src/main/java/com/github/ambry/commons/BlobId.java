@@ -142,6 +142,7 @@ public class BlobId extends StoreKey {
   public static final short BLOB_ID_V4 = 4;
   public static final short BLOB_ID_V5 = 5;
   public static final short BLOB_ID_V6 = 6;
+  public static final short BLOB_ID_V7 = 7;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
@@ -267,12 +268,13 @@ public class BlobId extends StoreKey {
         this.uuidStr = uuidStr;
         break;
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         this.type = type;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
-        this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version 6");
+        this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version 6 or 7");
         this.uuid = UUID.fromString(uuidStr);
         this.uuidStr = null;
         break;
@@ -281,6 +283,30 @@ public class BlobId extends StoreKey {
     }
     this.version = version;
     this.partitionId = partitionId;
+  }
+
+  /**
+   * Construct a blobId which excluding partitionId and use reserved UUID.
+   * @param version the version in which this blob should be created.
+   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
+   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
+   * @param uuidStr The uuid that is to be used to construct this id.
+   */
+  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
+      boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
+    this.type = type;
+    this.datacenterId = datacenterId;
+    this.accountId = accountId;
+    this.containerId = containerId;
+    this.isEncrypted = isEncrypted;
+    this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version " + version);
+    this.uuid = UUID.fromString(uuidStr);
+    this.uuidStr = null;
+    this.version = version;
+    this.partitionId = null;
   }
 
   /**
@@ -308,6 +334,7 @@ public class BlobId extends StoreKey {
     }
     switch (version) {
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         uuid = UuidSerDe.deserialize(stream);
         uuidStr = null;
         break;
@@ -363,6 +390,10 @@ public class BlobId extends StoreKey {
         return (short) (VERSION_FIELD_LENGTH_IN_BYTES + FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length
             + UuidSerDe.SIZE_IN_BYTES);
+      case BLOB_ID_V7:
+        return (short) (VERSION_FIELD_LENGTH_IN_BYTES + FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
+            + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + (partitionId == null ? 0
+            : partitionId.getBytes().length) + UuidSerDe.SIZE_IN_BYTES);
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -399,6 +430,12 @@ public class BlobId extends StoreKey {
    */
   public short getContainerId() {
     return containerId;
+  }
+
+  public boolean isEncrypted() { return  isEncrypted; }
+
+  public BlobIdType getBlobIdType() {
+    return type;
   }
 
   /**
@@ -482,6 +519,7 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V5:
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
         flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
@@ -493,9 +531,12 @@ public class BlobId extends StoreKey {
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
-    idBuf.put(partitionId.getBytes());
+    if (partitionId != null) {
+      idBuf.put(partitionId.getBytes());
+    }
     switch (version) {
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         UuidSerDe.serialize(uuid, idBuf);
         break;
       default:
@@ -521,6 +562,7 @@ public class BlobId extends StoreKey {
         uuidBuf.put(uuidBytes);
         break;
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         uuidBuf = ByteBuffer.allocate(UuidSerDe.SIZE_IN_BYTES);
         UuidSerDe.serialize(uuid, uuidBuf);
         break;
@@ -548,6 +590,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V4:
       case BLOB_ID_V5:
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         sb.append(":").append(type);
         sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
@@ -617,6 +660,7 @@ public class BlobId extends StoreKey {
           result = uuidStr.compareTo(other.uuidStr);
           break;
         case BLOB_ID_V6:
+        case BLOB_ID_V7:
           result = uuid.compareTo(other.uuid);
           break;
         default:
@@ -643,6 +687,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V5:
         return 3;
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         return 4;
       default:
         throw new IllegalArgumentException("Unrecognized blobId version " + version);
@@ -873,6 +918,7 @@ public class BlobId extends StoreKey {
           break;
         case BLOB_ID_V5:
         case BLOB_ID_V6:
+        case BLOB_ID_V7:
           blobIdFlag = stream.readByte();
           type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
           isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;

@@ -82,6 +82,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.router.RouterUtils;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
@@ -191,6 +192,7 @@ public class FrontendRestRequestServiceTest {
   private AccountAndContainerInjector accountAndContainerInjector;
   private final String SECURE_PATH_PREFIX = "secure-path";
   private final int CONTENT_LENGTH = 1024;
+  private final RouterConfig routerConfig;
 
   /**
    * Sets up the {@link FrontendRestRequestService} instance before a test.
@@ -213,10 +215,11 @@ public class FrontendRestRequestServiceTest {
     frontendMetrics = new FrontendMetrics(metricRegistry, frontendConfig);
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     String endpoint = "http://localhost:1174";
+    routerConfig = new RouterConfig(verifiableProperties);
     urlSigningService = new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
         frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
         frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance(), clusterMap,
-        new ClusterMapConfig(verifiableProperties), new RouterConfig(verifiableProperties));
+        new ClusterMapConfig(verifiableProperties), routerConfig);
     idSigningService = new AmbryIdSigningService();
     namedBlobDb = mock(NamedBlobDb.class);
     idConverterFactory =
@@ -4396,6 +4399,8 @@ class FrontendTestRouter implements Router {
   String ttlUpdateServiceId = null;
   String undeleteServiceId = null;
   IdConverter idConverter;
+  Properties configProps = new Properties();
+
 
   public FrontendTestRouter(IdConverterFactory idConverterFactory) {
     if (idConverterFactory != null) {
@@ -4466,7 +4471,10 @@ class FrontendTestRouter implements Router {
 
   @Override
   public RouterConfig getRouterConfig() {
-    return null;
+    configProps.setProperty("router.hostname", "localhost");
+    configProps.setProperty("router.datacenter.name", "dc1");
+    VerifiableProperties properties = new VerifiableProperties(configProps);
+    return new RouterConfig(properties);
   }
 
   @Override

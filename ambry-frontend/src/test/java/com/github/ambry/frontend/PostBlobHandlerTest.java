@@ -80,6 +80,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.rest.RestUtils.Headers.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
 
 
@@ -97,12 +99,11 @@ public class PostBlobHandlerTest {
   private static final Container REF_CONTAINER_WITH_TTL_REQUIRED;
   private static final ClusterMap CLUSTER_MAP;
   private static final QuotaManager QUOTA_MANAGER;
-
   private static final int TIMEOUT_SECS = 10;
   private static final String SERVICE_ID = "test-app";
   private static final String CONTENT_TYPE = "text/plain";
   private static final String OWNER_ID = "tester";
-  private static final String CONVERTED_ID = "/abcdef";
+  private final String CONVERTED_ID;
   private static final String CLUSTER_NAME = "ambry-test";
 
   static {
@@ -160,6 +161,10 @@ public class PostBlobHandlerTest {
     } else {
       reservedMetadataId = null;
     }
+    CONVERTED_ID =
+        new BlobId(BlobId.BLOB_ID_V7, BlobId.BlobIdType.NATIVE, CLUSTER_MAP.getLocalDatacenterId(), REF_ACCOUNT.getId(),
+            REF_CONTAINER.getId(), CLUSTER_MAP.getAllPartitionIds(null).get(0), false,
+            BlobId.BlobDataType.SIMPLE).getID();
     initPostBlobHandler(props);
   }
 
@@ -321,7 +326,8 @@ public class PostBlobHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     postBlobHandler =
         new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            idSigningService, router, injector, time, frontendConfig, metrics, CLUSTER_NAME, QUOTA_MANAGER);
+            idSigningService, router, injector, time, frontendConfig, metrics, CLUSTER_NAME, QUOTA_MANAGER,
+            CLUSTER_MAP);
   }
 
   // ttlRequiredEnforcementTest() helpers
@@ -374,7 +380,7 @@ public class PostBlobHandlerTest {
       RestResponseChannel restResponseChannel, boolean expectWarning) throws Exception {
     postFuture.get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
-    String id = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+    String id = (String) restResponseChannel.getHeader(LOCATION);
     assertNotNull("There should be a blob ID returned", id);
     InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(id);
     assertNotNull("No blob with ID " + id, blob);
@@ -431,7 +437,7 @@ public class PostBlobHandlerTest {
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
-      assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+      assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(LOCATION));
       Object metadata = request.getArgs().get(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY);
       if (chunkUpload) {
         Map<String, String> expectedMetadata = new HashMap<>(3);
@@ -442,9 +448,8 @@ public class PostBlobHandlerTest {
         if (reservedMetadataId != null) {
           expectedMetadata.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataId);
         } else {
-          assertEquals(
-              callCount, ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
-                  metrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.getCount());
+          assertEquals(callCount, ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+              metrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.getCount());
         }
         assertEquals("Unexpected signed ID metadata", expectedMetadata, metadata);
       } else {
@@ -456,6 +461,19 @@ public class PostBlobHandlerTest {
       //check that blob size matches the actual upload size
       assertEquals("Invalid blob size", Integer.toString(contentLength),
           restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+      //Only need to test this for metadata and simple blob type.
+      if (!chunkUpload) {
+        //This is used to reconstruct the CONVERTED_ID with reserved UUID generated when blob properties are build.
+        String blobIdStr = new BlobId(BlobId.BLOB_ID_V7, BlobId.BlobIdType.NATIVE, CLUSTER_MAP.getLocalDatacenterId(),
+            REF_ACCOUNT.getId(), REF_CONTAINER.getId(), CLUSTER_MAP.getAllPartitionIds(null).get(0), false,
+            BlobId.BlobDataType.SIMPLE, blob.getBlobProperties().getReservedUuid()).getID();
+        BlobId blobId = new BlobId(blobIdStr, CLUSTER_MAP);
+        BlobId newBlobId =
+            new BlobId(blobId.getVersion(), blobId.getBlobIdType(), blobId.getDatacenterId(), blobId.getAccountId(),
+                blobId.getContainerId(), blobId.isEncrypted(), blobId.getBlobDataType(), blobId.getUuid());
+        assertEquals("Invalid internal blob id header", request.getArgs().get(BLOB_ID_EXCLUDE_PARTITION),
+            newBlobId.getID());
+      }
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);
@@ -571,7 +589,7 @@ public class PostBlobHandlerTest {
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
-      assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+      assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(LOCATION));
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
       assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks, blob.getStitchedChunks());
       ByteArrayOutputStream expectedContent = new ByteArrayOutputStream();

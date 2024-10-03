@@ -378,7 +378,7 @@ public class RouterConfig {
    * The version to use for new BlobIds.
    */
   @Config(ROUTER_BLOBID_CURRENT_VERSION)
-  @Default("5")
+  @Default("7")
   public final short routerBlobidCurrentVersion;
 
   /**
@@ -845,8 +845,8 @@ public class RouterConfig {
         verifiableProperties.getDoubleInRange(ROUTER_LATENCY_TOLERANCE_QUANTILE, DEFAULT_LATENCY_TOLERANCE_QUANTILE,
             0.0, 1.0);
     routerBlobidCurrentVersion =
-        verifiableProperties.getShortFromAllowedValues(ROUTER_BLOBID_CURRENT_VERSION, (short) 6,
-            new Short[]{1, 2, 3, 4, 5, 6});
+        verifiableProperties.getShortFromAllowedValues(ROUTER_BLOBID_CURRENT_VERSION, (short) 7,
+            new Short[]{1, 2, 3, 4, 5, 6, 7});
     routerMetadataContentVersion =
         verifiableProperties.getShortFromAllowedValues(ROUTER_METADATA_CONTENT_VERSION, (short) 2, new Short[]{2, 3});
     routerKeyManagementServiceFactory =

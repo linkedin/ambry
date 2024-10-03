@@ -505,6 +505,11 @@ public class RestUtils {
      * content-length header
      */
     public static final String CONTENT_RANGE_LENGTH = KEY_PREFIX + "content-range-length";
+
+    /**
+     * The re-constructed blob Id which exclude the partition Id info.
+     */
+    public static final String BLOB_ID_EXCLUDE_PARTITION = KEY_PREFIX + "blob-id-exclude-partition";
   }
 
   /**
