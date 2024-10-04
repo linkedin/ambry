@@ -2123,14 +2123,20 @@ public class HelixBootstrapUpgradeUtil {
       String question =
           String.format("Are you sure you want to remove instance %s from property store and instance config",
               instanceName);
-      String line = System.console().readLine("%s (y[es]/n[o]): ", question).toLowerCase();
-      boolean shouldDelete = line.equals("yes") || line.equals("y");
-      lock.unlock();
-
-      if (!shouldDelete) {
-        // terminate the process right away.
-        System.exit(1);
+      // Keep retrying until the user provides a valid input
+      boolean validInput = false;
+      while (!validInput) {
+          String line = System.console().readLine("%s (y[es]/n[o]): ", question).toLowerCase();
+          if (line.equals("yes") || line.equals("y")) {
+              validInput = true;
+          } else if (line.equals("no") || line.equals("n")) {
+              lock.unlock();
+              System.exit(1);
+          } else {
+              System.out.println("Invalid input. Please enter 'yes' or 'no'.");
+          }
       }
+      lock.unlock();
     }
     adminForDc.get(dcName).dropInstance(clusterName, new InstanceConfig(instanceName));
     if (dataNodeConfigSourceType == PROPERTY_STORE) {
