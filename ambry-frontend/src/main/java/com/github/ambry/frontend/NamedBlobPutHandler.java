@@ -249,12 +249,13 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
+        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback -> router.updateBlobTtl(restRequest, blobId, serviceId, Utils.Infinite_Time, callback,
+              callback -> router.updateBlobTtl(restRequest, blobIdClean, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)),
               this::isRetriable, routerTtlUpdateCallback(blobInfo));
         } else {
