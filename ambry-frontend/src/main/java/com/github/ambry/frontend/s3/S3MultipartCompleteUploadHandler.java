@@ -67,11 +67,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
-import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
 /**
@@ -187,7 +187,9 @@ public class S3MultipartCompleteUploadHandler {
           } else {
             restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
           }
-          restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+          if (restRequest.getArgs().get(CONTENT_ENCODING) != null) {
+            restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+          }
           // Overwrites are allowed by default for S3 uploads
           restRequest.setArg(NAMED_UPSERT, true);
           BlobInfo blobInfo = getBlobInfoFromRequest();

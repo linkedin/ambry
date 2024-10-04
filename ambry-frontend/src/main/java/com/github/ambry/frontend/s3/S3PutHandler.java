@@ -86,7 +86,9 @@ public class S3PutHandler extends S3BaseHandler<Void> {
     } else {
       restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
     }
-    restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+    if (restRequest.getArgs().get(CONTENT_ENCODING) != null) {
+      restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+    }
 
     // Overwrites are allowed by default for S3 APIs https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
     restRequest.setArg(NAMED_UPSERT, true);
