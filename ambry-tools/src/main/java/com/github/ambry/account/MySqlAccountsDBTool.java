@@ -227,7 +227,7 @@ public class MySqlAccountsDBTool {
     List<AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
     for (Account account : accountInfoMap.getAccounts()) {
       accountUpdateInfos.add(
-          new AccountUpdateInfo(account, true, false, new ArrayList<>(account.getAllContainers()), new ArrayList<>()));
+          new AccountUpdateInfo(account, true, false, new ArrayList<>(account.getAllContainers()), new ArrayList<>(), new ArrayList<>()));
     }
     mySqlAccountStore.updateAccounts(accountUpdateInfos);
 
