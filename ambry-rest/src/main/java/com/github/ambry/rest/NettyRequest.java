@@ -180,10 +180,7 @@ public class NettyRequest implements RestRequest {
       if (!denyListedQueryParams.contains(e.getKey())) {
         StringBuilder value = null;
         if (e.getValue() != null) {
-          StringBuilder combinedValues = combineVals(new StringBuilder(), e.getValue());
-          if (combinedValues.length() > 0) {
-            value = combinedValues;
-          }
+          value = combineVals(new StringBuilder(), e.getValue());
         }
         allArgs.put(e.getKey(), value);
       } else {
@@ -202,7 +199,7 @@ public class NettyRequest implements RestRequest {
         }
       } else {
         boolean valueNull = request.headers().get(e.getKey()) == null;
-        if (!valueNull && allArgs.get(e.getKey()) == null) {
+        if (!valueNull && (allArgs.get(e.getKey()) == null || allArgs.get(e.getKey()).toString().isEmpty())) {
           sb = new StringBuilder(e.getValue());
           allArgs.put(e.getKey(), sb);
         } else if (!valueNull) {

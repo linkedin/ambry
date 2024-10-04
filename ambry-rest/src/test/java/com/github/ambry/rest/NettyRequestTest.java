@@ -15,10 +15,10 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -768,7 +768,8 @@ public class NettyRequestTest {
 
     assertEquals("Number of args does not match", keyValueCount.size(), receivedArgs.size());
     for (Map.Entry<String, Integer> e : keyValueCount.entrySet()) {
-      assertEquals("Value count for key " + e.getKey() + " does not match", e.getValue().intValue(),
+      assertEquals("Value count for key " + e.getKey() + " does not match",
+          e.getValue() == 0 ? 1 : e.getValue().intValue(),
           receivedArgs.get(e.getKey()).size());
     }
 
