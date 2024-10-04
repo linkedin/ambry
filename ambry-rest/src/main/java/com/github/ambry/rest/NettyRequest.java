@@ -36,12 +36,12 @@ import java.nio.channels.ClosedChannelException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -69,7 +69,7 @@ public class NettyRequest implements RestRequest {
   protected final HttpRequest request;
   protected final Channel channel;
   protected final NettyMetrics nettyMetrics;
-  protected final Map<String, Object> allArgs = new HashMap<>();
+  protected final Map<String, Object> allArgs = new ConcurrentHashMap<>();
   protected final Queue<HttpContent> requestContents = new LinkedBlockingQueue<>();
   protected final ReentrantLock contentLock = new ReentrantLock();
 
