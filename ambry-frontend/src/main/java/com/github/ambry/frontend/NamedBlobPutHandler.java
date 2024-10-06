@@ -766,11 +766,11 @@ public class NamedBlobPutHandler {
         }
       };
     }
+  }
 
-    public String stripPrefixAndExtension(String blobId) throws RestServiceException {
-      return RestUtils.stripSlashAndExtensionFromId(
-          RequestPath.parse(blobId, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove, clusterName)
-              .getOperationOrBlobId(false));
-    }
+  public String stripPrefixAndExtension(String blobId) throws RestServiceException {
+    return RestUtils.stripSlashAndExtensionFromId(
+        RequestPath.parse(blobId, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove, clusterName)
+            .getOperationOrBlobId(false));
   }
 }

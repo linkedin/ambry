@@ -92,11 +92,11 @@ public class NamedBlobPutHandlerTest {
   private static final String CONVERTED_ID = "/abcdef";
   private static final String CLUSTER_NAME = "ambry-test";
   private static final String NAMED_BLOB_PREFIX = "/named";
+  private static final String PATH_PREFIX_TO_REMOVE = "/media";
   private static final String SLASH = "/";
   private static final String BLOBNAME = "ambry_blob_name";
   private static final String DATASET_NAME = "testDataset";
   private static final String VERSION = "1";
-  private static final String PATH_PREFIX_TO_REMOVE = "/media";
 
   private final NamedBlobDb namedBlobDb;
 
@@ -193,24 +193,25 @@ public class NamedBlobPutHandlerTest {
     assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
   }
 
+
   @Test
   public void testStripPrefixAndExtension() throws Exception {
     String EXTENSION = ".bin";
     Properties properties = new Properties();
-    properties.setProperty("frontend.path.prefixes.to.remove", PATH_PREFIX_TO_REMOVE);
+    properties.setProperty("frontend.path.prefixes.to.remove",  PATH_PREFIX_TO_REMOVE);
     initNamedBlobPutHandler(properties);
 
-    String blobId = CLUSTER_NAME + CONVERTED_ID + EXTENSION;
-    assertEquals("Blob Id should not have prefix and extention", RestUtils.stripSlashAndExtensionFromId(CONVERTED_ID),
-        stripPrefixAndExtension(blobId));
+    String blobId = CLUSTER_NAME + "/" + CONVERTED_ID + EXTENSION;
+    assertEquals("Blob Id should not have prefix and extention", CONVERTED_ID,
+        namedBlobPutHandler.stripPrefixAndExtension(blobId));
 
-    blobId = PATH_PREFIX_TO_REMOVE + "/" + CLUSTER_NAME + CONVERTED_ID + EXTENSION;
-    assertEquals("Blob Id should not have prefix and extention", RestUtils.stripSlashAndExtensionFromId(CONVERTED_ID),
-        stripPrefixAndExtension(blobId));
+    blobId = PATH_PREFIX_TO_REMOVE + "/" + CLUSTER_NAME + "/" + CONVERTED_ID + EXTENSION;
+    assertEquals("Blob Id should not have prefix and extention", CONVERTED_ID,
+        namedBlobPutHandler.stripPrefixAndExtension(blobId));
 
-    blobId = CONVERTED_ID + EXTENSION;
-    assertEquals("Blob Id should not have prefix and extention", RestUtils.stripSlashAndExtensionFromId(CONVERTED_ID),
-        stripPrefixAndExtension(blobId));
+    blobId = "/" + CONVERTED_ID + EXTENSION;
+    assertEquals("Blob Id should not have prefix and extention", CONVERTED_ID,
+        namedBlobPutHandler.stripPrefixAndExtension(blobId));
   }
 
   /**
@@ -690,11 +691,5 @@ public class NamedBlobPutHandlerTest {
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     return request;
-  }
-
-  public String stripPrefixAndExtension(String blobId) throws RestServiceException {
-    return RestUtils.stripSlashAndExtensionFromId(
-        RequestPath.parse(blobId, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove, CLUSTER_NAME)
-            .getOperationOrBlobId(false));
   }
 }
