@@ -249,7 +249,7 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
-        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
+        String blobIdClean = stripPrefixAndExtension(blobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
@@ -766,5 +766,11 @@ public class NamedBlobPutHandler {
         }
       };
     }
+  }
+
+  public String stripPrefixAndExtension(String blobId) throws RestServiceException {
+    return RestUtils.stripSlashAndExtensionFromId(
+        RequestPath.parse(blobId, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove, clusterName)
+            .getOperationOrBlobId(false));
   }
 }
