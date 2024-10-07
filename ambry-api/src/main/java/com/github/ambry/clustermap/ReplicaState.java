@@ -25,6 +25,12 @@ public enum ReplicaState {
   OFFLINE,
 
   /**
+   * A new state to Be introduced between OFFline And Bootstrap
+   * Router should not send any request to replica in this state.
+   */
+  HYDRATE,
+
+  /**
    * Bootstrap state is an intermediate state between OFFLINE and STANDBY.
    * This state allows replica to do some bootstrap work like checking replication lag and catching up with peers.
    * GET, DELETE, TTLUpdate can be routed to replica in this state.
