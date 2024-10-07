@@ -35,6 +35,9 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -56,6 +59,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -152,8 +156,8 @@ public class TtlUpdateManagerTest {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
       TestCallback<Void> callback = new TestCallback<>();
       notificationSystem.reset();
-      router.updateBlobTtl(null, blobId, null, Utils.Infinite_Time, callback, quotaChargeCallback)
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, null, Utils.Infinite_Time,
+          callback, quotaChargeCallback).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       notificationSystem.checkNotifications(1, null, Utils.Infinite_Time);
       assertTrue("Callback was not called", callback.getLatch().await(10, TimeUnit.MILLISECONDS));
       assertNull("There should be no exception in the callback", callback.getException());
@@ -682,6 +686,15 @@ public class TtlUpdateManagerTest {
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
+  }
+
+  private RestRequest createRestRequestForTtlUpdateOperation(String blobId) throws Exception {
+    JSONObject request = new JSONObject();
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    RestRequest restRequest = new MockRestRequest(request, null);
+    return restRequest;
   }
 
   static {

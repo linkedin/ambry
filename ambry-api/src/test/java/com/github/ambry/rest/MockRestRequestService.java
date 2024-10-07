@@ -128,7 +128,7 @@ public class MockRestRequestService implements RestRequestService {
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
         router.putBlob(null, blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
-            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null);
+            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null, null);
       } catch (RestServiceException e) {
         handleResponse(restRequest, restResponseChannel, null, e);
       }
@@ -159,7 +159,7 @@ public class MockRestRequestService implements RestRequestService {
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
         router.putBlob(null, blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
-            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null);
+            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null, null);
       } catch (RestServiceException e) {
         handleResponse(restRequest, restResponseChannel, null, e);
       }

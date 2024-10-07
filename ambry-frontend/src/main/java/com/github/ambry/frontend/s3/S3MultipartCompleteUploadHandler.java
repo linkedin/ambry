@@ -221,7 +221,7 @@ public class S3MultipartCompleteUploadHandler {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics, bytesRead -> {
         PutBlobOptions options = new PutBlobOptionsBuilder().restRequest(restRequest).build();
         BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
-        router.stitchBlob(propertiesForRouterUpload, blobInfo.getUserMetadata(),
+        router.stitchBlob(null, propertiesForRouterUpload, blobInfo.getUserMetadata(),
             getChunksToStitch(parseCompleteMultipartUploadBody(channel)), options,
             routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
@@ -241,7 +241,7 @@ public class S3MultipartCompleteUploadHandler {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
-        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo, blobId));
+        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo,  blobId));
       }, uri, LOGGER, finalCallback);
     }
 
@@ -249,7 +249,6 @@ public class S3MultipartCompleteUploadHandler {
      * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @param blobId the blob ID returned by the router (without decoration or obfuscation by id converter).
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
@@ -269,7 +268,6 @@ public class S3MultipartCompleteUploadHandler {
      * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @param blobId the {@link String} to use for blob id.
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {

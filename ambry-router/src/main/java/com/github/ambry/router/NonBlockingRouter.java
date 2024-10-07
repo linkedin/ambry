@@ -24,6 +24,7 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.frontend.IdConverterFactory;
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
@@ -34,6 +35,9 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -42,7 +46,9 @@ import com.google.common.cache.CacheBuilder;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -51,6 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.github.ambry.rest.RestMethod;
 
 
 /**
@@ -96,7 +103,7 @@ public class NonBlockingRouter implements Router {
    * @param cryptoService         {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler      {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param accountService        the {@link AccountService} to use.
-   * @param time                  the time instance.
+   * @param time                  the {@link Time} instance.
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
@@ -172,7 +179,7 @@ public class NonBlockingRouter implements Router {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param accountService the {@link AccountService} to use.
-   * @param time the time instance.
+   * @param time           the {@link Time} instance.
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
@@ -356,11 +363,12 @@ public class NonBlockingRouter implements Router {
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback       The {@link Callback} which will be invoked on the completion of the request .
+   * @param time           The {@link Time} instance.
    * @return A future that would contain the BlobId eventually.
    */
   @Override
   public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, Time time) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
@@ -376,7 +384,8 @@ public class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForPut(restRequest, blobProperties,
+            futureResult, callback, time) : callback;
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, wrappedCallback,
           quotaChargeCallback);
@@ -389,6 +398,8 @@ public class NonBlockingRouter implements Router {
     }
     return futureResult;
   }
+
+
 
   /**
    * Requests for a blob to be replicated asynchronously and returns a future that will eventually contain information
@@ -440,7 +451,7 @@ public class NonBlockingRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     if (blobProperties == null || chunksToStitch == null) {
       throw new IllegalArgumentException("blobProperties or chunksToStitch must not be null");
@@ -456,15 +467,18 @@ public class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
+    Callback<String> wrappedCallback =
+        restRequest != null && idConverter != null ? createIdConverterCallbackForStitch(restRequest, blobProperties,
+            futureResult, callback) : callback;
     if (isOpen.get()) {
-      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, options, futureResult, callback,
+      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, options, futureResult, wrappedCallback,
           quotaChargeCallback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), true);
-      completeOperation(futureResult, callback, null, routerException);
+      completeOperation(futureResult, wrappedCallback, null, routerException);
     }
     return futureResult;
   }
@@ -563,39 +577,48 @@ public class NonBlockingRouter implements Router {
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback) {
-    //TODO: once the id converter logic moved in for router.updateTTL, we need to pass in internal header with blob id,
-    //and use it to gate if we want to convert to get the blob id before the actual blob updated ttl.
-    if (blobId == null) {
-      throw new IllegalArgumentException("blobId must not be null");
-    }
-    currentOperationsCount.incrementAndGet();
-    routerMetrics.updateBlobTtlOperationRate.mark();
-    routerMetrics.operationQueuingRate.mark();
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
-    Callback<String> stringCallback = (result, exception) -> {
-      // Create a new Callback<Void> and call it, ignoring the String result.
-      callback.onCompletion(null, exception);
-    };
-    Callback<Void> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback) : callback;
-    if (isOpen.get()) {
-      if (notFoundCache.getIfPresent(blobId) != null) {
-        // If we know that blob doesn't exist, complete the operation.
-        logger.info("Blob {} is known to be missing in servers", blobId);
-        RouterException routerException =
-            new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
-        completeOperation(futureResult, wrappedCallback, null, routerException);
-      } else {
-        getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult,
-            new BlobOperationCallbackWrapper<>(blobId, wrappedCallback), quotaChargeCallback);
+    if (restRequest == null) {
+      if (blobId == null) {
+        throw new IllegalArgumentException("blobId must not be null");
       }
+      proceedWithTtlUpdate(null, blobId, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
     } else {
-      RouterException routerException =
-          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-      completeUpdateBlobTtlOperation(routerException, futureResult, wrappedCallback);
+      //if the blobId is not named blob based, it could bypass the first round of d converter logic by checking InternalKeys.BLOB_ID.
+      //First round is to convert named blob to blob Id.
+      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+        String blobIdStr =
+            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
+        proceedWithTtlUpdate(restRequest, blobIdStr, serviceId, expiresAtMs, callback, futureResult,
+            quotaChargeCallback);
+      } else {
+        try {
+          //If the blobId is named blob, need to go through convert first.
+          String blobIdStr =
+              removeLeadingSlashIfNeeded(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
+          // Convert asynchronously and proceed once blobId is available
+          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+            @Override
+            public void onCompletion(String convertedBlobId, Exception exception) {
+              if (exception != null) {
+                callback.onCompletion(null, exception);
+              } else {
+                // Call proceedWithTtlUpdate once blobId is available
+                proceedWithTtlUpdate(restRequest, convertedBlobId, serviceId, expiresAtMs, callback, futureResult,
+                    quotaChargeCallback);
+              }
+            }
+          });
+          return futureResult; // Return early since we're waiting for the async operation
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+          return futureResult;
+        }
+      }
     }
+
     return futureResult;
   }
 
@@ -775,6 +798,48 @@ public class NonBlockingRouter implements Router {
   }
 
   /**
+   * Helper method to perform TTL update once blobId is available
+   */
+  private void proceedWithTtlUpdate(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+      Callback<Void> callback, FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
+    currentOperationsCount.incrementAndGet();
+    routerMetrics.updateBlobTtlOperationRate.mark();
+    routerMetrics.operationQueuingRate.mark();
+
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
+
+    Callback<String> stringCallback = (r, e) -> {
+      // Create a new Callback<Void> and call it, ignoring the String result.
+      if (callback != null) {
+        callback.onCompletion(null, e);
+      }
+    };
+
+    Callback<Void> wrappedCallback =
+        restRequest != null && idConverter != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId,
+            futureResult, stringCallback) : callback;
+
+    if (isOpen.get()) {
+      if (notFoundCache.getIfPresent(blobId) != null) {
+        // If we know that the blob doesn't exist, complete the operation.
+        logger.info("Blob {} is known to be missing in servers", blobId);
+        RouterException routerException =
+            new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
+        completeOperation(futureResult, wrappedCallback, null, routerException);
+      } else {
+        getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult,
+            new BlobOperationCallbackWrapper<>(blobId, wrappedCallback), quotaChargeCallback);
+      }
+    } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+      completeUpdateBlobTtlOperation(routerException, futureResult, wrappedCallback);
+    }
+  }
+
+  /**
    * Initiate the shutdown of all the OperationControllers. This method can get executed in the context of
    * both the calling thread of the {@link #close()} method, and the RequestResponseHandler thread of any of the
    * Operation Controllers.
@@ -826,12 +891,14 @@ public class NonBlockingRouter implements Router {
 
   /**
    * Create id converter callback after router put the blob.
-   * @param restRequest {@link RestRequest} to put the blob.
+   *
+   * @param restRequest    {@link RestRequest} to put the blob.
    * @param blobProperties {@link BlobProperties} for the blob.
+   * @param time           The {@link Time} instance.
    * @return
    */
   private Callback<String> createIdConverterCallbackForPut(RestRequest restRequest, BlobProperties blobProperties,
-      FutureResult<String> futureResult, Callback<String> callback) {
+      FutureResult<String> futureResult, Callback<String> callback, Time time) {
     return (blobId, exception) -> {
       if (exception != null) {
         // If putBlob fails, complete the future and callback with an error
@@ -841,10 +908,81 @@ public class NonBlockingRouter implements Router {
         }
       } else {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, blobProperties, callback);
+        try {
+          if (RestMethod.POST.equals(restRequest.getRestMethod())) {
+            setSignedIdMetadata(restRequest, blobProperties, time);
+          }
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
+  }
+
+  /**
+   * Create id converter callback after router stitch the blob.
+   * @param restRequest {@link RestRequest} to stitch the blob.
+   * @param blobProperties {@link BlobProperties} for the blob.
+   * @return
+   */
+  private Callback<String> createIdConverterCallbackForStitch(RestRequest restRequest, BlobProperties blobProperties,
+      FutureResult<String> futureResult, Callback<String> callback) {
+    return (blobId, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
+        // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
+        blobProperties.setBlobSize(blobProperties.getBlobSize());
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
+        // Call idConverter.convert after putBlob succeeds
+        try {
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
+      }
+    };
+  }
+
+  /**
+   * Attach the metadata to include in a signed ID to the {@link RestRequest} if the request is for a chunk upload. This
+   * will tell the ID converter that it needs to produce a signed ID to give back to the client.
+   *
+   * @param blobProperties the {@link BlobProperties} from the request.
+   * @param time The {@link Time} instance.
+   * @throws RestServiceException
+   */
+  private void setSignedIdMetadata(RestRequest restRequest, BlobProperties blobProperties, Time time)
+      throws RestServiceException {
+    if (time == null) {
+      throw new IllegalStateException("Time cannot be null for request " + restRequest);
+    }
+    if (RestUtils.isChunkUpload(restRequest.getArgs())) {
+      Map<String, String> metadata = new HashMap<>(2);
+      metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
+      metadata.put(RestUtils.Headers.SESSION,
+          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
+      metadata.put(RouterUtils.EXPIRATION_TIME_MS_KEY,
+          Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
+      if (blobProperties.getReservedMetadataBlobId() != null) {
+        metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, blobProperties.getReservedMetadataBlobId());
+      } else {
+        ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+            routerMetrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.inc();
+        RouterUtils.throwRestServiceExceptionIfEnabled(
+            new RestServiceException("No reserved metadata id present to set in chunked upload response",
+                RestServiceErrorCode.BadRequest), getRouterConfig().routerReservedMetadataEnabled);
+      }
+      restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
+    }
   }
 
   /**
@@ -864,9 +1002,17 @@ public class NonBlockingRouter implements Router {
         }
       } else {
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, null, callback);
+        try {
+          idConverter.convert(restRequest, blobId, null, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
+  }
+
+  private String removeLeadingSlashIfNeeded(String blobId) {
+    return blobId.startsWith("/") ? blobId.substring(1) : blobId;
   }
 
   /**

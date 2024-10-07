@@ -21,6 +21,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
@@ -59,27 +60,31 @@ public interface Router extends Closeable {
    * @param options             The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback            The {@link Callback} which will be invoked on the completion of the request .
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
+   * @param time                The {@link Time} instance.
    * @return A future that would contain the BlobId eventually.
    */
   Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, Time time);
 
   /**
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
    * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
    * by this operation can be used to fetch the chunks as if they were a single blob.
-   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
-   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
-   * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
-   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
-   *                       fields are set accurately.
-   * @param options the {@link PutBlobOptions}.
-   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   *
+   * @param restRequest         The {@link RestRequest} to stitch blob.
+   * @param blobProperties      The properties of the blob. Note that the size specified in the properties is ignored.
+   *                            The channel is consumed fully, and the size of the blob is the number of bytes read from
+   *                            it.
+   * @param userMetadata        Optional user metadata about the blob. This can be null.
+   * @param chunksToStitch      the list of data chunks to stitch together. The router will treat the metadata in the
+   *                            {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
+   *                            fields are set accurately.
+   * @param options             the {@link PutBlobOptions}.
+   * @param callback            The {@link Callback} which will be invoked on the completion of the request .
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
-  Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
 
   /**
@@ -106,8 +111,8 @@ public interface Router extends Closeable {
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
-  Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback);
+  Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a blob to be undeleted asynchronously and invokes the {@link Callback} when the request completes.
@@ -150,18 +155,20 @@ public interface Router extends Closeable {
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
    * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
    * by this operation can be used to fetch the chunks as if they were a single blob.
+   *
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
-   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
-   *                       fields are set accurately.
+   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these fields
+   *                       are set accurately.
    * @return A future that would contain the BlobId eventually.
    */
   default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
       List<ChunkInfo> chunksToStitch) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    stitchBlob(blobProperties, userMetadata, chunksToStitch, null, CallbackUtils.fromCompletableFuture(future), null);
+    stitchBlob(null, blobProperties, userMetadata, chunksToStitch, null, CallbackUtils.fromCompletableFuture(future),
+        null);
     return future;
   }
 
@@ -169,19 +176,20 @@ public interface Router extends Closeable {
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
    * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
    * by this operation can be used to fetch the chunks as if they were a single blob.
+   *
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
-   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
-   *                       fields are set accurately.
-   * @param options the {@link PutBlobOptions}.
+   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these fields
+   *                       are set accurately.
+   * @param options        the {@link PutBlobOptions}.
    * @return A future that would contain the BlobId eventually.
    */
   default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
       List<ChunkInfo> chunksToStitch, PutBlobOptions options) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    stitchBlob(blobProperties, userMetadata, chunksToStitch, options, CallbackUtils.fromCompletableFuture(future),
+    stitchBlob(null, blobProperties, userMetadata, chunksToStitch, options, CallbackUtils.fromCompletableFuture(future),
         null);
     return future;
   }
@@ -189,17 +197,19 @@ public interface Router extends Closeable {
   /**
    * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of
    * the new blob on a successful response.
+   *
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
+   * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @return A future that would contain the BlobId eventually.
    */
   default CompletableFuture<String> putBlob(BlobProperties blobProperties, byte[] userMetadata,
       ReadableStreamChannel channel, PutBlobOptions options) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    putBlob(null, blobProperties, userMetadata, channel, options, CallbackUtils.fromCompletableFuture(future), null);
+    putBlob(null, blobProperties, userMetadata, channel, options, CallbackUtils.fromCompletableFuture(future), null,
+        null);
     return future;
   }
 
@@ -219,8 +229,9 @@ public interface Router extends Closeable {
   /**
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
-   * @param blobId The ID of the blob that needs its TTL updated.
-   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
+   *
+   * @param blobId      The ID of the blob that needs its TTL updated.
+   * @param serviceId   The service ID of the service updating the blob. This can be null if unknown.
    * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
    *                    permanent
    * @return A future that would contain information about whether the update succeeded or not, eventually.

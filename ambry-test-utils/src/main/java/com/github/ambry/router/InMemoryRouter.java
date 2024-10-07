@@ -30,15 +30,20 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -276,13 +281,14 @@ public class InMemoryRouter implements Router {
 
   @Override
   public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, Time time) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback,
+            time) : callback;
     PostData postData = new PostData(blobProperties, usermetadata, channel, null, options, wrappedCallback, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
@@ -290,14 +296,16 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
+    Callback<String> wrappedCallback =
+        restRequest != null && idConverter != null ? createIdConverterCallbackForStitch(restRequest, blobProperties, futureResult, callback) : callback;
     PostData postData =
-        new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, callback,
+        new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, wrappedCallback,
             futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
@@ -336,39 +344,45 @@ public class InMemoryRouter implements Router {
   public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
+    // Perform pre-checks
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
-    Callback<String> stringCallback = (result, exception) -> {
-      // Create a new Callback<Void> and call it, ignoring the String result.
-      callback.onCompletion(null, exception);
-    };
-    Callback<Void> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
-            : callback;
-    Exception exception = null;
-    try {
-      // to make sure Blob ID is ok
-      checkBlobId(blobId);
-      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
-        InMemoryBlob blob = blobs.get(blobId);
-        BlobProperties currentProps = blob.blobProperties;
-        long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
-        blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
-        if (notificationSystem != null) {
-          notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs, null, null);
-        }
-      } else if (deletedBlobs.contains(blobId)) {
-        exception = new RouterException("Blob has been deleted", RouterErrorCode.BlobDeleted);
+    if (restRequest == null) {
+      proceedWithTtlUpdate(null, blobId, serviceId, expiresAtMs, callback, futureResult);
+    } else {
+      // Extract blobId or convert it if necessary
+      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+        // Blob ID is already available
+        String blobIdStr =
+            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
+        proceedWithTtlUpdate(restRequest, blobIdStr, serviceId, expiresAtMs, callback, futureResult);
       } else {
-        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+        // Blob ID is not available, use idConverter to get it
+        try {
+          //If the blobId is named blob, need to go through convert first.
+          String blobIdStr =
+              removeLeadingSlashIfNeeded(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
+
+          // Call idConverter to get blobId asynchronously
+          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+            @Override
+            public void onCompletion(String convertedBlobId, Exception exception) {
+              if (exception != null) {
+                // Handle error in conversion
+                callback.onCompletion(null, exception);
+              } else {
+                // Continue with TTL update once blobId is available
+                proceedWithTtlUpdate(restRequest, convertedBlobId, serviceId, expiresAtMs, callback, futureResult);
+              }
+            }
+          });
+        } catch (Exception e) {
+          // Handle synchronous errors during header extraction
+          callback.onCompletion(null, e);
+          return futureResult;
+        }
       }
-    } catch (RouterException e) {
-      exception = e;
-    } catch (Exception e) {
-      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-    } finally {
-      completeOperation(futureResult, wrappedCallback, null, exception);
     }
     return futureResult;
   }
@@ -485,6 +499,58 @@ public class InMemoryRouter implements Router {
     return continueOp;
   }
 
+  /**
+   * Helper method to perform TTL update once blobId is available
+   */
+  private void proceedWithTtlUpdate(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+      Callback<Void> callback, FutureResult<Void> futureResult) {
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
+    Callback<String> stringCallback = (r, e) -> {
+      // Create a new Callback<Void> and call it, ignoring the String result.
+      callback.onCompletion(null, e);
+    };
+
+    Callback<Void> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
+            : callback;
+    Exception exception = null;
+
+    try {
+      // Check blobId before performing the update
+      checkBlobId(blobId);
+
+      // Perform TTL update if blob is not deleted and exists
+      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
+        InMemoryBlob blob = blobs.get(blobId);
+        BlobProperties currentProps = blob.blobProperties;
+        long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
+        blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
+
+        // Notify the notification system if applicable
+        if (notificationSystem != null) {
+          notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs, null, null);
+        }
+      } else if (deletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob has been deleted", RouterErrorCode.BlobDeleted);
+      } else {
+        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+      }
+    } catch (RouterException e) {
+      exception = e;
+    } catch (Exception e) {
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+    } finally {
+      // Complete the operation by calling the callback
+      completeOperation(futureResult, wrappedCallback, null, exception);
+    }
+  }
+
+  private String removeLeadingSlashIfNeeded(String blobId) {
+    return blobId.startsWith("/") ? blobId.substring(1) : blobId;
+  }
+
   private void checkBlobId(String blobId) throws RouterException {
     try {
       new BlobId(blobId, clusterMap);
@@ -495,11 +561,37 @@ public class InMemoryRouter implements Router {
 
   /**
    * Create id converter callback after router put the blob.
-   * @param restRequest {@link RestRequest} to put the blob.
+   *
+   * @param restRequest    {@link RestRequest} to put the blob.
    * @param blobProperties {@link BlobProperties} for the blob.
+   * @param time
    * @return
    */
   private Callback<String> createIdConverterCallbackForPut(RestRequest restRequest, BlobProperties blobProperties,
+      FutureResult<String> futureResult, Callback<String> callback, Time time) {
+    return (blobId, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
+        // Call idConverter.convert after putBlob succeeds
+        try {
+          setSignedIdMetadata(restRequest, blobProperties, time);
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
+      }
+    };
+  }
+
+  private Callback<String> createIdConverterCallbackForStitch(RestRequest restRequest, BlobProperties blobProperties,
       FutureResult<String> futureResult, Callback<String> callback) {
     return (blobId, exception) -> {
       if (exception != null) {
@@ -510,10 +602,44 @@ public class InMemoryRouter implements Router {
         }
       } else {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, blobProperties, callback);
+        try {
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
+  }
+
+  /**
+   * Attach the metadata to include in a signed ID to the {@link RestRequest} if the request is for a chunk upload. This
+   * will tell the ID converter that it needs to produce a signed ID to give back to the client.
+   *
+   * @param blobProperties the {@link BlobProperties} from the request.
+   * @param time
+   * @throws RestServiceException
+   */
+  private void setSignedIdMetadata(RestRequest restRequest, BlobProperties blobProperties, Time time)
+      throws RestServiceException {
+    if (RestUtils.isChunkUpload(restRequest.getArgs())) {
+      Map<String, String> metadata = new HashMap<>(2);
+      metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
+      metadata.put(RestUtils.Headers.SESSION,
+          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
+      metadata.put(RouterUtils.EXPIRATION_TIME_MS_KEY,
+          Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
+      if (blobProperties.getReservedMetadataBlobId() != null) {
+        metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, blobProperties.getReservedMetadataBlobId());
+      } else {
+        RouterUtils.throwRestServiceExceptionIfEnabled(
+            new RestServiceException("No reserved metadata id present to set in chunked upload response",
+                RestServiceErrorCode.BadRequest), getRouterConfig().routerReservedMetadataEnabled);
+      }
+      restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
+    }
   }
 
   /**
@@ -533,7 +659,11 @@ public class InMemoryRouter implements Router {
         }
       } else {
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, null, callback);
+        try {
+          idConverter.convert(restRequest, blobId, null, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }

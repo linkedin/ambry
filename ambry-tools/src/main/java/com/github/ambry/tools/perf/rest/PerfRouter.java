@@ -31,6 +31,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.Time;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Future;
@@ -111,11 +112,12 @@ class PerfRouter implements Router {
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        the {@link PutBlobOptions} for the blob.
    * @param callback       the {@link Callback} to invoke on operation completion.
+   * @param time
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
   public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback, Time time) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {
@@ -142,7 +144,7 @@ class PerfRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received stitchBlob call");
     final FutureResult<String> futureResult = new FutureResult<>();

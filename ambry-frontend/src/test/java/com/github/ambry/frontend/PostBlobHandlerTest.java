@@ -441,11 +441,8 @@ public class PostBlobHandlerTest {
             Long.toString(Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
         if (reservedMetadataId != null) {
           expectedMetadata.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataId);
-        } else {
-          assertEquals(
-              callCount, ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
-                  metrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.getCount());
         }
+        //TODO: Adding router metric in InmemoryRouter
         assertEquals("Unexpected signed ID metadata", expectedMetadata, metadata);
       } else {
         assertNull("Signed id metadata should not be set on non-chunk uploads", metadata);
