@@ -14,12 +14,15 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -49,6 +52,7 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -81,23 +85,27 @@ class PostBlobHandler {
   private final FrontendMetrics frontendMetrics;
   private final String clusterName;
   private final QuotaManager quotaManager;
+  private final RouterConfig routerConfig;
+  private final ClusterMap clusterMap;
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
-   * @param securityService the {@link SecurityService} to use.
-   * @param idConverter the {@link IdConverter} to use.
-   * @param idSigningService the {@link IdSigningService} to use.
-   * @param router the {@link Router} to use.
+   *
+   * @param securityService             the {@link SecurityService} to use.
+   * @param idConverter                 the {@link IdConverter} to use.
+   * @param idSigningService            the {@link IdSigningService} to use.
+   * @param router                      the {@link Router} to use.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
-   * @param time the {@link Time} instance to use.
-   * @param frontendConfig the {@link FrontendConfig} to use.
-   * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
-   * @param clusterName the name of the storage cluster that the router communicates with
-   * @param quotaManager {@link QuotaManager} instance to charge against quota for each chunk.
+   * @param time                        the {@link Time} instance to use.
+   * @param frontendConfig              the {@link FrontendConfig} to use.
+   * @param frontendMetrics             {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param clusterName                 the name of the storage cluster that the router communicates with
+   * @param quotaManager                {@link QuotaManager} instance to charge against quota for each chunk.
+   * @param clusterMap                  The {@link ClusterMap} to use.
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
       Router router, AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager) {
+      FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager, ClusterMap clusterMap) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
@@ -108,6 +116,8 @@ class PostBlobHandler {
     this.frontendMetrics = frontendMetrics;
     this.clusterName = clusterName;
     this.quotaManager = quotaManager;
+    this.routerConfig = router.getRouterConfig();
+    this.clusterMap = clusterMap;
   }
 
   /**
@@ -194,6 +204,7 @@ class PostBlobHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
+          constructBlobIdAndSetIntoRestRequestInternalHeader(blobInfo, options);
           router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
@@ -467,6 +478,22 @@ class PostBlobHandler {
             router.getRouterConfig().routerReservedMetadataEnabled);
       }
       return chunkReservedMetadataBlobId;
+    }
+
+    /**
+     * Reconstruct the blob Id by excluding the partition Id info.
+     * @param blobInfo the {@link BlobInfo}
+     * @param options the {@link PutBlobOptions}
+     */
+    private void constructBlobIdAndSetIntoRestRequestInternalHeader(BlobInfo blobInfo, PutBlobOptions options) {
+      BlobProperties blobProperties = blobInfo.getBlobProperties();
+      boolean isSimpleBlob = !options.isChunkUpload() && !options.skipCompositeChunk();
+      //Chunk upload does not need the customized blobId
+      BlobId.BlobDataType blobDataType = isSimpleBlob ? BlobId.BlobDataType.SIMPLE : BlobId.BlobDataType.METADATA;
+      BlobId customizedBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+          clusterMap.getLocalDatacenterId(), blobProperties.getAccountId(), blobProperties.getContainerId(),
+          blobProperties.isEncrypted(), blobDataType, blobProperties.getReservedUuid());
+      restRequest.setArg(BLOB_ID_EXCLUDE_PARTITION, customizedBlobId.getID());
     }
   }
 }

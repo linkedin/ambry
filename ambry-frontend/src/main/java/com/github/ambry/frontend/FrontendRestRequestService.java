@@ -193,7 +193,7 @@ class FrontendRestRequestService implements RestRequestService {
             frontendMetrics, clusterMap, quotaManager, accountService);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager);
+            SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager, clusterMap);
 
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
