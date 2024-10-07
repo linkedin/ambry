@@ -91,7 +91,7 @@ public class TtlUpdateHandlerTest {
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
     router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP, idConverterFactory);
     blobId = router.putBlob(null, BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null,
-        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);
+        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE), null).get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),

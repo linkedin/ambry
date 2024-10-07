@@ -38,7 +38,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -194,8 +193,9 @@ class PostBlobHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          router.putBlob(restRequest, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+              idConverterCallbackForPut(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true),
+              time);
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -209,35 +209,23 @@ class PostBlobHandler {
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
+          bytesRead -> router.stitchBlob(restRequest, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
-              routerStitchBlobCallback(blobInfo),
-              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER,
-          finalCallback);
+              idConverterCallbackForStitch(blobInfo),
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER, finalCallback);
     }
 
     /**
-     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
-     * that will be returned in the "Location" header.
-     * @param blobInfo the {@link BlobInfo} to make the router call with.
-     * @return a {@link Callback} to be used with {@link Router#putBlob}.
+     * After {@link IdConverter#convert} finishes, set the "Location" header and call
+     * {@link SecurityService#processResponse}.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo)), uri, LOGGER,
-          finalCallback);
-    }
-
-    /**
-     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
-     * that will be returned in the "Location" header.
-     * @param blobInfo the {@link BlobInfo} to make the router call with.
-     * @return a {@link Callback} to be used with {@link Router#putBlob}.
-     */
-    private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
-        setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
-        idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
+    private Callback<String> idConverterCallbackForPut(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
+        restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }
 
@@ -247,7 +235,7 @@ class PostBlobHandler {
      * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo) {
+    private Callback<String> idConverterCallbackForStitch(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
@@ -316,34 +304,6 @@ class PostBlobHandler {
         builder.maxUploadSize(maxUploadSize);
       }
       return builder.build();
-    }
-
-    /**
-     * Attach the metadata to include in a signed ID to the {@link RestRequest} if the request is for a chunk upload.
-     * This will tell the ID converter that it needs to produce a signed ID to give back to the client.
-     * @param blobProperties the {@link BlobProperties} from the request.
-     * @throws RestServiceException
-     */
-    private void setSignedIdMetadataAndBlobSize(BlobProperties blobProperties) throws RestServiceException {
-      if (RestUtils.isChunkUpload(restRequest.getArgs())) {
-        Map<String, String> metadata = new HashMap<>(2);
-        metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
-        metadata.put(RestUtils.Headers.SESSION,
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
-        metadata.put(EXPIRATION_TIME_MS_KEY,
-            Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
-        if (blobProperties.getReservedMetadataBlobId() != null) {
-          metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, blobProperties.getReservedMetadataBlobId());
-        } else {
-          ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
-              frontendMetrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.inc();
-          throwRestServiceExceptionIfEnabled(new RestServiceException("No reserved metadata id present to set in chunked upload response",
-                RestServiceErrorCode.BadRequest), router.getRouterConfig().routerReservedMetadataEnabled);
-        }
-        restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
-      }
-      //the actual blob size is the number of bytes read
-      restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
     }
 
     /**

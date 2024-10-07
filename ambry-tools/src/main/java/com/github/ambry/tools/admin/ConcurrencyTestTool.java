@@ -674,7 +674,7 @@ public class ConcurrencyTestTool {
               callback.onCompletion(toReturn, exceptionToReturn);
             }
           }
-        }, QUOTA_CHARGE_EVENT_LISTENER);
+        }, QUOTA_CHARGE_EVENT_LISTENER, null);
       } catch (Exception e) {
         futureResult.done(null, e);
         if (callback != null) {

@@ -46,6 +46,7 @@ import com.github.ambry.repair.RepairRequestRecord;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
@@ -1259,7 +1260,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         layout.getMockServers()
             .forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
         TestCallback<Void> testCallback = new TestCallback<>();
-        Future<Void> future = router.updateBlobTtl(null, blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+        Future<Void> future =
+            router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
+                Utils.Infinite_Time, testCallback, null);
         assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
 
         // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
@@ -1269,7 +1272,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // bad blob id
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future =
-          router.updateBlobTtl(null, "bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback, null);
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation("bad-blob-id"), "bad-blob-id",
+              updateServiceId, Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
     } finally {
       if (router != null) {
@@ -1297,10 +1301,11 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null, expectedError -> {
         final CountDownLatch callbackCalled = new CountDownLatch(1);
-        router.updateBlobTtl(null, blobId, null, Utils.Infinite_Time, (result, exception) -> {
-          callbackCalled.countDown();
-          throw new RuntimeException("Throwing an exception in the user callback");
-        }, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, null, Utils.Infinite_Time,
+            (result, exception) -> {
+              callbackCalled.countDown();
+              throw new RuntimeException("Throwing an exception in the user callback");
+            }, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertTrue("Callback not called.", callbackCalled.await(10, TimeUnit.MILLISECONDS));
         assertEquals("All operations should be finished.", 0, router.getOperationsCount());
         assertTrue("Router should not be closed", router.isOpen());
@@ -2428,7 +2433,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       layout.getMockServers()
           .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(null, blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future =
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
+              Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.BlobDoesNotExist);
 
       // Verify that not-found cache is populated with the blob ID.
@@ -2451,7 +2458,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       TestCallback<Void> ttlUpdateTestCallback = new TestCallback<>();
       Future<Void> ttlUpdateFuture =
-          router.updateBlobTtl(null, blobId, updateServiceId, Utils.Infinite_Time, ttlUpdateTestCallback, null);
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
+              Utils.Infinite_Time, ttlUpdateTestCallback, null);
       assertFailureAndCheckErrorCode(ttlUpdateFuture, ttlUpdateTestCallback, RouterErrorCode.BlobDoesNotExist);
 
       TestCallback<Void> deleteTestCallback = new TestCallback<>();
@@ -2864,7 +2872,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(null, blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future =
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
+              Utils.Infinite_Time, testCallback, null);
       // It should return the error code of the TtlUpdate which is AmbryUnavailable,
       // shouldn't return the error code of the ReplicateBlob which is Unknown_Error.
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
@@ -2913,7 +2923,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(null, blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future =
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
+              Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
 
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
@@ -2949,7 +2961,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(null, blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future =
+          router.updateBlobTtl(createRestRequestForTtlUpdateOperation(blobId), blobId, updateServiceId,
+              Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
 
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
@@ -4108,5 +4122,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       assertEquals(expectedRecord.getLifeVersion(), record.getLifeVersion());
       assertEquals(expectedRecord.getExpirationTimeMs(), record.getExpirationTimeMs());
     }
+  }
+
+  private RestRequest createRestRequestForTtlUpdateOperation(String blobId) throws Exception {
+    JSONObject request = new JSONObject();
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.BLOB_ID, blobId);
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    RestRequest restRequest = new MockRestRequest(request, null);
+    return restRequest;
   }
 }

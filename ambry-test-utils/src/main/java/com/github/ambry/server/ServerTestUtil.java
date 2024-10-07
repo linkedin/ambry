@@ -1492,7 +1492,7 @@ public final class ServerTestUtil {
                   }
                   callbackLatch.countDown();
                 }
-              }, QUOTA_CHARGE_EVENT_LISTENER);
+              }, QUOTA_CHARGE_EVENT_LISTENER, null);
       putFutures.add(future);
     }
     for (Future<String> future : putFutures) {
