@@ -170,7 +170,7 @@ public class MockRestRequestService implements RestRequestService {
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.deleteBlob(blobId, null, new MockDeleteCallback(this, restRequest, restResponseChannel), null);
+      router.deleteBlob(null, blobId, null, new MockDeleteCallback(this, restRequest, restResponseChannel), null);
     }
   }
 
