@@ -19,6 +19,8 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -27,7 +29,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -97,6 +101,88 @@ public class PipedAsyncWritableChannelTest {
         throw new RuntimeException(e);
       }
     });
+  }
+
+  @Test
+  public void primaryReadByteBufTest() throws Exception {
+    ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(1024);
+    byteBuf.writeBytes(fillRandomBytes(new byte[1024]));
+    byteBuf.retain(); // retain before it goes to readable stream channel
+    try {
+      PipedAsyncWritableChannel pipedAsyncWritableChannel =
+          new PipedAsyncWritableChannel(new ByteBufReadableStreamChannel(byteBuf), false);
+      ReadableStreamChannel primaryReadableStreamChannel = pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
+      ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+      primaryReadableStreamChannel.readInto(writableChannel, null);
+      ByteBuf obtained = writableChannel.getNextByteBuf();
+      // Make sure this is the same as original byte array
+      obtained.retain();
+      writableChannel.resolveOldestChunk(null);
+      for (int i = 0; i < 1024; i++) {
+        Assert.assertEquals(byteBuf.getByte(i), obtained.getByte(i));
+      }
+      obtained.release();
+    } finally {
+      byteBuf.release();
+      assertEquals("Reference count of the original byte buf must be back to 0", 0, byteBuf.refCnt());
+    }
+  }
+
+  @Test
+  public void primaryAndSecondaryReadByteBufTest() throws Exception {
+    ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(1024);
+    byteBuf.writeBytes(fillRandomBytes(new byte[1024]));
+    byteBuf.retain(); // retain before it goes to readable stream channel
+    try {
+      PipedAsyncWritableChannel pipedAsyncWritableChannel =
+          new PipedAsyncWritableChannel(new ByteBufReadableStreamChannel(byteBuf), true);
+
+      // Verify we are able to read contents from both primary and secondary readable channels
+      ExecutorService executorService = Executors.newFixedThreadPool(2);
+      Future<?> primaryReadFuture = executorService.submit(() -> {
+        try {
+          ReadableStreamChannel primaryReadableStreamChannel =
+              pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
+          ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+          primaryReadableStreamChannel.readInto(writableChannel, null);
+          ByteBuf obtained = writableChannel.getNextByteBuf();
+          // Make sure this is the same as original byte array
+          obtained.retain();
+          writableChannel.resolveOldestChunk(null);
+          for (int i = 0; i < 1024; i++) {
+            assertEquals(byteBuf.getByte(i), obtained.getByte(i));
+          }
+          obtained.release();
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      });
+
+      Future<?> secondaryReadFuture = executorService.submit(() -> {
+        try {
+          ReadableStreamChannel primaryReadableStreamChannel =
+              pipedAsyncWritableChannel.getSecondaryReadableStreamChannel();
+          ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+          primaryReadableStreamChannel.readInto(writableChannel, null);
+          ByteBuf obtained = writableChannel.getNextByteBuf();
+          // Make sure this is the same as original byte array
+          obtained.retain();
+          writableChannel.resolveOldestChunk(null);
+          for (int i = 0; i < 1024; i++) {
+            assertEquals(byteBuf.getByte(i), obtained.getByte(i));
+          }
+          obtained.release();
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      });
+
+      primaryReadFuture.get(500, TimeUnit.MILLISECONDS);
+      secondaryReadFuture.get(500, TimeUnit.MILLISECONDS);
+    } finally {
+      byteBuf.release();
+      assertEquals("Reference count of the original byte buf must be back to 0", 0, byteBuf.refCnt());
+    }
   }
 
   /**

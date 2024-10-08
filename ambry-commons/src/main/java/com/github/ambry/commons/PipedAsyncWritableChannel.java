@@ -104,7 +104,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
       if (!isOpen()) {
         // This writable channel is no longer open. Return with closed channel exception
         logger.error("Cannot be written to this channel. Writable channel is already closed");
-        chunkData.resolveChunk(new ClosedChannelException());
+        chunkData.resolveChunk(0, new ClosedChannelException());
       } else {
         // Forward the bytes to underlying primary and secondary readable channels. The readable channels will read the
         // bytes into their respective destination writable channels
@@ -207,8 +207,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
           bufferedChunks.add(chunkData);
           return;
         }
-        // Reference count is increased here. It will be decreased in callback received after write is successful
-        writableChannel.write(chunkData.buf.retainedDuplicate(),
+        writableChannel.write(chunkData.buf.duplicate(),
             chunkData.makeCallbackForReadableStreamChannel(primary, totalBytesRead));
       } finally {
         lock.unlock();
@@ -242,7 +241,10 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
         if (channelOpen.compareAndSet(true, false)) {
           ChunkData chunkData;
           while ((chunkData = bufferedChunks.poll()) != null) {
-            chunkData.resolveChunk(new ClosedChannelException());
+            if (primary) {
+              // Only resolve chunk for primary channel. This will invoke source ReadableStreamChannel callback
+              chunkData.resolveChunk(0, new ClosedChannelException());
+            }
           }
         }
       } finally {
@@ -260,10 +262,10 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
     public final FutureResult<Long> future = new FutureResult<>();
     public ByteBuf buf;
     private final Callback<Long> callback;
-    private final long size;
     private Result primaryWriteCallbackResult;
     private Result secondaryWriteCallbackResult;
     private final Lock lock = new ReentrantLock();
+    private final AtomicBoolean chunkResolved = new AtomicBoolean(false);
 
     /**
      * Create a new instance of ChunkData with the given parameters.
@@ -272,26 +274,23 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
      */
     private ChunkData(ByteBuf buf, Callback<Long> callback) {
       this.buf = buf;
-      if (buf != null) {
-        size = buf.readableBytes();
-      } else {
-        size = 0;
-      }
       this.callback = callback;
     }
 
     /**
      * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
      * resolved, the data inside it is considered void.
+     * @param bytesRead num of bytes read into write channels
      * @param exception the reason for chunk handling failure.
      */
-    private void resolveChunk(Exception exception) {
-      if (buf != null) {
-        future.done(exception == null ? size : 0, exception);
+    private void resolveChunk(long bytesRead, Exception exception) {
+      if (chunkResolved.compareAndSet(false, true)) {
+        future.done(bytesRead, exception);
         if (callback != null) {
-          callback.onCompletion(exception == null ? size : 0, exception);
+          callback.onCompletion(bytesRead, exception);
         }
-        buf = null;
+      } else {
+        logger.error("Chunk is already resolved. Attempting duplicate resolution");
       }
     }
 
@@ -299,12 +298,14 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
       return (result, exception) -> {
         lock.lock();
         try {
+          if (chunkResolved.get()) {
+            logger.debug("Chunk is already resolved. Must be callback from secondary after time out. Do nothing");
+            return;
+          }
+
           if (exception == null) {
             totalBytesRead.getAndAdd(result);
           }
-
-          // Decrease the reference counter
-          buf.release();
 
           if (primary) {
             // This callback is coming from primary reader
@@ -317,10 +318,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
           if (PipedAsyncWritableChannel.this.pipedSecondaryReadChannel == null) {
             // Either there is no secondary or secondary failed with an exception. Invoke "sourceChannel" callback
             // informing that reading of these bytes is completed. This will send more bytes
-            future.done(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
-            if (callback != null) {
-              callback.onCompletion(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
-            }
+            resolveChunk(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
           } else {
             if (primaryWriteCallbackResult != null && secondaryWriteCallbackResult != null) {
               // Both primary and secondary callback came. Invoke "sourceChannel" callback informing that
@@ -334,10 +332,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
                 logger.error(message);
                 PipedAsyncWritableChannel.this.closeSecondary(new ClosedChannelException());
               }
-              future.done(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
-              if (callback != null) {
-                callback.onCompletion(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
-              }
+              resolveChunk(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
             } else if (primaryWriteCallbackResult != null) {
               // TODO: Write successful callback came from primary but not from secondary. We will "start a timer" to wait
               //  for result from secondary. If we time out waiting for the result, we will close secondary and send the
