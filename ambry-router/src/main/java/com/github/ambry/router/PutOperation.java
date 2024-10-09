@@ -48,6 +48,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -72,6 +73,8 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1192,6 +1195,14 @@ class PutOperation {
     // Whether this chunk is compressed.  Default is false for not compressed.
     // This value is set after compression has completed.  It is used to create PutRequest.
     private boolean isChunkCompressed;
+    private final Crc32 chunkCrc32 = new Crc32();
+    // The state of a chunk is cleared after quorum is met (ex: 2 responses are received) and reused for next 4MB.
+    // However, we might be handling response for the 3rd response and doing CRC checks at the same time. This would
+    // cause incorrect CRC failures. This lock is used to make sure there is no race condition for CRC checks. I.e. If
+    // clear() is called first, correlationIdToChunkPutRequestInfo map would be cleared and all subsequent responses
+    // would be dropped in handleResponse(). If handleResponse() is called first, clear() is not invoked until all CRC
+    // checks are done
+    private final Lock lock = new ReentrantLock();
 
     /**
      * Construct a PutChunk
@@ -1204,24 +1215,29 @@ class PutOperation {
      * Clear the state to make way for a new data chunk
      */
     void clear() {
-      releaseBlobContent();
-      chunkIndex = -1;
-      chunkBlobSize = -1;
-      chunkBlobId = null;
-      chunkException = null;
-      failedAttempts = 0;
-      partitionId = null;
-      attemptedPartitionIds.clear();
-      correlationIdToChunkPutRequestInfo.clear();
-      chunkUserMetadata = userMetadata;
-      encryptedPerBlobKey = null;
-      chunkFreeAtMs = time.milliseconds();
-      // this assignment should be the last statement as this immediately makes this chunk available to the
-      // ChunkFiller thread for filling.
-      state = ChunkState.Free;
-      operationQuotaCharger =
-          new OperationQuotaCharger(quotaChargeCallback, PutOperation.class.getSimpleName(), routerMetrics);
-      isChunkCompressed = false;
+      lock.lock();
+      try {
+        releaseBlobContent();
+        chunkIndex = -1;
+        chunkBlobSize = -1;
+        chunkBlobId = null;
+        chunkException = null;
+        failedAttempts = 0;
+        partitionId = null;
+        attemptedPartitionIds.clear();
+        correlationIdToChunkPutRequestInfo.clear();
+        chunkUserMetadata = userMetadata;
+        encryptedPerBlobKey = null;
+        chunkFreeAtMs = time.milliseconds();
+        // this assignment should be the last statement as this immediately makes this chunk available to the
+        // ChunkFiller thread for filling.
+        state = ChunkState.Free;
+        operationQuotaCharger =
+            new OperationQuotaCharger(quotaChargeCallback, PutOperation.class.getSimpleName(), routerMetrics);
+        isChunkCompressed = false;
+      } finally {
+        lock.unlock();
+      }
     }
 
     /**
@@ -1232,6 +1248,7 @@ class PutOperation {
         logger.trace("{}: releasing the chunk data for chunk {}", loggingContext, chunkIndex);
         ReferenceCountUtil.safeRelease(buf);
         buf = null;
+        chunkCrc32.reset();
       }
     }
 
@@ -1444,6 +1461,22 @@ class PutOperation {
      */
     private void encryptionCallback(EncryptJob.EncryptJobResult result, Exception exception) {
       logger.trace("{}: Processing encrypt job callback for chunk at index {}", loggingContext, chunkIndex);
+
+      if (exception == null && !verifyCRC()) {
+        // Original content is corruption. Complete the operation
+        logger.error("CRC of the chunk {} is different before and after encryption", chunkBlobId);
+        releaseBlobContent();
+        if (result != null) {
+          result.release();
+        }
+        setOperationExceptionAndComplete(
+            new RouterException("CRC of chunk {} is different before and after encryption" + chunkBlobId, exception,
+                RouterErrorCode.BlobCorrupted));
+        routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
+        routerCallback.onPollReady();
+        return;
+      }
+
       if (!isMetadataChunk()) {
         // If this is a data blob, then release the content with or without exception.
         // When there is no exception, then the encrypted data will be used.
@@ -1454,6 +1487,13 @@ class PutOperation {
       if (exception == null && !isOperationComplete()) {
         if (!isMetadataChunk()) {
           buf = result.getEncryptedBlobContent();
+          if (routerConfig.routerVerifyCrcForPutRequests) {
+            // Calculate CRC again
+            chunkCrc32.reset();
+            for (ByteBuffer byteBuffer : buf.nioBuffers()) {
+              chunkCrc32.update(byteBuffer);
+            }
+          }
         }
         encryptedPerBlobKey = result.getEncryptedKey();
         chunkUserMetadata = result.getEncryptedUserMetadata().array();
@@ -1571,29 +1611,37 @@ class PutOperation {
      */
     int fillFrom(ByteBuf channelReadBuf) {
       int toWrite;
+      ByteBuf slice;
       if (buf == null) {
         // If current buf is null, then only read the up to routerMaxPutChunkSizeBytes.
         toWrite = Math.min(channelReadBuf.readableBytes(), routerConfig.routerMaxPutChunkSizeBytes);
-        buf = channelReadBuf.readRetainedSlice(toWrite);
+        slice = channelReadBuf.readRetainedSlice(toWrite);
+        buf = slice;
         buf.touch(loggingContext);
       } else {
         int remainingSize = routerConfig.routerMaxPutChunkSizeBytes - buf.readableBytes();
         toWrite = Math.min(channelReadBuf.readableBytes(), remainingSize);
-        ByteBuf remainingSlice = channelReadBuf.readRetainedSlice(toWrite);
-        remainingSlice.touch(loggingContext);
+        slice = channelReadBuf.readRetainedSlice(toWrite);
+        slice.touch(loggingContext);
         // buf already has some bytes
         if (buf instanceof CompositeByteBuf) {
           // Buf is already a CompositeByteBuf, then just add the slice from
-          ((CompositeByteBuf) buf).addComponent(true, remainingSlice);
+          ((CompositeByteBuf) buf).addComponent(true, slice);
         } else {
           int maxComponents = routerConfig.routerMaxPutChunkSizeBytes;
           CompositeByteBuf composite = buf.isDirect() ? buf.alloc().compositeDirectBuffer(maxComponents)
               : buf.alloc().compositeHeapBuffer(maxComponents);
-          composite.addComponents(true, buf, remainingSlice);
+          composite.addComponents(true, buf, slice);
           buf = composite;
           buf.touch(loggingContext);
         }
       }
+
+      // Update crc for the chunk data
+      if (routerConfig.routerVerifyCrcForPutRequests) {
+        chunkCrc32.update(slice.nioBuffer());
+      }
+
       if (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes) {
         if (chunkIndex == 0) {
           // If first put chunk is full, but not yet prepared then mark it awaiting resolution instead of completing it.
@@ -1618,7 +1666,8 @@ class PutOperation {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
           appendSlippedPutBlobId(chunkBlobId);
-          if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts && !shouldUseReservedMetadataId()) {
+          if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts && !shouldUseReservedMetadataId()
+              && chunkException.getErrorCode() != RouterErrorCode.BlobCorrupted) {
             logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
                 chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
@@ -1806,98 +1855,128 @@ class PutOperation {
      * @param putResponse the {@link PutResponse} associated with this response.
      */
     void handleResponse(ResponseInfo responseInfo, PutResponse putResponse) {
-      int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
-      RequestInfo requestInfo = correlationIdToChunkPutRequestInfo.remove(correlationId);
-      if (requestInfo == null) {
-        // Ignore right away. This could mean:
-        // - the response is valid for this chunk, but was timed out and removed from the map.
-        // - the response is for an earlier attempt of this chunk (slipped put scenario). And the map was cleared
-        // before attempting the slipped put.
-        // - the response is for an earlier chunk held by this PutChunk.
-        logger.debug("{}: No matching request found for {}", loggingContext, correlationId);
-        return;
-      }
-      if (responseInfo.isQuotaRejected()) {
-        processQuotaRejectedResponse(correlationId, requestInfo.getReplicaId());
-        return;
-      }
-      // Track the over all time taken for the response since the creation of the request.
-      long requestLatencyMs = time.milliseconds() - requestInfo.getRequestCreateTime();
-      routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(requestInfo.getReplicaId().getDataNodeId()).putRequestLatencyMs.update(
-          requestLatencyMs);
-      boolean isSuccessful;
-      TrackedRequestFinalState putRequestFinalState = null;
-      if (responseInfo.getError() != null) {
-        logger.debug("{}: PutRequest with response correlationId {} timed out for replica {} ", loggingContext,
-            correlationId, requestInfo.getReplicaId().getDataNodeId());
-        setChunkException(new RouterException(
-            "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
-            RouterErrorCode.OperationTimedOut));
-        isSuccessful = false;
-        putRequestFinalState = TrackedRequestFinalState.FAILURE;
-      } else {
-        if (putResponse == null) {
-          logger.debug(
-              "{}: PutRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
-              loggingContext, correlationId, requestInfo.getReplicaId().getDataNodeId());
-          setChunkException(new RouterException("Response deserialization received an unexpected error",
-              RouterErrorCode.UnexpectedInternalError));
+      lock.lock();
+      try {
+        int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
+        RequestInfo requestInfo = correlationIdToChunkPutRequestInfo.remove(correlationId);
+        if (requestInfo == null) {
+          // Ignore right away. This could mean:
+          // - the response is valid for this chunk, but was timed out and removed from the map.
+          // - the response is for an earlier attempt of this chunk (slipped put scenario). And the map was cleared
+          // before attempting the slipped put.
+          // - the response is for an earlier chunk held by this PutChunk.
+          logger.debug("{}: No matching request found for {}", loggingContext, correlationId);
+          return;
+        }
+        if (responseInfo.isQuotaRejected()) {
+          processQuotaRejectedResponse(correlationId, requestInfo.getReplicaId());
+          return;
+        }
+        // Track the over all time taken for the response since the creation of the request.
+        long requestLatencyMs = time.milliseconds() - requestInfo.getRequestCreateTime();
+        routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
+        routerMetrics.getDataNodeBasedMetrics(requestInfo.getReplicaId().getDataNodeId()).putRequestLatencyMs.update(
+            requestLatencyMs);
+        boolean isSuccessful;
+        TrackedRequestFinalState putRequestFinalState = null;
+        if (responseInfo.getError() != null) {
+          logger.debug("{}: PutRequest with response correlationId {} timed out for replica {} ", loggingContext,
+              correlationId, requestInfo.getReplicaId().getDataNodeId());
+          setChunkException(new RouterException(
+              "Operation timed out because of " + responseInfo.getError() + " at DataNode "
+                  + responseInfo.getDataNode(), RouterErrorCode.OperationTimedOut));
           isSuccessful = false;
           putRequestFinalState = TrackedRequestFinalState.FAILURE;
         } else {
-          if (putResponse.getCorrelationId() != correlationId) {
-            // The NetworkClient associates a response with a request based on the fact that only one request is sent
-            // out over a connection id, and the response received on a connection id must be for the latest request
-            // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
-            // There is no other way to handle it.
-            routerMetrics.unknownReplicaResponseError.inc();
-            logger.error(
-                "{}: The correlation id in the PutResponse {} is not the same as the correlation id in the associated PutRequest: {}",
-                loggingContext, putResponse.getCorrelationId(), correlationId);
-            setChunkException(
-                new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
+          if (putResponse == null) {
+            logger.debug(
+                "{}: PutRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
+                loggingContext, correlationId, requestInfo.getReplicaId().getDataNodeId());
+            setChunkException(new RouterException("Response deserialization received an unexpected error",
+                RouterErrorCode.UnexpectedInternalError));
             isSuccessful = false;
             putRequestFinalState = TrackedRequestFinalState.FAILURE;
-            // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
-            ServerErrorCode putError = putResponse.getError();
-            if (putError == ServerErrorCode.No_Error) {
-              logger.trace("{}: The putRequest was successful for chunk {}", loggingContext, chunkIndex);
-              isSuccessful = true;
-            } else {
-              // chunkException will be set within processServerError.
-              logger.trace(
-                  "{}: Replica {} returned an error {} for a PutRequest with response correlationId : {} and blobId {}",
-                  loggingContext, requestInfo.getReplicaId(), putResponse.getError(), putResponse.getCorrelationId(),
-                  blobId);
-              processServerError(putResponse.getError());
+            if (putResponse.getCorrelationId() != correlationId) {
+              // The NetworkClient associates a response with a request based on the fact that only one request is sent
+              // out over a connection id, and the response received on a connection id must be for the latest request
+              // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
+              // There is no other way to handle it.
+              routerMetrics.unknownReplicaResponseError.inc();
+              logger.error(
+                  "{}: The correlation id in the PutResponse {} is not the same as the correlation id in the associated PutRequest: {}",
+                  loggingContext, putResponse.getCorrelationId(), correlationId);
+              setChunkException(
+                  new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
               isSuccessful = false;
-              putRequestFinalState =
-                  putError == ServerErrorCode.Temporarily_Disabled ? TrackedRequestFinalState.REQUEST_DISABLED
-                      : TrackedRequestFinalState.FAILURE;
+              putRequestFinalState = TrackedRequestFinalState.FAILURE;
+              // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
+            } else {
+              ServerErrorCode putError = putResponse.getError();
+              if (putError == ServerErrorCode.No_Error) {
+                if (!verifyCRC()) {
+                  logger.error("{}: PutRequest with response correlationId {}, blob id {} has a mismatch in crc {} ",
+                      loggingContext, correlationId, chunkBlobId, requestInfo.getReplicaId().getDataNodeId());
+                  setChunkException(
+                      new RouterException("CRC mismatch of chunk content before and after writing to server",
+                          RouterErrorCode.BlobCorrupted));
+                  isSuccessful = false;
+                  putRequestFinalState = TrackedRequestFinalState.FAILURE;
+                } else {
+                  logger.trace("{}: The putRequest was successful for chunk {}", loggingContext, chunkIndex);
+                  isSuccessful = true;
+                }
+              } else {
+                // chunkException will be set within processServerError.
+                logger.trace(
+                    "{}: Replica {} returned an error {} for a PutRequest with response correlationId : {} and blobId {}",
+                    loggingContext, requestInfo.getReplicaId(), putResponse.getError(), putResponse.getCorrelationId(),
+                    blobId);
+                processServerError(putResponse.getError());
+                isSuccessful = false;
+                putRequestFinalState =
+                    putError == ServerErrorCode.Temporarily_Disabled ? TrackedRequestFinalState.REQUEST_DISABLED
+                        : TrackedRequestFinalState.FAILURE;
+              }
             }
           }
         }
-      }
-      if (isSuccessful) {
-        operationTracker.onResponse(requestInfo.getReplicaId(), TrackedRequestFinalState.SUCCESS);
-        if (RouterUtils.isRemoteReplica(routerConfig, requestInfo.getReplicaId())) {
-          logger.trace("{}: Cross colo request successful for remote replica in {} ", loggingContext,
-              requestInfo.getReplicaId().getDataNodeId().getDatacenterName());
-          routerMetrics.crossColoSuccessCount.inc();
+        if (isSuccessful) {
+          operationTracker.onResponse(requestInfo.getReplicaId(), TrackedRequestFinalState.SUCCESS);
+          if (RouterUtils.isRemoteReplica(routerConfig, requestInfo.getReplicaId())) {
+            logger.trace("{}: Cross colo request successful for remote replica in {} ", loggingContext,
+                requestInfo.getReplicaId().getDataNodeId().getDatacenterName());
+            routerMetrics.crossColoSuccessCount.inc();
 
-          // We use a separate metric to the latency of remote vs local writes (such requests are routed through
-          // ParanoidDurabilityOperationTracker).
-          routerMetrics.routerPutRequestRemoteLatencyMs.update(requestLatencyMs);
+            // We use a separate metric to the latency of remote vs local writes (such requests are routed through
+            // ParanoidDurabilityOperationTracker).
+            routerMetrics.routerPutRequestRemoteLatencyMs.update(requestLatencyMs);
+          } else {
+            routerMetrics.routerPutRequestLocalLatencyMs.update(requestLatencyMs);
+          }
+        } else {
+          onErrorResponse(requestInfo.getReplicaId(), putRequestFinalState);
         }
-        else {
-          routerMetrics.routerPutRequestLocalLatencyMs.update(requestLatencyMs);
-        }
-      } else {
-        onErrorResponse(requestInfo.getReplicaId(), putRequestFinalState);
+        checkAndMaybeComplete();
+      } finally {
+        lock.unlock();
       }
-      checkAndMaybeComplete();
+    }
+
+    /**
+     * @return {@code true} if CRC of the chunk buffer is same as one calculated in chunk filler thread
+     */
+    boolean verifyCRC() {
+      if (!routerConfig.routerVerifyCrcForPutRequests || isMetadataChunk()) {
+        return true;
+      }
+      Crc32 crc32 = new Crc32();
+      for (ByteBuffer byteBuffer : buf.nioBuffers()) {
+        crc32.update(byteBuffer);
+      }
+      logger.trace("Chunk Id {}, state {}, Original CRC {}, current CRC {}", chunkBlobId, state.name(),
+          this.chunkCrc32.getValue(), crc32.getValue());
+      return this.chunkCrc32.getValue() == crc32.getValue();
     }
 
     /**

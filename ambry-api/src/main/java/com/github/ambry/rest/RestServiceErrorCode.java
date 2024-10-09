@@ -219,6 +219,7 @@ public enum RestServiceErrorCode {
       case UnexpectedInternalError:
       case ChannelClosed:
       case LifeVersionConflict:
+      case BlobCorrupted:
       default:
         return InternalServerError;
     }
