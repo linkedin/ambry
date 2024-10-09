@@ -548,7 +548,7 @@ public class PutOperationTest {
               false, BlobId.BlobDataType.METADATA);
       BlobProperties blobPropertiesWithId =
           new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null,
-              reservedMetadataId.getID());
+              reservedMetadataId.getID(), null);
       BlobId altReservedMetadataId =
           new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 0, (short) 1, (short) 1, new MockPartitionId(),
               true, BlobId.BlobDataType.METADATA);

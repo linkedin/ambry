@@ -1350,10 +1350,18 @@ class PutOperation {
           chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
         } else {
           partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
-          chunkBlobId =
-              new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                  passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
-                  passedInBlobProperties.isEncrypted(), blobDataType);
+          if (BlobDataType.DATACHUNK.equals(blobDataType) || passedInBlobProperties.getReservedUuid() == null) {
+            chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE,
+                clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
+                passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted(),
+                blobDataType);
+          } else {
+            //We should only reserve uuid for METADATA and SIMPLE blob type.
+            chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE,
+                clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
+                passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted(),
+                blobDataType, passedInBlobProperties.getReservedUuid());
+          }
         }
 
         // To ensure previously attempted partitions are not retried for this PUT after a failure.
@@ -1365,7 +1373,7 @@ class PutOperation {
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-            passedInBlobProperties.getFilename(), resolveReservedMetadataId());
+            passedInBlobProperties.getFilename(), resolveReservedMetadataId(), null);
         operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
@@ -2003,7 +2011,7 @@ class PutOperation {
           reservedMetadataChunkId =
               ClusterMapUtils.reserveMetadataBlobId(partitionClass, Collections.emptyList(), reservedMetadataIdMetrics,
                   clusterMap, passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-                  passedInBlobProperties.isEncrypted(), routerConfig);
+                  passedInBlobProperties.isEncrypted(), routerConfig, passedInBlobProperties.getReservedUuid());
         } else if (!chunksToStitch.isEmpty() && !RestUtils.isS3Request(restRequest)) {
           // Empty chunksToStitch list is already handled in PutOperation constructor by now.
           setReservedMetadataChunkId(chunksToStitch.get(0).getReservedMetadataId());
@@ -2164,7 +2172,7 @@ class PutOperation {
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
-              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null);
+              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null, null);
 
       if (options.skipCompositeChunk()) {
         // close the request as the single blob. we don't generate the composite blob.
