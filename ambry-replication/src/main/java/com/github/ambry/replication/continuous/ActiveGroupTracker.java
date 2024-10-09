@@ -14,6 +14,7 @@
 package com.github.ambry.replication.continuous;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 /**
@@ -29,7 +30,18 @@ public class ActiveGroupTracker extends GroupTracker {
     this.preAssignedReplicas = preAssignedReplicas;
   }
 
-  public List<ReplicaTracker> getPreAssignedReplica() {
+  public List<ReplicaTracker> getPreAssignedReplicas() {
     return preAssignedReplicas;
+  }
+
+  public List<ReplicaTracker> getPreAssignedReplicas(List<ReplicaStatus> statuses) {
+    return preAssignedReplicas.stream()
+        .filter(replicaTracker -> statuses.contains(replicaTracker.getReplicaStatus()))
+        .collect(Collectors.toList());
+  }
+
+  @Override
+  public String toString() {
+    return "ActiveGroupTracker :[" + super.toString() + " " + preAssignedReplicas.toString() + "]";
   }
 }

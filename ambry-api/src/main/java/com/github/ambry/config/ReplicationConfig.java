@@ -28,6 +28,7 @@ public class ReplicationConfig {
   public static final String REPLICA_TOKEN_FILE_NAME = "replicaTokens";
   public static final String REPLICATION_MODEL_ACROSS_DATACENTERS = "replication.model.across.datacenters";
   public static final String REPLICATION_ENABLE_CONTINUOUS_REPLICATION = "replication.enable.continuous.replication";
+  public static final String REPLICATION_GROUP_ITERATION_LIMIT = "replication.group.iteration.limit";
   public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
       "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
 
@@ -57,6 +58,17 @@ public class ReplicationConfig {
   @Config(REPLICATION_ENABLE_CONTINUOUS_REPLICATION)
   @Default("false")
   public final boolean replicationEnableContinuousReplication;
+
+  /**
+   * Maximum number of iterations per remote replica group in a continuous replication cycle
+   * This is valid only when continuous replication is enabled.
+   * Its default value is 1, to make it compatible with old cyclic replication logic.
+   * When value is set to 1, each group does 1 iteration in a cycle(continuous replication call)
+   * as in the beginning of cycle, all groups will get created and all will reach limit of 1.
+   */
+  @Config(REPLICATION_GROUP_ITERATION_LIMIT)
+  @Default("1")
+  public final int replicationGroupIterationLimit;
 
   /**
    * The number of replica threads on each server that runs the replication protocol for intra dc replication
@@ -337,6 +349,7 @@ public class ReplicationConfig {
         DEFAULT_RECOVERY_TOKEN_FACTORY);
     replicationEnableContinuousReplication =
         verifiableProperties.getBoolean(REPLICATION_ENABLE_CONTINUOUS_REPLICATION, false);
+    replicationGroupIterationLimit = verifiableProperties.getInt(REPLICATION_GROUP_ITERATION_LIMIT, 1);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =

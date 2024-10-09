@@ -100,14 +100,16 @@ public class ReplicationTestHelper {
   protected ReplicationConfig replicationConfig;
   protected final AccountService accountService;
 
-  public ReplicationTestHelper(short requestVersion, short responseVersion) {
-    System.out.println("The request version: " + requestVersion + " ResponseVersion: " + responseVersion);
+  public ReplicationTestHelper(short requestVersion, short responseVersion, boolean enableContinuousReplication) {
+    System.out.println("The request version: " + requestVersion + " ResponseVersion: " + responseVersion + " enableContinuousReplication: " + enableContinuousReplication);
     List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     properties = new Properties();
     properties.setProperty("replication.metadata.request.version", Short.toString(requestVersion));
     properties.setProperty("replication.metadataresponse.version", Short.toString(responseVersion));
+    properties.setProperty(ReplicationConfig.REPLICATION_ENABLE_CONTINUOUS_REPLICATION,
+        String.valueOf(enableContinuousReplication));
     properties.setProperty("replication.cloud.token.factory", "com.github.ambry.replication.MockFindTokenFactory");
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
