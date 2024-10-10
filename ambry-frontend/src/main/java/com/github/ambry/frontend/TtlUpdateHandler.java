@@ -132,9 +132,9 @@ class TtlUpdateHandler {
         if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
           accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.updateBlobTtlMetricsGroup);
         } else {
-          blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
-          BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(blobIdStr, clusterMap);
-          restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, convertedBlobId);
+          String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobIdStr);
+          BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(blobIdClean, clusterMap);
+          restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, convertedBlobId.getID());
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(convertedBlobId, restRequest,
               metrics.updateBlobTtlMetricsGroup);
         }
