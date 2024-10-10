@@ -32,6 +32,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -102,7 +103,7 @@ public class MockRouter implements Router {
 
   @Override
   public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback, Time time) {
     lock.lock();
     try {
       FutureResult<String> future = new FutureResult<>();
@@ -134,7 +135,7 @@ public class MockRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("stichBlob is not supported by this mock");
   }
