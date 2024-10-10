@@ -45,11 +45,12 @@ public class DatasetDao {
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final MySqlMetrics metrics;
   private static final long MAX_TIMESTAMP_MONOTONIC_VERSION_VALUE = Long.MAX_VALUE;
-  private static final long MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE = 999L;
+  private static final long MAX_SEMANTIC_VERSION_PART_VALUE = 999L;
   private static final String LATEST = "LATEST";
   private static final String MAJOR = "MAJOR";
   private static final String MINOR = "MINOR";
   private static final String PATCH = "PATCH";
+  private static final String REVISION = "REVISION";
 
   // Account table fields
   public static final String ACCOUNT_ID = "accountId";
@@ -311,7 +312,7 @@ public class DatasetDao {
     DatasetVersionRecord datasetVersionRecord;
     try {
       dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
-      if (isAutoCreatedVersionForUpload(version)) {
+      if (isAutoCreatedVersionForUpload(version, dataset.getVersionSchema())) {
         datasetVersionRecord =
             retryWithLatestAutoIncrementedVersion(accountId, containerId, dataset, version, timeToLiveInSeconds,
                 creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
@@ -840,19 +841,51 @@ public class DatasetDao {
         version = Long.toString(versionValue);
         return version;
       case SEMANTIC:
-        //Given a version number MAJOR.MINOR.PATCH, increment the:
-        //1.MAJOR version when you make incompatible API changes
-        //2.MINOR version when you add functionality in a backwards compatible manner
-        //3.PATCH version when you make backwards compatible bug fixes
-        //The MAJOR,MINOR and PATCH version are non-negative value.
-        long major = versionValue / 1000000L;
-        long minor = (versionValue % 1000000L) / 1000L;
-        long patch = versionValue % 1000L;
-        version = String.format("%d.%d.%d", major, minor, patch);
+        version = convertVersionToSemantic(versionValue);
+        return version;
+      case SEMANTIC_LONG:
+        version = convertVersionToSemanticLong(versionValue);
         return version;
       default:
         throw new IllegalArgumentException("Unsupported version schema: " + versionSchema);
     }
+  }
+
+  /**
+   * Produces a string-represented value in the for {major}.{minor}.{patch}
+   * @param versionValue the value of the version from DB.
+   * @return the converted string format version.
+   */
+  private String convertVersionToSemantic(long versionValue) {
+    //Given a version number MAJOR.MINOR.PATCH, increment the:
+    //1.MAJOR version when you make incompatible API changes
+    //2.MINOR version when you add functionality in a backwards compatible manner
+    //3.PATCH version when you make backwards compatible bug fixes
+    //The MAJOR,MINOR and PATCH version are non-negative value.
+    long major = versionValue / 1000000L;
+    long minor = (versionValue % 1000000L) / 1000L;
+    long patch = versionValue % 1000L;
+    return String.format("%d.%d.%d", major, minor, patch);
+  }
+
+  /**
+   * Produces a string-represented value in the for {major}.{minor}.{patch}.{revision} from a long value, by performing
+   * the following calculation: A * 10^9 + B * 10^6 + C * 10^3 + D, where version is A.B.C.D.
+   * @param versionValue the value of the version from DB.
+   * @return the converted string format version.
+   */
+  private String convertVersionToSemanticLong(long versionValue) {
+    //Given a version number MAJOR.MINOR.PATCH.REVISION, increment the:
+    //1.MAJOR version when you make incompatible API changes
+    //2.MINOR version when you add functionality in a backwards compatible manner
+    //3.PATCH version when you make backwards compatible bug fixes
+    //4.REVISION   version when you make fixes atop an original major.minor.patch version.
+    //The MAJOR, MINOR, PATCH, and REVISION version are non-negative value.
+    long major = versionValue / 1000000000L;
+    long minor = (versionValue % 1000000000L) / 1000000L;
+    long patch = (versionValue % 1000000L) / 1000L;
+    long revision = versionValue % 1000L;
+    return String.format("%d.%d.%d.%d", major, minor, patch, revision);
   }
 
   /**
@@ -923,7 +956,7 @@ public class DatasetDao {
    * Generate the auto incremented version based on the latest valid version and the version schema.
    * @param versionValue the latest version value for current dataset.
    * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} of the dataset.
-   * @param version the version string to indicate if user provide LATEST, MAJOR, MINOR or PATCH option.
+   * @param version the version string to indicate if user provide LATEST, MAJOR, MINOR, PATCH, or REVISION option.
    * @return the auto incremented value base on latest version.
    */
   private long generateAutoIncrementedVersionBasedOnSchema(long versionValue, Dataset.VersionSchema versionSchema,
@@ -961,25 +994,72 @@ public class DatasetDao {
           majorVersion += 1;
           minorVersion = 0;
           patchVersion = 0;
-          if (majorVersion > MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE) {
+          if (majorVersion > MAX_SEMANTIC_VERSION_PART_VALUE) {
             throw new IllegalArgumentException("The largest version for Semantic Major version should be less than "
-                + MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE + ", currentMajorVersion: " + majorVersion);
+                + MAX_SEMANTIC_VERSION_PART_VALUE + ", currentMajorVersion: " + majorVersion);
           }
         } else if (MINOR.equals(version)) {
           minorVersion += 1;
           patchVersion = 0;
-          if (minorVersion > MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE) {
+          if (minorVersion > MAX_SEMANTIC_VERSION_PART_VALUE) {
             throw new IllegalArgumentException("The largest version for Semantic Minor version should be less than "
-                + MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE + ", currentMinorVersion: " + minorVersion);
+                + MAX_SEMANTIC_VERSION_PART_VALUE + ", currentMinorVersion: " + minorVersion);
           }
         } else {
           patchVersion += 1;
-          if (patchVersion > MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE) {
+          if (patchVersion > MAX_SEMANTIC_VERSION_PART_VALUE) {
             throw new IllegalArgumentException("The largest version for Semantic Patch version should be less than "
-                + MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE + ", currentPatchVersion: " + patchVersion);
+                + MAX_SEMANTIC_VERSION_PART_VALUE + ", currentPatchVersion: " + patchVersion);
           }
         }
         return majorVersion * 1000000 + minorVersion * 1000 + patchVersion;
+      case SEMANTIC_LONG:
+        //Given a version number MAJOR.MINOR.PATCH, increment the:
+        //1.MAJOR version when you make incompatible API changes
+        //2.MINOR version when you add functionality in a backwards compatible manner
+        //3.PATCH version when you make backwards compatible bug fixes
+        //4.REVISION   version when you make fixes atop an original major.minor.patch version.
+        //The MAJOR, MINOR, PATCH, and REVISION version are non-negative value.
+        if (!MAJOR.equals(version) && !MINOR.equals(version) && !PATCH.equals(version) && !REVISION.equals(version)) {
+          throw new IllegalArgumentException(
+              "The current version string " + version + " is not supported for Semantic Long version schema");
+        }
+        long majorLongVersion = versionValue / 1000000000L;
+        long minorLongVersion = (versionValue % 1000000000L) / 1000000L;
+        long patchLongVersion = (versionValue % 1000000L) / 1000L;
+        long revisionLongVersion = versionValue % 1000L;
+        if (MAJOR.equals(version)) {
+          majorLongVersion += 1;
+          minorLongVersion = 0;
+          patchLongVersion = 0;
+          revisionLongVersion = 0;
+          if (majorLongVersion > MAX_SEMANTIC_VERSION_PART_VALUE) {
+            throw new IllegalArgumentException("The largest version for Semantic Major version should be less than "
+                + MAX_SEMANTIC_VERSION_PART_VALUE + ", currentMajorVersion: " + majorLongVersion);
+          }
+        } else if (MINOR.equals(version)) {
+          minorLongVersion += 1;
+          patchLongVersion = 0;
+          revisionLongVersion = 0;
+          if (minorLongVersion > MAX_SEMANTIC_VERSION_PART_VALUE) {
+            throw new IllegalArgumentException("The largest version for Semantic Minor version should be less than "
+                + MAX_SEMANTIC_VERSION_PART_VALUE + ", currentMinorVersion: " + minorLongVersion);
+          }
+        } else if (PATCH.equals(version)) {
+          patchLongVersion += 1;
+          revisionLongVersion = 0;
+          if (patchLongVersion > MAX_SEMANTIC_VERSION_PART_VALUE) {
+            throw new IllegalArgumentException("The largest version for Semantic Patch version should be less than "
+                + MAX_SEMANTIC_VERSION_PART_VALUE + ", currentPatchVersion: " + patchLongVersion);
+          }
+        } else {
+          revisionLongVersion += 1;
+          if (revisionLongVersion > MAX_SEMANTIC_VERSION_PART_VALUE) {
+            throw new IllegalArgumentException("The largest version for Semantic Revision version should be less than "
+                + MAX_SEMANTIC_VERSION_PART_VALUE + ", currentRevisionVersion: " + revisionLongVersion);
+          }
+        }
+        return majorLongVersion * 1000000000 + minorLongVersion * 1000000 + patchLongVersion * 1000 + revisionLongVersion;
       default:
         throw new IllegalArgumentException("Unsupported version schema: " + versionSchema);
     }
@@ -987,10 +1067,15 @@ public class DatasetDao {
 
   /**
    * @param version the version string.
+   * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} from dataset level.
    * @return {@code} true if the version is auto created version for upload.
    */
-  private boolean isAutoCreatedVersionForUpload(String version) {
-    return LATEST.equals(version) || MAJOR.equals(version) || MINOR.equals(version) || PATCH.equals(version);
+  private boolean isAutoCreatedVersionForUpload(String version, Dataset.VersionSchema versionSchema) {
+    boolean isAutoCreated = LATEST.equals(version)
+        || MAJOR.equals(version)
+        || MINOR.equals(version)
+        || PATCH.equals(version);
+    return versionSchema == Dataset.VersionSchema.SEMANTIC_LONG ? isAutoCreated || REVISION.equals(version) : isAutoCreated;
   }
 
   /**
@@ -1603,6 +1688,8 @@ public class DatasetDao {
         //3.PATCH version when you make backwards compatible bug fixes
         //The MAJOR,MINOR and PATCH version are non-negative value.
         return sanityCheckAndConvertSemanticVersion(version);
+      case SEMANTIC_LONG:
+        return sanityCheckAndConvertSemanticLongVersion(version);
       default:
         throw new IllegalArgumentException("Unsupported version schema: " + versionSchema);
     }
@@ -1642,6 +1729,44 @@ public class DatasetDao {
           "Version does not match the semantic version format MAJOR.MINOR.PATCH, version: " + version);
     }
     return majorVersion * 1000000 + minorVersion * 1000 + patchVersion;
+  }
+
+  /**
+   * Sanity check for semantic long version.
+   * @param version The version from request.
+   * @return the converted version which will be stored in DatasetVersions DB.
+   */
+  private long sanityCheckAndConvertSemanticLongVersion(String version) {
+    long majorVersion;
+    long minorVersion;
+    long patchVersion;
+    long revisionVersion;
+    try {
+      String[] versionArray = version.split("[.]", 4);
+      revisionVersion = Long.parseLong(versionArray[3]);
+      patchVersion = Long.parseLong(versionArray[2]);
+      minorVersion = Long.parseLong(versionArray[1]);
+      majorVersion = Long.parseLong(versionArray[0]);
+      if (revisionVersion < 0 || patchVersion < 0 || minorVersion < 0 || majorVersion < 0) {
+        throw new IllegalArgumentException(
+            "The major, minor, patch, or revision version is less than 0, major version: " + majorVersion + " minor version: "
+                + minorVersion + " patch version: " + patchVersion + " revision version: " + revisionVersion);
+      }
+      if (revisionVersion > 999 || patchVersion > 999 || minorVersion > 999) {
+        throw new IllegalArgumentException(
+            "The minor, patch, or revision version exceeded max allowed number: 999, minor version: " + minorVersion
+                + " patch version: " + patchVersion + " revision version: " + revisionVersion);
+      }
+      //We set the max major version same as revision/patch/minor version based on current use cases.
+      if (majorVersion > mySqlAccountServiceConfig.maxMajorVersionForSemanticSchemaDataset) {
+        throw new IllegalArgumentException("The major version exceeded max allowed number: "
+            + mySqlAccountServiceConfig.maxMajorVersionForSemanticSchemaDataset + " major version: " + majorVersion);
+      }
+    } catch (Exception e) {
+      throw new IllegalArgumentException(
+          "Version does not match the semantic version format MAJOR.MINOR.PATCH, version: " + version);
+    }
+    return majorVersion * 1000000000 + minorVersion * 1000000 + patchVersion * 1000 + revisionVersion;
   }
 
   /**

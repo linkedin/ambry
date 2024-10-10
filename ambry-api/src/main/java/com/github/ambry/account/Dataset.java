@@ -116,7 +116,7 @@ public class Dataset {
   }
 
   public enum VersionSchema {
-    TIMESTAMP, MONOTONIC, SEMANTIC
+    TIMESTAMP, MONOTONIC, SEMANTIC, SEMANTIC_LONG
   }
 
   /**
