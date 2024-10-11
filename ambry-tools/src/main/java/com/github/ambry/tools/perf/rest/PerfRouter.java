@@ -105,17 +105,17 @@ class PerfRouter implements Router {
    * Consumes the data in {@code channel} and simply throws it away. {@code blobProperties} and {@code usermetadata} are
    * ignored.
    *
-   * @param restRequest    The {@link RestRequest} to put the blob.
    * @param blobProperties The properties of the blob.
    * @param usermetadata   Optional user metadata about the blob. This can be null.
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        the {@link PutBlobOptions} for the blob.
    * @param callback       the {@link Callback} to invoke on operation completion.
+   * @param restRequest    The {@link RestRequest} to put the blob.
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
+      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback, RestRequest restRequest) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {
@@ -176,16 +176,14 @@ class PerfRouter implements Router {
 
   /**
    * Does nothing. Simply indicates success immediately.
-   *
-   * @param restRequest The {@link RestRequest} of updateBlobTtl
-   * @param blobId      (ignored).
-   * @param serviceId   (ignored).
+   * @param blobId (ignored).
+   * @param serviceId (ignored).
    * @param expiresAtMs (ignored).
-   * @param callback    the {@link Callback} to invoke on operation completion.
+   * @param callback the {@link Callback} to invoke on operation completion.
    * @return a {@link FutureResult} that will eventually contain the result of the operation.
    */
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received updateBlobTtl call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
