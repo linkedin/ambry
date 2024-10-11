@@ -114,7 +114,7 @@ class PerfRouter implements Router {
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, BlobInfo usermetadata, final ReadableStreamChannel channel,
       PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();

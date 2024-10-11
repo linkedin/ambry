@@ -29,6 +29,7 @@ import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.CompositeBlobInfo;
@@ -401,8 +402,9 @@ public class PutManagerTest {
     }
     instantiateNewRouterForPuts = false;
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
+    BlobInfo blobInfo = new BlobInfo(req.putBlobProperties, req.putUserMetadata);
     Future future =
-        router.putBlob(null, req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
+        router.putBlob(null, req.putBlobProperties, blobInfo, putChannel, req.options, (result, exception) -> {
           callbackCalled.countDown();
           throw new RuntimeException("Throwing an exception in the user callback");
         }, QuotaTestUtils.createTestQuotaChargeCallback());

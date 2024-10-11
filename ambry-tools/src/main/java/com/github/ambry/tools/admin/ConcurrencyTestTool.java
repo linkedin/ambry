@@ -23,6 +23,7 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaAction;
@@ -655,7 +656,8 @@ public class ConcurrencyTestTool {
       try {
         final long startTimeInMs = SystemTime.getInstance().milliseconds();
         ByteBufferReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob));
-        router.putBlob(null, props, usermetadata, putChannel, new PutBlobOptionsBuilder().build(), new Callback<String>() {
+        BlobInfo blobInfo = new BlobInfo(props, usermetadata);
+        router.putBlob(null, props, blobInfo, putChannel, new PutBlobOptionsBuilder().build(), new Callback<String>() {
           @Override
           public void onCompletion(String result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeInMs;

@@ -297,8 +297,9 @@ class RouterServerTestFramework {
         opChain.blobId = result;
       }
     };
+    BlobInfo blobInfo = new BlobInfo(opChain.properties, opChain.userMetadata);
     Future<String> future =
-        router.putBlob(null, opChain.properties, opChain.userMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+        router.putBlob(null, opChain.properties, blobInfo, putChannel, new PutBlobOptionsBuilder().build(),
             callback, quotaChargeCallback);
     TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", false), opChain) {
       @Override

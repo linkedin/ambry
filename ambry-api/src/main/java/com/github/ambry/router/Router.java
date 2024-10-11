@@ -54,14 +54,14 @@ public interface Router extends Closeable {
    * @param blobProperties      The properties of the blob. Note that the size specified in the properties is ignored.
    *                            The channel is consumed fully, and the size of the blob is the number of bytes read from
    *                            it.
-   * @param userMetadata        Optional user metadata about the blob. This can be null.
+   * @param blobInfo            The blob info which include the original blob property and user metadata.
    * @param channel             The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options             The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback            The {@link Callback} which will be invoked on the completion of the request .
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
-  Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+  Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, BlobInfo blobInfo, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
 
   /**
@@ -189,17 +189,19 @@ public interface Router extends Closeable {
   /**
    * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of
    * the new blob on a successful response.
+   *
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param userMetadata   Optional user metadata about the blob. This can be null.
+   * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @return A future that would contain the BlobId eventually.
    */
   default CompletableFuture<String> putBlob(BlobProperties blobProperties, byte[] userMetadata,
       ReadableStreamChannel channel, PutBlobOptions options) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    putBlob(null, blobProperties, userMetadata, channel, options, CallbackUtils.fromCompletableFuture(future), null);
+    BlobInfo blobInfo = new BlobInfo(blobProperties, userMetadata);
+    putBlob(null, blobProperties, blobInfo, channel, options, CallbackUtils.fromCompletableFuture(future), null);
     return future;
   }
 

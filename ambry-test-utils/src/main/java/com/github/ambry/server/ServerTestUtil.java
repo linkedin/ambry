@@ -46,6 +46,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -125,6 +126,7 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -1480,8 +1482,9 @@ public final class ServerTestUtil {
       final byte[] blob = new byte[size];
       TestUtils.RANDOM.nextBytes(metadata);
       TestUtils.RANDOM.nextBytes(blob);
+      BlobInfo blobInfo = new BlobInfo(properties, metadata);
       Future<String> future =
-          router.putBlob(null, properties, metadata, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob)),
+          router.putBlob(null, properties, blobInfo, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob)),
               new PutBlobOptionsBuilder().build(), new Callback<String>() {
                 @Override
                 public void onCompletion(String result, Exception exception) {

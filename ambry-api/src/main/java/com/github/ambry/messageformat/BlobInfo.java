@@ -57,6 +57,14 @@ public class BlobInfo {
   }
 
   /**
+   * Set the user metadata of the blob.
+   * @param userMetadata The user metadata to set.
+   */
+  public void setUserMetadata(byte[] userMetadata) {
+    this.userMetadata = userMetadata;
+  }
+
+  /**
    * Set the lifeVersion of this blob.
    * @param lifeVersion The lifeVersion to set.
    */

@@ -4475,7 +4475,7 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, BlobInfo usermetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }

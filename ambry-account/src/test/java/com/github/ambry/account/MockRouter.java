@@ -101,7 +101,7 @@ public class MockRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, BlobInfo blobInfo, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     lock.lock();
     try {
@@ -110,7 +110,7 @@ public class MockRouter implements Router {
       try {
         InputStream input = new ReadableStreamChannelInputStream(channel);
         byte[] bytes = Utils.readBytesFromStream(input, (int) size);
-        BlobInfoAndData blob = new BlobInfoAndData(new BlobInfo(blobProperties, userMetadata), bytes);
+        BlobInfoAndData blob = new BlobInfoAndData(new BlobInfo(blobProperties, blobInfo.getUserMetadata()), bytes);
         String id;
         do {
           id = TestUtils.getRandomString(10);

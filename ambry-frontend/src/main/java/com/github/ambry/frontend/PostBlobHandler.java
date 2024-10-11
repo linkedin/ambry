@@ -194,7 +194,7 @@ class PostBlobHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+          router.putBlob(null, blobInfo.getBlobProperties(), blobInfo, restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);

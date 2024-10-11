@@ -275,15 +275,15 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, BlobInfo blobInfo, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
-    PostData postData = new PostData(blobProperties, usermetadata, channel, null, options, wrappedCallback, futureResult);
+        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobInfo.getBlobProperties(), futureResult, callback) : callback;
+    PostData postData = new PostData(blobProperties, blobInfo.getUserMetadata(), channel, null, options, wrappedCallback, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;

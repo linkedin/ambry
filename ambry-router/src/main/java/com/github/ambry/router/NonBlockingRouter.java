@@ -352,20 +352,20 @@ public class NonBlockingRouter implements Router {
    * @param restRequest    The {@link RestRequest} to put the blob.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata   Optional user metadata about the blob. This can be null.
+   * @param blobInfo       Optional user metadata about the blob. This can be null.
    * @param channel        The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options        The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback       The {@link Callback} which will be invoked on the completion of the request .
    * @return A future that would contain the BlobId eventually.
    */
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, BlobInfo blobInfo, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
-    if (userMetadata == null) {
-      userMetadata = new byte[0];
+    if (blobInfo.getUserMetadata() == null) {
+      blobInfo.setUserMetadata(new byte[0]);
     }
     currentOperationsCount.incrementAndGet();
     if (blobProperties.isEncrypted()) {
@@ -375,10 +375,11 @@ public class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
+    //the blob properties passed into id converter should be the original property from blobInfo.
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobInfo.getBlobProperties(), futureResult, callback) : callback;
     if (isOpen.get()) {
-      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, wrappedCallback,
+      getOperationController().putBlob(blobProperties, blobInfo.getUserMetadata(), channel, options, futureResult, wrappedCallback,
           quotaChargeCallback);
     } else {
       RouterException routerException =

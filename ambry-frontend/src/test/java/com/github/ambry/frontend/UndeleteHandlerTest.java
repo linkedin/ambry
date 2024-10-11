@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaTestUtils;

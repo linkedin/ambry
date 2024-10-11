@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -90,7 +91,8 @@ public class TtlUpdateHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
     router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP, idConverterFactory);
-    blobId = router.putBlob(null, BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null,
+    BlobInfo blobInfo = new BlobInfo(BLOB_PROPERTIES, new byte[0]);
+    blobId = router.putBlob(null, BLOB_PROPERTIES, blobInfo, channel, new PutBlobOptionsBuilder().build(), null,
         QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
     ttlUpdateHandler =
