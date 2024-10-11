@@ -840,7 +840,6 @@ public class NonBlockingRouter implements Router {
           callback.onCompletion(null, exception);
         }
       } else {
-        blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         // Call idConverter.convert after putBlob succeeds
         idConverter.convert(restRequest, blobId, blobProperties, callback);
       }
