@@ -314,6 +314,16 @@ public class ReplicationManager extends ReplicationEngine {
     }
 
     @Override
+    public void onPartitionBecomeHydrateFromOffline(String partitionName) {
+
+    }
+
+    @Override
+    public void onPartitionBecomeBootstrapFromHydrate(String partitionName) {
+
+    }
+
+    @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
       logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
           partitionName);

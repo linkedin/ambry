@@ -855,7 +855,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
     try{
       if(fileCopyListener !=null){
-        //fileCopyListener.();
+        fileCopyListener.wait();
       }
     }
   }
@@ -881,7 +881,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
     }
-    localPartitionAndState.put(partitionName, ReplicaState.STANDBY);
+    localPartitionAndState.put(partitionName, ReplicaState.HYDRATE);
   }
 
   @Override
