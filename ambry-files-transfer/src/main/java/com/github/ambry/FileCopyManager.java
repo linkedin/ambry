@@ -15,6 +15,9 @@ import com.github.ambry.store.StoreKeyFactory;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /*
 Responsibilities of this class is to receive state transitions for a replica,
@@ -24,6 +27,8 @@ Then for each file,
 public class FileCopyManager {
   Map<String, String> diskToPartitionQueue;
 
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
+
   public FileCopyManager(FileCopyConfig fileCopyConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
@@ -31,6 +36,7 @@ public class FileCopyManager {
     if(clusterParticipant != null){
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.FileCopyManagerListener,
           new PartitionStateChangeListenerImpl());
+      logger.info("File Copy Manager's state change listener registered!");
     }
   }
   public void start() throws InterruptedException, IOException {
