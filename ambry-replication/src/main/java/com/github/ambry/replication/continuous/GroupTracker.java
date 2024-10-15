@@ -24,19 +24,19 @@ import java.util.List;
  *
  *   {@link #groupId} group id assigned to remote replica group
  *   {@link #remoteReplicaGroup} group for which we have created this tracker
- *   {@link #inflightReplicas} replicas that are currently present in {@link #remoteReplicaGroup}
+ *   {@link #inflightReplicaTrackers} replicas that are currently present in {@link #remoteReplicaGroup}
  *   {@link #iterations} total number of iterations for the remote replica group with {@link #groupId} group id
  */
 public abstract class GroupTracker {
   private final int groupId;
   private ReplicaThread.RemoteReplicaGroup remoteReplicaGroup;
-  private List<ReplicaTracker> inflightReplicas;
+  private List<ReplicaTracker> inflightReplicaTrackers;
   private int iterations;
 
   GroupTracker(int groupId) {
     this.groupId = groupId;
     this.remoteReplicaGroup = null;
-    this.inflightReplicas = new ArrayList<>();
+    this.inflightReplicaTrackers = new ArrayList<>();
     this.iterations = 0;
   }
 
@@ -44,19 +44,58 @@ public abstract class GroupTracker {
     return groupId;
   }
 
+  public ReplicaThread.RemoteReplicaGroup getRemoteReplicaGroup() {
+    return remoteReplicaGroup;
+  }
+
+  public List<ReplicaTracker> getInflightReplicaTrackers() {
+    return inflightReplicaTrackers;
+  }
+
+  public int getIterations() {
+    return iterations;
+  }
+
+  /**
+   * This method should be called, when a new remote replica group
+   * @param remoteReplicaGroup Remote replica group created for this tracker
+   * @param inflightReplicas replica trackers for replicas included in the remoteReplicaGroup
+   */
   public void startIteration(ReplicaThread.RemoteReplicaGroup remoteReplicaGroup,
       List<ReplicaTracker> inflightReplicas) {
     this.remoteReplicaGroup = remoteReplicaGroup;
-    this.inflightReplicas = inflightReplicas;
+    this.inflightReplicaTrackers = inflightReplicas;
     this.iterations++;
   }
 
+  /**
+   * removes remote replica group from tracking, finishes iterations for inflight replicas
+   * and removes from tracking afterward
+   */
   public void finishIteration() {
     remoteReplicaGroup = null;
-    inflightReplicas.clear();
+
+    inflightReplicaTrackers.forEach(ReplicaTracker::finishIteration);
+    inflightReplicaTrackers.clear();
   }
 
-  public boolean isAvailable() {
-    return remoteReplicaGroup == null;
+  /**
+   * If remoteReplicaGroup is null, only then we consider group is not getting tracked
+   * @return returns true if group is getting tracked, false otherwise
+   */
+  public boolean isInFlight() {
+    return remoteReplicaGroup != null;
+  }
+
+  /**
+   * @return checks and returns true if group is getting tracked and in done state, false otherwise
+   */
+  public boolean isGroupDone() {
+    return isInFlight() && remoteReplicaGroup.isDone();
+  }
+
+  @Override
+  public String toString() {
+    return "GroupTracker: [" + groupId + " " + inflightReplicaTrackers.toString() + " " + iterations + "]";
   }
 }
