@@ -18,17 +18,21 @@ import com.github.ambry.utils.Time;
 
 
 /**
- * This class tracks for a current state for continuous replication cycle.
+ * This class tracks for a current status of Replica for a continuous replication cycle.
  * This also tracks whether a replicas is throttled or not in a continuous replication cycle.
  */
 public class ReplicaTracker {
   private final RemoteReplicaInfo remoteReplicaInfo;
-  private ReplicaState replicaState;
+  private ReplicaStatus replicaStatus;
+  private final Time time;
+  private final long throttleDurationMs;
   private long throttledTill;
 
-  public ReplicaTracker(RemoteReplicaInfo remoteReplicaInfo) {
+  public ReplicaTracker(RemoteReplicaInfo remoteReplicaInfo, Time time, long throttleDurationMs) {
     this.remoteReplicaInfo = remoteReplicaInfo;
-    this.replicaState = ReplicaState.UNKNOWN;
+    this.replicaStatus = ReplicaStatus.UNKNOWN;
+    this.time = time;
+    this.throttleDurationMs = throttleDurationMs;
     this.throttledTill = 0;
   }
 
@@ -36,19 +40,30 @@ public class ReplicaTracker {
     return remoteReplicaInfo;
   }
 
-  public void setReplicaState(ReplicaState replicaState) {
-    this.replicaState = replicaState;
+  public void setReplicaStatus(ReplicaStatus replicaStatus) {
+    this.replicaStatus = replicaStatus;
   }
 
-  public ReplicaState getReplicaState() {
-    return replicaState;
+  public ReplicaStatus getReplicaStatus() {
+    return replicaStatus;
   }
 
-  public boolean isThrottled(Time time) {
-    return time.milliseconds() <= throttledTill;
+  public boolean isThrottled() {
+    return time.milliseconds() < throttledTill;
   }
 
-  public void setThrottledTill(long throttledTill) {
-    this.throttledTill = throttledTill;
+  /**
+   * whenever a group is finished, this method gets called for corresponding replica trackers,
+   * replica status is moved to unknown and replica is throttled
+   */
+  public void finishIteration() {
+    this.replicaStatus = ReplicaStatus.UNKNOWN;
+    this.throttledTill = time.milliseconds() + throttleDurationMs;
+  }
+
+  @Override
+  public String toString() {
+    return "ReplicaTracker: [" + remoteReplicaInfo.toString() + " " + replicaStatus.toString() + " " + throttledTill
+        + "]";
   }
 }

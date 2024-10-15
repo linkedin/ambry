@@ -51,6 +51,8 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.continuous.ActiveGroupTracker;
 import com.github.ambry.replication.continuous.DataNodeTracker;
+import com.github.ambry.replication.continuous.GroupTracker;
+import com.github.ambry.replication.continuous.ReplicaStatus;
 import com.github.ambry.replication.continuous.ReplicaTracker;
 import com.github.ambry.replication.continuous.StandByGroupTracker;
 import com.github.ambry.server.ServerErrorCode;
@@ -66,8 +68,10 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -119,6 +123,7 @@ public class ReplicaThread implements Runnable {
   private final long threadThrottleDurationMs;
   protected final Time time;
   private final Counter throttleCount;
+  private final Counter continuousReplicationReplicaThrottleCount;
   private final Counter syncedBackOffCount;
   private final Counter idleCount;
   private final ReentrantLock lock = new ReentrantLock();
@@ -127,6 +132,8 @@ public class ReplicaThread implements Runnable {
   private final int maxReplicaCountPerRequest;
   private final boolean enableContinuousReplication;
   private final Predicate<MessageInfo> skipPredicate;
+  private final int continuousReplicationGroupIterationLimit;
+  private volatile boolean terminateCurrentContinuousReplicationCycle = false;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
   protected Thread thread;
@@ -180,13 +187,16 @@ public class ReplicaThread implements Runnable {
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
       idleCount = replicationMetrics.interColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.interColoReplicaThreadThrottleCount;
+      continuousReplicationReplicaThrottleCount = replicationMetrics.interColoContinuousReplicationReplicaThrottleCount;
     } else {
       threadThrottleDurationMs = replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.intraColoReplicaSyncedBackoffCount;
       idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
+      continuousReplicationReplicaThrottleCount = replicationMetrics.intraColoContinuousReplicationReplicaThrottleCount;
     }
     this.enableContinuousReplication = isContinuousReplicationEnabled(replicationConfig);
+    this.continuousReplicationGroupIterationLimit = replicationConfig.replicationGroupIterationLimit;
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
@@ -236,6 +246,7 @@ public class ReplicaThread implements Runnable {
         }
       }
     } finally {
+      terminateCurrentContinuousReplicationCycle = true;
       lock.unlock();
     }
   }
@@ -257,6 +268,14 @@ public class ReplicaThread implements Runnable {
    */
   NetworkClient getNetworkClient() {
     return networkClient;
+  }
+
+  /**
+   * Only used in test.
+   * @param value
+   */
+  protected void setTerminateCurrentContinuousReplicationCycle(boolean value) {
+    terminateCurrentContinuousReplicationCycle = value;
   }
 
   /**
@@ -326,6 +345,7 @@ public class ReplicaThread implements Runnable {
             threadName, dataNodeId, remoteReplicaInfo);
       }
     } finally {
+      terminateCurrentContinuousReplicationCycle = true;
       lock.unlock();
     }
   }
@@ -350,6 +370,7 @@ public class ReplicaThread implements Runnable {
         logger.warn("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
       }
     } finally {
+      terminateCurrentContinuousReplicationCycle = true;
       lock.unlock();
     }
     logger.trace("RemoteReplicaInfo {} is added to ReplicaThread {}. Now working on {} dataNodeIds.", remoteReplicaInfo,
@@ -390,9 +411,144 @@ public class ReplicaThread implements Runnable {
     }
   }
 
-  //TODO implement continuous replication inside this
-  public void replicateContinuous() {
+  /**
+   * Polls the give remote replica groups for requests, submits these requests to networkClient,
+   * gets responses from networkClient and submits these to corresponding remote replica groups
+   *
+   * @param remoteReplicaGroups remoteReplica groups
+   * @param correlationIdToReplicaGroup map of correlation id to remote replica group
+   * @param correlationIdToRequestInfo map of correlation id to request info
+   */
+  private void pollRequestsAndSubmitResponses(List<RemoteReplicaGroup> remoteReplicaGroups,
+      Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup,
+      Map<Integer, RequestInfo> correlationIdToRequestInfo) {
 
+    List<RequestInfo> requestInfos =
+        pollRemoteReplicaGroups(remoteReplicaGroups, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+    logger.trace("Thread name: {} Requests generated", threadName);
+
+    // generate responses for requests that are timed out
+    List<ResponseInfo> responseInfosForTimedOutRequests =
+        filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
+    logger.trace("Thread name: {} Filtered timed out Requests", threadName);
+
+    // mark timed out requests to be dropped by network client
+    Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
+        .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
+        .collect(Collectors.toSet());
+
+    if (!requestsToDrop.isEmpty()) {
+      replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
+          datacenterName);
+    }
+
+    final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
+
+    // submit requests and get response for earlier submitted requests
+    List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
+    logger.trace("Thread name: {} received {} responses from network client", threadName, responseInfos.size());
+    responseInfos.addAll(responseInfosForTimedOutRequests);
+    // process responses
+    onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
+  }
+
+  /**
+   * Computes the exchangeMetaDataResponse for each cycle
+   * Prints logs for remote replica groups which have errors
+   *
+   * @param remoteReplicaGroups remoteReplica groups
+   * @param groupsAddedToExchangeMetadatResponse set of group ids for which exchange metadata is added to {@link #exchangeMetadataResponsesInEachCycle}
+   */
+  private void processFinishedGroups(List<RemoteReplicaGroup> remoteReplicaGroups,
+      Set<Integer> groupsAddedToExchangeMetadatResponse) {
+
+    /*for each data node we are caching the first metadata responses received for remote replica groups.
+     this will be used in tests only.
+     */
+    remoteReplicaGroups.stream()
+        .filter(g -> !groupsAddedToExchangeMetadatResponse.contains(g.id) && g.isDone()
+            && g.getExchangeMetadataResponseList() != null)
+        .forEach(g -> {
+          exchangeMetadataResponsesInEachCycle.computeIfAbsent(g.getRemoteDataNode(), k -> new ArrayList<>())
+              .addAll(g.getExchangeMetadataResponseList());
+          groupsAddedToExchangeMetadatResponse.add(g.id);
+        });
+
+    // print logs for groups which have error
+    remoteReplicaGroups.stream()
+        .filter(g -> g.isDone() && g.getException() != null)
+        .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
+            g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
+  }
+
+  /**
+   * Do replication for replicas grouped by {@link DataNodeId}
+   * We will keep trying to generate groups until we do not get any groups by calling generateRemoteReplicaGroups.
+   * We will generate requests and then process responses when received for these groups.
+   *
+   * A replication cycle between two replicas involves the following steps:
+   *    1. Exchange metadata : fetch the metadata of blobs added to remote replica since the last synchronization point
+   *    and filter the ones missing in local store.
+   *    2. Fetch missing blobs: fetch the missing blobs by issuing GET request to remote replica and write them to
+   *       the local store
+   *
+   *  During cross-colo replication, depending on the {@link ReplicationModelType}, the missing blobs are either fetched
+   *  from all remote replicas (if modelType == ALL_TO_ALL) or only fetched for local leader replicas from their remote
+   *  leader replicas (if modelType == LEADER_BASED). In the latter case, non-leader replica pairs (leader <-> standby,
+   *  standby <-> leader, standby <-> standby) will get their missing blobs from their corresponding leader<->leader
+   *  exchanges and intra-dc replication.
+   *
+   *  Here is a table listing on what is exchanged between local and remote replicas based on their roles
+   *  (leader/standby) when {@link ReplicationModelType is LEADER_BASED}.
+   *
+   *              |   Local Leader    |     Local Standby   |   Remote Leader   |  Remote Standby
+   *            -------------------------------------------------------------------------------------
+   *     Leader:  |        ---        |  metadata and data  | metadata and data |   metadata only
+   *     Standby: | metadata and data |  metadata and data  | metadata only     |   metadata only
+   *
+   */
+  public void replicateContinuous() {
+    long oneRoundStartTimeMs = time.milliseconds();
+    terminateCurrentContinuousReplicationCycle = false;
+    logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
+
+    exchangeMetadataResponsesInEachCycle = new HashMap<>();
+    Set<Integer> groupsAddedToExchangeMetadatResponse = new HashSet<>();
+    boolean allReplicasCaughtEarly = false;
+
+    try {
+      storeKeyConverter.dropCache();
+
+      Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
+      Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+
+      RemoteReplicaGroupPoller poller = new RemoteReplicaGroupPoller();
+      // we keep polling groups until we can, i.e. there are no more inflight groups
+
+      do {
+        if (!running) {
+          break;
+        }
+        List<RemoteReplicaGroup> inflightRemoteReplicaGroups = poller.enqueue();
+
+        pollRequestsAndSubmitResponses(inflightRemoteReplicaGroups, correlationIdToReplicaGroup,
+            correlationIdToRequestInfo);
+
+        processFinishedGroups(inflightRemoteReplicaGroups, groupsAddedToExchangeMetadatResponse);
+        logger.trace("Thread name: {} Finish one iteration for RemoteReplicaGroup replication", threadName);
+      } while (poller.shouldContinue());
+      logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
+      allReplicasCaughtEarly = poller.allReplicasCaughtUpEarly();
+    } catch (Exception e) {
+      logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
+    } finally {
+      replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
+          replicatingFromRemoteColo, datacenterName);
+    }
+
+    // check and make thread sleep and publish metrics for throttling
+    maybeSleepAfterReplication(allReplicasCaughtEarly);
+    logger.trace("Thread name: {} Exiting replication, all iterations Done!", threadName);
   }
 
   /**
@@ -432,9 +588,9 @@ public class ReplicaThread implements Runnable {
         DataNodeId remoteNode = entry.getKey();
         List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
         List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
-        List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+        List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress = new ArrayList<>();
         filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode,
-            standbyReplicasWithNoProgress);
+            standbyReplicasTimedOutOnNoProgress);
 
         if (activeReplicasPerNode.size() > 0) {
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
@@ -446,15 +602,13 @@ public class ReplicaThread implements Runnable {
             remoteReplicaGroups.add(group);
           }
         }
-        if (standbyReplicasWithNoProgress.size() > 0) {
-          List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
-              getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
-          if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
-            RemoteReplicaGroup group =
-                new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
-            remoteReplicaGroups.add(group);
-          }
+
+        if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
+          RemoteReplicaGroup group =
+              new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
+          remoteReplicaGroups.add(group);
         }
+
       }
       // A map from correlation id to RemoteReplicaGroup. This is used to find the group when response comes back.
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
@@ -503,24 +657,39 @@ public class ReplicaThread implements Runnable {
     } catch (Throwable e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
-      emitReplicationCycleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, time.milliseconds());
+      long cycleEndTime = time.milliseconds();
+      replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - oneRoundStartTimeMs, replicatingFromRemoteColo,
+          datacenterName);
+      emitCyclicReplicationIdleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, cycleEndTime);
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
   }
 
+
+  /**
+   * We should call this method to convert store keys, This will convert the keys and add the keys which were
+   * converted to the list.
+   * @param storeKeysToConvert store keys to convert
+   * @param storeKeysConversionLog list to store which keys were converted
+   * @return Map
+   * @throws Exception
+   */
+  Map<StoreKey, StoreKey> convertStoreKeys(Collection<StoreKey> storeKeysToConvert,
+      List<StoreKey> storeKeysConversionLog) throws Exception {
+    Map<StoreKey, StoreKey> conversionMap = this.storeKeyConverter.convert(storeKeysToConvert);
+    storeKeysConversionLog.addAll(new ArrayList<>(conversionMap.keySet()));
+    return conversionMap;
+  }
+
   /**
    * Emits metrics for
-   * 1. Replication cycle duration
-   * 2. Cumulative time groups are idle in a cycle i.e groups are in DONE state but cycle continues
-   * 3. Cumulative percentage of time per cycle groups are idle
+   * 1. Cumulative time groups are idle in a cycle i.e groups are in DONE state but cycle continues
+   * 2. Cumulative percentage of time per cycle groups are idle
    * @param groups list of RemoteReplicaGroups
    * @param cycleStartTime start time of replication cycle
    * @param cycleEndTime end time of replication cycle
    */
-  private void emitReplicationCycleMetrics(List<RemoteReplicaGroup> groups, long cycleStartTime, long cycleEndTime) {
-    replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - cycleStartTime, replicatingFromRemoteColo,
-        datacenterName);
-
+  private void emitCyclicReplicationIdleMetrics(List<RemoteReplicaGroup> groups, long cycleStartTime, long cycleEndTime) {
     long totalIdleTime = 0;
     for (RemoteReplicaGroup group : groups) {
       totalIdleTime = totalIdleTime + cycleEndTime - group.getFinishTime();
@@ -708,42 +877,99 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * performs below checks and gives status of replica
+   *
+   * 1. check if replica is OFFLINE then return OFFLINE status
+   *
+   * 2. check these conditions
+   *    1. check if we are doing cross colo replication
+   *    2. check if leader based replication is enabled
+   *    3. our local replica is not leader
+   *    4. we have missing blobs from last ReplicaMetadataRequest
+   *    return STANDBY_TIMED_OUT_ON_NO_PROGRESS if last missing blob arrived  before replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds
+   *    return STANDBY otherwise as we need to wait for data to come through intra colo replication
+   *
+   * 3. return ACTIVE status if above criteria are not met
+   *
+   *  We can pull data only from ACTIVE replicas and STANDBY_TIMED_OUT_ON_NO_PROGRESS replicas
+   */
+  ReplicaStatus getReplicaStatus(RemoteReplicaInfo remoteReplicaInfo) {
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+    if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
+        || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
+      logger.debug(
+          "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
+              + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
+          replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
+          remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
+          replicationDisabledPartitions.contains(replicaId.getPartitionId()));
+      return ReplicaStatus.OFFLINE;
+    }
+
+    if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
+      // check if all missing keys for standby replicas from previous replication cycle are now obtained
+      // via leader replica. If we still have missing keys, don't include them in current replication cycle
+      // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
+      processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
+      if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
+
+        // Use case: In leader-based cross colo replication, non-leader replica pairs don't fetch blobs for missing keys
+        // found in metadata exchange and expect them to come from leader<->leader replication and intra-dc replication.
+        // However, if for any reason, some of their missing blobs never arrive via local leader, this is a safety feature
+        // for standbys to fetch the blobs themselves in order to avoid being stuck.
+
+        // Example scenario: For DELETE after PUT use case in remote data center, it is possible that standby replicas get
+        // only PUT record in its replication cycle (DELETE record will come in next cycle) while leader gets both
+        // PUT and DELETE together in its replication cycle. Due to that, deleted blob is not fetched by leader and is not
+        // replicated from leader to standby. As a result, the corresponding PUT record in standby's missing blobs set is
+        // never received.
+
+        // Time out period is configurable via replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds. If
+        // replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds == -1, this safety feature is disabled.
+
+        if (replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds != -1) {
+          ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
+          ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
+          ExchangeMetadataResponse exchangeMetadataResponse = remoteReplicaInfo.getExchangeMetadataResponse();
+          if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)
+              && exchangeMetadataResponse.hasMissingStoreMessages()
+              && (time.seconds() - exchangeMetadataResponse.lastMissingMessageReceivedTimeSec)
+              > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds) {
+            return ReplicaStatus.STANDBY_TIMED_OUT_ON_NO_PROGRESS;
+          }
+        }
+        return ReplicaStatus.STANDBY;
+      }
+    }
+    return ReplicaStatus.ACTIVE;
+  }
+
+  /**
    * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
    * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
    * but still have missing blobs from last ReplicaMetadataRequest when the leader based replication is enabled.
    * @param replicasToReplicatePerNode All the replicas.
    * @param activeReplicasPerNode A list to store all the active replicas after filtering.
-   * @param standbyReplicasWithNoProgress A list to store all the standby replicas that still have missing blobs from
-   *                                      previous ReplicaMetadataRequest.
+   * @param standbyReplicasTimedOutOnNoProgress A list to store all the standby replicas that still have missing blobs from
+   *                                      previous ReplicaMetadataRequest and are timed out
    */
   void filterRemoteReplicasToReplicate(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress) {
-    // Get a list of active replicas that needs be included for this replication cycle
+      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress) {
+    // Get a list of active and standBy replicas that have timed out that needs be included for this replication cycle
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-      ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-      boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-      if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
-          || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-        logger.debug(
-            "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
-                + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
-            replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
-            remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
-            replicationDisabledPartitions.contains(replicaId.getPartitionId()));
-        continue;
+      ReplicaStatus replicaStatus = getReplicaStatus(remoteReplicaInfo);
+      switch (replicaStatus){
+        case OFFLINE:
+        case STANDBY:
+          break;
+        case ACTIVE:
+          activeReplicasPerNode.add(remoteReplicaInfo);
+          break;
+        case STANDBY_TIMED_OUT_ON_NO_PROGRESS:
+          standbyReplicasTimedOutOnNoProgress.add(remoteReplicaInfo);
+          break;
       }
-
-      if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-        // check if all missing keys for standby replicas from previous replication cycle are now obtained
-        // via leader replica. If we still have missing keys, don't include them in current replication cycle
-        // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
-        processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
-        if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
-          standbyReplicasWithNoProgress.add(remoteReplicaInfo);
-          continue;
-        }
-      }
-      activeReplicasPerNode.add(remoteReplicaInfo);
     }
   }
 
@@ -754,14 +980,15 @@ public class ReplicaThread implements Runnable {
    * @param response The {@link ReplicaMetadataResponse}.
    * @param replicasToReplicatePerNode
    * @param remoteNode The remote {@link DataNodeId}.
+   * @param storeKeysConversionLog list to store storeKeys that were converted
    * @return A list of {@link ExchangeMetadataResponse}.
    * @throws IOException
    */
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode) throws Exception {
+      List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode, List<StoreKey> storeKeysConversionLog) throws Exception {
     long startTimeInMs = time.milliseconds();
     List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<>();
-    Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response);
+    Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response, storeKeysConversionLog);
 
     for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
@@ -1163,10 +1390,11 @@ public class ReplicaThread implements Runnable {
    * Intention is that conversion is done all at once so that followup calls to
    * {@link StoreKeyConverter#getConverted(StoreKey)} will work
    * @param response the {@link ReplicaMetadataResponse} whose keys will be converted
+   * @param storeKeysConversionLog list to store storeKeys that were converted
    * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
    * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
    */
-  Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response) throws Exception {
+  Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response, List<StoreKey> storeKeysConversionLog) throws Exception {
     List<StoreKey> storeKeysToConvert = new ArrayList<>();
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
       if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
@@ -1176,7 +1404,7 @@ public class ReplicaThread implements Runnable {
         }
       }
     }
-    return storeKeyConverter.convert(storeKeysToConvert);
+    return convertStoreKeys(storeKeysToConvert, storeKeysConversionLog);
   }
 
   /**
@@ -1621,35 +1849,8 @@ public class ReplicaThread implements Runnable {
    * @return list of remote replica infos which have timed out due to no progress
    */
   List<RemoteReplicaInfo> getRemoteStandbyReplicasTimedOutOnNoProgress(List<RemoteReplicaInfo> remoteReplicaInfos) {
-
-    // Use case: In leader-based cross colo replication, non-leader replica pairs don't fetch blobs for missing keys
-    // found in metadata exchange and expect them to come from leader<->leader replication and intra-dc replication.
-    // However, if for any reason, some of their missing blobs never arrive via local leader, this is a safety feature
-    // for standbys to fetch the blobs themselves in order to avoid being stuck.
-
-    // Example scenario: For DELETE after PUT use case in remote data center, it is possible that standby replicas get
-    // only PUT record in its replication cycle (DELETE record will come in next cycle) while leader gets both
-    // PUT and DELETE together in its replication cycle. Due to that, deleted blob is not fetched by leader and is not
-    // replicated from leader to standby. As a result, the corresponding PUT record in standby's missing blobs set is
-    // never received.
-
-    // Time out period is configurable via replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds. If
-    // replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds == -1, this safety feature is disabled.
-
     List<RemoteReplicaInfo> remoteReplicasTimedOut = new ArrayList<>();
-    if (replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds != -1) {
-      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-        ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
-        ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
-        ExchangeMetadataResponse exchangeMetadataResponse = remoteReplicaInfo.getExchangeMetadataResponse();
-        if (!leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)
-            && exchangeMetadataResponse.hasMissingStoreMessages()
-            && (time.seconds() - exchangeMetadataResponse.lastMissingMessageReceivedTimeSec)
-            > replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds) {
-          remoteReplicasTimedOut.add(remoteReplicaInfo);
-        }
-      }
-    }
+    filterRemoteReplicasToReplicate(remoteReplicaInfos, new ArrayList<>(), remoteReplicasTimedOut);
     return remoteReplicasTimedOut;
   }
 
@@ -1958,23 +2159,45 @@ public class ReplicaThread implements Runnable {
 
   /**
    * This class is used to generate remote replica groups continuously for replication
-   * TODO -fill more details as we keep writing code
+   * Lifecycle of groups in this poller is as below
+   *  1. For each data node, we create multiple sets of replicas and pre-assign group id to each set and store it in {@link ActiveGroupTracker#getPreAssignedReplicas()}
+   *     These sets are stored as {@link DataNodeTracker#getActiveGroupTrackers()}
+   *  2. We pre-assign group id for standBy group for each datanode and store it {@link DataNodeTracker#getStandByGroupTracker()}
+   *  3. {@link #enqueue()} would try to create (and add back) those groups for these sets and group ids and
+   *     store it in {@link DataNodeTracker#getActiveGroupTrackers()} and {@link DataNodeTracker#getStandByGroupTracker()}.
+   *  4. Once a group finishes one iteration of work, include metadata exchange and data download,
+   *     we remove group  from the {@link GroupTracker} and potentially backoff replicas in the group.
+   *  5. If  any of the replicas of this group need to go through another iteration, we create group with group id as same as {@link ActiveGroupTracker#getGroupId()}
+   *     the same group would be added back to {@link ActiveGroupTracker} with the available replicas only.
+   *  6. While trying to create any group, if we find stand by replicas that have timed out,
+   *     we will move replica to {@link ReplicaStatus#STANDBY_TIMED_OUT_ON_NO_PROGRESS} status.
+   *  7. All standBy groups get created using the replicas with status {@link ReplicaStatus#STANDBY_TIMED_OUT_ON_NO_PROGRESS}
+   *     of the data node and will be stored in {@link DataNodeTracker#getStandByGroupTracker()}
+   *  8. When there is a new replica added to the thread, or a replica removed from this thread,
+   *     or there is one group reaches max iteration, we don't create new groups, just return the existing ones,
+   *     and after they all finish current iteration, {@link GroupTracker} will not be tracking any group and do-while loop would break.
    */
   class RemoteReplicaGroupPoller {
     private final List<DataNodeTracker> dataNodeTrackers;
+    private boolean allReplicasCaughtUpEarly;
 
     RemoteReplicaGroupPoller() {
       dataNodeTrackers = new ArrayList<>();
       fillDataNodeTrackers();
+      allReplicasCaughtUpEarly = false;
     }
 
     public List<DataNodeTracker> getDataNodeTrackers() {
       return dataNodeTrackers;
     }
 
+    boolean allReplicasCaughtUpEarly() {
+      return allReplicasCaughtUpEarly;
+    }
+
     /**
      * Creates Data node trackers for every data node
-     * Every datanode tracker has  active groups and standby group
+     * Every datanode tracker has active groups and standby group
      * For each data node tracker, only one stand by group is present to reduce cross colo requests
      * Active groups have maximum {@link #maxReplicaCountPerRequest}  preassigned replicas
      * Across all datanode tracker group ids are unique
@@ -1989,7 +2212,8 @@ public class ReplicaThread implements Runnable {
         List<RemoteReplicaInfo> remoteReplicasPerNode = entry.getValue();
 
         DataNodeTracker dataNodeTracker =
-            new DataNodeTracker(remoteHost, remoteReplicasPerNode, maxReplicaCountPerRequest, currentStartGroupId);
+            new DataNodeTracker(remoteHost, remoteReplicasPerNode, maxReplicaCountPerRequest, currentStartGroupId, time,
+                threadThrottleDurationMs);
         logger.trace("Thread name: {} for datanode {} create datanode tracker {}", threadName, remoteHost,
             dataNodeTracker);
 
@@ -1998,7 +2222,222 @@ public class ReplicaThread implements Runnable {
       }
     }
 
+    /**
+     * @return Iterates over all data nodes and returns list of all remote replica groups
+     * that are getting tracked
+     */
+    private List<RemoteReplicaGroup> getInflightGroups() {
+      List<RemoteReplicaGroup> allRemoteReplicaGroups = new ArrayList<>();
+      dataNodeTrackers.forEach(dataNodeTracker -> {
+        allRemoteReplicaGroups.addAll(dataNodeTracker.getInflightRemoteReplicaGroups());
+      });
+      return allRemoteReplicaGroups;
+    }
+
+    /**
+     * @return returns true if there are any remote replica groups getting tracked, false otherwise
+     */
+    boolean shouldContinue() {
+      return !getInflightGroups().isEmpty();
+    }
+
+    /**
+     * Conditions when we don't want to create new groups.
+     *
+     * 1. terminateCurrentContinuousReplicationCycle is true, which means there are replicas added to this thread
+     *    or removed from this thread, don't create new group and just let existing groups finish,
+     *    so we can later create new groups with the new set of replicas in next cycle.
+     * 2. any group reaches max iteration, which means existing groups should just finish its current work and stop,
+     *    thus no new groups should be created.
+     * @return {@link boolean} returns true if new groups can be created, false otherwise
+     */
+    private boolean shouldEnqueue() {
+      if (terminateCurrentContinuousReplicationCycle) {
+        logger.trace("Thread name: {} not creating new groups as terminate cycle received {}", threadName,
+            terminateCurrentContinuousReplicationCycle);
+        return false;
+      }
+      int maxIterationsDoneByAnyGroup = dataNodeTrackers.stream()
+          .map(DataNodeTracker::getMaxIterationAcrossGroups)
+          .max(Comparator.naturalOrder())
+          .orElse(0);
+      if (maxIterationsDoneByAnyGroup >= continuousReplicationGroupIterationLimit) {
+        logger.info("Thread name: {} not creating new groups as iteration limit {} reached", threadName,
+            maxIterationsDoneByAnyGroup);
+        return false;
+      }
+      return true;
+    }
+
+    /**
+     * For each data node tracker, if any remote replica group is done,
+     * removes remote replica group from tracking, throttles replicas added in this group,
+     * throttles corresponding replica and moves its state to UNKNOWN
+     * For these finished groups, drops keys from store key converter
+     */
+    private void processFinishedGroups() {
+      List<RemoteReplicaGroup> finishedGroups = dataNodeTrackers.stream()
+          .map(DataNodeTracker::processFinishedGroups)
+          .flatMap(List::stream)
+          .collect(Collectors.toList());
+
+      finishedGroups.forEach(remoteReplicaGroup -> {
+        storeKeyConverter.tryDropCache(remoteReplicaGroup.getStoreKeysConversionLog());
+        logger.trace("Thread name: {} group id {} is done and removed from group tracker", threadName, remoteReplicaGroup.getId());
+      });
+
+      logger.trace("Thread name: {} Finished processing finished groups {}", threadName, dataNodeTrackers);
+    }
+
+    /**
+     * For any active group tracker that is not tracking any group, does below things
+     *
+     * 1. Filter pre-assigned replicas with UNKNOWN, OFFLINE and STANDBY status
+     * 2. If any of these replica is throttled we increment throttling metric
+     * 3. For each of these replicas we check the status of replica and update in corresponding tracker
+     *
+     * whenever active group is free, no replica will be in ACTIVE status and whenever stand by group is free,
+     * it will pick up STANDBY_TIMED_OUT_ON_NO_PROGRESS replicas, so we do not need to recheck status of these.
+     *
+     * @param finishedActiveGroupTracker finished group tracker
+     * @return list of replica trackers updated
+     */
+    private List<ReplicaTracker> fillReplicaStatusForFinishedGroup(ActiveGroupTracker finishedActiveGroupTracker) {
+
+      List<ReplicaTracker> replicaTrackers = finishedActiveGroupTracker.getPreAssignedReplicas(
+              Arrays.asList(ReplicaStatus.UNKNOWN, ReplicaStatus.OFFLINE, ReplicaStatus.STANDBY))
+          .stream()
+          .filter(replicaTracker -> {
+            if (replicaTracker.isThrottled()) {
+              logger.trace("Thread name: {} replica for tracker {} is throttled", threadName, replicaTracker);
+              continuousReplicationReplicaThrottleCount.inc();
+              return false;
+            }
+            return true;
+          })
+          .collect(Collectors.toList());
+
+      replicaTrackers.forEach(replicaTracker -> {
+        ReplicaStatus replicaStatus = getReplicaStatus(replicaTracker.getRemoteReplicaInfo());
+
+        logger.trace("Thread name: {} Updated replica {} status from {} to {}", threadName,
+            replicaTracker.getRemoteReplicaInfo(), replicaTracker.getReplicaStatus(), replicaStatus);
+
+        replicaTracker.setReplicaStatus(replicaStatus);
+      });
+      return replicaTrackers;
+    }
+
+    /**
+     * For all active group trackers which are not tracking any remote replica group, does below things
+     *
+     * 1. updates status of preassigned available replicas with UNKNOWN, OFFLINE and STANDBY status.
+     * 2. Creates active remote replica group from updated replicas with status as ACTIVE.
+     * 3. Updates group tracker for newly created active groups.
+     */
+    private void fillActiveGroups() {
+      dataNodeTrackers.forEach(dataNodeTracker -> {
+        logger.trace("Thread name: {} Trying to create active group for data node {} ", threadName,
+            dataNodeTracker.getDataNodeId());
+        List<ActiveGroupTracker> finishedActiveGroupTrackers = dataNodeTracker.getFinishedActiveGroupTrackers();
+
+        finishedActiveGroupTrackers.forEach(activeGroupTracker -> {
+          logger.trace("Thread name: {} Trying to create active group for active group tracker {} ", threadName,
+              activeGroupTracker);
+
+          List<ReplicaTracker> activeReplicaTrackers = fillReplicaStatusForFinishedGroup(activeGroupTracker).stream()
+              .filter(replicaTracker -> replicaTracker.getReplicaStatus().equals(ReplicaStatus.ACTIVE))
+              .collect(Collectors.toList());
+
+          logger.trace("Thread name: {} trying to create group from active replicas {} for group id {} ",
+              threadName, activeReplicaTrackers, activeGroupTracker.getGroupId());
+
+          if (activeReplicaTrackers.isEmpty()) {
+            return;
+          }
+
+          RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(
+              activeReplicaTrackers.stream().map(ReplicaTracker::getRemoteReplicaInfo).collect(Collectors.toList()),
+              dataNodeTracker.getDataNodeId(), false, activeGroupTracker.getGroupId());
+
+          activeGroupTracker.startIteration(remoteReplicaGroup, activeReplicaTrackers);
+          logger.trace("Thread name: {} Created active remote replica group for group tracker {} ", threadName,
+              activeGroupTracker);
+        });
+      });
+    }
+
+    /**
+     * For all stand by tracker, which are not tracking any remote replica group, it does below things
+     *
+     * 1. Gets all preassigned replicas with STANDBY_TIMED_OUT_ON_NO_PROGRESS status from preassigned replicas of active group of
+     *    corresponding datanode tracker.
+     * 2. Create single standby group from these replicas and store it in standby group tracker
+     */
+    private void fillStandByGroups() {
+      dataNodeTrackers.forEach(dataNodeTracker -> {
+        logger.trace("Thread name: {} Trying to create standby group for data node {} ", threadName,
+            dataNodeTracker.getDataNodeId());
+
+        StandByGroupTracker standByGroupTracker = dataNodeTracker.getStandByGroupTracker();
+        if (standByGroupTracker.isInFlight()) {
+          return;
+        }
+        logger.trace("Thread name: {} Trying to create standby group for stand by group tracker {} ", threadName,
+            standByGroupTracker);
+
+        List<ReplicaTracker> standByTimedOutNoProgressReplicaTrackers = new ArrayList<>();
+        List<ActiveGroupTracker> activeGroupTrackers = dataNodeTracker.getActiveGroupTrackers();
+
+        activeGroupTrackers.forEach(activeGroupTracker -> {
+          List<ReplicaTracker> replicaTrackers = activeGroupTracker.getPreAssignedReplicas(
+                  Collections.singletonList(ReplicaStatus.STANDBY_TIMED_OUT_ON_NO_PROGRESS));
+
+          standByTimedOutNoProgressReplicaTrackers.addAll(replicaTrackers);
+        });
+
+        if (standByTimedOutNoProgressReplicaTrackers.isEmpty()) {
+          return;
+        }
+
+        logger.trace("Thread name: {} Trying to create standby group with replica trackers {} ", threadName,
+            standByTimedOutNoProgressReplicaTrackers);
+
+        RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(standByTimedOutNoProgressReplicaTrackers.stream()
+            .map(ReplicaTracker::getRemoteReplicaInfo)
+            .collect(Collectors.toList()), dataNodeTracker.getDataNodeId(), true, standByGroupTracker.getGroupId());
+        standByGroupTracker.startIteration(remoteReplicaGroup, standByTimedOutNoProgressReplicaTrackers);
+
+        logger.trace("Thread name: {} Created stand by remote replica group for stand by group tracker {} ", threadName,
+            standByGroupTracker);
+      });
+    }
+
+    /**
+     * Tries to update remote replica groups currently in progress and
+     * creates new remote replica groups
+     */
+    List<RemoteReplicaGroup> enqueue() {
+      processFinishedGroups();
+
+      if (!shouldEnqueue()) {
+        logger.trace("Thread name: {} Not creating any new groups", threadName);
+        return getInflightGroups();
+      }
+
+      fillActiveGroups();
+      fillStandByGroups();
+      List<RemoteReplicaGroup> inflightGroups = getInflightGroups();
+
+      // if we are not able to create any new group and no groups are remaining, all replicas caught up early
+      if (inflightGroups.isEmpty()) {
+        allReplicasCaughtUpEarly = true;
+        logger.trace("Thread name: {} All replicas marked to caught up early", threadName);
+      }
+      return inflightGroups;
+    }
   }
+
   /**
    * ReplicaGroupReplicationState indicates different state of RemoteReplicaGroup in one replication cycle.
    * Each replication cycle, we will break all the replicas in order different groups and each group
@@ -2064,6 +2503,7 @@ public class ReplicaThread implements Runnable {
     private long exchangeMetadataStartTimeInMs;
     private long fixMissingStoreKeysStartTimeInMs;
     private long finishTime;
+    private final List<StoreKey> storeKeysConversionLog;
 
     /**
      * Constructor of {@link RemoteReplicaGroup}.
@@ -2080,6 +2520,7 @@ public class ReplicaThread implements Runnable {
       this.remoteDataNode = dataNodeId;
       this.isNonProgressStandbyReplicaGroup = isNonProgressStandbyReplicaGroup;
       this.id = id;
+      storeKeysConversionLog = new ArrayList<>();
       finishTime = 0;
       if (isNonProgressStandbyReplicaGroup) {
         exchangeMetadataResponseList = remoteReplicaInfos.stream()
@@ -2092,7 +2533,7 @@ public class ReplicaThread implements Runnable {
         remoteReplicaInfosToSend = this.remoteReplicaInfos;
         exchangeMetadataResponseListToProcess = exchangeMetadataResponseList;
         try {
-          storeKeyConverter.convert(storeKeysToConvert);
+          convertStoreKeys(storeKeysToConvert, storeKeysConversionLog);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
         } catch (Exception e) {
           setException(e, "Failed to convert storeKeys");
@@ -2135,6 +2576,14 @@ public class ReplicaThread implements Runnable {
 
     public int getId() {
       return id;
+    }
+
+    public boolean isNonProgressStandbyReplicaGroup() {
+      return isNonProgressStandbyReplicaGroup;
+    }
+
+    public List<StoreKey> getStoreKeysConversionLog() {
+      return storeKeysConversionLog;
     }
 
     public List<ExchangeMetadataResponse> getExchangeMetadataResponseList() {
@@ -2246,7 +2695,7 @@ public class ReplicaThread implements Runnable {
                 response.getError());
           }
           exchangeMetadataResponseList =
-              ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode);
+              ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode, storeKeysConversionLog);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
           logger.trace(
               "Remote node: {} Thread name: {} RemoteReplicaGroup {} Handled ReplicaMetadataResponse for correlation id {}, set state to {}",
