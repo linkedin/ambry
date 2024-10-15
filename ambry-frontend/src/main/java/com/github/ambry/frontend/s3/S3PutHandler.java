@@ -104,6 +104,9 @@ public class S3PutHandler extends S3BaseHandler<Void> {
         restResponseChannel.setHeader("ETag", blobId);
       }
       callback.onCompletion(null, null);
-    }, restRequest.getUri(), LOGGER, callback));
+    }, restRequest.getUri(), LOGGER, (result, exception) -> {
+      LOGGER.info("Request {} failed in s3 put object API", restRequest.getUri(), exception);
+      callback.onCompletion(null, exception);
+    }));
   }
 }
