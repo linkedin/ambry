@@ -18,6 +18,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -71,6 +72,18 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Assert;
+import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetBuilder;
+import java.io.ByteArrayInputStream;
+import java.text.SimpleDateFormat;
+import java.util.Comparator;
+import java.util.Random;
+import java.util.stream.Collectors;
+import org.json.JSONObject;
+import java.util.TimeZone;
+import static com.github.ambry.account.Dataset.VersionSchema.*;
+import static com.github.ambry.frontend.Operations.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -417,6 +430,489 @@ public class FrontendIntegrationTestBase {
       isFirst = false;
       numberOfBlobs -= NAMED_BLOB_LIST_RESULT_MAX;
     }
+  }
+
+  List<Dataset> doDatasetPutUpdateGetTest(Account account, Container container, Long ttl) throws Exception {
+    String accountName = account.getName();
+    String containerName = container.getName();
+    List<Dataset.VersionSchema> versionSchemas = new ArrayList<>();
+    List<Dataset> datasetList = new ArrayList<>();
+    versionSchemas.add(TIMESTAMP);
+    versionSchemas.add(SEMANTIC);
+    versionSchemas.add(MONOTONIC);
+    for (Dataset.VersionSchema versionSchema : versionSchemas) {
+      String datasetName = "zzzz" + TestUtils.getRandomString(10);
+      Dataset dataset;
+      if (ttl == null) {
+        dataset = new DatasetBuilder(accountName, containerName, datasetName).setVersionSchema(versionSchema).build();
+      } else {
+        dataset = new DatasetBuilder(accountName, containerName, datasetName).setVersionSchema(versionSchema)
+            .setRetentionTimeInSeconds(ttl)
+            .build();
+      }
+      HttpHeaders headers = new DefaultHttpHeaders();
+      //Test put dataset
+      putDatasetAndVerify(dataset, headers, false);
+      HttpHeaders getHeaders = new DefaultHttpHeaders();
+      getHeaders.add(TARGET_ACCOUNT_NAME, dataset.getAccountName());
+      getHeaders.add(TARGET_CONTAINER_NAME, dataset.getContainerName());
+      getHeaders.add(TARGET_DATASET_NAME, dataset.getDatasetName());
+      getDatasetAndVerify(dataset, getHeaders);
+
+      //Update dataset
+      Dataset datasetToUpdate = new DatasetBuilder(dataset).setRetentionCount(10).build();
+      putDatasetAndVerify(datasetToUpdate, headers, true);
+      getDatasetAndVerify(datasetToUpdate, getHeaders);
+      datasetList.add(datasetToUpdate);
+    }
+    return datasetList;
+  }
+
+  List<Pair<String, String>> doDatasetVersionPutGetWithTtlTest(Account account, Container container, List<Dataset> datasets,
+      String contentType, String ownerId, int contentSize) throws Exception {
+    String accountName = account.getName();
+    List<Pair<String, String>> datasetVersions = new ArrayList<>();
+    for (Dataset dataset : datasets) {
+      for (long ttl : new long[]{-1, TTL_SECS}) {
+        //Test put dataset version with default dataset level ttl
+        HttpHeaders headers = new DefaultHttpHeaders();
+        setAmbryHeadersForPut(headers, ttl, false, accountName, contentType, ownerId, null, null);
+        headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+        ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
+        String version = generateDatasetVersion(dataset);
+        if (dataset.getRetentionTimeInSeconds() == null) {
+          putDatasetVersionAndVerify(dataset, version, headers, content, contentSize, ttl);
+          datasetVersions.add(new Pair<>(dataset.getDatasetName(), version));
+        } else {
+          putDatasetVersionAndVerify(dataset, version, headers, content, contentSize,
+              dataset.getRetentionTimeInSeconds());
+          datasetVersions.add(new Pair<>(dataset.getDatasetName(), version));
+        }
+
+        //Test put dataset version with dataset level ttl
+        headers = new DefaultHttpHeaders();
+        setAmbryHeadersForPut(headers, ttl, false, accountName, contentType, ownerId, null, null);
+        headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+        headers.add(RestUtils.Headers.DATASET_VERSION_TTL_ENABLED, true);
+        version = generateDatasetVersion(dataset);
+        putDatasetVersionAndVerify(dataset, version, headers, content, contentSize, ttl);
+        datasetVersions.add(new Pair<>(dataset.getDatasetName(), version));
+      }
+    }
+    return datasetVersions;
+  }
+
+  void doDatasetUpdateTtlAndVerify(String accountName, String containerName,
+      List<Pair<String, String>> allDatasetVersionPairs, int expectedContentSize, String contentType, String ownerId)
+      throws Exception {
+    for (Pair<String, String> pair : allDatasetVersionPairs) {
+      String datasetName = pair.getFirst();
+      String version = pair.getSecond();
+      HttpHeaders updateTtlHeaders = new DefaultHttpHeaders();
+      updateTtlHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+      updateTtlHeaders.add(RestUtils.Headers.BLOB_ID,
+          buildUriForDatasetVersion(accountName, containerName, datasetName, version));
+      updateTtlHeaders.add(RestUtils.Headers.SERVICE_ID, accountName);
+
+      //Update ttl
+      updateDatasetVersionTtl(updateTtlHeaders);
+
+      //Test get dataset version, should be permanent
+      HttpHeaders getHeaders = new DefaultHttpHeaders();
+      getHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+
+      HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(updateTtlHeaders);
+      expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, expectedContentSize);
+      expectedGetHeaders.add(RestUtils.Headers.LIFE_VERSION, "0");
+      expectedGetHeaders.add(TARGET_ACCOUNT_NAME, accountName);
+      expectedGetHeaders.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
+      expectedGetHeaders.add(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
+      expectedGetHeaders.add(OWNER_ID, ownerId);
+
+      getDatasetVersionInfoAndVerify(accountName, containerName, datasetName, version, getHeaders, Utils.Infinite_Time,
+          expectedGetHeaders);
+    }
+  }
+
+  List<Pair<String, String>> doDatasetVersionPutGetTest(Account account, Container container, List<Dataset> datasets,
+      String contentType, String ownerId) throws Exception {
+    String accountName = account.getName();
+    String containerName = container.getName();
+    List<Pair<String, String>> datasetVersions = new ArrayList<>();
+    for (Dataset dataset : datasets) {
+      for (long ttl : new long[]{-1, TTL_SECS}) {
+        //Test put dataset version
+        HttpHeaders headers = new DefaultHttpHeaders();
+        setAmbryHeadersForPut(headers, ttl, false, accountName, contentType, ownerId, null, null);
+        headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+        int contentSize = 100;
+        ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
+        String version = generateDatasetVersion(dataset);
+        String blobId = putDatasetVersionAndVerify(dataset, version, headers, content, contentSize, ttl);
+
+        // This is the blob id for the given blob name, we should be able to do all get operations on this blob id.
+        HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(headers);
+        expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+        expectedGetHeaders.add(RestUtils.Headers.LIFE_VERSION, "0");
+        expectedGetHeaders.add(TARGET_ACCOUNT_NAME, accountName);
+        expectedGetHeaders.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
+        doVariousGetAndVerify(blobId, expectedGetHeaders, false, content, 100, accountName, containerName, null,
+            container);
+
+        //Test get dataset version
+        HttpHeaders getHeaders = new DefaultHttpHeaders();
+        getHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+        getDatasetVersionAndVerify(dataset, version, getHeaders, contentSize, ttl, expectedGetHeaders, content);
+        getDatasetVersionInfoAndVerify(accountName, containerName, dataset.getDatasetName(), version, getHeaders, ttl,
+            expectedGetHeaders);
+
+        //add all versions when successfully get it.
+        datasetVersions.add(new Pair<>(dataset.getDatasetName(), version));
+      }
+    }
+    return datasetVersions;
+  }
+
+  List<Pair<String, String>> doStitchDatasetVersionGetTest(Account account, Container container, List<Dataset> datasets,
+      String contentType, String ownerId, List<String> signedChunkIds, byte[] fullContentArray, long stitchedBlobSize)
+      throws Exception {
+    String accountName = account.getName();
+    String containerName = container.getName();
+    List<Pair<String, String>> datasetVersions = new ArrayList<>();
+    for (Dataset dataset : datasets) {
+      for (long ttl : new long[]{-1, TTL_SECS}) {
+        //Test stitch
+        HttpHeaders stitchHeaders = new DefaultHttpHeaders();
+        setAmbryHeadersForPut(stitchHeaders, ttl, !container.isCacheable(), "stitcher", contentType, ownerId,
+            account.getName(), container.getName());
+        stitchHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+        stitchHeaders.add(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, "STITCH");
+        String version = generateDatasetVersion(dataset);
+        String stitchedBlobId =
+            doDatasetStitchAndVerify(account, container, dataset, version, stitchHeaders, signedChunkIds,
+                stitchedBlobSize, ttl);
+        HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(stitchHeaders);
+        // Test different request types on stitched blob ID
+        // (getBlobInfo, getBlob, getBlob w/ range, head, updateBlobTtl, deleteBlob)
+        expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, fullContentArray.length);
+        expectedGetHeaders.set(RestUtils.Headers.LIFE_VERSION, "0");
+        getBlobInfoAndVerify(stitchedBlobId, GetOption.None, expectedGetHeaders, !container.isCacheable(),
+            account.getName(), container.getName(), null, container);
+        List<ByteRange> ranges = new ArrayList<>();
+        ranges.add(null);
+        ranges.add(ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(fullContentArray.length + 1)));
+        ranges.add(ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(fullContentArray.length)));
+        long random1 = ThreadLocalRandom.current().nextLong(fullContentArray.length);
+        long random2 = ThreadLocalRandom.current().nextLong(fullContentArray.length);
+        ranges.add(ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+        for (ByteRange range : ranges) {
+          getBlobAndVerify(stitchedBlobId, range, GetOption.None, false, expectedGetHeaders, !container.isCacheable(),
+              ByteBuffer.wrap(fullContentArray), account.getName(), container.getName(), container);
+          getHeadAndVerify(stitchedBlobId, range, GetOption.None, expectedGetHeaders, !container.isCacheable(),
+              account.getName(), container.getName());
+        }
+
+        //Test get dataset version
+        HttpHeaders getHeaders = new DefaultHttpHeaders();
+        getHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+        getDatasetVersionAndVerify(dataset, version, getHeaders, stitchedBlobSize, ttl, expectedGetHeaders,
+            ByteBuffer.wrap(fullContentArray));
+        getDatasetVersionInfoAndVerify(accountName, containerName, dataset.getDatasetName(), version, getHeaders, ttl,
+            expectedGetHeaders);
+
+        //add all versions when successfully get it.
+        datasetVersions.add(new Pair<>(dataset.getDatasetName(), version));
+      }
+    }
+    return datasetVersions;
+  }
+
+  List<Pair<String, String>> doListDatasetVersionAndVerify(List<Dataset> datasets,
+      List<Pair<String, String>> expectDatasetVersions) throws Exception {
+    InMemAccountService.PAGE_SIZE = -1;
+    List<Pair<String, String>> allDatasetVersions = new ArrayList<>();
+    for (Dataset dataset : datasets) {
+      HttpHeaders listHeaders = new DefaultHttpHeaders();
+      listHeaders.add(TARGET_ACCOUNT_NAME, dataset.getAccountName());
+      listHeaders.add(TARGET_CONTAINER_NAME, dataset.getContainerName());
+      listHeaders.add(TARGET_DATASET_NAME, dataset.getDatasetName());
+      listHeaders.add(ENABLE_DATASET_VERSION_LISTING, true);
+      listHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+      allDatasetVersions.addAll(listDatasetVersions(dataset, listHeaders));
+    }
+    sortPair(expectDatasetVersions);
+    sortPair(allDatasetVersions);
+    assertEquals("The size of the dataset version should meet expectation", expectDatasetVersions.size(),
+        allDatasetVersions.size());
+    assertEquals("Should list all dataset versions", expectDatasetVersions, allDatasetVersions);
+    return allDatasetVersions;
+  }
+
+  void doListDatasetAndVerify(String accountName, String containerName, List<Dataset> expectedDatasets)
+      throws Exception {
+    InMemAccountService.PAGE_SIZE = -1;
+    HttpHeaders listHeaders = new DefaultHttpHeaders();
+    listHeaders.add(TARGET_ACCOUNT_NAME, accountName);
+    listHeaders.add(TARGET_CONTAINER_NAME, containerName);
+    List<String> datasetNames = listDataset(listHeaders);
+    List<String> expectedDatasetNames =
+        expectedDatasets.stream().map(Dataset::getDatasetName) // Extract the name from each Dataset
+            .collect(Collectors.toList());
+    Collections.sort(datasetNames);
+    Collections.sort(expectedDatasetNames);
+    assertEquals("Dataset name should match", expectedDatasetNames, datasetNames);
+  }
+
+  void doDeleteDatasetVersionAndVerify(String accountName, String containerName,
+      List<Pair<String, String>> allDatasetVersionPairs) throws Exception {
+    for (Pair<String, String> pair : allDatasetVersionPairs) {
+      String datasetName = pair.getFirst();
+      String version = pair.getSecond();
+      HttpHeaders deleteHeaders = new DefaultHttpHeaders();
+      deleteHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+      deleteDatasetVersion(accountName, containerName, datasetName, version, deleteHeaders);
+    }
+  }
+
+  void doDeleteDatasetAndVerify(String accountName, String containerName, List<Dataset> datasets) throws Exception {
+    for (Dataset dataset : datasets) {
+      HttpHeaders deleteHeaders = new DefaultHttpHeaders();
+      String datasetName = dataset.getDatasetName();
+      deleteHeaders.add(TARGET_ACCOUNT_NAME, accountName);
+      deleteHeaders.add(TARGET_CONTAINER_NAME, containerName);
+      deleteHeaders.add(TARGET_DATASET_NAME, datasetName);
+      deleteDataset(deleteHeaders);
+    }
+  }
+
+  List<Pair<String, String>> listDatasetVersions(Dataset dataset, HttpHeaders listHeaders) throws Exception {
+    List<Pair<String, String>> datasetVersions = new ArrayList<>();
+    String accountName = dataset.getAccountName();
+    String containerName = dataset.getContainerName();
+    String datasetName = dataset.getDatasetName();
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.GET, buildUriForNamedBlob(accountName, containerName, datasetName), listHeaders, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    Page<String> page = Page.fromJsonWithoutKey(new JSONObject(new String(content.array())), Object::toString);
+    for (String version : page.getEntries()) {
+      datasetVersions.add(new Pair<>(datasetName, version));
+    }
+    return datasetVersions;
+  }
+
+  List<String> listDataset(HttpHeaders listHeaders) throws Exception {
+    List<String> datasetNames = new ArrayList<>();
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, ACCOUNTS_CONTAINERS_DATASETS, listHeaders, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    Page<String> page = Page.fromJsonWithoutKey(new JSONObject(new String(content.array())), Object::toString);
+    for (String datasetName : page.getEntries()) {
+      datasetNames.add(datasetName);
+    }
+    return datasetNames;
+  }
+
+  void deleteDatasetVersion(String accountName, String containerName, String datasetName, String version,
+      HttpHeaders deleteHeaders) throws Exception {
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.DELETE, buildUriForDatasetVersion(accountName, containerName, datasetName, version),
+            deleteHeaders, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.status());
+  }
+
+  void updateDatasetVersionTtl(HttpHeaders ttlUpdateHeaders) throws Exception {
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UPDATE_TTL, ttlUpdateHeaders, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+  }
+
+  void deleteDataset(HttpHeaders deleteHeaders) throws Exception {
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.DELETE, ACCOUNTS_CONTAINERS_DATASETS, deleteHeaders, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.status());
+  }
+
+  String doDatasetStitchAndVerify(Account account, Container container, Dataset dataset, String version,
+      HttpHeaders stitchHeaders, List<String> signedChunkIds, long stitchedBlobSize, long ttl) throws Exception {
+    HttpRequest httpRequest = buildRequest(HttpMethod.PUT,
+        buildUriForDatasetVersion(account.getName(), container.getName(), dataset.getDatasetName(), version),
+        stitchHeaders,
+        ByteBuffer.wrap(StitchRequestSerDe.toJson(signedChunkIds).toString().getBytes(StandardCharsets.UTF_8)));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    return verifyDatasetVersionAndReturnBlobId(response, responseParts, stitchedBlobSize, ttl);
+  }
+
+  void putDatasetAndVerify(Dataset dataset, HttpHeaders headers, boolean enableUpdate) throws Exception {
+    byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    ByteBuffer content = ByteBuffer.wrap(datasetsUpdateJson);
+    if (enableUpdate) {
+      headers.add(RestUtils.Headers.DATASET_UPDATE, true);
+    }
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, ACCOUNTS_CONTAINERS_DATASETS, headers, content);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+  }
+
+  void getDatasetAndVerify(Dataset expectedDataset, HttpHeaders headers) throws Exception {
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, ACCOUNTS_CONTAINERS_DATASETS, headers, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    assertEquals("Dataset does not match", expectedDataset,
+        AccountCollectionSerde.datasetsFromInputStreamInJson(new ByteArrayInputStream(content.array())));
+  }
+
+  String putDatasetVersionAndVerify(Dataset dataset, String version, HttpHeaders headers, ByteBuffer content,
+      long contentSize, long expectTtl) throws Exception {
+    String accountName = dataset.getAccountName();
+    String containerName = dataset.getContainerName();
+    String datasetName = dataset.getDatasetName();
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.PUT, buildUriForDatasetVersion(accountName, containerName, datasetName, version),
+            headers, content);
+
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    return verifyDatasetVersionAndReturnBlobId(response, responseParts, contentSize, expectTtl);
+  }
+
+  void getDatasetVersionAndVerify(Dataset dataset, String version, HttpHeaders headers, long contentSize,
+      long expectTtl, HttpHeaders expectedHeaders, ByteBuffer expectedContent) throws Exception {
+    String accountName = dataset.getAccountName();
+    String containerName = dataset.getContainerName();
+    String datasetName = dataset.getDatasetName();
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.GET, buildUriForDatasetVersion(accountName, containerName, datasetName, version),
+            headers, null);
+
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    verifyGetDatasetVersion(response, responseParts, expectedHeaders, contentSize, expectTtl, expectedContent);
+  }
+
+  void getDatasetVersionInfoAndVerify(String accountName, String containerName, String datasetName, String version,
+      HttpHeaders headers, long expectTtl, HttpHeaders expectedHeaders) throws Exception {
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET,
+        buildUriForDatasetVersion(accountName, containerName, datasetName, version) + "/"
+            + RestUtils.SubResource.BlobInfo, headers, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    checkCommonGetHeadHeaders(response.headers());
+    verifyTrackingHeaders(response);
+    verifyBlobProperties(expectedHeaders, false, response);
+    verifyAccountAndContainerHeaders(accountName, containerName, response);
+    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    if (expectTtl != -1) {
+      assertEquals("Unexpected ttl value", expectTtl,
+          (gmtToEpoch(response.headers().get(RestUtils.Headers.DATASET_EXPIRATION_TIME)) - gmtToEpoch(
+              response.headers().get(RestUtils.Headers.CREATION_TIME))) / 1000);
+    }
+    assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match",
+        expectedHeaders.get(RestUtils.Headers.LIFE_VERSION), response.headers().get(RestUtils.Headers.LIFE_VERSION));
+  }
+
+  private void verifyGetDatasetVersion(HttpResponse response, NettyClient.ResponseParts responseParts,
+      HttpHeaders expectedHeaders, long contentSize, long expectTtl, ByteBuffer expectedContent) throws Exception {
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    checkCommonGetHeadHeaders(response.headers());
+    assertEquals("Content-Type does not match", expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
+        response.headers().get(HttpHeaderNames.CONTENT_TYPE));
+    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    assertEquals("Accept-Ranges not set correctly", "bytes", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
+    assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match",
+        expectedHeaders.get(RestUtils.Headers.LIFE_VERSION), response.headers().get(RestUtils.Headers.LIFE_VERSION));
+    if (expectTtl != -1) {
+      assertEquals("Unexpected ttl value", expectTtl,
+          (gmtToEpoch(response.headers().get(RestUtils.Headers.DATASET_EXPIRATION_TIME)) - gmtToEpoch(
+              response.headers().get(RestUtils.Headers.CREATION_TIME))) / 1000);
+    }
+    assertEquals("Correct blob size should be returned in response", Long.toString(contentSize),
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    byte[] expectedContentArray = expectedContent.array();
+    byte[] responseContentArray = getContent(responseParts.queue, expectedContentArray.length).array();
+    assertArrayEquals("GET content does not match original content", expectedContentArray, responseContentArray);
+  }
+
+  private String verifyDatasetVersionAndReturnBlobId(HttpResponse response, NettyClient.ResponseParts responseParts,
+      long contentSize, long expectTtl) throws Exception {
+    assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.status());
+    assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
+    assertNotNull("No " + RestUtils.Headers.CREATION_TIME,
+        response.headers().get(RestUtils.Headers.CREATION_TIME, null));
+    assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
+    String blobId = response.headers().get(HttpHeaderNames.LOCATION, null);
+    assertNotNull("Blob ID from PUT should not be null", blobId);
+    assertNoContent(responseParts.queue, 1);
+    assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    assertEquals("Correct blob size should be returned in response", Long.toString(contentSize),
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    if (expectTtl != -1) {
+      assertEquals("Unexpected ttl value", expectTtl,
+          (gmtToEpoch(response.headers().get(RestUtils.Headers.DATASET_EXPIRATION_TIME)) - gmtToEpoch(
+              response.headers().get(RestUtils.Headers.CREATION_TIME))) / 1000);
+    }
+    verifyTrackingHeaders(response);
+    verifyPostRequestCostHeaders(response, contentSize);
+    return blobId;
+  }
+
+  private String generateDatasetVersion(Dataset dataset) {
+    String version;
+    Dataset.VersionSchema datasetVersionSchema = dataset.getVersionSchema();
+    Random random = new Random();
+    if (TIMESTAMP.equals(datasetVersionSchema)) {
+      sleep();
+      version = String.valueOf(System.currentTimeMillis());
+    } else if (MONOTONIC.equals(datasetVersionSchema)) {
+      version = String.valueOf(random.nextInt(10000));
+    } else if (SEMANTIC.equals(datasetVersionSchema)) {
+      int major = random.nextInt(100);
+      int minor = random.nextInt(100);
+      int patch = random.nextInt(100);
+      version = major + "." + minor + "." + patch;
+    } else {
+      throw new IllegalArgumentException("This type of version schema is not compatible");
+    }
+    return version;
+  }
+
+  /**
+   * Sleeps for a millisecond.
+   */
+  private void sleep() {
+    try {
+      Thread.sleep(1);
+    } catch (InterruptedException e) {
+      throw new IllegalStateException("Sleep was interrupted", e);
+    }
+  }
+
+  /**
+   * The http request uri for dataset version.
+   * @param accountName The account name.
+   * @param containerName The container name.
+   * @param blobName The dataset name.
+   * @param version The version of the dataset.
+   * @return
+   */
+  String buildUriForDatasetVersion(String accountName, String containerName, String blobName, String version) {
+    return String.format("/named/%s/%s/%s/%s", accountName, containerName, blobName, version);
   }
 
   /**
@@ -1335,5 +1831,26 @@ public class FrontendIntegrationTestBase {
     public void setNextPageToken(String nextPageToken) {
       this.nextPageToken = nextPageToken;
     }
+  }
+
+  private static long gmtToEpoch(String gmtTime) throws Exception {
+    SimpleDateFormat gmtFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z");
+    gmtFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
+    Date date = gmtFormat.parse(gmtTime);
+    return date.getTime();
+  }
+
+  private void sortPair(List<Pair<String, String>> pairs) {
+    Collections.sort(pairs, new Comparator<Pair<String, String>>() {
+      @Override
+      public int compare(Pair<String, String> p1, Pair<String, String> p2) {
+        int firstComparison = p1.getFirst().compareTo(p2.getFirst());
+        if (firstComparison != 0) {
+          return firstComparison;
+        } else {
+          return p1.getSecond().compareTo(p2.getSecond());
+        }
+      }
+    });
   }
 }
