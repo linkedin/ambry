@@ -349,7 +349,8 @@ public class ReplicationConfig {
         DEFAULT_RECOVERY_TOKEN_FACTORY);
     replicationEnableContinuousReplication =
         verifiableProperties.getBoolean(REPLICATION_ENABLE_CONTINUOUS_REPLICATION, false);
-    replicationGroupIterationLimit = verifiableProperties.getInt(REPLICATION_GROUP_ITERATION_LIMIT, 1);
+    replicationGroupIterationLimit =
+        verifiableProperties.getIntInRange(REPLICATION_GROUP_ITERATION_LIMIT, 1, 1, 10000000);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =
