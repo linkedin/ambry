@@ -86,6 +86,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import com.github.ambry.account.Dataset;
+
 
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -257,6 +259,70 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
   }
+
+  @Test
+  public void datasetTest() throws Exception {
+    Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container namedBlobOptionalContainer =
+        new ContainerBuilder((short) 11, "optional", Container.ContainerStatus.ACTIVE, "",
+            refAccount.getId()).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
+    ACCOUNT_SERVICE.updateContainers(refAccount.getName(), Arrays.asList(namedBlobOptionalContainer));
+    String contentType = "application/octet-stream";
+    String ownerId = "datasetTest";
+    List<Dataset> datasetList = doDatasetPutUpdateGetTest(refAccount, namedBlobOptionalContainer, null);
+    List<Pair<String, String>> allDatasetVersions = new ArrayList<>();
+    Pair<List<String>, byte[]> idsAndContent =
+        uploadDataChunksAndVerify(refAccount, namedBlobOptionalContainer, null, 50, 50, 50, 50, 17);
+    //Test put and get
+    List<Pair<String, String>> datasetVersionsFromPut =
+        doDatasetVersionPutGetTest(refAccount, namedBlobOptionalContainer, datasetList, contentType, ownerId);
+    //Test Stitch and Get
+    ownerId = "stitchedUploadTest";
+    List<Pair<String, String>> datasetVersionsFromStitch =
+        doStitchDatasetVersionGetTest(refAccount, namedBlobOptionalContainer, datasetList, contentType, ownerId,
+            idsAndContent.getFirst(), idsAndContent.getSecond(), 217);
+    allDatasetVersions.addAll(datasetVersionsFromPut);
+    allDatasetVersions.addAll(datasetVersionsFromStitch);
+    //Test List dataset
+    doListDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), datasetList);
+    //Test List dataset version
+    List<Pair<String, String>> allDatasetVersionPairs = doListDatasetVersionAndVerify(datasetList, allDatasetVersions);
+    //Test delete
+    doDeleteDatasetVersionAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), allDatasetVersionPairs);
+    //After delete, it should have an empty list.
+    doListDatasetVersionAndVerify(datasetList, new ArrayList<>());
+    //Test delete dataset
+    doDeleteDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), datasetList);
+    //After delete, it should have an empty list.
+    doListDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), new ArrayList<>());
+  }
+
+  @Test
+  public void datasetTtlTest() throws Exception {
+    Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container namedBlobOptionalContainer =
+        new ContainerBuilder((short) 11, "optional", Container.ContainerStatus.ACTIVE, "",
+            refAccount.getId()).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
+    ACCOUNT_SERVICE.updateContainers(refAccount.getName(), Arrays.asList(namedBlobOptionalContainer));
+    String contentType = "application/octet-stream";
+    String ownerId = "datasetTest";
+    int contentSize = 100;
+    List<Dataset> datasetList = null;
+    List<Dataset> allDatasets = new ArrayList<>();
+    List<Pair<String, String>> allDatasetVersions = new ArrayList<>();
+    for (Long ttl : new Long[]{null, (long) -1, TTL_SECS}) {
+      datasetList = doDatasetPutUpdateGetTest(refAccount, namedBlobOptionalContainer, ttl);
+      List<Pair<String, String>> datasetVersionsFromPut =
+          doDatasetVersionPutGetWithTtlTest(refAccount, namedBlobOptionalContainer, datasetList, contentType, ownerId,
+              contentSize);
+      allDatasetVersions.addAll(datasetVersionsFromPut);
+      allDatasets.addAll(datasetList);
+    }
+    List<Pair<String, String>> allDatasetVersionPairs = doListDatasetVersionAndVerify(allDatasets, allDatasetVersions);
+    doDatasetUpdateTtlAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), allDatasetVersionPairs,
+        contentSize, contentType, ownerId);
+  }
+
 
   /**
    * Tests multipart POST and verifies it via GET operations.
