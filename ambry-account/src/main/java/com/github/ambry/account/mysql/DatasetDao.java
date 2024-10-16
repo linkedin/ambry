@@ -312,7 +312,7 @@ public class DatasetDao {
     DatasetVersionRecord datasetVersionRecord;
     try {
       dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
-      if (isAutoCreatedVersionForUpload(version, dataset.getVersionSchema())) {
+      if (isAutoCreatedVersionForUpload(version)) {
         datasetVersionRecord =
             retryWithLatestAutoIncrementedVersion(accountId, containerId, dataset, version, timeToLiveInSeconds,
                 creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
@@ -1067,15 +1067,14 @@ public class DatasetDao {
 
   /**
    * @param version the version string.
-   * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} from dataset level.
    * @return {@code} true if the version is auto created version for upload.
    */
-  private boolean isAutoCreatedVersionForUpload(String version, Dataset.VersionSchema versionSchema) {
-    boolean isAutoCreated = LATEST.equals(version)
+  private boolean isAutoCreatedVersionForUpload(String version) {
+    return LATEST.equals(version)
         || MAJOR.equals(version)
         || MINOR.equals(version)
-        || PATCH.equals(version);
-    return versionSchema == Dataset.VersionSchema.SEMANTIC_LONG ? isAutoCreated || REVISION.equals(version) : isAutoCreated;
+        || PATCH.equals(version)
+        || REVISION.equals(version);
   }
 
   /**
