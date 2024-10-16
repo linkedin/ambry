@@ -28,6 +28,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
@@ -257,7 +258,7 @@ public class NamedBlobPutHandler {
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(restRequest, blobIdClean, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)),
-              this::isRetriable, routerTtlUpdateCallback(blobInfo));
+              this::isRetriable, routerTtlUpdateCallbackForPut(blobInfo));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
@@ -321,7 +322,7 @@ public class NamedBlobPutHandler {
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(null, blobId, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-              routerTtlUpdateCallback(blobInfo));
+              routerTtlUpdateCallbackForStitch(blobInfo, blobId));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
@@ -351,8 +352,39 @@ public class NamedBlobPutHandler {
      * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
-    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo) {
+    private Callback<Void> routerTtlUpdateCallbackForPut(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          //Make sure to process response after delete finished
+          updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
+              deleteDatasetVersionOutOfRetentionCallback(blobInfo));
+        } else {
+          securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+              securityProcessResponseCallback());
+        }
+      }, uri, LOGGER, deleteDatasetCallback);
+    }
+
+    /**
+     * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @param blobId the {@link String} to use for blob id.
+     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
+     */
+    private Callback<Void> routerTtlUpdateCallbackForStitch(BlobInfo blobInfo, String blobId) {
+      return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        // Set the named blob state to be 'READY' after the Ttl update succeed
+        if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
+          throw new RestServiceException("Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION
+              + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
+        }
+        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
+        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
+        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
