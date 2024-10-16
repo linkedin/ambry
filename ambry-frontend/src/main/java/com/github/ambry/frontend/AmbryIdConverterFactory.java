@@ -43,6 +43,8 @@ import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+
 
 /**
  * Factory that instantiates an {@link IdConverter} implementation for the frontend.
@@ -176,7 +178,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           //and do update ttl in routerCallBack.
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption).thenApply(result -> {
-            restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, result.getVersion());
+            restRequest.setArg(NAMED_BLOB_VERSION, result.getVersion());
             return result.getBlobId();
           });
         } else {
@@ -184,24 +186,36 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
-        Objects.requireNonNull(blobProperties, "blobProperties cannot be null.");
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        String blobId = RestUtils.stripSlashAndExtensionFromId(input);
-        long expirationTimeMs =
-            Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
-        // Please note that the modified_ts column in DB will be auto-populated by the DB server.
-        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-            namedBlobPath.getBlobName(), blobId, expirationTimeMs, 0, blobProperties.getBlobSize());
-        NamedBlobState state = NamedBlobState.READY;
-        if (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
-          // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
-          state = NamedBlobState.IN_PROGRESS;
+        if (restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
+          long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
+          String blobIdClean = RestUtils.stripSlashAndExtensionFromId(input);
+          NamedBlobPath namedBlobPath =
+              NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+              namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
+          conversionFuture = namedBlobDb.updateBlobTtlAndStateToReady(record).thenApply(result -> {
+            return result.getInsertedRecord().getBlobId();
+          });
+        } else {
+          Objects.requireNonNull(blobProperties, "blobProperties cannot be null.");
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          String blobId = RestUtils.stripSlashAndExtensionFromId(input);
+          long expirationTimeMs =
+              Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
+          // Please note that the modified_ts column in DB will be auto-populated by the DB server.
+          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+              namedBlobPath.getBlobName(), blobId, expirationTimeMs, 0, blobProperties.getBlobSize());
+          NamedBlobState state = NamedBlobState.READY;
+          if (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+            // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
+            state = NamedBlobState.IN_PROGRESS;
+          }
+          conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(
+              result -> {
+                restRequest.setArg(NAMED_BLOB_VERSION, result.getInsertedRecord().getVersion());
+                return result.getInsertedRecord().getBlobId();
+              });
         }
-        conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(
-            result -> {
-              restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, result.getInsertedRecord().getVersion());
-              return result.getInsertedRecord().getBlobId();
-            });
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);

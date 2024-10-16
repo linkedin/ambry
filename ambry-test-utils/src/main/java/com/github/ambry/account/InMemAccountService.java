@@ -51,7 +51,7 @@ public class InMemAccountService implements AccountService {
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER), Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
   static final String INMEM_ACCOUNT_UPDATER_PREFIX = "in-memory-account-updater";
-  private static final int PAGE_SIZE = 1;
+  public static int PAGE_SIZE = 1;
   private final boolean shouldReturnOnlyUnknown;
   private final boolean notifyConsumers;
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
@@ -262,6 +262,9 @@ public class InMemAccountService implements AccountService {
     List<String> datasets = new ArrayList<>(nameToDatasetMap.get(new Pair<>(accountName, containerName)).keySet());
     Collections.sort(datasets);
     int index = 0;
+    if (pageToken == null && PAGE_SIZE < 1) {
+      return new Page<>(datasets, null);
+    }
     if (pageToken != null) {
       index = Collections.binarySearch(datasets, pageToken);
     }
@@ -276,10 +279,15 @@ public class InMemAccountService implements AccountService {
     short containerId = account.getContainerByName(containerName).getId();
     List<DatasetVersionRecord> datasetRecords =
         new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).values());
-    List<String> versionList =
-        datasetRecords.stream().map(DatasetVersionRecord::getVersion).collect(Collectors.toList());
+    List<String> versionList = datasetRecords.stream()
+        .filter(record -> datasetName.equals(record.getDatasetName()))
+        .map(DatasetVersionRecord::getVersion)
+        .collect(Collectors.toList());
     Collections.sort(versionList);
     int index = 0;
+    if (pageToken == null && PAGE_SIZE < 1) {
+      return new Page<>(versionList, null);
+    }
     if (pageToken != null) {
       index = Collections.binarySearch(versionList, pageToken);
     }

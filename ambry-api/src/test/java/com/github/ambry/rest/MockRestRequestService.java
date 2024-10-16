@@ -127,8 +127,8 @@ public class MockRestRequestService implements RestRequestService {
         restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
-        router.putBlob(blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
-            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null, null);
+        router.putBlob(null, blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
+            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null);
       } catch (RestServiceException e) {
         handleResponse(restRequest, restResponseChannel, null, e);
       }
@@ -158,8 +158,8 @@ public class MockRestRequestService implements RestRequestService {
         restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
-        router.putBlob(blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
-            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null, null);
+        router.putBlob(null, blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
+            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null);
       } catch (RestServiceException e) {
         handleResponse(restRequest, restResponseChannel, null, e);
       }
