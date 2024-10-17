@@ -440,6 +440,7 @@ public class FrontendIntegrationTestBase {
     versionSchemas.add(TIMESTAMP);
     versionSchemas.add(SEMANTIC);
     versionSchemas.add(MONOTONIC);
+    versionSchemas.add(SEMANTIC_LONG);
     for (Dataset.VersionSchema versionSchema : versionSchemas) {
       String datasetName = "zzzz" + TestUtils.getRandomString(10);
       Dataset dataset;
@@ -886,6 +887,12 @@ public class FrontendIntegrationTestBase {
       int minor = random.nextInt(100);
       int patch = random.nextInt(100);
       version = major + "." + minor + "." + patch;
+    } else if (SEMANTIC_LONG.equals(datasetVersionSchema)) {
+      int major = random.nextInt(100);
+      int minor = random.nextInt(100);
+      int patch = random.nextInt(100);
+      int revision = random.nextInt(100);
+      version = major + "." + minor + "." + patch + "." + revision;
     } else {
       throw new IllegalArgumentException("This type of version schema is not compatible");
     }
