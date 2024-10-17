@@ -134,5 +134,10 @@ public enum RouterErrorCode {
   /**
    * Request is out of quota and should be throttled.
    */
-  TooManyRequests
+  TooManyRequests,
+
+  /**
+   * Blob content no longer satisfies CRC. This applies to uploads only
+   */
+  BlobCorrupted
 }
