@@ -19,11 +19,14 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.HashedWheelTimer;
+import io.netty.util.Timeout;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -41,22 +44,29 @@ import org.slf4j.LoggerFactory;
 public class PipedAsyncWritableChannel implements AsyncWritableChannel {
 
   private final ReadableStreamChannel sourceChannel;
+  private final int secondaryTimeoutInMs;
   private final PipedReadableStreamChannel pipedPrimaryReadChannel;
   private PipedReadableStreamChannel pipedSecondaryReadChannel = null;
   private final ReentrantLock lock = new ReentrantLock();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private static final Logger logger = LoggerFactory.getLogger(PipedAsyncWritableChannel.class);
+  final static HashedWheelTimer wheel = new HashedWheelTimer(10, TimeUnit.MILLISECONDS, 1024);
 
   /**
-   * @param sourceChannel The channel that contains the stream of bytes to be read into primary and secondary destinations
-   * @param withSecondary if {@code true}, sends the bytes from source channel to secondary destination as well
+   * @param sourceChannel        The channel that contains the stream of bytes to be read into primary and secondary
+   *                             destinations
+   * @param withSecondary        if {@code true}, sends the bytes from source channel to secondary destination as well
+   * @param secondaryTimeoutInMs time in milliseconds after which secondary read channel will be closed
    */
-  public PipedAsyncWritableChannel(ReadableStreamChannel sourceChannel, boolean withSecondary) {
+  public PipedAsyncWritableChannel(ReadableStreamChannel sourceChannel, boolean withSecondary,
+      int secondaryTimeoutInMs) {
     this.sourceChannel = sourceChannel;
+    this.secondaryTimeoutInMs = secondaryTimeoutInMs;
 
     pipedPrimaryReadChannel = new PipedReadableStreamChannel(true);
     if (withSecondary) {
       pipedSecondaryReadChannel = new PipedReadableStreamChannel(false);
+      wheel.start();
     }
 
     sourceChannel.readInto(this, (result, exception) -> {
@@ -266,6 +276,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
     private Result secondaryWriteCallbackResult;
     private final Lock lock = new ReentrantLock();
     private final AtomicBoolean chunkResolved = new AtomicBoolean(false);
+    private Timeout secondaryTimeout = null;
 
     /**
      * Create a new instance of ChunkData with the given parameters.
@@ -313,6 +324,9 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
           } else {
             // This callback is coming from secondary reader
             secondaryWriteCallbackResult = new Result(result, exception);
+            if (secondaryTimeout != null) {
+              secondaryTimeout.cancel();
+            }
           }
 
           if (PipedAsyncWritableChannel.this.pipedSecondaryReadChannel == null) {
@@ -334,11 +348,12 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
               }
               resolveChunk(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
             } else if (primaryWriteCallbackResult != null) {
-              // TODO: Write successful callback came from primary but not from secondary. We will "start a timer" to wait
-              //  for result from secondary. If we time out waiting for the result, we will close secondary and send the
-              //  remaining bytes to primary alone so that primary upload SLA is not affected.
-            } else {
-              // Do nothing. Callback from Secondary came. We will wait for callback to come from primary
+              secondaryTimeout = wheel.newTimeout(timeout -> {
+                // Secondary took very long
+                logger.error("Closing secondary channel since it is unresponsive");
+                PipedAsyncWritableChannel.this.closeSecondary(new ClosedChannelException());
+                resolveChunk(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
+              }, secondaryTimeoutInMs, TimeUnit.MILLISECONDS);
             }
           }
         } finally {

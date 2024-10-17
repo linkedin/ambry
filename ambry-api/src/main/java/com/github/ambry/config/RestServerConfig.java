@@ -21,6 +21,8 @@ public class RestServerConfig {
   public static final String ENABLE_ADDED_CHANNEL_HANDLERS = CONFIG_PREFIX + "enable.added.channel.handlers";
   public static final String ENABLE_STRUCTURED_LOGGING = CONFIG_PREFIX + "enable.structured.logging";
   public static final String ENABLE_COMPOSITE_ROUTER = CONFIG_PREFIX + "enable.composite.router";
+  private static final String PIPED_ASYNC_CHANNEL_SECONDARY_TIMEOUT_MS =
+      CONFIG_PREFIX + "piped.async.channel.secondary.timeout.ms";
 
   /**
    * The RestRequestServiceFactory that needs to be used by the RestServer
@@ -118,6 +120,13 @@ public class RestServerConfig {
   public final boolean restServerEnableAddedChannelHandlers;
 
   /**
+   * Timeout when writing to secondary reader via PipedAsyncWritableChannel.
+   */
+  @Config(PIPED_ASYNC_CHANNEL_SECONDARY_TIMEOUT_MS)
+  @Default("100")
+  public final int restServerPipedAsyncChannelSecondaryTimeoutMs;
+
+  /**
    * Set true to enable composite router in RestServer.
    */
   @Config(ENABLE_COMPOSITE_ROUTER)
@@ -149,5 +158,7 @@ public class RestServerConfig {
     restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
     restServerEnableAddedChannelHandlers = verifiableProperties.getBoolean(ENABLE_ADDED_CHANNEL_HANDLERS, false);
     restServerEnableCompositeRouter = verifiableProperties.getBoolean(ENABLE_COMPOSITE_ROUTER, false);
+    restServerPipedAsyncChannelSecondaryTimeoutMs =
+        verifiableProperties.getInt(PIPED_ASYNC_CHANNEL_SECONDARY_TIMEOUT_MS, 100);
   }
 }
