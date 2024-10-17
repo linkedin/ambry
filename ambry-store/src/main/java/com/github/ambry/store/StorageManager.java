@@ -31,6 +31,7 @@ import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
@@ -72,6 +73,10 @@ public class StorageManager implements StoreManager {
   private final Time time;
   private final StoreConfig storeConfig;
   private final DiskManagerConfig diskManagerConfig;
+
+  private final boolean fileBasedReplication = true;
+
+  private final FileCopyConfig fileCopyConfig;
   private final ScheduledExecutorService scheduler;
   private final StoreMetrics storeMainMetrics;
   private final StoreMetrics storeUnderCompactionMetrics;
@@ -106,10 +111,11 @@ public class StorageManager implements StoreManager {
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param accountService the {@link AccountService} instance to use.
    */
-  public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
+  public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig, FileCopyConfig fileCopyConfig,
       ScheduledExecutorService scheduler, MetricRegistry registry, StoreKeyFactory keyFactory, ClusterMap clusterMap,
       DataNodeId dataNodeId, MessageStoreHardDelete hardDelete, List<ClusterParticipant> clusterParticipants, Time time,
       MessageStoreRecovery recovery, AccountService accountService) throws StoreException {
+    this.fileCopyConfig = fileCopyConfig;
     verifyConfigs(storeConfig, diskManagerConfig);
     this.storeConfig = storeConfig;
     this.diskManagerConfig = diskManagerConfig;
@@ -488,6 +494,13 @@ public class StorageManager implements StoreManager {
       return false;
     }
     DiskManager diskManager = addDisk(replica.getDiskId());
+    if(fileBasedReplication){
+      if(diskManager == null || !diskManager.createDirectoryForBlobStore(replica)){
+        logger.error("Failed to add new store into DiskManager");
+        return false;
+      }
+
+    }
     if (diskManager == null || !diskManager.addBlobStore(replica)) {
       logger.error("Failed to add new store into DiskManager");
       return false;

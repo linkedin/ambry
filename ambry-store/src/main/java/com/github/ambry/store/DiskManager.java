@@ -471,6 +471,10 @@ public class DiskManager {
     return succeed;
   }
 
+  boolean createDirectoryForBlobStore(ReplicaId replica){
+
+  }
+
   /**
    * Start the BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be started.

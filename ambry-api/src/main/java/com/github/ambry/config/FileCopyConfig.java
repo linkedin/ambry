@@ -1,10 +1,14 @@
 package com.github.ambry.config;
 
 public class FileCopyConfig {
-  @Config("replication.no.of.inter.dc.replica.threads")
-  @Default("1")
-  public final int replicationNumOfInterDCReplicaThreads;
+  public static final String FILECOPY_ENABLE_FILEBASED_REPLICATION = "fileCopy.enable.fileBasedReplication";
+
+  @Config("FILECOPY_ENABLE_FILEBASED_REPLICATION")
+  @Default("false")
+  public final boolean fileCopyEnableFileBasedReplication;
   public final static String isFileBasedReplicationEnabled = null;
-  public FileCopyConfig(VerifiableProperties verifiableProperties) {}
+  public FileCopyConfig(VerifiableProperties verifiableProperties) {
+    this.fileCopyEnableFileBasedReplication = verifiableProperties.getBoolean(FILECOPY_ENABLE_FILEBASED_REPLICATION, false);
+  }
 
 }

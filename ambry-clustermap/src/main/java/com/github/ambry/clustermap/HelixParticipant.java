@@ -839,7 +839,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       PartitionStateChangeListener statsManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
       if (statsManagerListener != null) {
-        statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+        statsManagerListener.x(partitionName);
       }
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);

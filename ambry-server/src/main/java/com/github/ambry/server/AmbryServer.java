@@ -328,7 +328,7 @@ public class AmbryServer {
         // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
         // and some components require sole participant, the first one in the list will be primary participant.
         storageManager =
-            new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+            new StorageManager(storeConfig, diskManagerConfig, fileCopyConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
 

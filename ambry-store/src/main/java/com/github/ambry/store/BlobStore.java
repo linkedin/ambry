@@ -333,6 +333,36 @@ public class BlobStore implements Store {
     }
   }
 
+  @Override
+  public void createDirectory() throws StoreException {
+    synchronized (storeWriteLock) {
+      if (started) {
+        throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
+      }
+      final Timer.Context context = metrics.storeStartTime.time();
+      try {
+        // Check if the data dir exist. If it does not exist, create it
+        File dataFile = new File(dataDir);
+        if (!dataFile.exists()) {
+          logger.info("Store : {} data directory not found. creating it", dataDir);
+          boolean created = dataFile.mkdir();
+          if (!created) {
+            throw new StoreException("Failed to create directory for data dir " + dataDir,
+                StoreErrorCodes.Initialization_Error);
+          }
+        }
+        if (!dataFile.isDirectory() || !dataFile.canRead()) {
+          throw new StoreException(dataFile.getAbsolutePath() + " is either not a directory or is not readable",
+              StoreErrorCodes.Initialization_Error);
+        }
+      } catch (Exception e) {
+
+      }finally {
+        context.stop();
+      }
+    }
+  }
+
   /**
    * Returns CRC of blob-content
    * @param msg Metadata of blob

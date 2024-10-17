@@ -49,7 +49,7 @@ public class FileCopyManager {
     }
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-      //diskTopartitoionQueue.put(partitionName);
+      //diskToPartitionQueue.put(partitionName);
     }
 
     @Override
