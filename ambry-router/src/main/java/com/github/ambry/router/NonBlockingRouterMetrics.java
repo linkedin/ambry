@@ -165,6 +165,7 @@ public class NonBlockingRouterMetrics {
   public final Counter chunkFillerUnexpectedErrorCount;
   public final Counter operationFailureWithUnsetExceptionCount;
   public final Counter missingDataChunkErrorCount;
+  public final Counter putBlobCRCMismatchCount;
 
   // Performance metrics for operation managers.
   public final Histogram putManagerPollTimeMs;
@@ -512,6 +513,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNotFoundCount"));
     backgroundDeleterExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterExceptionCount"));
+    putBlobCRCMismatchCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "PutBlobCRCMismatchCount"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));
@@ -985,6 +988,9 @@ public class NonBlockingRouterMetrics {
           break;
         case ChannelClosed:
           channelClosedErrorCount.inc();
+          break;
+        case BlobCorrupted:
+          putBlobCRCMismatchCount.inc();
           break;
         default:
           unknownErrorCountForOperation.inc();
