@@ -1196,6 +1196,7 @@ class PutOperation {
     // This value is set after compression has completed.  It is used to create PutRequest.
     private boolean isChunkCompressed;
     private final Crc32 chunkCrc32 = new Crc32();
+    private boolean isCrcVerified = false;
 
     /**
      * Construct a PutChunk
@@ -1237,6 +1238,7 @@ class PutOperation {
         ReferenceCountUtil.safeRelease(buf);
         buf = null;
         chunkCrc32.reset();
+        isCrcVerified = false;
       }
     }
 
@@ -1954,13 +1956,14 @@ class PutOperation {
      * @return {@code true} if CRC of the chunk buffer is same as one calculated in chunk filler thread
      */
     boolean verifyCRC() {
-      if (!routerConfig.routerVerifyCrcForPutRequests || isMetadataChunk()) {
+      if (!routerConfig.routerVerifyCrcForPutRequests || isMetadataChunk() || isCrcVerified) {
         return true;
       }
       Crc32 crc32 = new Crc32();
       for (ByteBuffer byteBuffer : buf.nioBuffers()) {
         crc32.update(byteBuffer);
       }
+      isCrcVerified = true;
       logger.trace("Chunk Id {}, state {}, Original CRC {}, current CRC {}", chunkBlobId, state.name(),
           this.chunkCrc32.getValue(), crc32.getValue());
       return this.chunkCrc32.getValue() == crc32.getValue();
