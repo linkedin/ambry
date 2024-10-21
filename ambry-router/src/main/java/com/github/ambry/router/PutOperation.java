@@ -48,6 +48,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -72,6 +73,8 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1192,6 +1195,8 @@ class PutOperation {
     // Whether this chunk is compressed.  Default is false for not compressed.
     // This value is set after compression has completed.  It is used to create PutRequest.
     private boolean isChunkCompressed;
+    private final Crc32 chunkCrc32 = new Crc32();
+    private boolean isCrcVerified = false;
 
     /**
      * Construct a PutChunk
@@ -1232,6 +1237,8 @@ class PutOperation {
         logger.trace("{}: releasing the chunk data for chunk {}", loggingContext, chunkIndex);
         ReferenceCountUtil.safeRelease(buf);
         buf = null;
+        chunkCrc32.reset();
+        isCrcVerified = false;
       }
     }
 
@@ -1444,6 +1451,22 @@ class PutOperation {
      */
     private void encryptionCallback(EncryptJob.EncryptJobResult result, Exception exception) {
       logger.trace("{}: Processing encrypt job callback for chunk at index {}", loggingContext, chunkIndex);
+
+      if (exception == null && !verifyCRC()) {
+        // Original content is corruption. Complete the operation
+        logger.error("CRC of the chunk {} is different before and after encryption", chunkBlobId);
+        releaseBlobContent();
+        if (result != null) {
+          result.release();
+        }
+        setOperationExceptionAndComplete(
+            new RouterException("CRC of chunk {} is different before and after encryption" + chunkBlobId, exception,
+                RouterErrorCode.BlobCorrupted));
+        routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
+        routerCallback.onPollReady();
+        return;
+      }
+
       if (!isMetadataChunk()) {
         // If this is a data blob, then release the content with or without exception.
         // When there is no exception, then the encrypted data will be used.
@@ -1454,6 +1477,11 @@ class PutOperation {
       if (exception == null && !isOperationComplete()) {
         if (!isMetadataChunk()) {
           buf = result.getEncryptedBlobContent();
+          if (routerConfig.routerVerifyCrcForPutRequests) {
+            for (ByteBuffer byteBuffer : buf.nioBuffers()) {
+              chunkCrc32.update(byteBuffer);
+            }
+          }
         }
         encryptedPerBlobKey = result.getEncryptedKey();
         chunkUserMetadata = result.getEncryptedUserMetadata().array();
@@ -1571,29 +1599,37 @@ class PutOperation {
      */
     int fillFrom(ByteBuf channelReadBuf) {
       int toWrite;
+      ByteBuf slice;
       if (buf == null) {
         // If current buf is null, then only read the up to routerMaxPutChunkSizeBytes.
         toWrite = Math.min(channelReadBuf.readableBytes(), routerConfig.routerMaxPutChunkSizeBytes);
-        buf = channelReadBuf.readRetainedSlice(toWrite);
+        slice = channelReadBuf.readRetainedSlice(toWrite);
+        buf = slice;
         buf.touch(loggingContext);
       } else {
         int remainingSize = routerConfig.routerMaxPutChunkSizeBytes - buf.readableBytes();
         toWrite = Math.min(channelReadBuf.readableBytes(), remainingSize);
-        ByteBuf remainingSlice = channelReadBuf.readRetainedSlice(toWrite);
-        remainingSlice.touch(loggingContext);
+        slice = channelReadBuf.readRetainedSlice(toWrite);
+        slice.touch(loggingContext);
         // buf already has some bytes
         if (buf instanceof CompositeByteBuf) {
           // Buf is already a CompositeByteBuf, then just add the slice from
-          ((CompositeByteBuf) buf).addComponent(true, remainingSlice);
+          ((CompositeByteBuf) buf).addComponent(true, slice);
         } else {
           int maxComponents = routerConfig.routerMaxPutChunkSizeBytes;
           CompositeByteBuf composite = buf.isDirect() ? buf.alloc().compositeDirectBuffer(maxComponents)
               : buf.alloc().compositeHeapBuffer(maxComponents);
-          composite.addComponents(true, buf, remainingSlice);
+          composite.addComponents(true, buf, slice);
           buf = composite;
           buf.touch(loggingContext);
         }
       }
+
+      // Update crc for the chunk data
+      if (routerConfig.routerVerifyCrcForPutRequests) {
+        chunkCrc32.update(slice.nioBuffer());
+      }
+
       if (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes) {
         if (chunkIndex == 0) {
           // If first put chunk is full, but not yet prepared then mark it awaiting resolution instead of completing it.
@@ -1613,6 +1649,16 @@ class PutOperation {
     void checkAndMaybeComplete() {
       boolean done = false;
       // Now, check if this chunk is done.
+      if (chunkException != null && chunkException.getErrorCode() == RouterErrorCode.BlobCorrupted) {
+        logger.error("{} : Put chunk {} failed due to corruption. Failing entire operation", loggingContext,
+            getChunkBlobId());
+        // Append this blob to slipped put so that it is cleaned up later. If this is a composite blob, the rest of the
+        // chunks will be cleaned up automatically as part of PUT operation clean up in PutManager#onComplete()
+        appendSlippedPutBlobId(chunkBlobId);
+        setOperationExceptionAndComplete(chunkException);
+        return;
+      }
+
       if (operationTracker.isDone() || (chunkException != null
           && chunkException.getErrorCode() == RouterErrorCode.TooManyRequests)) {
         if (!operationTracker.hasSucceeded()) {
@@ -1863,8 +1909,18 @@ class PutOperation {
           } else {
             ServerErrorCode putError = putResponse.getError();
             if (putError == ServerErrorCode.No_Error) {
-              logger.trace("{}: The putRequest was successful for chunk {}", loggingContext, chunkIndex);
-              isSuccessful = true;
+              if (!verifyCRC()) {
+                logger.error("{}: PutRequest with response correlationId {}, blob id {} has a mismatch in crc {} ",
+                    loggingContext, correlationId, chunkBlobId, requestInfo.getReplicaId().getDataNodeId());
+                setChunkException(
+                    new RouterException("CRC mismatch of chunk content before and after writing to server",
+                        RouterErrorCode.BlobCorrupted));
+                isSuccessful = false;
+                putRequestFinalState = TrackedRequestFinalState.FAILURE;
+              } else {
+                logger.trace("{}: The putRequest was successful for chunk {}", loggingContext, chunkIndex);
+                isSuccessful = true;
+              }
             } else {
               // chunkException will be set within processServerError.
               logger.trace(
@@ -1890,14 +1946,30 @@ class PutOperation {
           // We use a separate metric to the latency of remote vs local writes (such requests are routed through
           // ParanoidDurabilityOperationTracker).
           routerMetrics.routerPutRequestRemoteLatencyMs.update(requestLatencyMs);
-        }
-        else {
+        } else {
           routerMetrics.routerPutRequestLocalLatencyMs.update(requestLatencyMs);
         }
       } else {
         onErrorResponse(requestInfo.getReplicaId(), putRequestFinalState);
       }
       checkAndMaybeComplete();
+    }
+
+    /**
+     * @return {@code true} if CRC of the chunk buffer is same as one calculated in chunk filler thread
+     */
+    boolean verifyCRC() {
+      if (!routerConfig.routerVerifyCrcForPutRequests || isMetadataChunk() || isCrcVerified) {
+        return true;
+      }
+      Crc32 crc32 = new Crc32();
+      for (ByteBuffer byteBuffer : buf.nioBuffers()) {
+        crc32.update(byteBuffer);
+      }
+      isCrcVerified = true;
+      logger.trace("Chunk Id {}, state {}, Original CRC {}, current CRC {}", chunkBlobId, state.name(),
+          this.chunkCrc32.getValue(), crc32.getValue());
+      return this.chunkCrc32.getValue() == crc32.getValue();
     }
 
     /**
