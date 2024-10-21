@@ -17,6 +17,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufReadableStreamChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.RouterConfig;
@@ -39,6 +40,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -50,6 +52,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.commons.lang3.reflect.MethodUtils;
@@ -348,9 +351,135 @@ public class PutOperationTest {
     op.handleResponse(responseInfo, null);
     responseInfo.release();
     Assert.assertTrue(op.isOperationComplete());
-    Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException)op.getOperationException()).getErrorCode());
+    Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException) op.getOperationException()).getErrorCode());
     Assert.assertEquals("Metrics should show no metadata chunk was created", 0,
         routerMetrics.metadataChunkCreationCount.getCount());
+  }
+
+  @Test
+  public void testCRCSucceeds() throws Exception {
+    final int successTarget = 2;
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(true));
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+
+    int numChunks = 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(chunkSize * numChunks);
+    byteBuf.writeBytes(content);
+    byteBuf.retain(); // retain before it goes to readable stream channel
+    ByteBufReadableStreamChannel byteBufReadableStreamChannel = new ByteBufReadableStreamChannel(byteBuf);
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, byteBufReadableStreamChannel, PutBlobOptions.DEFAULT,
+            new FutureResult<>(), null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null,
+            null, time, blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback,
+            compressionService);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // fill chunks
+    op.fillChunks();
+    Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
+        mockNetworkClient.getAndClearWokenUpStatus());
+
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+
+    // Send all requests.
+    for (int i = 0; i < requestInfos.size(); i++) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfos.get(i));
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      if (i < successTarget) {
+        PutOperation.PutChunk putChunk = op.getPutChunks()
+            .stream().filter(chunk -> chunk.state == PutOperation.ChunkState.Ready).collect(Collectors.toList()).get(0);
+        // Verify that CRC matches
+        Assert.assertTrue("CRC should match", putChunk.verifyCRC());
+      }
+      op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
+      responseInfo.release();
+    }
+    byteBuf.release();
+    Assert.assertEquals("Reference count must be 0", 0, byteBuf.refCnt());
+  }
+
+  @Test
+  public void testCRCFailures() throws Exception {
+    final int successTarget = 2;
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(true));
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+
+    int numChunks = 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(chunkSize * numChunks);
+    byteBuf.writeBytes(content);
+    byteBuf.retain(); // retain before it goes to readable stream channel
+    ByteBufReadableStreamChannel byteBufReadableStreamChannel = new ByteBufReadableStreamChannel(byteBuf);
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, byteBufReadableStreamChannel, PutBlobOptions.DEFAULT,
+            new FutureResult<>(), null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null,
+            null, time, blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback,
+            compressionService);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // fill chunks
+    op.fillChunks();
+    Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
+        mockNetworkClient.getAndClearWokenUpStatus());
+
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+
+    // Modify the content
+    PutOperation.PutChunk putChunk = op.getPutChunks().get(0);
+    putChunk.buf.clear();
+    random.nextBytes(content);
+    putChunk.buf.writeBytes(content);
+
+    // Send all requests.
+    for (int i = 0; i < requestInfos.size(); i++) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfos.get(i));
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
+      responseInfo.release();
+    }
+
+    Assert.assertEquals(RouterErrorCode.BlobCorrupted, ((RouterException) op.getOperationException()).getErrorCode());
+    // The failed blob must be added to slipped put list
+    Assert.assertEquals("Number of slipped puts should be 1", 1, op.getSlippedPutBlobIds().size());
+    byteBuf.release();
+    Assert.assertEquals("Reference count must be 0", 0, byteBuf.refCnt());
   }
 
   /**
