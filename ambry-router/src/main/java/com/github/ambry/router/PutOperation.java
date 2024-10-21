@@ -1652,6 +1652,9 @@ class PutOperation {
       if (chunkException != null && chunkException.getErrorCode() == RouterErrorCode.BlobCorrupted) {
         logger.error("{} : Put chunk {} failed due to corruption. Failing entire operation", loggingContext,
             getChunkBlobId());
+        // Append this blob to slipped put so that it is cleaned up later. If this is a composite blob, the rest of the
+        // chunks will be cleaned up automatically as part of PUT operation clean up in PutManager#onComplete()
+        appendSlippedPutBlobId(chunkBlobId);
         setOperationExceptionAndComplete(chunkException);
         return;
       }

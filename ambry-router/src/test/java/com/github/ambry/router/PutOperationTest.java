@@ -476,6 +476,8 @@ public class PutOperationTest {
     }
 
     Assert.assertEquals(RouterErrorCode.BlobCorrupted, ((RouterException) op.getOperationException()).getErrorCode());
+    // The failed blob must be added to slipped put list
+    Assert.assertEquals("Number of slipped puts should be 1", 1, op.getSlippedPutBlobIds().size());
     byteBuf.release();
     Assert.assertEquals("Reference count must be 0", 0, byteBuf.refCnt());
   }
