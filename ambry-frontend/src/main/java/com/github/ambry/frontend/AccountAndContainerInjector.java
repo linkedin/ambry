@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -413,9 +412,11 @@ public class AccountAndContainerInjector {
         restRequest);
     if (metricsGroup != null) {
       if (!frontendConfig.containerMetricsExcludedAccounts.contains(targetAccount.getName())) {
+        boolean shouldIncludeAccountMetrics =
+            frontendConfig.containerMetricsAggregatedAccounts.contains(targetAccount.getName());
         restRequest.getMetricsTracker()
-            .injectContainerMetrics(
-                metricsGroup.getContainerMetrics(targetAccount.getName(), targetContainer.getName()));
+            .injectContainerMetrics(metricsGroup.getContainerMetrics(targetAccount.getName(), targetContainer.getName(),
+                shouldIncludeAccountMetrics));
       }
     }
   }

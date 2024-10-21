@@ -14,8 +14,6 @@
 
 package com.github.ambry.frontend;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.rest.ResponseStatus;
 
@@ -23,105 +21,33 @@ import com.github.ambry.rest.ResponseStatus;
 /**
  * Metrics for an operation on a specific container.
  */
-public class ContainerMetrics {
-  private static final String SEPARATOR = "___";
-
-  private final Histogram roundTripTimeInMs;
-
-  // counts by status code type
-  // 2xx
-  private final Counter successCount;
-  // 3xx
-  private final Counter redirectionCount;
-  // 4xx
-  private final Counter clientErrorCount;
-  // 5xx
-  private final Counter serverErrorCount;
-
-  // counts for individual status codes
-  // 400
-  private final Counter badRequestCount;
-  // 401
-  private final Counter unauthorizedCount;
-  // 403
-  private final Counter forbiddenCount;
-  // 404
-  private final Counter notFoundCount;
-  // 410
-  private final Counter goneCount;
-
-  private final Counter totalCount;
+public class ContainerMetrics extends EntityOperationMetrics {
+  private final AccountMetrics accountMetrics;
 
   /**
    * Metric names will be in the following format:
-   * {@code com.github.ambry.frontend.ContainerMetrics.{accountName}___{containerName}___{operationType}{metric}}
-   * For example:
-   * {@code com.github.ambry.frontend.ContainerMetrics.account-a___container-b___GetBlobSuccessCount}
-   * @param accountName the account name to use for naming metrics.
-   * @param containerName the container name to use for naming metrics.
-   * @param operationType the operation type to use for naming metrics.
+   * {@code com.github.ambry.frontend.ContainerMetrics.{accountName}___{containerName}___{operationType}{metric}} For
+   * example: {@code com.github.ambry.frontend.ContainerMetrics.account-a___container-b___GetBlobSuccessCount}
+   *
+   * @param accountName    the account name to use for naming metrics.
+   * @param containerName  the container name to use for naming metrics.
+   * @param operationType  the operation type to use for naming metrics.
    * @param metricRegistry the {@link MetricRegistry}.
-   * @param isGetRequest the request operationType is get.
+   * @param isGetRequest   the request operationType is get.
+   * @param accountMetrics the {@link AccountMetrics} for this account. If it's null, then there will no account
+   *                       metrics
    */
   ContainerMetrics(String accountName, String containerName, String operationType, MetricRegistry metricRegistry,
-      boolean isGetRequest) {
-    String metricPrefix = accountName + SEPARATOR + containerName + SEPARATOR + operationType;
-    roundTripTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "RoundTripTimeInMs"));
-    // counts by status code type
-    successCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "SuccessCount"));
-    redirectionCount =
-        metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "RedirectionCount"));
-    clientErrorCount =
-        metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "ClientErrorCount"));
-    serverErrorCount =
-        metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "ServerErrorCount"));
-    // counts for individual status codes
-    badRequestCount =
-        metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "BadRequestCount"));
-    unauthorizedCount =
-        metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "UnauthorizedCount"));
-    forbiddenCount =
-        metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "ForbiddenCount"));
-    notFoundCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "NotFoundCount"));
-    goneCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "GoneCount"));
-    String qpsMetricPrefix = accountName + SEPARATOR + containerName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
-    totalCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, qpsMetricPrefix + "totalCount"));
+      boolean isGetRequest, AccountMetrics accountMetrics) {
+    super(accountName + EntityOperationMetrics.SEPARATOR + containerName, ContainerMetrics.class, operationType,
+        metricRegistry, isGetRequest);
+    this.accountMetrics = accountMetrics;
   }
 
-  /**
-   * Emit metrics for an operation on this container.
-   * @param roundTripTimeInMs the time it took to receive a request and send a response.
-   * @param responseStatus the {@link ResponseStatus} sent in the response.
-   */
   public void recordMetrics(long roundTripTimeInMs, ResponseStatus responseStatus) {
-    this.roundTripTimeInMs.update(roundTripTimeInMs);
-    totalCount.inc();
-    if (responseStatus.isSuccess()) {
-      successCount.inc();
-    } else if (responseStatus.isRedirection()) {
-      redirectionCount.inc();
-    } else if (responseStatus.isClientError()) {
-      clientErrorCount.inc();
-      switch (responseStatus) {
-        case BadRequest:
-          badRequestCount.inc();
-          break;
-        case Unauthorized:
-          unauthorizedCount.inc();
-          break;
-        case Forbidden:
-          forbiddenCount.inc();
-          break;
-        case NotFound:
-          notFoundCount.inc();
-          break;
-        case Gone:
-          goneCount.inc();
-          break;
-      }
-    } else if (responseStatus.isServerError()) {
-      serverErrorCount.inc();
+    super.recordMetrics(roundTripTimeInMs, responseStatus);
+    if (accountMetrics != null) {
+      accountMetrics.recordMetrics(roundTripTimeInMs, responseStatus);
     }
   }
 }
