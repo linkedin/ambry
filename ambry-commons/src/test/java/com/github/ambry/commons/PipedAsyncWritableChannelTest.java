@@ -19,6 +19,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -26,11 +27,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -42,6 +45,8 @@ import static org.junit.Assert.*;
 public class PipedAsyncWritableChannelTest {
 
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private final int secondaryTimeoutInMs = 500;
+  private final int secondaryTimeoutCorrectionDeltaInMs = 100;
 
   @Before
   public void before() {
@@ -62,7 +67,7 @@ public class PipedAsyncWritableChannelTest {
     ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
     ByteBufferReadableStreamChannel sourceReadableStreamChannel = new ByteBufferReadableStreamChannel(content);
     PipedAsyncWritableChannel pipedAsyncWritableChannel =
-        new PipedAsyncWritableChannel(sourceReadableStreamChannel, false, 100, new MetricRegistry());
+        new PipedAsyncWritableChannel(sourceReadableStreamChannel, false, secondaryTimeoutInMs, new MetricRegistry());
     ReadableStreamChannel pipedPrimaryReadableStreamChannel =
         pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
     assertNotNull("Primary readable stream channel must not be null", pipedPrimaryReadableStreamChannel);
@@ -79,7 +84,7 @@ public class PipedAsyncWritableChannelTest {
     ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
     ByteBufferReadableStreamChannel sourceReadableStreamChannel = new ByteBufferReadableStreamChannel(content);
     PipedAsyncWritableChannel pipedAsyncWritableChannel =
-        new PipedAsyncWritableChannel(sourceReadableStreamChannel, true, 100, new MetricRegistry());
+        new PipedAsyncWritableChannel(sourceReadableStreamChannel, true, secondaryTimeoutInMs, new MetricRegistry());
     ReadableStreamChannel primaryReadableStreamChannel = pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
     ReadableStreamChannel secondaryReadableStreamChannel =
         pipedAsyncWritableChannel.getSecondaryReadableStreamChannel();
@@ -111,7 +116,8 @@ public class PipedAsyncWritableChannelTest {
     byteBuf.retain(); // retain before it goes to readable stream channel
     try {
       PipedAsyncWritableChannel pipedAsyncWritableChannel =
-          new PipedAsyncWritableChannel(new ByteBufReadableStreamChannel(byteBuf), false, 100, new MetricRegistry());
+          new PipedAsyncWritableChannel(new ByteBufReadableStreamChannel(byteBuf), false, secondaryTimeoutInMs,
+              new MetricRegistry());
       ReadableStreamChannel primaryReadableStreamChannel = pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
       ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
       primaryReadableStreamChannel.readInto(writableChannel, null);
@@ -136,7 +142,8 @@ public class PipedAsyncWritableChannelTest {
     byteBuf.retain(); // retain before it goes to readable stream channel
     try {
       PipedAsyncWritableChannel pipedAsyncWritableChannel =
-          new PipedAsyncWritableChannel(new ByteBufReadableStreamChannel(byteBuf), true, 100, new MetricRegistry());
+          new PipedAsyncWritableChannel(new ByteBufReadableStreamChannel(byteBuf), true, secondaryTimeoutInMs,
+              new MetricRegistry());
 
       // Verify we are able to read contents from both primary and secondary readable channels
       ExecutorService executorService = Executors.newFixedThreadPool(2);
@@ -145,15 +152,27 @@ public class PipedAsyncWritableChannelTest {
           ReadableStreamChannel primaryReadableStreamChannel =
               pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
           ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
-          primaryReadableStreamChannel.readInto(writableChannel, null);
+          CountDownLatch latch = new CountDownLatch(1);
+          Callback<Long> contentReadCallback = new Callback<Long>() {
+            @Override
+            public void onCompletion(Long result, Exception exception) {
+              // 1. Verify primary succeeded with no exception
+              assertNull("No exception expected", exception);
+              assertEquals(1024, result.longValue());
+              latch.countDown();
+            }
+          };
+          primaryReadableStreamChannel.readInto(writableChannel, contentReadCallback);
           ByteBuf obtained = writableChannel.getNextByteBuf();
           // Make sure this is the same as original byte array
           obtained.retain();
-          writableChannel.resolveOldestChunk(null);
           for (int i = 0; i < 1024; i++) {
-            assertEquals(byteBuf.getByte(i), obtained.getByte(i));
+            assertEquals(byteBuf.getByte(i), obtained.readByte());
           }
+          writableChannel.resolveOldestChunk(null);
           obtained.release();
+          Thread.sleep(secondaryTimeoutInMs);
+          TestUtils.awaitLatchOrTimeout(latch, secondaryTimeoutCorrectionDeltaInMs);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }
@@ -161,28 +180,122 @@ public class PipedAsyncWritableChannelTest {
 
       Future<?> secondaryReadFuture = executorService.submit(() -> {
         try {
-          ReadableStreamChannel primaryReadableStreamChannel =
+          ReadableStreamChannel secondaryReadableStreamChannel =
               pipedAsyncWritableChannel.getSecondaryReadableStreamChannel();
           ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
-          primaryReadableStreamChannel.readInto(writableChannel, null);
+          CountDownLatch latch = new CountDownLatch(1);
+          Callback<Long> contentReadCallback = new Callback<Long>() {
+            @Override
+            public void onCompletion(Long result, Exception exception) {
+              // 1. Verify secondary succeeded with no exception
+              assertNull("No exception expected", exception);
+              assertEquals(1024, result.longValue());
+              latch.countDown();
+            }
+          };
+          secondaryReadableStreamChannel.readInto(writableChannel, contentReadCallback);
           ByteBuf obtained = writableChannel.getNextByteBuf();
           // Make sure this is the same as original byte array
           obtained.retain();
-          writableChannel.resolveOldestChunk(null);
           for (int i = 0; i < 1024; i++) {
-            assertEquals(byteBuf.getByte(i), obtained.getByte(i));
+            assertEquals(byteBuf.getByte(i), obtained.readByte());
           }
+          writableChannel.resolveOldestChunk(null);
           obtained.release();
+          Thread.sleep(secondaryTimeoutInMs);
+          TestUtils.awaitLatchOrTimeout(latch, secondaryTimeoutCorrectionDeltaInMs);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }
       });
 
-      primaryReadFuture.get(500, TimeUnit.MILLISECONDS);
-      secondaryReadFuture.get(500, TimeUnit.MILLISECONDS);
+      primaryReadFuture.get(secondaryTimeoutInMs + 250, TimeUnit.MILLISECONDS);
+      secondaryReadFuture.get(secondaryTimeoutInMs + 250, TimeUnit.MILLISECONDS);
     } finally {
       byteBuf.release();
       assertEquals("Reference count of the original byte buf must be back to 0", 0, byteBuf.refCnt());
+    }
+  }
+
+  @Test
+  public void secondaryTimeOutTest() throws ExecutionException, InterruptedException, TimeoutException {
+
+    final int contentLength = 1024;
+    ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(contentLength);
+    byteBuf.writeBytes(fillRandomBytes(new byte[contentLength]));
+    byteBuf.retain(); // retain before it goes to readable stream channel
+    try {
+      PipedAsyncWritableChannel pipedAsyncWritableChannel =
+          new PipedAsyncWritableChannel(new ByteBufReadableStreamChannel(byteBuf), true, secondaryTimeoutInMs,
+              new MetricRegistry());
+
+      // Read contents from primary
+      ExecutorService executorService = Executors.newFixedThreadPool(2);
+      Future<?> primaryReadFuture = executorService.submit(() -> {
+        try {
+          ReadableStreamChannel primaryReadableStreamChannel =
+              pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
+          ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+          CountDownLatch latch = new CountDownLatch(1);
+          Callback<Long> contentReadCallback = new Callback<Long>() {
+            @Override
+            public void onCompletion(Long result, Exception exception) {
+              // 1. Verify primary succeeded with no exception
+              assertNull("No exception expected", exception);
+              assertEquals(contentLength, result.longValue());
+              latch.countDown();
+            }
+          };
+          primaryReadableStreamChannel.readInto(writableChannel, contentReadCallback);
+          ByteBuf obtained = writableChannel.getNextByteBuf();
+          // Make sure this is the same as original byte array
+          obtained.retain();
+          for (int i = 0; i < contentLength; i++) {
+            assertEquals(byteBuf.getByte(i), obtained.readByte());
+          }
+          writableChannel.resolveOldestChunk(null);
+          obtained.release();
+          Thread.sleep(secondaryTimeoutInMs);
+          TestUtils.awaitLatchOrTimeout(latch, secondaryTimeoutCorrectionDeltaInMs);
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      });
+
+      Future<?> secondaryReadFuture = executorService.submit(() -> {
+        try {
+          CountDownLatch latch = new CountDownLatch(1);
+          ReadableStreamChannel secondaryReadableStreamChannel =
+              pipedAsyncWritableChannel.getSecondaryReadableStreamChannel();
+          ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+          Callback<Long> contentReadCallback = new Callback<Long>() {
+            @Override
+            public void onCompletion(Long result, Exception exception) {
+              // 2. Verify ClosedChannelException is called since this is a timeout case
+              assertNotNull("Exception must be sent", exception);
+              assertTrue("Expected closed channel exception", exception instanceof ClosedChannelException);
+              latch.countDown();
+            }
+          };
+          secondaryReadableStreamChannel.readInto(writableChannel, contentReadCallback);
+
+          // Don't call resolveOldestChunk() on writableChannel
+          Thread.sleep(secondaryTimeoutInMs);
+          // Secondary should have been timed out and content read callback should have been invoked with exception
+          TestUtils.awaitLatchOrTimeout(latch, secondaryTimeoutCorrectionDeltaInMs);
+          // 3. Verify metrics
+          PipedAsyncWritableChannel.Metrics metrics = pipedAsyncWritableChannel.getMetrics();
+          assertEquals("Expected secondary timeout count to be 1", 1, metrics.secondaryTimeOutCount.getCount());
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      });
+
+      primaryReadFuture.get(secondaryTimeoutInMs + 250, TimeUnit.MILLISECONDS);
+      secondaryReadFuture.get(secondaryTimeoutInMs + 250, TimeUnit.MILLISECONDS);
+    } finally {
+      byteBuf.release();
+      assertEquals("Reference count of the original byte buf mismatch", 0, byteBuf.refCnt());
     }
   }
 
@@ -194,7 +307,7 @@ public class PipedAsyncWritableChannelTest {
     ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
     ByteBufferReadableStreamChannel sourceReadableStreamChannel = new ByteBufferReadableStreamChannel(content);
     PipedAsyncWritableChannel pipedAsyncWritableChannel =
-        new PipedAsyncWritableChannel(sourceReadableStreamChannel, true, 100, new MetricRegistry());
+        new PipedAsyncWritableChannel(sourceReadableStreamChannel, true, secondaryTimeoutInMs, new MetricRegistry());
     ReadableStreamChannel primaryReadableStreamChannel = pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
     ReadableStreamChannel secondaryReadableStreamChannel =
         pipedAsyncWritableChannel.getSecondaryReadableStreamChannel();
@@ -232,7 +345,7 @@ public class PipedAsyncWritableChannelTest {
     ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
     ByteBufferReadableStreamChannel sourceReadableStreamChannel = new ByteBufferReadableStreamChannel(content);
     PipedAsyncWritableChannel pipedAsyncWritableChannel =
-        new PipedAsyncWritableChannel(sourceReadableStreamChannel, true, 100, new MetricRegistry());
+        new PipedAsyncWritableChannel(sourceReadableStreamChannel, true, secondaryTimeoutInMs, new MetricRegistry());
     ReadableStreamChannel primaryReadableStreamChannel = pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
     ReadableStreamChannel secondaryReadableStreamChannel =
         pipedAsyncWritableChannel.getSecondaryReadableStreamChannel();
@@ -269,7 +382,7 @@ public class PipedAsyncWritableChannelTest {
     byte[] in = fillRandomBytes(new byte[1]);
     ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     PipedAsyncWritableChannel pipedAsyncWritableChannel =
-        new PipedAsyncWritableChannel(readableStreamChannel, false, 100, new MetricRegistry());
+        new PipedAsyncWritableChannel(readableStreamChannel, false, secondaryTimeoutInMs, new MetricRegistry());
     ReadableStreamChannel primaryReadableStreamChannel = pipedAsyncWritableChannel.getPrimaryReadableStreamChannel();
 
     // 1. Bad Async writable channel.

@@ -88,6 +88,14 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
   }
 
   /**
+   * Used in tests
+   * @return metrics collected in this class
+   */
+  Metrics getMetrics() {
+    return metrics;
+  }
+
+  /**
    * @return the primary {@link ReadableStreamChannel} that contains the bytes coming into this writable channel
    */
   public ReadableStreamChannel getPrimaryReadableStreamChannel() {
@@ -394,7 +402,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
   /**
    * Metrics for {@link PipedAsyncWritableChannel}.
    */
-  private static class Metrics {
+  static class Metrics {
     public final Histogram secondaryTimeoutCorrectionTimeInMs;
     public final Counter secondaryTimeOutCount;
 
