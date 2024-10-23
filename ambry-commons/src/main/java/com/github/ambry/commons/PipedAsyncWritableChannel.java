@@ -20,6 +20,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.util.HashedWheelTimer;
@@ -54,7 +55,9 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
   private final ReentrantLock lock = new ReentrantLock();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private static final Logger logger = LoggerFactory.getLogger(PipedAsyncWritableChannel.class);
-  final static HashedWheelTimer wheel = new HashedWheelTimer(10, TimeUnit.MILLISECONDS, 1024);
+  final static HashedWheelTimer wheel =
+      new HashedWheelTimer(new Utils.SchedulerThreadFactory("secondary-read-channel-timeout-handler-", false), 10,
+          TimeUnit.MILLISECONDS, 1024);
   private final Metrics metrics;
 
   /**
