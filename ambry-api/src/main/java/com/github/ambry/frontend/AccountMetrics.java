@@ -23,7 +23,7 @@ public class AccountMetrics extends EntityOperationMetrics {
   /**
    * Metric names will be in the following format:
    * {@code com.github.ambry.frontend.AccountMetrics.{accountName}___{operationType}{metric}} For example:
-   * {@code com.github.ambry.frontend.ContainerMetrics.account-a___GetBlobSuccessCount}
+   * {@code com.github.ambry.frontend.AccountMetrics.account-a___GetBlobSuccessCount}
    *
    * @param accountName    the account name to use for naming metrics.
    * @param operationType  the operation type to use for naming metrics.
