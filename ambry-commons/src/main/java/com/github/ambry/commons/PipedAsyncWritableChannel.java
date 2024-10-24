@@ -14,16 +14,24 @@
  */
 package com.github.ambry.commons;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.HashedWheelTimer;
+import io.netty.util.Timeout;
+import io.netty.util.TimerTask;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -41,22 +49,33 @@ import org.slf4j.LoggerFactory;
 public class PipedAsyncWritableChannel implements AsyncWritableChannel {
 
   private final ReadableStreamChannel sourceChannel;
+  private final int secondaryTimeoutInMs;
   private final PipedReadableStreamChannel pipedPrimaryReadChannel;
   private PipedReadableStreamChannel pipedSecondaryReadChannel = null;
   private final ReentrantLock lock = new ReentrantLock();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private static final Logger logger = LoggerFactory.getLogger(PipedAsyncWritableChannel.class);
+  final static HashedWheelTimer wheel =
+      new HashedWheelTimer(new Utils.SchedulerThreadFactory("secondary-read-channel-timeout-handler-", false), 10,
+          TimeUnit.MILLISECONDS, 1024);
+  private final Metrics metrics;
 
   /**
-   * @param sourceChannel The channel that contains the stream of bytes to be read into primary and secondary destinations
-   * @param withSecondary if {@code true}, sends the bytes from source channel to secondary destination as well
+   * @param sourceChannel        The channel that contains the stream of bytes to be read into primary and secondary
+   *                             destinations
+   * @param withSecondary        if {@code true}, sends the bytes from source channel to secondary destination as well
+   * @param secondaryTimeoutInMs time in milliseconds after which secondary read channel will be closed
+   * @param metricRegistry
    */
-  public PipedAsyncWritableChannel(ReadableStreamChannel sourceChannel, boolean withSecondary) {
+  public PipedAsyncWritableChannel(ReadableStreamChannel sourceChannel, boolean withSecondary, int secondaryTimeoutInMs,
+      MetricRegistry metricRegistry) {
     this.sourceChannel = sourceChannel;
+    this.secondaryTimeoutInMs = secondaryTimeoutInMs;
 
     pipedPrimaryReadChannel = new PipedReadableStreamChannel(true);
     if (withSecondary) {
       pipedSecondaryReadChannel = new PipedReadableStreamChannel(false);
+      wheel.start();
     }
 
     sourceChannel.readInto(this, (result, exception) -> {
@@ -68,6 +87,15 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
       // Close this writable channel. It will close the piped readable channels as well.
       close();
     });
+    metrics = new Metrics(metricRegistry);
+  }
+
+  /**
+   * Used in tests
+   * @return metrics collected in this class
+   */
+  Metrics getMetrics() {
+    return metrics;
   }
 
   /**
@@ -266,6 +294,7 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
     private Result secondaryWriteCallbackResult;
     private final Lock lock = new ReentrantLock();
     private final AtomicBoolean chunkResolved = new AtomicBoolean(false);
+    private Timeout secondaryTimeout = null;
 
     /**
      * Create a new instance of ChunkData with the given parameters.
@@ -313,6 +342,9 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
           } else {
             // This callback is coming from secondary reader
             secondaryWriteCallbackResult = new Result(result, exception);
+            if (secondaryTimeout != null) {
+              secondaryTimeout.cancel();
+            }
           }
 
           if (PipedAsyncWritableChannel.this.pipedSecondaryReadChannel == null) {
@@ -334,11 +366,23 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
               }
               resolveChunk(primaryWriteCallbackResult.bytesWritten, primaryWriteCallbackResult.exception);
             } else if (primaryWriteCallbackResult != null) {
-              // TODO: Write successful callback came from primary but not from secondary. We will "start a timer" to wait
-              //  for result from secondary. If we time out waiting for the result, we will close secondary and send the
-              //  remaining bytes to primary alone so that primary upload SLA is not affected.
-            } else {
-              // Do nothing. Callback from Secondary came. We will wait for callback to come from primary
+              long startTimeMs = System.currentTimeMillis();
+              secondaryTimeout = wheel.newTimeout(new TimerTask() {
+                @Override
+                public void run(Timeout timeout) throws Exception {
+                  logger.error("Closing secondary channel since it is unresponsive");
+                  // Measure difference between expected delay and actual delay.
+                  long actualDelayInMs = System.currentTimeMillis() - startTimeMs;
+                  metrics.secondaryTimeoutCorrectionTimeInMs.update(
+                      Math.abs(actualDelayInMs - (long) secondaryTimeoutInMs));
+                  metrics.secondaryTimeOutCount.inc();
+                  // Close the secondary channel
+                  PipedAsyncWritableChannel.this.closeSecondary(new ClosedChannelException());
+                  // Invoke write call back for waiting primary
+                  ChunkData.this.resolveChunk(primaryWriteCallbackResult.bytesWritten,
+                      primaryWriteCallbackResult.exception);
+                }
+              }, secondaryTimeoutInMs, TimeUnit.MILLISECONDS);
             }
           }
         } finally {
@@ -355,6 +399,25 @@ public class PipedAsyncWritableChannel implements AsyncWritableChannel {
     private Result(long bytesWritten, Exception exception) {
       this.bytesWritten = bytesWritten;
       this.exception = exception;
+    }
+  }
+
+  /**
+   * Metrics for {@link PipedAsyncWritableChannel}.
+   */
+  static class Metrics {
+    public final Histogram secondaryTimeoutCorrectionTimeInMs;
+    public final Counter secondaryTimeOutCount;
+
+    /**
+     * Constructor to create the metrics;
+     * @param registry
+     */
+    public Metrics(MetricRegistry registry) {
+      secondaryTimeoutCorrectionTimeInMs = registry.histogram(
+          MetricRegistry.name(PipedAsyncWritableChannel.class, "SecondaryTimeoutCorrectionTimeInMs"));
+      secondaryTimeOutCount =
+          registry.counter(MetricRegistry.name(PipedAsyncWritableChannel.class, "SecondaryTimeOutCount"));
     }
   }
 }
