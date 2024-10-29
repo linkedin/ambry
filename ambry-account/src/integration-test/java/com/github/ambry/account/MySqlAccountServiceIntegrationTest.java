@@ -76,6 +76,7 @@ public class MySqlAccountServiceIntegrationTest {
   private static final String DATASET_NAME_NOT_EXIST = "testDatasetNotExist";
   private static final String DATASET_NAME_WITH_TTL = "testDatasetWithTtl";
   private static final String DATASET_NAME_WITH_SEMANTIC = "testDatasetWithSemantic";
+  private static final String DATASET_NAME_WITH_SEMANTIC_LONG = "testDatasetWithSemanticLong";
   private static final String DATASET_NAME_EXPIRED = "testDatasetExpired";
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
@@ -949,6 +950,8 @@ public class MySqlAccountServiceIntegrationTest {
     verifyDatasetProperties(dataset, datasetFromMysql);
   }
 
+// region Latest Version Support Tests
+
   /**
    * Test add and get latest version.
    * @throws Exception
@@ -1119,6 +1122,147 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch for datasets list", expectedDatasetVersions, partialDatasetVersions.getEntries());
     assertEquals("Mismatch on next page token", "2.1.0", partialDatasetVersions.getNextPageToken());
   }
+
+  /**
+   * Test add and get latest version with semantic long versioning format.
+   * @throws Exception
+   */
+  @Test
+  public void testLatestSemanticLongVersionSupport() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    // Add a dataset with semantic version
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG)
+            .setVersionSchema(Dataset.VersionSchema.SEMANTIC_LONG).build();
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // get a latest dataset version when no version exist, should fail.
+    String version = "LATEST";
+    DatasetVersionRecord datasetVersionRecordFromMysql;
+    try {
+      mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME, version);
+      fail();
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
+    }
+
+    // add a major version for timestamp schema, should fail.
+
+    // add a major version.
+    version = "MAJOR";
+    DatasetVersionRecord expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "1.0.0.0", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+    // add second major version
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.0.0.0", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    // add a revision version.
+    version = "REVISION";
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.0.0.1", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+    // add second revision version
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.0.0.2", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    // add a patch version.
+    version = "PATCH";
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.0.1.0", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+    // add second path version
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.0.2.0", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    // add a minor version.
+    version = "MINOR";
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.1.0.0", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+    // add second minor version
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.2.0.0", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    //get the latest version.
+    version = "LATEST";
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG, "2.2.0.0", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    //list all dataset versions
+    Page<String> allDatasetVersions =
+        mySqlAccountStore.listAllValidDatasetVersions(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC_LONG, null);
+    List<String> expectedDatasetVersions = Arrays.asList("1.0.0.0", "2.0.0.0", "2.0.0.1", "2.0.0.2", "2.0.1.0", "2.0.2.0", "2.1.0.0", "2.2.0.0");
+    assertEquals("Mismatch for dataset version list", expectedDatasetVersions, allDatasetVersions.getEntries());
+
+    //update the listDatasetVersionsMaxResult
+    mySqlConfigProps.setProperty(LIST_DATASET_VERSIONS_MAX_RESULT, "3");
+    mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+        new MetricRegistry()).getMySqlAccountStore());
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
+    mySqlAccountService = getAccountService();
+    Page<String> partialDatasetVersions =
+        mySqlAccountStore.listAllValidDatasetVersions(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC_LONG, null);
+    expectedDatasetVersions = Arrays.asList("1.0.0.0", "2.0.0.0", "2.0.0.1");
+    assertEquals("Mismatch for datasets list", expectedDatasetVersions, partialDatasetVersions.getEntries());
+    assertEquals("Mismatch on next page token", "2.0.0.2", partialDatasetVersions.getNextPageToken());
+
+    //listing dataset version with page token provided.
+    partialDatasetVersions =
+        mySqlAccountStore.listAllValidDatasetVersions(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC_LONG, "2.0.0.0");
+    expectedDatasetVersions = Arrays.asList("2.0.0.0", "2.0.0.1", "2.0.0.2");
+    assertEquals("Mismatch for datasets list", expectedDatasetVersions, partialDatasetVersions.getEntries());
+    assertEquals("Mismatch on next page token", "2.0.1.0", partialDatasetVersions.getNextPageToken());
+  }
+
+// endregion Latest Version Support Tests
+
+// region Add/Get Version Tests
 
   /**
    * Test add and get dataset version with different input.
@@ -1304,6 +1448,104 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch on number of valid dataset versions", 1, datasetVersionRecords.size());
     assertEquals("Mismatch on valid dataset versions", "1.2.4", datasetVersionRecords.get(0).getVersion());
   }
+
+  /**
+   * Test add and get dataset semantic long version with different input.
+   */
+  @Test
+  public void testAddAndGetDatasetSemanticLongVersion() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Map<String, String> userTags = new HashMap<>();
+    userTags.put("userTag", "tagValue");
+    long datasetTtl = 3600L;
+
+    //Test semantic long version.
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG).setVersionSchema(
+            Dataset.VersionSchema.SEMANTIC_LONG).setRetentionTimeInSeconds((long) -1).setUserTags(userTags).build();
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+    String version = "1.2.3.4";
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+        DatasetVersionState.READY);
+    DatasetVersionRecord datasetVersionRecordWithSemanticVersion =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version);
+    assertEquals("Mismatch in dataset version", version, datasetVersionRecordWithSemanticVersion.getVersion());
+
+    // Add dataset version for non-existing dataset.
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), "NonExistingDataset", version, -1, System.currentTimeMillis(), false,
+          DatasetVersionState.READY);
+      fail("Add dataset version should fail without dataset");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected ErrorCode", AccountServiceErrorCode.NotFound, e.getErrorCode());
+    }
+
+    //add same dataset version, should fail
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, 0, false, DatasetVersionState.READY);
+      fail("Should fail due to dataset version already exist");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
+    }
+
+    //Delete dataset version
+    mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG,
+        version);
+
+    //add dataset version again, should succeed.
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+        DatasetVersionState.READY);
+
+    //get the new added dataset version, should not fail.
+    mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version);
+
+    // Add dataset version which didn't follow the semantic long format.
+    version = "1.2.3";
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+          DatasetVersionState.READY);
+      fail("Add dataset version should fail with wrong format of semantic version");
+    } catch (IllegalArgumentException e) {
+      // do nothing
+    }
+
+    //delete the dataset, and can't add or get any dataset version.
+    mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC_LONG);
+    version = "1.2.3.5";
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version, -1, System.currentTimeMillis(), false,
+          DatasetVersionState.READY);
+      fail("Should fail due to the dataset already gone");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
+
+    try {
+      mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC_LONG, version);
+      fail("Should fail due to the dataset already gone");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
+
+    List<DatasetVersionRecord> datasetVersionRecords =
+        mySqlAccountStore.getAllValidVersionForDatasetDeletion(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC_LONG);
+    assertEquals("Mismatch on number of valid dataset versions", 1, datasetVersionRecords.size());
+    assertEquals("Mismatch on valid dataset versions", "1.2.3.4", datasetVersionRecords.get(0).getVersion());
+  }
+
+// endregion Add/Get Version Tests
 
   @Test
   public void testUpdateTtlForDatasetVersions() throws Exception {

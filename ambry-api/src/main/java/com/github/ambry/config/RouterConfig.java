@@ -64,6 +64,7 @@ public class RouterConfig {
   public static final String ROUTER_PUT_SUCCESS_TARGET = "router.put.success.target";
   public static final String ROUTER_PUT_REMOTE_SUCCESS_TARGET = "router.put.remote.success.target";
   public static final String ROUTER_PUT_REMOTE_ATTEMPT_LIMIT = "router.put.remote.attempt.limit";
+  public static final String ROUTER_VERIFY_CRC_FOR_PUT_REQUESTS = "router.verify.crc.for.put.requests";
   public static final String ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM = "router.replicate.blob.request.parallelism";
   public static final String ROUTER_REPLICATE_BLOB_SUCCESS_TARGET = "router.replicate.blob.success.target";
   public static final String ROUTER_MAX_SLIPPED_PUT_ATTEMPTS = "router.max.slipped.put.attempts";
@@ -288,6 +289,10 @@ public class RouterConfig {
   @Config(ROUTER_PUT_REMOTE_ATTEMPT_LIMIT)
   @Default("2")
   public final int routerPutRemoteAttemptLimit;
+
+  @Config(ROUTER_VERIFY_CRC_FOR_PUT_REQUESTS)
+  @Default("false")
+  public final boolean routerVerifyCrcForPutRequests;
 
   /**
    * The maximum number of parallel requests issued at a time by the ReplicateBlob manager.
@@ -946,6 +951,7 @@ public class RouterConfig {
         verifiableProperties.getInt(ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL,
             DEFAULT_ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL);
     routerParanoidDurabilityEnabled = verifiableProperties.getBoolean(ROUTER_PARANOID_DURABILITY_ENABLED, false);
+    routerVerifyCrcForPutRequests = verifiableProperties.getBoolean(ROUTER_VERIFY_CRC_FOR_PUT_REQUESTS, false);
   }
 
   /**

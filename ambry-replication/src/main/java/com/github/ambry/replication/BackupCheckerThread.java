@@ -167,11 +167,11 @@ public class BackupCheckerThread extends ReplicaThread {
     group.setState(ReplicaGroupReplicationState.DONE);
   }
 
-  protected MessageInfo mapBlob(MessageInfo blob) {
+  protected MessageInfo mapBlob(MessageInfo blob, List<StoreKey> storeKeysConversionLog) {
     StoreKey keyConvert = null;
     try {
       // Don't do batch-convert, if one replica in batch fails, then it affects handling others
-      keyConvert = storeKeyConverter.convert(Collections.singleton(blob.getStoreKey()))
+      keyConvert = convertStoreKeys(Collections.singleton(blob.getStoreKey()), storeKeysConversionLog)
           .get(blob.getStoreKey());
     } catch (Throwable e) {
       metrics.backupIntegrityError.inc();
@@ -225,7 +225,7 @@ public class BackupCheckerThread extends ReplicaThread {
    * @return
    */
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
-      List<RemoteReplicaInfo> replicas, DataNodeId server) {
+      List<RemoteReplicaInfo> replicas, DataNodeId server, List<StoreKey> storeKeysConversionLog) {
     IntStream.range(0, response.getReplicaMetadataResponseInfoList().size())
         .filter(i -> response.getReplicaMetadataResponseInfoList().get(i).getError() == ServerErrorCode.No_Error)
         .forEach(i -> {
@@ -235,7 +235,7 @@ public class BackupCheckerThread extends ReplicaThread {
           metadata.getMessageInfoList().stream()
               .map(serverBlob -> {
                 numBlobScanned.incrementAndGet();
-                return mapBlob(serverBlob);
+                return mapBlob(serverBlob, storeKeysConversionLog);
               })
               .filter(serverBlob -> serverBlob.getStoreKey() != null)
               .map(serverBlob -> {

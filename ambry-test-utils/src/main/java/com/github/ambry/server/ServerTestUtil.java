@@ -1481,7 +1481,7 @@ public final class ServerTestUtil {
       TestUtils.RANDOM.nextBytes(metadata);
       TestUtils.RANDOM.nextBytes(blob);
       Future<String> future =
-          router.putBlob(null, properties, metadata, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob)),
+          router.putBlob(properties, metadata, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob)),
               new PutBlobOptionsBuilder().build(), new Callback<String>() {
                 @Override
                 public void onCompletion(String result, Exception exception) {
@@ -1492,7 +1492,7 @@ public final class ServerTestUtil {
                   }
                   callbackLatch.countDown();
                 }
-              }, QUOTA_CHARGE_EVENT_LISTENER);
+              }, QUOTA_CHARGE_EVENT_LISTENER, null);
       putFutures.add(future);
     }
     for (Future<String> future : putFutures) {

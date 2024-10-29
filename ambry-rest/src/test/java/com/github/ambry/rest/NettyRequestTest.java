@@ -15,10 +15,10 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -754,7 +754,15 @@ public class NettyRequestTest {
 
     for (Map.Entry<String, String> e : headers) {
       if (!e.getKey().equalsIgnoreCase(HttpHeaderNames.COOKIE.toString())) {
+        // Make sure we have this key in receivedArgs
         assertTrue("Did not find key: " + e.getKey(), receivedArgs.containsKey(e.getKey()));
+        // Now make sure we can find a case-insensitive key in the request
+        String lowerKey = e.getKey().toLowerCase();
+        assertTrue("Case insensitive key should exist for lower key" + e.getKey(),
+            nettyRequest.getArgs().containsKey(lowerKey));
+        String upperKey = e.getKey().toUpperCase();
+        assertTrue("Case insensitive key should exist for upper key" + e.getKey(),
+            nettyRequest.getArgs().containsKey(upperKey));
         if (!keyValueCount.containsKey(e.getKey())) {
           keyValueCount.put(e.getKey(), 0);
         }
@@ -768,8 +776,8 @@ public class NettyRequestTest {
 
     assertEquals("Number of args does not match", keyValueCount.size(), receivedArgs.size());
     for (Map.Entry<String, Integer> e : keyValueCount.entrySet()) {
-      assertEquals("Value count for key " + e.getKey() + " does not match", e.getValue().intValue(),
-          receivedArgs.get(e.getKey()).size());
+      assertEquals("Value count for key " + e.getKey() + " does not match",
+          e.getValue() == 0 ? 1 : e.getValue().intValue(), receivedArgs.get(e.getKey()).size());
     }
 
     assertEquals("Auto-read is in an invalid state",

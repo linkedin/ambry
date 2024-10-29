@@ -85,22 +85,27 @@ public class PropertyStoreCleanUpTask implements Task {
 
   @Override
   public TaskResult run() {
+    logger.info("Running PropertyStoreCleanUpTask for cluster = {}", manager.getClusterName());
     long startTimeMs = System.currentTimeMillis();
     try {
       // Get all instances and live instances
+      logger.info("Fetching instances for cluster = {}", manager.getClusterName());
       HelixDataAccessor dataAccessor = manager.getHelixDataAccessor();
       List<String> instances = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
+      logger.info("Fetching live instances for cluster = {}", manager.getClusterName());
       Set<String> liveInstances = new HashSet<>(dataAccessor.getChildNames(dataAccessor.keyBuilder().liveInstances()));
       metrics.instancesAndLiveInstancesFetchTimeInMs.update(System.currentTimeMillis() - startTimeMs);
 
       //Get all instances in ideal state and external view for this cluster
       Set<String> instancesInIdealStateAndExternalView = new HashSet<>();
+      logger.info("Fetching ideal state for cluster = {}", manager.getClusterName());
       dataAccessor.getChildValues(dataAccessor.keyBuilder().idealStates(), true).stream()
           .map(IdealState.class::cast)
           .forEach(idealState -> idealState.getPartitionSet().stream()
               .map(idealState::getInstanceSet)
               .forEach(instancesInIdealStateAndExternalView::addAll));
 
+      logger.info("Fetching external view for cluster = {}", manager.getClusterName());
       dataAccessor.getChildValues(dataAccessor.keyBuilder().externalViews(), true).stream()
           .map(ExternalView.class::cast)
           .forEach(externalView -> externalView.getPartitionSet().stream()
@@ -110,6 +115,7 @@ public class PropertyStoreCleanUpTask implements Task {
       metrics.idealStateAndExternalViewFetchTimeInMS.update(System.currentTimeMillis() - startTimeMs);
 
       // Cleanup property store for instances that are not live and not present in ideal state or external view
+      logger.info("Cleaning up property store for instances that are not live and not present in ideal state or external view");
       instances.stream()
           .filter(
               instance -> shouldDoCleanUpPropertyStore(instance, liveInstances, instancesInIdealStateAndExternalView))

@@ -20,6 +20,7 @@ import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.frontend.NamedBlobPath;
+import com.github.ambry.frontend.PutBlobMetaInfo;
 import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -30,7 +31,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.frontend.PutBlobMetaInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -100,7 +100,9 @@ public class S3MultipartUploadPartHandler {
     } else {
       restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
     }
-    restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+    if (restRequest.getArgs().get(CONTENT_ENCODING) != null) {
+      restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+    }
 
     // 2. Set the internal headers session id and chunk-upload. They are used during for multipart part uploads
     String uploadId = RestUtils.getHeader(restRequest.getArgs(), UPLOAD_ID_QUERY_PARAM, true);
@@ -172,8 +174,9 @@ public class S3MultipartUploadPartHandler {
           finalCallback.onCompletion(null, null);
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true),
+              null);
         }
       }, uri, logger, finalCallback);
     }

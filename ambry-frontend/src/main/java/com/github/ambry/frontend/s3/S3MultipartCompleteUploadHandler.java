@@ -67,11 +67,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
-import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
 /**
@@ -187,7 +187,9 @@ public class S3MultipartCompleteUploadHandler {
           } else {
             restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
           }
-          restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+          if (restRequest.getArgs().get(CONTENT_ENCODING) != null) {
+            restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+          }
           // Overwrites are allowed by default for S3 uploads
           restRequest.setArg(NAMED_UPSERT, true);
           BlobInfo blobInfo = getBlobInfoFromRequest();
@@ -257,7 +259,7 @@ public class S3MultipartCompleteUploadHandler {
         // since the converted ID may be changed by the ID converter.
         String serviceId = blobInfo.getBlobProperties().getServiceId();
         retryExecutor.runWithRetries(retryPolicy,
-            callback -> router.updateBlobTtl(null, blobId, serviceId, Utils.Infinite_Time, callback,
+            callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
                 QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
             routerTtlUpdateCallback(blobInfo, blobId));
       }, uri, LOGGER, finalCallback);

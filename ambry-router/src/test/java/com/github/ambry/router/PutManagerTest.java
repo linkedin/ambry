@@ -402,10 +402,10 @@ public class PutManagerTest {
     instantiateNewRouterForPuts = false;
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
     Future future =
-        router.putBlob(null, req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
+        router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
           callbackCalled.countDown();
           throw new RuntimeException("Throwing an exception in the user callback");
-        }, QuotaTestUtils.createTestQuotaChargeCallback());
+        }, QuotaTestUtils.createTestQuotaChargeCallback(), null);
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
     future.get();

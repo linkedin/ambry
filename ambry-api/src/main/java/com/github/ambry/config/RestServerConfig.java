@@ -20,7 +20,6 @@ public class RestServerConfig {
   public static final String CONFIG_PREFIX = "rest.server.";
   public static final String ENABLE_ADDED_CHANNEL_HANDLERS = CONFIG_PREFIX + "enable.added.channel.handlers";
   public static final String ENABLE_STRUCTURED_LOGGING = CONFIG_PREFIX + "enable.structured.logging";
-  public static final String ENABLE_COMPOSITE_ROUTER = CONFIG_PREFIX + "enable.composite.router";
 
   /**
    * The RestRequestServiceFactory that needs to be used by the RestServer
@@ -75,14 +74,6 @@ public class RestServerConfig {
   public final String restServerRouterFactory;
 
   /**
-   * The CompositeRouterFactory that needs to be used by the RestServer
-   * for bootstrapping the CompositeRouter.
-   */
-  @Config("rest.server.composite.router.factory")
-  @Default("")
-  public final String restServerCompositeRouterFactory;
-
-  /**
    * Request Headers that needs to be logged as part of public access log entries
    */
   @Config("rest.server.public.access.log.request.headers")
@@ -117,13 +108,6 @@ public class RestServerConfig {
   @Default("false")
   public final boolean restServerEnableAddedChannelHandlers;
 
-  /**
-   * Set true to enable composite router in RestServer.
-   */
-  @Config(ENABLE_COMPOSITE_ROUTER)
-  @Default("false")
-  public final boolean restServerEnableCompositeRouter;
-
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restServerRestRequestServiceFactory = verifiableProperties.getString("rest.server.rest.request.service.factory");
     restServerNioServerFactory =
@@ -137,7 +121,6 @@ public class RestServerConfig {
         verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerAccountServiceFactory = verifiableProperties.getString("rest.server.account.service.factory",
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
-    restServerCompositeRouterFactory = verifiableProperties.getString("rest.server.composite.router.factory", "");
     restServerRouterFactory = verifiableProperties.getString("rest.server.router.factory",
         "com.github.ambry.router.NonBlockingRouterFactory");
     restServerPublicAccessLogRequestHeaders =
@@ -148,6 +131,5 @@ public class RestServerConfig {
     restServerEnableStructuredLogging = verifiableProperties.getBoolean(ENABLE_STRUCTURED_LOGGING, false);
     restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
     restServerEnableAddedChannelHandlers = verifiableProperties.getBoolean(ENABLE_ADDED_CHANNEL_HANDLERS, false);
-    restServerEnableCompositeRouter = verifiableProperties.getBoolean(ENABLE_COMPOSITE_ROUTER, false);
   }
 }

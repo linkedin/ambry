@@ -204,9 +204,12 @@ class PostBlobHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          constructBlobIdAndSetIntoRestRequestInternalHeader(blobInfo, options);
-          router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          if (routerConfig.routerBlobidCurrentVersion == 7) {
+            constructBlobIdAndSetIntoRestRequestInternalHeader(blobInfo);
+          }
+          router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true),
+              null);
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -485,7 +488,7 @@ class PostBlobHandler {
      * @param blobInfo the {@link BlobInfo}
      * @param options the {@link PutBlobOptions}
      */
-    private void constructBlobIdAndSetIntoRestRequestInternalHeader(BlobInfo blobInfo, PutBlobOptions options) {
+    private void constructBlobIdAndSetIntoRestRequestInternalHeader(BlobInfo blobInfo) {
       BlobProperties blobProperties = blobInfo.getBlobProperties();
       //Chunk upload does not need the customized blobId
       BlobId customizedBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
