@@ -487,12 +487,10 @@ class PostBlobHandler {
      */
     private void constructBlobIdAndSetIntoRestRequestInternalHeader(BlobInfo blobInfo, PutBlobOptions options) {
       BlobProperties blobProperties = blobInfo.getBlobProperties();
-      boolean isSimpleBlob = !options.isChunkUpload() && !options.skipCompositeChunk();
       //Chunk upload does not need the customized blobId
-      BlobId.BlobDataType blobDataType = isSimpleBlob ? BlobId.BlobDataType.SIMPLE : BlobId.BlobDataType.METADATA;
       BlobId customizedBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), blobProperties.getAccountId(), blobProperties.getContainerId(),
-          blobProperties.isEncrypted(), blobDataType, blobProperties.getReservedUuid());
+          blobProperties.isEncrypted(), blobProperties.getReservedUuid());
       restRequest.setArg(BLOB_ID_EXCLUDE_PARTITION, customizedBlobId.getID());
     }
   }

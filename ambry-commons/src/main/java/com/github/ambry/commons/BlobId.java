@@ -287,22 +287,23 @@ public class BlobId extends StoreKey {
 
   /**
    * Construct a blobId which excluding partitionId and use reserved UUID.
-   * @param version the version in which this blob should be created.
-   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   *
+   * @param version      the version in which this blob should be created.
+   * @param type         The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
    * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
-   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
-   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
-   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
-   * @param uuidStr The uuid that is to be used to construct this id.
+   * @param accountId    The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId  The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
+   * @param isEncrypted  {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
+   * @param uuidStr      The uuid that is to be used to construct this id.
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
-      boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
+      boolean isEncrypted, String uuidStr) {
     this.type = type;
     this.datacenterId = datacenterId;
     this.accountId = accountId;
     this.containerId = containerId;
     this.isEncrypted = isEncrypted;
-    this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version " + version);
+    this.blobDataType = null;
     this.uuid = UUID.fromString(uuidStr);
     this.uuidStr = null;
     this.version = version;
@@ -519,10 +520,23 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V5:
       case BLOB_ID_V6:
-      case BLOB_ID_V7:
         flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
         flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
+        idBuf.put(flag);
+        idBuf.put(datacenterId);
+        idBuf.putShort(accountId);
+        idBuf.putShort(containerId);
+        break;
+      case BLOB_ID_V7:
+        flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
+        flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
+        if (blobDataType == null) {
+          // If blobDataType is null, always set to simple blob cause we might need the flag to identify if this need to be encrypted or not.
+          flag |= (0 << BLOB_DATA_TYPE_SHIFT);
+        } else {
+          flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
+        }
         idBuf.put(flag);
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);

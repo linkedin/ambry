@@ -147,6 +147,7 @@ public class PostBlobHandlerTest {
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
     CommonTestUtils.populateRequiredRouterProps(props);
+    props.setProperty(RouterConfig.ROUTER_BLOBID_CURRENT_VERSION, "7");
     props.setProperty(RouterConfig.RESERVED_METADATA_ENABLED, Boolean.toString(isReservedMetadataEnabled));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP, idConverterFactory);
@@ -470,7 +471,7 @@ public class PostBlobHandlerTest {
         BlobId blobId = new BlobId(blobIdStr, CLUSTER_MAP);
         BlobId newBlobId =
             new BlobId(blobId.getVersion(), blobId.getBlobIdType(), blobId.getDatacenterId(), blobId.getAccountId(),
-                blobId.getContainerId(), blobId.isEncrypted(), blobId.getBlobDataType(), blobId.getUuid());
+                blobId.getContainerId(), blobId.isEncrypted(), blobId.getUuid());
         assertEquals("Invalid internal blob id header", request.getArgs().get(BLOB_ID_EXCLUDE_PARTITION),
             newBlobId.getID());
       }
