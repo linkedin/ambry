@@ -131,6 +131,8 @@ public class ReplicationMetrics {
   public final Counter interColoReplicaThreadIdleCount;
   public final Counter intraColoReplicaThreadThrottleCount;
   public final Counter interColoReplicaThreadThrottleCount;
+  public final Counter intraColoContinuousReplicationReplicaThrottleCount;
+  public final Counter interColoContinuousReplicationReplicaThrottleCount;
   public final Counter remoteReplicaInfoRemoveError;
   public final Counter remoteReplicaInfoAddError;
   public final Counter allResponsedKeysExist;
@@ -282,6 +284,10 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicaThreadThrottleCount"));
     interColoReplicaThreadThrottleCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicaThreadThrottleCount"));
+    intraColoContinuousReplicationReplicaThrottleCount = registry.counter(
+        MetricRegistry.name(ReplicaThread.class, "IntraColoContinuousReplicationReplicaThrottleCount"));
+    interColoContinuousReplicationReplicaThrottleCount = registry.counter(
+        MetricRegistry.name(ReplicaThread.class, "InterColoContinuousReplicationReplicaThrottleCount"));
     remoteReplicaInfoRemoveError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoRemoveError"));
     remoteReplicaInfoAddError = registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoAddError"));

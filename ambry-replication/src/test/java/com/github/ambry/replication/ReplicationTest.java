@@ -120,8 +120,8 @@ public class ReplicationTest extends ReplicationTestHelper {
   /**
    * Constructor to set the configs
    */
-  public ReplicationTest(short requestVersion, short responseVersion) {
-    super(requestVersion, responseVersion);
+  public ReplicationTest(short requestVersion, short responseVersion, boolean enableContinuousReplication) {
+    super(requestVersion, responseVersion, enableContinuousReplication);
   }
 
   /**
@@ -134,8 +134,10 @@ public class ReplicationTest extends ReplicationTestHelper {
   public static List<Object[]> data() {
     //@formatter:off
     return Arrays.asList(new Object[][]{
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5},
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, true},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, false},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, true},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, false},
     });
     //@formatter:on
   }
@@ -1669,7 +1671,7 @@ public class ReplicationTest extends ReplicationTestHelper {
           replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All DELETE_IN_PROGRESS blobs qualified with retention time should be skipped during replication", 0,
           remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }
@@ -1693,7 +1695,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       assertEquals(
           "All DELETE_IN_PROGRESS blobs not qualified with retention time should not be skipped during replication", 2,
           remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }
@@ -1714,7 +1716,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       Set<MessageInfo> remoteMissingStoreKeys =
           replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All INACTIVE blobs should be skipped during replication", 0, remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }
@@ -1736,7 +1738,7 @@ public class ReplicationTest extends ReplicationTestHelper {
           replicaThread.getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
       assertEquals("All non-deprecated blobs should not be skipped during replication", 2,
           remoteMissingStoreKeys.size());
-      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response);
+      Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = replicaThread.batchConvertReplicaMetadataResponseKeys(response, new ArrayList<>());
       replicaThread.processReplicaMetadataResponse(remoteMissingStoreKeys, replicaMetadataResponseInfo,
           remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
     }
@@ -1952,6 +1954,85 @@ public class ReplicationTest extends ReplicationTestHelper {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Testing for put blobs in case of multiple iterations per replication cycle
+   * @throws Exception
+   */
+  @Test
+  public void putsContinuousReplicationTest() throws Exception {
+    if (!replicationConfig.replicationEnableContinuousReplication) {
+      return;
+    }
+
+    properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
+    properties.setProperty("replication.max.partition.count.per.request", Integer.toString(3));
+    properties.setProperty(ReplicationConfig.REPLICATION_GROUP_ITERATION_LIMIT, Integer.toString(6));
+    verifiableProperties = new VerifiableProperties(properties);
+    replicationConfig = new ReplicationConfig(verifiableProperties);
+
+    // setting number of mount points to partition limit so each node can have replicas higher that limit so multiple groups get created
+    MockClusterMap clusterMap =
+        new MockClusterMap(false, true, 9, replicationConfig.replicationMaxPartitionCountPerRequest + 1, 3, false,
+            false, null);
+
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+    storeKeyConverter.setConversionMap(conversionMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+
+    List<MockHost> remoteHostOnly = Collections.singletonList(remoteHost);
+    List<MockHost> localHostOnly = Collections.singletonList(localHost);
+    List<MockHost> allHosts = Arrays.asList(localHost, remoteHost);
+
+    for (PartitionId pid : partitionIds) {
+      // add 3 put messages to both hosts (also add to expectedLocal)
+      List<StoreKey> ids = addPutMessagesToReplicasOfPartition(pid, allHosts, 3);
+
+      ids.addAll(addPutMessagesToReplicasOfPartition(pid, remoteHostOnly, 3));
+      ids.addAll(addPutMessagesToReplicasOfPartition(pid, localHostOnly, 2));
+    }
+
+    // After the for loop above, we have records in hosts just like below
+    // L|id0|id1|id2|   |   |   |id6|id7|
+    // R|id0|id1|id2|id3|id4|id5|   |   |
+
+    //in every metadata request we will only fetch 1 blob id
+    int batchSize = 1;
+
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null, null,
+            remoteHost);
+
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    // We can see from the table in the comments above, Local has 3 records less than remote host.
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+      assertEquals("Missing buffers count mismatch", 3, entry.getValue().size());
+    }
+
+    //after 6th iteration all partitions should be caught up.
+    replicaThread.replicate();
+
+    Map<PartitionId, List<ByteBuffer>> missingBuffersAfterReplication =
+        remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    //all partitions should be caught up now
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffersAfterReplication.entrySet()) {
+      assertEquals("Missing buffers count mismatch", 0, entry.getValue().size());
     }
   }
 

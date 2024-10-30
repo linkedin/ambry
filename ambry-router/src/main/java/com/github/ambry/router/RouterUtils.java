@@ -111,6 +111,7 @@ public class RouterUtils {
         case BlobUpdateNotAllowed:
           isSystemHealthError = false;
           break;
+        case BlobCorrupted:
         case UnexpectedInternalError:
           isInternalError = true;
           break;

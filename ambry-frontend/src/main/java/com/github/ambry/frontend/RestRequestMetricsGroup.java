@@ -34,6 +34,7 @@ public class RestRequestMetricsGroup {
 
   private final ConcurrentMap<Pair<String, String>, ContainerMetrics> instantiatedContainerMetrics =
       new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, AccountMetrics> instantiatedAccountMetrics = new ConcurrentHashMap<>();
   private final String requestType;
   private final boolean encryptedMetricsEnabled;
   private final MetricRegistry metricRegistry;
@@ -46,12 +47,13 @@ public class RestRequestMetricsGroup {
 
   /**
    * Instantiates {@link RestRequestMetricsGroup} for the given requestType and resource
-   * @param ownerClass the {@link Class} that is supposed to own the metrics created by this group.
-   * @param requestType the type of request for which a group is being created.
+   *
+   * @param ownerClass              the {@link Class} that is supposed to own the metrics created by this group.
+   * @param requestType             the type of request for which a group is being created.
    * @param encryptedMetricsEnabled {@code true} if separate {@link RestRequestMetrics} should be used for encrypted
    *                                blob operations.
-   * @param metricRegistry the {@link MetricRegistry} instance.
-   * @param frontendConfig the {@link FrontendConfig}.
+   * @param metricRegistry          the {@link MetricRegistry} instance.
+   * @param frontendConfig          the {@link FrontendConfig}.
    */
   RestRequestMetricsGroup(Class ownerClass, String requestType, boolean encryptedMetricsEnabled,
       MetricRegistry metricRegistry, FrontendConfig frontendConfig) {
@@ -74,7 +76,8 @@ public class RestRequestMetricsGroup {
 
   /**
    * Fetches the appropriate {@link RestRequestMetrics} based on the params
-   * @param sslUsed {@code true} if the request is sent over ssl. {@code false} otherwise
+   *
+   * @param sslUsed   {@code true} if the request is sent over ssl. {@code false} otherwise
    * @param encrypted {@code true} if the blob is encrypted. {@code false} otherwise
    * @return the appropriate {@link RestRequestMetrics} based on the params
    */
@@ -90,15 +93,22 @@ public class RestRequestMetricsGroup {
    * Get a {@link ContainerMetrics} instance for the specified container for this operation type. If a request of this
    * operation type has not been made for the specified container since the frontend was started, new metrics will be
    * created.
-   * @param accountName the account name.
-   * @param containerName the container name.
+   *
+   * @param accountName                the account name.
+   * @param containerName              the container name.
+   * @param shouldIncludeAccountMetrics True to include account metrics in container metrics
    * @return the {@link ContainerMetrics} instance, or {@code null} if container metrics are disabled for this type of
-   *         operation.
+   * operation.
    */
-  ContainerMetrics getContainerMetrics(String accountName, String containerName) {
+  ContainerMetrics getContainerMetrics(String accountName, String containerName, boolean shouldIncludeAccountMetrics) {
     return containerMetricsEnabledRequestTypes.contains(requestType) ? instantiatedContainerMetrics.computeIfAbsent(
-        new Pair<>(accountName, containerName),
-        k -> new ContainerMetrics(accountName, containerName, requestType, metricRegistry,
-            containerMetricsEnabledGetRequestTypes.contains(requestType))) : null;
+        new Pair<>(accountName, containerName), k -> {
+          boolean isGetRequest = containerMetricsEnabledGetRequestTypes.contains(requestType);
+          AccountMetrics accountMetrics =
+              shouldIncludeAccountMetrics ? instantiatedAccountMetrics.computeIfAbsent(accountName,
+                  ak -> new AccountMetrics(accountName, requestType, metricRegistry, isGetRequest)) : null;
+          return new ContainerMetrics(accountName, containerName, requestType, metricRegistry, isGetRequest,
+              accountMetrics);
+        }) : null;
   }
 }

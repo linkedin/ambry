@@ -41,7 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -69,7 +69,10 @@ public class NettyRequest implements RestRequest {
   protected final HttpRequest request;
   protected final Channel channel;
   protected final NettyMetrics nettyMetrics;
-  protected final Map<String, Object> allArgs = new ConcurrentHashMap<>();
+  // This allArgs map needs to be
+  // 1. case-insensitive, as headers and query parameters in http request should be case-insensitive
+  // 2. thread safe, as we might access/update the map in different threads.
+  protected final Map<String, Object> allArgs = new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
   protected final Queue<HttpContent> requestContents = new LinkedBlockingQueue<>();
   protected final ReentrantLock contentLock = new ReentrantLock();
 

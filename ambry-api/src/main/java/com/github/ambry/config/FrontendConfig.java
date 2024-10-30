@@ -41,6 +41,7 @@ public class FrontendConfig {
   public static final String ENABLE_UNDELETE = PREFIX + "enable.undelete";
   public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
   public static final String CONTAINER_METRICS_EXCLUDED_ACCOUNTS = PREFIX + "container.metrics.excluded.accounts";
+  public static final String CONTAINER_METRICS_AGGREGATED_ACCOUNTS = PREFIX + "container.metrics.aggregated.accounts";
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
   public static final String CONTAINER_METRICS_ENABLED_REQUEST_TYPES = PREFIX + "container.metrics.enabled.request.types";
   public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = PREFIX + "container.metrics.enabled.get.request.types";
@@ -280,6 +281,15 @@ public class FrontendConfig {
   public final List<String> containerMetricsExcludedAccounts;
 
   /**
+   * The comma separated list of account names for which container metrics should be aggregated. If account A is in the
+   * list, then an account metrics would be created for each container metrics under this account. And all the container
+   * metrics would be aggregated to this account metrics.
+   */
+  @Config(CONTAINER_METRICS_AGGREGATED_ACCOUNTS)
+  @Default("")
+  public final List<String> containerMetricsAggregatedAccounts;
+
+  /**
    * This should be controlled by {@link NettyConfig}.nettyEnableOneHundredContinue
    */
   public final boolean oneHundredContinueEnable;
@@ -345,6 +355,8 @@ public class FrontendConfig {
     namedBlobDbFactory = verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
     containerMetricsExcludedAccounts =
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_EXCLUDED_ACCOUNTS, ""), ",");
+    containerMetricsAggregatedAccounts =
+        Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_AGGREGATED_ACCOUNTS, ""), ",");
   }
 
   /**
