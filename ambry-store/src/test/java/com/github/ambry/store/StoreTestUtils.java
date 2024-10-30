@@ -88,6 +88,7 @@ public class StoreTestUtils {
       partitionId = mock(PartitionId.class);
       when(partitionId.toString()).thenReturn(storeId);
       when(partitionId.toPathString()).thenReturn(storeId);
+      when(partitionId.getId()).thenReturn(1L);
     }
 
     @Override
