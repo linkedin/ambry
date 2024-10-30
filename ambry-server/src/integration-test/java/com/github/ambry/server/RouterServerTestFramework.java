@@ -298,8 +298,8 @@ class RouterServerTestFramework {
       }
     };
     Future<String> future =
-        router.putBlob(opChain.properties, opChain.userMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            callback, quotaChargeCallback, null);
+        router.putBlob(null, opChain.properties, opChain.userMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            callback, quotaChargeCallback);
     TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", false), opChain) {
       @Override
       void check() throws Exception {
@@ -445,7 +445,7 @@ class RouterServerTestFramework {
    */
   private void startTtlUpdate(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    Future<Void> future = router.updateBlobTtl(opChain.blobId, null, Utils.Infinite_Time, callback,
+    Future<Void> future = router.updateBlobTtl(null, opChain.blobId, null, Utils.Infinite_Time, callback,
         quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("updateBlobTtl", false), opChain) {
       @Override

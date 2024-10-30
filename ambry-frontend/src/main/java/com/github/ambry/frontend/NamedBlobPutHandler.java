@@ -234,9 +234,8 @@ public class NamedBlobPutHandler {
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true),
-              restRequest);
+          router.putBlob(restRequest, getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
+              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -250,8 +249,26 @@ public class NamedBlobPutHandler {
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
-        blobInfo.getBlobProperties().setBlobSize(restRequest.getBlobBytesReceived());
-        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo, blobId));
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
+        String blobIdClean = stripPrefixAndExtension(blobId);
+        if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+          // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
+          // since the converted ID may be changed by the ID converter.
+          String serviceId = blobInfo.getBlobProperties().getServiceId();
+          retryExecutor.runWithRetries(retryPolicy,
+              callback -> router.updateBlobTtl(restRequest, blobIdClean, serviceId, Utils.Infinite_Time, callback,
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)),
+              this::isRetriable, routerTtlUpdateCallbackForPut(blobInfo));
+        } else {
+          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            //Make sure to process response after delete finished
+            updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
+                deleteDatasetVersionOutOfRetentionCallback(blobInfo));
+          } else {
+            securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+                securityProcessResponseCallback());
+          }
+        }
       }, uri, LOGGER, deleteDatasetCallback);
     }
 
@@ -293,7 +310,6 @@ public class NamedBlobPutHandler {
      * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @param blobId the blob ID returned by the router (without decoration or obfuscation by id converter).
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
@@ -304,9 +320,9 @@ public class NamedBlobPutHandler {
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
+              callback -> router.updateBlobTtl(null, blobId, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-              routerTtlUpdateCallback(blobInfo, blobId));
+              routerTtlUpdateCallbackForStitch(blobInfo, blobId));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
@@ -330,13 +346,33 @@ public class NamedBlobPutHandler {
     }
 
     /**
+     * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform request time security
+     * checks that rely on the request being fully parsed and any additional arguments set.
+     *
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
+     */
+    private Callback<Void> routerTtlUpdateCallbackForPut(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          //Make sure to process response after delete finished
+          updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
+              deleteDatasetVersionOutOfRetentionCallback(blobInfo));
+        } else {
+          securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+              securityProcessResponseCallback());
+        }
+      }, uri, LOGGER, deleteDatasetCallback);
+    }
+
+    /**
      * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @param blobId the {@link String} to use for blob id.
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
-    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
+    private Callback<Void> routerTtlUpdateCallbackForStitch(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
         // Set the named blob state to be 'READY' after the Ttl update succeed
         if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
@@ -762,5 +798,11 @@ public class NamedBlobPutHandler {
         }
       };
     }
+  }
+
+  public String stripPrefixAndExtension(String blobId) throws RestServiceException {
+    return RestUtils.stripSlashAndExtensionFromId(
+        RequestPath.parse(blobId, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove, clusterName)
+            .getOperationOrBlobId(false));
   }
 }

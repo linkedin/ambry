@@ -85,6 +85,8 @@ import static com.github.ambry.account.Dataset.VersionSchema.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 
+import static com.github.ambry.frontend.Operations.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
@@ -272,6 +274,7 @@ public class FrontendIntegrationTestBase {
     assertNoContent(responseParts.queue, 1);
   }
 
+
   /**
    * Utility to test named blob PUT, GET, HEAD and DELETE operations
    * @param account the {@link Account} to use in post headers.
@@ -294,7 +297,7 @@ public class FrontendIntegrationTestBase {
 
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     headers.add(RestUtils.Headers.LIFE_VERSION, "0");
-    headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+    headers.add(TARGET_ACCOUNT_NAME, accountName);
     headers.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
     // This is the blob id for the given blob name, we should be able to do all get operations on this blob id.
     doVariousGetAndVerify(blobId, headers, false, content, 100, accountName, containerName, null, container);
@@ -386,6 +389,7 @@ public class FrontendIntegrationTestBase {
     verifyPostRequestCostHeaders(response, contentSize);
     return blobId;
   }
+
 
   /**
    * Verify Named blob List operation.
@@ -933,6 +937,7 @@ public class FrontendIntegrationTestBase {
     return String.format("/named/%s/%s/%s", accountName, containerName, blobName);
   }
 
+
   /**
    * The http request uri for list named blob.
    * @param accountName The account name.
@@ -1014,7 +1019,7 @@ public class FrontendIntegrationTestBase {
       httpHeaders.add(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
       httpHeaders.add(RestUtils.Headers.NAMED_UPSERT, true);
       if (targetAccountName != null) {
-        httpHeaders.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
+        httpHeaders.add(TARGET_ACCOUNT_NAME, targetAccountName);
       }
       if (targetContainerName != null) {
         httpHeaders.add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
@@ -1371,7 +1376,7 @@ public class FrontendIntegrationTestBase {
    * @param response the response received from Ambry.
    */
   void verifyAccountAndContainerHeaders(String accountName, String containerName, HttpResponse response) {
-    String accountNameInResponse = response.headers().get(RestUtils.Headers.TARGET_ACCOUNT_NAME);
+    String accountNameInResponse = response.headers().get(TARGET_ACCOUNT_NAME);
     String containerNameInResponse = response.headers().get(RestUtils.Headers.TARGET_CONTAINER_NAME);
     if (accountName != null && containerName != null) {
       assertEquals("Account name does not match that to which blob was uploaded", accountName, accountNameInResponse);

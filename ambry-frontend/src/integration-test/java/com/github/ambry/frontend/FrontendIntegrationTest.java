@@ -620,6 +620,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doNamedBlobPutListDeleteTest(refAccount, namedBlobOptionalContainer);
   }
 
+
   // helpers
   // general
 

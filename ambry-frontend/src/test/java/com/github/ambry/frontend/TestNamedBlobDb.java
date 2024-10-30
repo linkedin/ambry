@@ -254,6 +254,9 @@ public class TestNamedBlobDb implements NamedBlobDb {
               .stream()
               .filter(e -> e.getSecond().getFirst() == NamedBlobState.READY)
               .collect(Collectors.toList());
+          if (readyRecords.isEmpty()) {
+            return null;
+          }
           Pair<NamedBlobRecord, Pair<NamedBlobState, Long>> latestRecord = readyRecords.get(readyRecords.size() - 1);
           return new Pair<>(latestRecord.getFirst(), latestRecord.getSecond().getSecond());
         }
