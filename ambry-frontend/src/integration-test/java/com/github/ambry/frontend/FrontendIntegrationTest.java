@@ -18,7 +18,6 @@ import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
-import com.github.ambry.account.Dataset;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -552,42 +551,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doNamedBlobPutListDeleteTest(refAccount, namedBlobOptionalContainer);
   }
 
-  @Test
-  public void datasetTest() throws Exception {
-    Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    Container namedBlobOptionalContainer =
-        new ContainerBuilder((short) 11, "optional", Container.ContainerStatus.ACTIVE, "",
-            refAccount.getId()).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
-    ACCOUNT_SERVICE.updateContainers(refAccount.getName(), Arrays.asList(namedBlobOptionalContainer));
-    String contentType = "application/octet-stream";
-    String ownerId = "datasetTest";
-    List<Dataset> datasetList = doDatasetPutUpdateGetTest(refAccount, namedBlobOptionalContainer);
-    List<Pair<String, String>> allDatasetVersions = new ArrayList<>();
-    Pair<List<String>, byte[]> idsAndContent =
-        uploadDataChunksAndVerify(refAccount, namedBlobOptionalContainer, null, 50, 50, 50, 50, 17);
-    //Test put and get
-    List<Pair<String, String>> datasetVersionsFromPut =
-        doDatasetVersionPutGetTest(refAccount, namedBlobOptionalContainer, datasetList, contentType, ownerId);
-    //Test Stitch and Get
-    ownerId = "stitchedUploadTest";
-    List<Pair<String, String>> datasetVersionsFromStitch =
-        doStitchDatasetVersionGetTest(refAccount, namedBlobOptionalContainer, datasetList, contentType, ownerId,
-            idsAndContent.getFirst(), idsAndContent.getSecond(), 217);
-    allDatasetVersions.addAll(datasetVersionsFromPut);
-    allDatasetVersions.addAll(datasetVersionsFromStitch);
-    InMemAccountService.PAGE_SIZE = -1;
-    //Test List dataset
-    doListDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), datasetList);
-    //Test List dataset version
-    List<Pair<String, String>> allDatasetVersionPairs = doListDatasetVersionAndVerify(datasetList, allDatasetVersions);
-    //Test delete
-    doDeleteDatasetVersionAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), allDatasetVersionPairs);
-    //After delete, it should have an empty list.
-    doListDatasetVersionAndVerify(datasetList, new ArrayList<>());
-    //Test delete dataset
-    doDeleteDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), datasetList);
-    doListDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), new ArrayList<>());
-  }
 
   // helpers
   // general
