@@ -116,12 +116,12 @@ public class DeleteBlobHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.deleteBlobSecurityProcessRequestMetrics, result -> {
         String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
-        if (!RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
-          blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+        if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) == null)  {
+          // Inject account and container when they are missing from the rest request.
+          blobIdStr = RestUtils.stripSlashAndExtensionFromId(blobIdStr);
           BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(blobIdStr, clusterMap);
-          restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, convertedBlobId);
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(convertedBlobId, restRequest,
-              metrics.updateBlobTtlMetricsGroup);
+              metrics.deleteBlobMetricsGroup);
         }
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);

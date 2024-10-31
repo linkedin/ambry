@@ -315,35 +315,26 @@ public class InMemoryRouter implements Router {
     if (restRequest == null) {
       proceedWithDelete(blobId, serviceId, callback, futureResult);
     } else {
-      // Extract blobId or convert it if necessary
-      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-        // Blob ID is already available
-        String blobIdStr =
-            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
-        proceedWithDelete(blobIdStr, serviceId, callback, futureResult);
-      } else {
-        try {
-          //If the blobId is named blob, need to go through convert first.
-          String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(true);
+      try {
+        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(true);
 
-          // Call idConverter to get blobId asynchronously
-          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
-            @Override
-            public void onCompletion(String convertedBlobId, Exception exception) {
-              if (exception != null) {
-                // Handle error in conversion
-                callback.onCompletion(null, exception);
-              } else {
-                // Continue with TTL update once blobId is available
-                proceedWithDelete(convertedBlobId, serviceId, callback, futureResult);
-              }
+        // Call idConverter to get blobId asynchronously
+        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+          @Override
+          public void onCompletion(String convertedBlobId, Exception exception) {
+            if (exception != null) {
+              // Handle error in conversion
+              callback.onCompletion(null, exception);
+            } else {
+              // Continue with TTL update once blobId is available
+              proceedWithDelete(convertedBlobId, serviceId, callback, futureResult);
             }
-          });
-        } catch (Exception e) {
-          // Handle synchronous errors during header extraction
-          callback.onCompletion(null, e);
-          return futureResult;
-        }
+          }
+        });
+      } catch (Exception e) {
+        // Handle synchronous errors during header extraction
+        callback.onCompletion(null, e);
+        return futureResult;
       }
     }
     // Blob ID is not available, use idConverter to get it

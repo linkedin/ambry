@@ -3555,8 +3555,7 @@ public class FrontendRestRequestServiceTest {
             accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
-    //Regular blob delete won't need to go through id converter
-    RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.HEAD};
+    RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
   }
 

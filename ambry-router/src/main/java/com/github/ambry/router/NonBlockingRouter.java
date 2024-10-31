@@ -491,34 +491,25 @@ public class NonBlockingRouter implements Router {
       }
       proceedWithDelete(blobId, serviceId, callback, futureResult, quotaChargeCallback);
     } else {
-      //if the blobId is not named blob based, it could bypass the first round of d converter logic by checking InternalKeys.BLOB_ID.
-      //First round is to convert named blob to blob Id.
-      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-        String blobIdStr =
-            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
-        proceedWithDelete(blobIdStr, serviceId, callback, futureResult, quotaChargeCallback);
-      } else {
-        try {
-          //If the blobId is named blob, need to go through convert first.
-          String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(true);
+      try {
+        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(true);
 
-          // Convert asynchronously and proceed once blobId is available
-          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
-            @Override
-            public void onCompletion(String convertedBlobId, Exception exception) {
-              if (exception != null) {
-                callback.onCompletion(null, exception);
-              } else {
-                // Call proceedWithTtlUpdate once blobId is available
-                proceedWithDelete(convertedBlobId, serviceId, callback, futureResult, quotaChargeCallback);
-              }
+        // Convert asynchronously and proceed once blobId is available
+        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+          @Override
+          public void onCompletion(String convertedBlobId, Exception exception) {
+            if (exception != null) {
+              callback.onCompletion(null, exception);
+            } else {
+              // Call proceedWithTtlUpdate once blobId is available
+              proceedWithDelete(convertedBlobId, serviceId, callback, futureResult, quotaChargeCallback);
             }
-          });
-          return futureResult; // Return early since we're waiting for the async operation
-        } catch (Exception e) {
-          callback.onCompletion(null, e);
-          return futureResult;
-        }
+          }
+        });
+        return futureResult; // Return early since we're waiting for the async operation
+      } catch (Exception e) {
+        callback.onCompletion(null, e);
+        return futureResult;
       }
     }
     return futureResult;
