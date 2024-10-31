@@ -207,4 +207,15 @@ public interface ClusterParticipant extends AutoCloseable {
   default boolean setDisksState(List<DiskId> diskId, HardwareState state) {
     return true;
   }
+
+  /**
+   * Given a map of old disks and new disks, swaps the old disks with the new disks in the DataNodeConfig,
+   * and persists the resulting changes to Helix.
+   * @param newDiskMapping A map of old disks to new disks.
+   * @return {@code true} if the disks order was successfully updated, {@code false} otherwise.
+   */
+  default boolean setDisksOrder(Map<DiskId, DiskId> newDiskMapping) {
+    // The default should be to do nothing about disk order, so return false.
+    return false;
+  }
 }

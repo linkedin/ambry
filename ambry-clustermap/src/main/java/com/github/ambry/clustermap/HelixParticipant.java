@@ -436,6 +436,43 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
   }
 
+  /**
+   * Given a map of old disks and new disks, swaps the old disks with the new disks in the DataNodeConfig,
+   * and persists the resulting changes to Helix.
+   * @param newDiskMapping A map of old disks to new disks.
+   * @return {@code true} if the disks order was successfully updated, {@code false} otherwise.
+   */
+  public boolean setDisksOrder(Map<DiskId, DiskId> newDiskMapping) {
+    if (newDiskMapping == null || newDiskMapping.isEmpty()) {
+      throw new IllegalArgumentException("Map of disk mappings is empty when attempting to set disks order");
+    }
+
+    // Update DataNodeConfig and save it.
+    synchronized (helixAdministrationLock) {
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+      boolean success = true;
+      for (DiskId oldDisk : newDiskMapping.keySet()) {
+        DiskId newDisk = newDiskMapping.get(oldDisk);
+
+        // Confirm that both disks are present in the DataNodeConfig
+        DataNodeConfig.DiskConfig oldDiskConfig = dataNodeConfig.getDiskConfigs().get(oldDisk.getMountPath());
+        DataNodeConfig.DiskConfig newDiskConfig = dataNodeConfig.getDiskConfigs().get(newDisk.getMountPath());
+        if (oldDiskConfig == null || newDiskConfig == null) {
+          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath() + " can't be found in the DataNodeConfig");
+        }
+
+        // Swap the disks in the DataNodeConfig
+        logger.info("Replacing disk {} with disk {}", oldDisk.getMountPath(), newDisk.getMountPath());
+        dataNodeConfig.getDiskConfigs().put(oldDisk.getMountPath(), dataNodeConfig.getDiskConfigs().get(newDisk));
+        if (!dataNodeConfigSource.set(dataNodeConfig)) {
+          logger.error("Setting disks order failed DataNodeConfig update");
+          success = false;
+        }
+      }
+      return success;
+    }
+  }
+
   @Override
   public boolean supportsStateChanges() {
     return true;
