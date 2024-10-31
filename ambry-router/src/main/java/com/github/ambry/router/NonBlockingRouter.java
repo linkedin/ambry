@@ -88,7 +88,6 @@ public class NonBlockingRouter implements Router {
 
   private RepairRequestsDb repairRequestsDb = null;
   private IdConverter idConverter = null;
-
   /**
    * Constructs a NonBlockingRouter.
    *
@@ -586,36 +585,32 @@ public class NonBlockingRouter implements Router {
       }
       proceedWithTtlUpdate(null, blobId, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
     } else {
-      //if the blobId is not named blob based, it could bypass the first round of d converter logic by checking InternalKeys.BLOB_ID.
-      //First round is to convert named blob to blob Id.
-      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-        String blobIdStr =
-            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
-        proceedWithTtlUpdate(restRequest, blobIdStr, serviceId, expiresAtMs, callback, futureResult,
-            quotaChargeCallback);
-      } else {
-        try {
-          //If the blobId is named blob, need to go through convert first.
-          String blobIdStr =
-              removeLeadingSlashIfNeeded(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-          // Convert asynchronously and proceed once blobId is available
-          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
-            @Override
-            public void onCompletion(String convertedBlobId, Exception exception) {
-              if (exception != null) {
-                callback.onCompletion(null, exception);
-              } else {
-                // Call proceedWithTtlUpdate once blobId is available
-                proceedWithTtlUpdate(restRequest, convertedBlobId, serviceId, expiresAtMs, callback, futureResult,
-                    quotaChargeCallback);
-              }
-            }
-          });
-          return futureResult; // Return early since we're waiting for the async operation
-        } catch (Exception e) {
-          callback.onCompletion(null, e);
-          return futureResult;
+      try {
+        String blobIdStr;
+        //if update ttl request coming from two phase put.
+        if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+          blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
+        } else {
+          blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
         }
+
+        // Convert asynchronously and proceed once blobId is available
+        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+          @Override
+          public void onCompletion(String convertedBlobId, Exception exception) {
+            if (exception != null) {
+              callback.onCompletion(null, exception);
+            } else {
+              //to update the ttl, we should use the blobId which extract the prefix and extension
+              proceedWithTtlUpdate(restRequest, blobId, serviceId, expiresAtMs, callback, futureResult,
+                  quotaChargeCallback);
+            }
+          }
+        });
+        return futureResult; // Return early since we're waiting for the async operation
+      } catch (Exception e) {
+        callback.onCompletion(null, e);
+        return futureResult;
       }
     }
 
@@ -1009,10 +1004,6 @@ public class NonBlockingRouter implements Router {
         }
       }
     };
-  }
-
-  private String removeLeadingSlashIfNeeded(String blobId) {
-    return blobId.startsWith("/") ? blobId.substring(1) : blobId;
   }
 
   /**

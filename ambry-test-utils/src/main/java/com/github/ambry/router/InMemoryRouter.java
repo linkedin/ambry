@@ -351,37 +351,33 @@ public class InMemoryRouter implements Router {
     if (restRequest == null) {
       proceedWithTtlUpdate(null, blobId, serviceId, expiresAtMs, callback, futureResult);
     } else {
-      // Extract blobId or convert it if necessary
-      if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-        // Blob ID is already available
-        String blobIdStr =
-            removeLeadingSlashIfNeeded(restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString());
-        proceedWithTtlUpdate(restRequest, blobIdStr, serviceId, expiresAtMs, callback, futureResult);
-      } else {
-        // Blob ID is not available, use idConverter to get it
-        try {
-          //If the blobId is named blob, need to go through convert first.
-          String blobIdStr =
-              removeLeadingSlashIfNeeded(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-
-          // Call idConverter to get blobId asynchronously
-          idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
-            @Override
-            public void onCompletion(String convertedBlobId, Exception exception) {
-              if (exception != null) {
-                // Handle error in conversion
-                callback.onCompletion(null, exception);
-              } else {
-                // Continue with TTL update once blobId is available
-                proceedWithTtlUpdate(restRequest, convertedBlobId, serviceId, expiresAtMs, callback, futureResult);
-              }
-            }
-          });
-        } catch (Exception e) {
-          // Handle synchronous errors during header extraction
-          callback.onCompletion(null, e);
-          return futureResult;
+      // Blob ID is not available, use idConverter to get it
+      try {
+        String blobIdStr;
+        //if update ttl request coming from two phase put.
+        if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+          blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
+        } else {
+          blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
         }
+
+        // Call idConverter to get blobId asynchronously
+        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+          @Override
+          public void onCompletion(String convertedBlobId, Exception exception) {
+            if (exception != null) {
+              // Handle error in conversion
+              callback.onCompletion(null, exception);
+            } else {
+              //to update the ttl, we should use the blobId which extract the prefix and extension
+              proceedWithTtlUpdate(restRequest, blobId, serviceId, expiresAtMs, callback, futureResult);
+            }
+          }
+        });
+      } catch (Exception e) {
+        // Handle synchronous errors during header extraction
+        callback.onCompletion(null, e);
+        return futureResult;
       }
     }
     return futureResult;
