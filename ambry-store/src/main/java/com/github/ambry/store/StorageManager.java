@@ -150,24 +150,7 @@ public class StorageManager implements StoreManager {
 
     // Assume it's safe to place the new code here, AFTER partitionNameToReplicaId is populated.
     if (storeConfig.storeReshuffleDisksOnReorder) {
-      PartitionFinder partitionFinder = new PartitionFinder();
-      Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
-      for (DiskId currentDisk : diskToReplicaMap.keySet()) {
-        disksToPartitions.put(currentDisk, partitionFinder.findPartitionsOnDisk(currentDisk));
-      }
-
-      ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicaMap, disksToPartitions);
-      Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks();
-      if (!disksToReshuffle.isEmpty()) {
-        logger.info("Disks need to be reshuffled: {}", disksToReshuffle);
-        if(primaryClusterParticipant.setDisksOrder(disksToReshuffle)) {
-          logger.info(this.getClass().getSimpleName() + " - successfully reshuffled disks. Now terminating"
-              + " the process so we can restart with the new disk order.");
-          System.exit(0);
-        } else {
-          logger.error("Failed to reshuffle disks - continuing with the current disk order.");
-        }
-      }
+      reshuffleDisksAndMaybeExit(diskToReplicaMap);
     }
 
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
@@ -180,6 +163,34 @@ public class StorageManager implements StoreManager {
       diskToDiskManager.put(disk, diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+      }
+    }
+  }
+
+  /**
+   * Checks whether the replicas are placed on the correct disks. If not, reshuffle the disks, write
+   * the new state to Helix and exit. We assume that this ambry-server instance will then be restarted with the
+   * new disk order that we saved to Helix.
+   * @param diskToReplicas A map of disks to the replicas on those disks.
+   */
+  // Tommy: Make this protected so we can test it in StorageManagerTest?!?!!?!!?
+  protected void reshuffleDisksAndMaybeExit(Map<DiskId, List<ReplicaId>> diskToReplicas) {
+    PartitionFinder partitionFinder = new PartitionFinder();
+    Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
+    for (DiskId currentDisk : diskToReplicas.keySet()) {
+      disksToPartitions.put(currentDisk, partitionFinder.findPartitionsOnDisk(currentDisk));
+    }
+
+    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicas, disksToPartitions);
+    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks();
+    if (!disksToReshuffle.isEmpty()) {
+      logger.info("Disks need to be reshuffled: {}", disksToReshuffle);
+      if(primaryClusterParticipant.setDisksOrder(disksToReshuffle)) {
+        logger.info(this.getClass().getSimpleName() + " - successfully reshuffled disks. Now terminating"
+            + " the process so we can restart with the new disk order.");
+        System.exit(0);
+      } else {
+        logger.error("Failed to reshuffle disks - continuing with the current disk order.");
       }
     }
   }
