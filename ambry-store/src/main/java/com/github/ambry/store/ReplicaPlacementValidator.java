@@ -124,20 +124,28 @@ public class ReplicaPlacementValidator {
   /**
    * Find all the partition directories on the disk.
    * @param disk an instance of DiskId to search for partition directories.
-   * @return A list of partition directories on the disk.
+   * @return A {@code Set} of partition directories on the disk. The set will be empty if no partition
+   *        directories are found, or if something goes wrong (e.g. mount path does not exist).
    */
   private Set<String> findPartitionsOnDisk(DiskId disk) {
     Set<String> partitionDirs = new HashSet<>();
-    File[] directories = new File(disk.getMountPath()).listFiles(File::isDirectory);
+    File mount = new File(disk.getMountPath());
 
-    if (directories != null) {
-      for (File dir : directories) {
-        // Tommy: If we store just the leaf name from File.getName() will that work
-        //        when comparing with the directory names we get from ReplicaId??
-        //        AmbryPartition::toPathString() returns the partition ID as a string.
-        String dirName = dir.getName();
-        if (looksLikePartition(dirName)) {
-          partitionDirs.add(dirName);
+    if(mount.exists() && mount.isDirectory())
+    {
+      File[] ambryDirs = mount.listFiles(File::isDirectory);
+      if(ambryDirs != null)
+      {
+        for(File dir : ambryDirs)
+        {
+          // Tommy: If we store just the leaf name from File.getName() will that work
+          //        when comparing with the directory names we get from ReplicaId??
+          //        AmbryPartition::toPathString() returns the partition ID as a string.
+          String dirName = dir.getName();
+          if(looksLikePartition(dirName))
+          {
+            partitionDirs.add(dirName);
+          }
         }
       }
     }

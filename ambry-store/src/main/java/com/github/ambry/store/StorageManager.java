@@ -159,7 +159,7 @@ public class StorageManager implements StoreManager {
               + " the process so we can restart with the new disk order.");
           System.exit(0);
         } else {
-          logger.error("Failed to reshuffle disks - continuing with the current disk order");
+          logger.error("Failed to reshuffle disks - continuing with the current disk order.");
         }
       }
     }
