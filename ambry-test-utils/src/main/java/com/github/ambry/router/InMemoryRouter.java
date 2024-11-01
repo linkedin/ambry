@@ -354,8 +354,8 @@ public class InMemoryRouter implements Router {
       // Blob ID is not available, use idConverter to get it
       try {
         String blobIdStr;
-        //if update ttl request coming from two phase put.
         if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+          //if update ttl request coming from two phase put.
           blobIdStr = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
         } else {
           blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
@@ -369,8 +369,16 @@ public class InMemoryRouter implements Router {
               // Handle error in conversion
               callback.onCompletion(null, exception);
             } else {
-              //to update the ttl, we should use the blobId which extract the prefix and extension
-              proceedWithTtlUpdate(restRequest, blobId, serviceId, expiresAtMs, callback, futureResult);
+              //TTL UPDATE
+              //1. in named blob put handler, we already have the blobId from input.
+              //2. in ttlUpdate handler, we need to convert the blobId. and since the in converter is not calling namedBlob.put,
+              //so we don't need to clean the prefix.
+              if (blobId == null) {
+                proceedWithTtlUpdate(restRequest, convertedBlobId, serviceId, expiresAtMs, callback, futureResult);
+              } else {
+                //to update the ttl in put request, we should use the blobId which extract the prefix and extension
+                proceedWithTtlUpdate(restRequest, blobId, serviceId, expiresAtMs, callback, futureResult);
+              }
             }
           }
         });

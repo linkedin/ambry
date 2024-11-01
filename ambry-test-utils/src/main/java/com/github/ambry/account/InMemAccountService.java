@@ -59,8 +59,8 @@ public class InMemAccountService implements AccountService {
   private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
   private final ScheduledExecutorService scheduler;
   private boolean shouldUpdateSucceed = true;
-  private final Map<Pair<String, String>, Map<String, Dataset>> nameToDatasetMap = new HashMap<>();
-  private final Map<Pair<Short, Short>, Map<Pair<String, String>, DatasetVersionRecord>> idToDatasetVersionMap = new HashMap<>();
+  private final Map<String, Map<String, Dataset>> nameToDatasetMap = new HashMap<>();
+  private final Map<String, Map<String, DatasetVersionRecord>> idToDatasetVersionMap = new HashMap<>();
 
   /**
    * Constructor.
@@ -137,7 +137,7 @@ public class InMemAccountService implements AccountService {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
-    idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
+    idToDatasetVersionMap.putIfAbsent(String.valueOf(accountId) + ":" + String.valueOf(containerId), new HashMap<>());
     Dataset dataset = getDataset(accountName, containerName, datasetName);
     long updatedExpirationTimeMs = Utils.Infinite_Time;
     if (dataset.getRetentionTimeInSeconds() != null) {
@@ -147,8 +147,8 @@ public class InMemAccountService implements AccountService {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     }
     if ("LATEST".equals(version)) {
-      List<Map.Entry<Pair<String, String>, DatasetVersionRecord>> datasetToDatasetVersionList =
-          new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).entrySet());
+      List<Map.Entry<String, DatasetVersionRecord>> datasetToDatasetVersionList =
+          new ArrayList<>(idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId)).entrySet());
       datasetToDatasetVersionList.sort(
           (entry1, entry2) -> entry2.getValue().getVersion().compareTo(entry1.getValue().getVersion()));
       if (datasetToDatasetVersionList.size() == 0) {
@@ -159,8 +159,8 @@ public class InMemAccountService implements AccountService {
     }
     DatasetVersionRecord datasetVersionRecord =
         new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs);
-    idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
-        .put(new Pair<>(datasetName, version), datasetVersionRecord);
+    idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId))
+        .put(datasetName + ":" + version, datasetVersionRecord);
     return datasetVersionRecord;
   }
 
@@ -171,7 +171,7 @@ public class InMemAccountService implements AccountService {
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     DatasetVersionRecord datasetVersionRecord =
-        idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(new Pair<>(datasetName, version));
+        idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId)).get(datasetName + ":" + version);
     if (datasetVersionRecord == null) {
       throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
     }
@@ -184,7 +184,7 @@ public class InMemAccountService implements AccountService {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
-    idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).remove(new Pair<>(datasetName, version));
+    idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId)).remove(datasetName + ":" + version);
   }
 
   @Override
@@ -196,18 +196,23 @@ public class InMemAccountService implements AccountService {
     short containerId = account.getContainerByName(containerName).getId();
     Dataset dataset = getDataset(accountName, containerName, datasetName);
     Integer retentionCount = dataset.getRetentionCount();
-    if (retentionCount != null && idToDatasetVersionMap.get(new Pair<>(accountId, containerId)) != null) {
-      List<Map.Entry<Pair<String, String>, DatasetVersionRecord>> datasetToDatasetVersionList =
-          new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).entrySet());
-      datasetToDatasetVersionList.sort(
+    if (retentionCount != null && idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId)) != null) {
+      List<Map.Entry<String, DatasetVersionRecord>> datasetToDatasetVersionList =
+          new ArrayList<>(idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId)).entrySet());
+      List<Map.Entry<String, DatasetVersionRecord>> filteredList =
+          datasetToDatasetVersionList.stream()
+              .filter(entry -> entry.getKey().startsWith(datasetName))
+              .collect(Collectors.toList());
+      filteredList.sort(
           (entry1, entry2) -> entry2.getValue().getVersion().compareTo(entry1.getValue().getVersion()));
-      for (Map.Entry<Pair<String, String>, DatasetVersionRecord> entry : datasetToDatasetVersionList) {
+      for (Map.Entry<String, DatasetVersionRecord> entry : filteredList) {
         retentionCount--;
         if (retentionCount >= 0) {
           continue;
         }
-        Pair<String, String> key = entry.getKey();
-        if (key.getFirst().equals(datasetName)) {
+        String datasetNameToVersion = entry.getKey();
+        String[] parts = datasetNameToVersion.split(":", 2);
+        if (parts[0].equals(datasetName)) {
           datasetVersionRecordList.add(entry.getValue());
         }
       }
@@ -236,21 +241,21 @@ public class InMemAccountService implements AccountService {
   public synchronized void addDataset(Dataset dataset) {
     String accountName = dataset.getAccountName();
     String containerName = dataset.getContainerName();
-    nameToDatasetMap.putIfAbsent(new Pair<>(accountName, containerName), new HashMap<>());
-    nameToDatasetMap.get(new Pair<>(accountName, containerName)).put(dataset.getDatasetName(), dataset);
+    nameToDatasetMap.putIfAbsent(accountName + ":" + containerName, new HashMap<>());
+    nameToDatasetMap.get(accountName + ":" + containerName).put(dataset.getDatasetName(), dataset);
   }
 
   @Override
   public synchronized void updateDataset(Dataset dataset) {
     String accountName = dataset.getAccountName();
     String containerName = dataset.getContainerName();
-    nameToDatasetMap.get(new Pair<>(accountName, containerName)).put(dataset.getDatasetName(), dataset);
+    nameToDatasetMap.get(accountName + ":" + containerName).put(dataset.getDatasetName(), dataset);
   }
 
   @Override
   public synchronized Dataset getDataset(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    Dataset dataset = nameToDatasetMap.get(new Pair<>(accountName, containerName)).get(datasetName);
+    Dataset dataset = nameToDatasetMap.get(accountName + ":" + containerName).get(datasetName);
     if (dataset == null) {
       throw new AccountServiceException("Dataset has been deleted", AccountServiceErrorCode.Deleted);
     }
@@ -259,7 +264,7 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken) {
-    List<String> datasets = new ArrayList<>(nameToDatasetMap.get(new Pair<>(accountName, containerName)).keySet());
+    List<String> datasets = new ArrayList<>(nameToDatasetMap.get(accountName + ":" + containerName).keySet());
     Collections.sort(datasets);
     int index = 0;
     if (pageToken == null && PAGE_SIZE < 1) {
@@ -278,7 +283,7 @@ public class InMemAccountService implements AccountService {
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     List<DatasetVersionRecord> datasetRecords =
-        new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).values());
+        new ArrayList<>(idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId)).values());
     List<String> versionList = datasetRecords.stream()
         .filter(record -> datasetName.equals(record.getDatasetName()))
         .map(DatasetVersionRecord::getVersion)
@@ -299,17 +304,19 @@ public class InMemAccountService implements AccountService {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
-    Map<Pair<String, String>, DatasetVersionRecord> datasetToDatasetVersionMap =
-        idToDatasetVersionMap.get(new Pair<>(accountId, containerId));
+    Map<String, DatasetVersionRecord> datasetToDatasetVersionMap =
+        idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId));
     if (datasetToDatasetVersionMap != null) {
-      for (Map.Entry<Pair<String, String>, DatasetVersionRecord> entry : datasetToDatasetVersionMap.entrySet()) {
-        Pair<String, String> key = entry.getKey();
-        if (key.getFirst().equals(datasetName)) {
-          idToDatasetVersionMap.remove(key);
+      for (Map.Entry<String, DatasetVersionRecord> entry : datasetToDatasetVersionMap.entrySet()) {
+        String datasetNameToVersion = entry.getKey();
+        String[] parts = datasetNameToVersion.split(":", 2);
+        if (parts[0].equals(datasetName)) {
+          idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId))
+              .remove(datasetNameToVersion);
         }
       }
     }
-    nameToDatasetMap.get(new Pair<>(accountName, containerName)).remove(datasetName);
+    nameToDatasetMap.get(accountName + ":" + containerName).remove(datasetName);
   }
 
   @Override
@@ -319,14 +326,14 @@ public class InMemAccountService implements AccountService {
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     DatasetVersionRecord datasetVersionRecord =
-        idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(new Pair<>(datasetName, version));
+        idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId)).get(datasetName + ":" + version);
     if (datasetVersionRecord == null) {
       throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
     }
     DatasetVersionRecord updatedDatasetVersionRecord =
         new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time);
-    idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
-        .put(new Pair<>(datasetName, version), updatedDatasetVersionRecord);
+    idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId))
+        .put(datasetName + ":" + version, updatedDatasetVersionRecord);
   }
 
   @Override
@@ -336,13 +343,14 @@ public class InMemAccountService implements AccountService {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
-    Map<Pair<String, String>, DatasetVersionRecord> datasetToDatasetVersionMap =
-        idToDatasetVersionMap.get(new Pair<>(accountId, containerId));
+    Map<String, DatasetVersionRecord> datasetToDatasetVersionMap =
+        idToDatasetVersionMap.get(String.valueOf(accountId) + ":" + String.valueOf(containerId));
     if (datasetToDatasetVersionMap != null) {
-      for (Map.Entry<Pair<String, String>, DatasetVersionRecord> entry : datasetToDatasetVersionMap.entrySet()) {
-        Pair<String, String> key = entry.getKey();
+      for (Map.Entry<String, DatasetVersionRecord> entry : datasetToDatasetVersionMap.entrySet()) {
+        String datasetNameToVersion = entry.getKey();
+        String[] parts = datasetNameToVersion.split(":", 2);
         DatasetVersionRecord datasetVersionRecord = entry.getValue();
-        if (key.getFirst().equals(datasetName)
+        if (parts[0].equals(datasetName)
             && Utils.compareTimes(datasetVersionRecord.getExpirationTimeMs(), System.currentTimeMillis()) > 0) {
           datasetVersionRecords.add(datasetVersionRecord);
         }

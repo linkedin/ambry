@@ -129,9 +129,10 @@ public class AccountAndContainerInjector {
       throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
     NamedBlobPath namedBlobPath;
+    //For ttl update, the named blob path is defined in RestUtils.Headers.BLOB_ID
     String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
     if (blobIdStr != null && RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
-      blobIdStr = blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr;
+      blobIdStr = RestUtils.stripSlashAndExtensionFromId(blobIdStr);
       namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
     } else {
       namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
@@ -164,8 +165,8 @@ public class AccountAndContainerInjector {
           "Named blob APIs disabled for this container. account=" + accountName + ", container=" + containerName,
           RestServiceErrorCode.BadRequest);
     }
-    if (targetContainer.getNamedBlobMode() == Container.NamedBlobMode.NO_UPDATE &&
-        RestUtils.isUpsertForNamedBlob(restRequest.getArgs())) {
+    if (targetContainer.getNamedBlobMode() == Container.NamedBlobMode.NO_UPDATE && RestUtils.isUpsertForNamedBlob(
+        restRequest.getArgs())) {
       throw new RestServiceException(
           "Named blob APIs Upsert disabled for this container. account=" + accountName + ", container=" + containerName,
           RestServiceErrorCode.BadRequest);

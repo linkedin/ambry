@@ -741,8 +741,12 @@ public class NamedBlobPutHandler {
       LOGGER.debug("New request path : " + newRequestPath);
       // Replace RequestPath in the WrappedRestRequest for delete and call DeleteBlobHandler.handle.
       restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-      restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-      restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+      if (restRequest.getArgs().containsKey(TARGET_ACCOUNT_KEY)) {
+        restRequest.removeArg(InternalKeys.TARGET_ACCOUNT_KEY);
+      }
+      if (restRequest.getArgs().containsKey(TARGET_CONTAINER_KEY)) {
+        restRequest.removeArg(InternalKeys.TARGET_CONTAINER_KEY);
+      }
       //for delete out of retention request, we don't want to set anything to response channel.
       deleteBlobHandler.handle(restRequest, new NoOpResponseChannel(), (r, e) -> {
         if (e != null) {
