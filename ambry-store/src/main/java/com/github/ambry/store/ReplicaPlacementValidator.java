@@ -36,14 +36,14 @@ public class ReplicaPlacementValidator {
   private Map<DiskId, List<ReplicaId>> expectedDiskToReplicaMap;
   private Map<DiskId, List<ReplicaId>> newDiskToReplicaMap;
   private List<DiskId> brokenDisks = new ArrayList<>();
-  public ReplicaPlacementValidator(Map<DiskId, List<ReplicaId>> expectedDiskToReplicaMap) {
-    foundDiskToPartitionMap = new HashMap<>();
+  public ReplicaPlacementValidator(Map<DiskId, List<ReplicaId>> expectedDiskToReplicaMap,
+      Map<DiskId, Set<String>> actualDiskToPartitionMap) {
+    foundDiskToPartitionMap = actualDiskToPartitionMap;
     newDiskToReplicaMap = new HashMap<>();
     this.expectedDiskToReplicaMap = expectedDiskToReplicaMap;
 
     for (Map.Entry<DiskId, List<ReplicaId>> entry : expectedDiskToReplicaMap.entrySet()) {
       DiskId currentDisk = entry.getKey();
-      foundDiskToPartitionMap.put(currentDisk, findPartitionsOnDisk(currentDisk));
       List<ReplicaId> replicas = entry.getValue();
       for (ReplicaId replica : replicas) {
         String partitionID = replica.getPartitionId().toString();
@@ -104,51 +104,5 @@ public class ReplicaPlacementValidator {
       }
     }
     return null;
-  }
-
-  /**
-   * Checks whether a directory name looks like a partition.
-   * @param directoryName the name of the directory to check.
-   * @return True if the directory name looks like a partition, false otherwise.
-   */
-  private boolean looksLikePartition(String directoryName) {
-    try {
-      // The convention is simply to use Java long as partition IDs.
-      Long.parseLong(directoryName);
-    } catch (NumberFormatException e) {
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * Find all the partition directories on the disk.
-   * @param disk an instance of DiskId to search for partition directories.
-   * @return A {@code Set} of partition directories on the disk. The set will be empty if no partition
-   *        directories are found, or if something goes wrong (e.g. mount path does not exist).
-   */
-  private Set<String> findPartitionsOnDisk(DiskId disk) {
-    Set<String> partitionDirs = new HashSet<>();
-    File mount = new File(disk.getMountPath());
-
-    if(mount.exists() && mount.isDirectory())
-    {
-      File[] ambryDirs = mount.listFiles(File::isDirectory);
-      if(ambryDirs != null)
-      {
-        for(File dir : ambryDirs)
-        {
-          // Tommy: If we store just the leaf name from File.getName() will that work
-          //        when comparing with the directory names we get from ReplicaId??
-          //        AmbryPartition::toPathString() returns the partition ID as a string.
-          String dirName = dir.getName();
-          if(looksLikePartition(dirName))
-          {
-            partitionDirs.add(dirName);
-          }
-        }
-      }
-    }
-    return partitionDirs;
   }
 }

@@ -150,7 +150,13 @@ public class StorageManager implements StoreManager {
 
     // Assume it's safe to place the new code here, AFTER partitionNameToReplicaId is populated.
     if (storeConfig.storeReshuffleDisksOnReorder) {
-      ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicaMap);
+      PartitionFinder partitionFinder = new PartitionFinder();
+      Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
+      for (DiskId currentDisk : diskToReplicaMap.keySet()) {
+        disksToPartitions.put(currentDisk, partitionFinder.findPartitionsOnDisk(currentDisk));
+      }
+
+      ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicaMap, disksToPartitions);
       Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks();
       if (!disksToReshuffle.isEmpty()) {
         logger.info("Disks need to be reshuffled: {}", disksToReshuffle);
