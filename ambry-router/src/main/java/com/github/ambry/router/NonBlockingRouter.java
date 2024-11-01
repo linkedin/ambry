@@ -59,6 +59,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.github.ambry.rest.RestMethod;
 
+import static com.github.ambry.rest.RestUtils.*;
+
 
 /**
  * Streaming, non-blocking router implementation for Ambry.
@@ -484,21 +486,64 @@ public class NonBlockingRouter implements Router {
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
-   * @param blobId The ID of the blob that needs to be deleted.
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   *
+   * @param restRequest The {@link RestRequest} to delete the blob.
+   * @param blobId      The ID of the blob that needs to be deleted.
+   * @param serviceId   The service ID of the service deleting the blob. This can be null if unknown.
+   * @param callback    The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
+  public Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
-    if (blobId == null) {
-      throw new IllegalArgumentException("blobId must not be null");
+    FutureResult<Void> futureResult = new FutureResult<>();
+    if (restRequest == null) {
+      if (blobId == null) {
+        throw new IllegalArgumentException("blobId must not be null");
+      }
+      proceedWithDelete(blobId, serviceId, callback, futureResult, quotaChargeCallback);
+    } else {
+      try {
+        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(true);
+
+        // Convert asynchronously and proceed once blobId is available
+        idConverter.convert(restRequest, blobIdStr, null, new Callback<String>() {
+          @Override
+          public void onCompletion(String convertedBlobId, Exception exception) {
+            if (exception != null) {
+              callback.onCompletion(null, exception);
+            } else {
+              // Call proceedWithTtlUpdate once blobId is available
+              proceedWithDelete(convertedBlobId, serviceId, callback, futureResult, quotaChargeCallback);
+            }
+          }
+        });
+        return futureResult; // Return early since we're waiting for the async operation
+      } catch (Exception e) {
+        callback.onCompletion(null, e);
+        return futureResult;
+      }
     }
+    return futureResult;
+  }
+
+  private String removeLeadingSlashIfNeeded(String blobId) {
+    return blobId.startsWith("/") ? blobId.substring(1) : blobId;
+  }
+
+  /**
+   * Helper method to perform delete once the blob Id is available.
+   */
+  private void proceedWithDelete(String blobId, String serviceId, Callback<Void> callback,
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     currentOperationsCount.incrementAndGet();
     routerMetrics.deleteBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
-    FutureResult<Void> futureResult = new FutureResult<>();
+
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
+
     if (isOpen.get()) {
       if (notFoundCache.getIfPresent(blobId) != null) {
         // If we know that blob doesn't exist, complete the operation
@@ -522,7 +567,6 @@ public class NonBlockingRouter implements Router {
       routerMetrics.onDeleteBlobError(routerException);
       completeOperation(futureResult, callback, null, routerException);
     }
-    return futureResult;
   }
 
   /**
@@ -579,9 +623,23 @@ public class NonBlockingRouter implements Router {
   public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
-    if (restRequest == null) {
-      if (blobId == null) {
-        throw new IllegalArgumentException("blobId must not be null");
+    Callback<String> stringCallback = (result, exception) -> {
+      // Create a new Callback<Void> and call it, ignoring the String result.
+      callback.onCompletion(null, exception);
+    };
+    Callback<Void> wrappedCallback =
+        restRequest != null ? createIdConverterCallbackForTtlUpdateAndDelete(restRequest, blobId, futureResult,
+            stringCallback) : callback;
+    if (isOpen.get()) {
+      if (notFoundCache.getIfPresent(blobId) != null) {
+        // If we know that blob doesn't exist, complete the operation.
+        logger.info("Blob {} is known to be missing in servers", blobId);
+        RouterException routerException =
+            new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
+        completeOperation(futureResult, wrappedCallback, null, routerException);
+      } else {
+        getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult,
+            new BlobOperationCallbackWrapper<>(blobId, wrappedCallback), quotaChargeCallback);
       }
       proceedWithTtlUpdate(null, blobId, serviceId, expiresAtMs, callback, futureResult, quotaChargeCallback);
     } else {
@@ -813,7 +871,7 @@ public class NonBlockingRouter implements Router {
     };
 
     Callback<Void> wrappedCallback =
-        restRequest != null && idConverter != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId,
+        restRequest != null && idConverter != null ? createIdConverterCallbackForTtlUpdateAndDelete(restRequest, blobId,
             futureResult, stringCallback) : callback;
 
     if (isOpen.get()) {
@@ -986,7 +1044,7 @@ public class NonBlockingRouter implements Router {
    * @param blobId the blobId to update ttl.
    * @return
    */
-  private Callback<Void> createIdConverterCallbackForTtlUpdate(RestRequest restRequest, String blobId,
+  private Callback<Void> createIdConverterCallbackForTtlUpdateAndDelete(RestRequest restRequest, String blobId,
       FutureResult<Void> futureResult, Callback<String> callback) {
     return (result, exception) -> {
       if (exception != null) {

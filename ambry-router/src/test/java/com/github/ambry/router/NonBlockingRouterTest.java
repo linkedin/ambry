@@ -2385,7 +2385,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // failed delete
       mockServerLayout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(serverErrorCode));
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.deleteBlob(blobId, null, testCallback, null);
+      Future<Void> future = router.deleteBlob(null, blobId, null, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, routerErrorCode);
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
       mockServerLayout.getMockServers().forEach(mockServer -> mockServer.resetServerErrors());
@@ -2463,7 +2463,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       assertFailureAndCheckErrorCode(ttlUpdateFuture, ttlUpdateTestCallback, RouterErrorCode.BlobDoesNotExist);
 
       TestCallback<Void> deleteTestCallback = new TestCallback<>();
-      Future<Void> deleteFuture = router.deleteBlob(blobId, updateServiceId, deleteTestCallback, null);
+      Future<Void> deleteFuture = router.deleteBlob(null, blobId, updateServiceId, deleteTestCallback, null);
       assertFailureAndCheckErrorCode(deleteFuture, deleteTestCallback, RouterErrorCode.BlobDoesNotExist);
 
       TestCallback<Void> unDeleteTestCallback = new TestCallback<>();
