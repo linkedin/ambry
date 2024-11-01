@@ -84,13 +84,15 @@ public interface Router extends Closeable {
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
-   * @param blobId The ID of the blob that needs to be deleted.
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   *
+   * @param restRequest         The {@link RestRequest} to delete the blob.
+   * @param blobId              The ID of the blob that needs to be deleted.
+   * @param serviceId           The service ID of the service deleting the blob. This can be null if unknown.
+   * @param callback            The {@link Callback} which will be invoked on the completion of a request.
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
-  Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
+  Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback);
 
   /**
@@ -212,7 +214,7 @@ public interface Router extends Closeable {
    */
   default CompletableFuture<Void> deleteBlob(String blobId, String serviceId) {
     CompletableFuture<Void> future = new CompletableFuture<>();
-    deleteBlob(blobId, serviceId, CallbackUtils.fromCompletableFuture(future), null);
+    deleteBlob(null, blobId, serviceId, CallbackUtils.fromCompletableFuture(future), null);
     return future;
   }
 
