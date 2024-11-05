@@ -22,7 +22,6 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaType;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -135,6 +134,7 @@ public class ReplicationMetrics {
   public final Counter interColoContinuousReplicationReplicaThrottleCount;
   public final Counter remoteReplicaInfoRemoveError;
   public final Counter remoteReplicaInfoAddError;
+  public final Counter unexpectedBlobIdError;
   public final Counter allResponsedKeysExist;
 
   private MetricRegistry registry;
@@ -291,6 +291,7 @@ public class ReplicationMetrics {
     remoteReplicaInfoRemoveError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoRemoveError"));
     remoteReplicaInfoAddError = registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoAddError"));
+    unexpectedBlobIdError = registry.counter(MetricRegistry.name(ReplicaThread.class, "UnexpectedBlobIdError"));
     allResponsedKeysExist = registry.counter(MetricRegistry.name(ReplicaThread.class, "AllResponsedKeysExist"));
     intraColoReplicationErrorCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationErrorCount"));
