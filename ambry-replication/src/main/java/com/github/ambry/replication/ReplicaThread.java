@@ -1265,6 +1265,8 @@ public class ReplicaThread implements Runnable {
         if (replicationConfig.replicationIgnoreUnexpectedBlobIdError) {
           logger.error(errorMessage);
           replicationMetrics.unexpectedBlobIdError.inc();
+          missingRemoteStoreMessages.remove(messageInfo);
+          continue;
         } else {
           throw new IllegalStateException(errorMessage);
         }
