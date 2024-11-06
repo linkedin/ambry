@@ -21,8 +21,11 @@ import com.github.ambry.frontend.NamedBlobPutHandler;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import java.security.NoSuchAlgorithmException;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,20 +96,42 @@ public class S3PutHandler extends S3BaseHandler<Void> {
     // Overwrites are allowed by default for S3 APIs https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
     restRequest.setArg(NAMED_UPSERT, true);
 
+    // Calculate checksum of the file content. This will be used in ETag header. Default algorithm seems to be MD5
+    try {
+      restRequest.setDigestAlgorithm("MD5");
+    } catch (NoSuchAlgorithmException e) {
+      throw new RestServiceException("MD5 Algorithm is not supported", e, RestServiceErrorCode.InternalServerError);
+    }
+
     // 2. Upload the blob by following named blob PUT path
     namedBlobPutHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3PutHandleMetrics, (r) -> {
       if (restResponseChannel.getStatus() == ResponseStatus.Created) {
         // Set the response status to 200 since Ambry named blob PUT has response as 201.
         restResponseChannel.setStatus(ResponseStatus.Ok);
         // Set S3 ETag header
-        String blobId = (String) restResponseChannel.getHeader(LOCATION);
-        blobId = blobId.startsWith("/") ? blobId.substring(1) : blobId;
-        restResponseChannel.setHeader("ETag", blobId);
+        // TODO: For Multipart uploads, ETag is calculated as md5(part1) + md5(part2) + ... + md5(partN) + "-" + N.
+        //  This needs some external db to store md5 of individual parts.
+        String eTag = calculateETag(restRequest);
+        restResponseChannel.setHeader("ETag", eTag);
       }
       callback.onCompletion(null, null);
     }, restRequest.getUri(), LOGGER, (result, exception) -> {
       LOGGER.info("Request {} failed in s3 put object API", restRequest.getUri(), exception);
       callback.onCompletion(null, exception);
     }));
+  }
+
+  private String calculateETag(RestRequest restRequest) {
+    byte[] digest = restRequest.getDigest();
+    StringBuilder hexString = new StringBuilder();
+    for (byte b : digest) {
+      String hex = Integer.toHexString(0xff & b);
+      if (hex.length() == 1) {
+        hexString.append('0');
+      }
+      hexString.append(hex);
+    }
+    LOGGER.debug("ETag calculated for RestRequest {} is {}", restRequest, hexString);
+    return hexString.toString();
   }
 }
