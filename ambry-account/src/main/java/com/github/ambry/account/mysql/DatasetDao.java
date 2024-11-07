@@ -35,6 +35,7 @@ import java.util.Map;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 
+import static com.github.ambry.account.Dataset.VersionSchema.*;
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 import static com.github.ambry.utils.Utils.*;
 
@@ -91,6 +92,7 @@ public class DatasetDao {
   private final String listValidDatasetVersionsByPageSql;
   private final String listValidDatasetVersionsByListSql;
   private final String updateDatasetVersionTtlSql;
+  private final String copyToNewDatasetVersionSql;
 
   // Dataset table query strings
   private final String insertDatasetSql;
@@ -146,6 +148,12 @@ public class DatasetDao {
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), now(3), ?, ?)",
             DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, CREATION_TIME, LAST_MODIFIED_TIME,
             DELETED_TS, DATASET_VERSION_STATE);
+    //copy a dataset version from a source version.
+    //We need to update the modify time so counter based purge policy won't delete it.
+    copyToNewDatasetVersionSql = String.format(
+        "INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s) SELECT %2$s, %3$s, %4$s, ?, %6$s, NOW(3), %8$s, %9$s "
+            + "FROM %1$s WHERE %2$s = ? AND %3$s = ? AND %4$s = ? AND %5$s = ?", DATASET_VERSION_TABLE, ACCOUNT_ID,
+        CONTAINER_ID, DATASET_NAME, VERSION, CREATION_TIME, LAST_MODIFIED_TIME, DELETED_TS, DATASET_VERSION_STATE);
     //dataset version has in_progress and ready states.
     //when we put the dataset version, the flow is add dataset version in_progress -> add named blob -> add regular blob -> update dataset version to ready state.
     //Only the dataset version in ready state will be considered as a valid version.
@@ -342,6 +350,37 @@ public class DatasetDao {
     }
   }
 
+  /**
+   * Rename a dataset version of {@link Dataset}
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @param sourceVersion the source version to rename.
+   * @param targetVersion the target version to rename.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  public void renameDatasetVersion(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, String sourceVersion, String targetVersion) throws SQLException, AccountServiceException {
+    long startTimeMs = System.currentTimeMillis();
+    try {
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
+      if (!SEMANTIC_LONG.equals(dataset.getVersionSchema())) {
+        throw new IllegalArgumentException("Rename API only supported for SEMANTIC_LONG schema");
+      }
+      if (isAutoIncrVersion(sourceVersion) || isAutoIncrVersion(targetVersion)) {
+        throw new IllegalArgumentException("Rename API can't rename from/to auto incr version");
+      }
+      renameDatasetVersionHelper(accountId, containerId, datasetName, dataset.getVersionSchema(), sourceVersion,
+          targetVersion);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException | AccountServiceException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
 
   /**
    * Helper function to support add dataset verison.
@@ -366,6 +405,48 @@ public class DatasetDao {
         dataset.getDatasetName(), versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset,
         datasetVersionTtlEnabled, datasetVersionState);
     return new DatasetVersionRecord(accountId, containerId, dataset.getDatasetName(), version, newExpirationTimeMs);
+  }
+
+  /**
+   * Helper function to rename a dataset version from source version to target version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param sourceVersion the source version to rename.
+   * @param targetVersion the target version to rename.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private void renameDatasetVersionHelper(int accountId, int containerId, String datasetName,
+      Dataset.VersionSchema versionSchema, String sourceVersion, String targetVersion)
+      throws SQLException, AccountServiceException {
+    try {
+      // Disable auto commits
+      dataAccessor.setAutoCommit(false);
+      PreparedStatement copyToNewDatasetVersionStatement =
+          dataAccessor.getPreparedStatement(copyToNewDatasetVersionSql, true);
+      long sourceVersionValue = getVersionBasedOnSchema(sourceVersion, versionSchema);
+      long targetVersionValue = getVersionBasedOnSchema(targetVersion, versionSchema);
+      //copy the source version to the new target version.
+      executeCopyToNewDatasetVersionStatement(copyToNewDatasetVersionStatement, accountId, containerId, datasetName,
+          sourceVersionValue, targetVersionValue);
+      //delete the original dataset version
+      PreparedStatement deleteDatasetVersionStatement =
+          dataAccessor.getPreparedStatement(deleteDatasetVersionByIdSql, true);
+      executeDeleteDatasetVersionStatement(deleteDatasetVersionStatement, accountId, containerId, datasetName,
+          sourceVersionValue);
+      dataAccessor.commit();
+    } catch (SQLException | AccountServiceException e) {
+      dataAccessor.rollback();
+      dataAccessor.onException(e, Write);
+      if (e instanceof SQLIntegrityConstraintViolationException) {
+        throw new AccountServiceException(e.getMessage(), AccountServiceErrorCode.ResourceConflict);
+      }
+      throw e;
+    } finally {
+      // Close the connection to ensure subsequent queries are made in a new transaction and return the latest data
+      dataAccessor.closeActiveConnection();
+    }
   }
 
 
@@ -1394,6 +1475,33 @@ public class DatasetDao {
   }
 
   /**
+   * Execute CopyToNewDatasetVersionStatement to copy the source version to a target version.
+   * @param statement the rename dataset statement.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param sourceVersionValue the long value of source version.
+   * @param targetVersionValue the long value of target version.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private void executeCopyToNewDatasetVersionStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName, long sourceVersionValue, long targetVersionValue)
+      throws SQLException, AccountServiceException {
+    statement.setLong(1, targetVersionValue);
+    statement.setInt(2, accountId);
+    statement.setInt(3, containerId);
+    statement.setString(4, datasetName);
+    statement.setLong(5, sourceVersionValue);
+    int count = statement.executeUpdate();
+    if (count <= 0) {
+      throw new AccountServiceException(
+          "Can't find source version to rename for account: " + accountId + " container: " + containerId + " dataset: "
+              + datasetName + " version: " + sourceVersionValue, AccountServiceErrorCode.NotFound);
+    }
+  }
+
+  /**
    * Execute version ttl update statement.
    * @param statement the updateDatasetVersionTtlSql statement.
    * @param accountId the id for the parent account.
@@ -1827,5 +1935,10 @@ public class DatasetDao {
     PreparedStatement getDatasetStatement = dataAccessor.getPreparedStatement(getDatasetByNameSql, needWritable);
     return executeGetDatasetStatement(getDatasetStatement, accountId, containerId, accountName, containerName,
         datasetName);
+  }
+
+  private boolean isAutoIncrVersion(String version) {
+    return LATEST.equals(version) || MAJOR.equals(version) || MINOR.equals(version) || PATCH.equals(version)
+        || REVISION.equals(version);
   }
 }

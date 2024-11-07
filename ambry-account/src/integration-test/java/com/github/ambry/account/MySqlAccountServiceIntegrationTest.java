@@ -72,6 +72,8 @@ public class MySqlAccountServiceIntegrationTest {
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
   private static final String DATASET_NAME = "testDataset";
+  private static final String DATASET_NAME_RENAME = "testDatasetRename";
+
   private static final String DATASET_NAME_BASIC = "testDatasetBasic";
   private static final String DATASET_NAME_NOT_EXIST = "testDatasetNotExist";
   private static final String DATASET_NAME_WITH_TTL = "testDatasetWithTtl";
@@ -726,6 +728,98 @@ public class MySqlAccountServiceIntegrationTest {
 
     //4. query db - should establish new connection and get results.
     assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
+  }
+
+  @Test
+  public void testRenameDatasetVersion() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_RENAME).setVersionSchema(
+            Dataset.VersionSchema.SEMANTIC_LONG).build();
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+    // add source dataset version
+    String sourceVersion = "1.1.1.1";
+    DatasetVersionRecord expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_RENAME, sourceVersion, -1);
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_RENAME, sourceVersion, -1, System.currentTimeMillis(), false,
+        DatasetVersionState.READY);
+    // rename to a target dataset version
+    String targetVersion = "999.999.999.999";
+    mySqlAccountStore.renameDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_RENAME, sourceVersion, targetVersion);
+    // get the renamed version.
+    DatasetVersionRecord renamedDatasetVersion =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_RENAME, targetVersion);
+    //verify each field
+    assertEquals("Mismatch in dataset version's ", expectedDatasetVersionRecord.getAccountId(),
+        renamedDatasetVersion.getAccountId());
+    assertEquals("Mismatch in dataset version's ", expectedDatasetVersionRecord.getContainerId(),
+        renamedDatasetVersion.getContainerId());
+    assertEquals("Mismatch in dataset version's ", expectedDatasetVersionRecord.getDatasetName(),
+        renamedDatasetVersion.getDatasetName());
+    assertEquals("Mismatch in dataset version's ", expectedDatasetVersionRecord.getExpirationTimeMs(),
+        renamedDatasetVersion.getExpirationTimeMs());
+    assertEquals("Mismatch in dataset version's ", targetVersion, renamedDatasetVersion.getVersion());
+
+    //get previous version and should be deleted.
+    try {
+      mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_RENAME, sourceVersion);
+      fail();
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
+
+    // sourceVersion is auto incr version, should fail.
+    sourceVersion = "MAJOR";
+    try {
+      mySqlAccountStore.renameDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_RENAME, sourceVersion, targetVersion);
+      fail();
+    } catch (IllegalArgumentException e) {
+      //no-op
+    }
+
+    // targetVersion is auto incr version, should fail.
+    sourceVersion = "0.0.0.0";
+    targetVersion = "MAJOR";
+
+    try {
+      mySqlAccountStore.renameDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_RENAME, sourceVersion, targetVersion);
+      fail();
+    } catch (IllegalArgumentException e) {
+      //no-op
+    }
+
+    // rename a version which does not exist, should fail
+    sourceVersion = "1.1.1.1";
+    targetVersion = "888.888.888.888";
+
+    try {
+      mySqlAccountStore.renameDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_RENAME, sourceVersion, targetVersion);
+      fail();
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
+    }
+
+    //rename to an existing version, should throw conflict.
+    // rename a version which does not exist, should fail
+    sourceVersion = "999.999.999.999";
+    targetVersion = "999.999.999.999";
+
+    try {
+      mySqlAccountStore.renameDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_RENAME, sourceVersion, targetVersion);
+      fail();
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
+    }
   }
 
   @Test
