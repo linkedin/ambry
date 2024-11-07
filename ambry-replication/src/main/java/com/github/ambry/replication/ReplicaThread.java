@@ -1262,9 +1262,9 @@ public class ReplicaThread implements Runnable {
         String errorMessage =
             String.format("Blob id %s is not in the expected partition Actual partition %s " + " Expected partition %s",
                 blobId.getID(), blobId.getPartition(), remoteReplicaInfo.getLocalReplicaId().getPartitionId());
+        replicationMetrics.unexpectedBlobIdError.inc();
         if (replicationConfig.replicationIgnoreUnexpectedBlobIdError) {
           logger.error(errorMessage);
-          replicationMetrics.unexpectedBlobIdError.inc();
           missingRemoteStoreMessages.remove(messageInfo);
           continue;
         } else {
