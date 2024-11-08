@@ -43,7 +43,9 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -98,6 +100,7 @@ public class S3PutHandlerTest {
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> putResult = new FutureResult<>();
+    restResponseChannel.setStatus(ResponseStatus.Created);
     s3PutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
 
@@ -113,7 +116,14 @@ public class S3PutHandlerTest {
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(accountName, containerName, blobName).get();
     assertEquals("Mismatch in blob name to blob id mapping", blobId, namedBlobRecord.getBlobId());
 
-    // 4. Verify that getting a s3 blob should work
+    // 4. Verify eTag header is digest of the content
+    MessageDigest messageDigest = MessageDigest.getInstance("MD5");
+    messageDigest.update(content);
+    byte[] digest = messageDigest.digest();
+    String expectedETag = Utils.encodeAsHexString(digest);
+    assertEquals("Mismatch in ETag", expectedETag, restResponseChannel.getHeader(ETAG));
+
+    // 5. Verify that getting a s3 blob should work
     headers = new JSONObject();
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, uri, headers, null);
     RequestPath requestPath = RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME);

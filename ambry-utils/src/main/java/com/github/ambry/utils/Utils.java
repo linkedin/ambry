@@ -1552,4 +1552,21 @@ public class Utils {
   public static long timestampToMs(Timestamp timestamp) {
     return timestamp == null ? Utils.Infinite_Time : timestamp.getTime();
   }
+
+  /**
+   * Encode binary as base 16 or hexadecimal characters
+   * @param bytes bytes to be encoded
+   * @return base 16 encoded string
+   */
+  public static String encodeAsHexString(byte[] bytes) {
+    StringBuilder hexString = new StringBuilder();
+    for (byte b : bytes) {
+      String hex = Integer.toHexString(0xff & b);
+      if (hex.length() == 1) {
+        hexString.append('0');
+      }
+      hexString.append(hex);
+    }
+    return hexString.toString();
+  }
 }
