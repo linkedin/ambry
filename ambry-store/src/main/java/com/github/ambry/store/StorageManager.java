@@ -187,7 +187,7 @@ public class StorageManager implements StoreManager {
     if (!disksToReshuffle.isEmpty()) {
       logger.info("Disks need to be reshuffled: {}", disksToReshuffle);
       if(primaryClusterParticipant.setDisksOrder(disksToReshuffle)) {
-        logger.info(this.getClass().getSimpleName() + " - successfully reshuffled disks. Now terminating"
+        logger.info("Successfully reshuffled disks. Now terminating"
             + " the process so we can restart with the new disk order.");
         System.exit(0);
       } else {
