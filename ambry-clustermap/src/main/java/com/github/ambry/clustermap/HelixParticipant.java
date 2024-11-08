@@ -467,7 +467,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
         // Swap the disks in the DataNodeConfig
         logger.info("Replacing disk {} with disk {}", oldDisk.getMountPath(), newDisk.getMountPath());
-        dataNodeConfig.getDiskConfigs().put(oldDisk.getMountPath(), dataNodeConfig.getDiskConfigs().get(newDisk));
+        dataNodeConfig.getDiskConfigs().put(oldDisk.getMountPath(), dataNodeConfig.getDiskConfigs().get(newDisk.getMountPath()));
       }
 
       if (!dataNodeConfigSource.set(dataNodeConfig)) {
