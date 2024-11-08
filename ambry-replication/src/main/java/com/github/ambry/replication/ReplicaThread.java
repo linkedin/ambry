@@ -1259,9 +1259,10 @@ public class ReplicaThread implements Runnable {
     for (MessageInfo messageInfo : messageInfoList) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       if (remoteReplicaInfo.getLocalReplicaId().getPartitionId().compareTo(blobId.getPartition()) != 0) {
-        String errorMessage =
-            String.format("Blob id %s is not in the expected partition Actual partition %s " + " Expected partition %s",
-                blobId.getID(), blobId.getPartition(), remoteReplicaInfo.getLocalReplicaId().getPartitionId());
+        String errorMessage = String.format(
+            "Blob id %s is not in the expected partition Actual partition %s " + " Expected partition %s"
+                + "Replica %s", blobId.getID(), blobId.getPartition(),
+            remoteReplicaInfo.getLocalReplicaId().getPartitionId(), remoteReplicaInfo.getReplicaId());
         replicationMetrics.unexpectedBlobIdError.inc();
         if (replicationConfig.replicationIgnoreUnexpectedBlobIdError) {
           logger.error(errorMessage);
