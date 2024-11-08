@@ -24,6 +24,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.utils.Utils;
 import java.security.NoSuchAlgorithmException;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
@@ -112,7 +113,7 @@ public class S3PutHandler extends S3BaseHandler<Void> {
         // TODO: For Multipart uploads, ETag is calculated as md5(part1) + md5(part2) + ... + md5(partN) + "-" + N.
         //  This needs some external db to store md5 of individual parts.
         String eTag = calculateETag(restRequest);
-        restResponseChannel.setHeader("ETag", eTag);
+        restResponseChannel.setHeader(ETAG, eTag);
       }
       callback.onCompletion(null, null);
     }, restRequest.getUri(), LOGGER, (result, exception) -> {
@@ -123,15 +124,8 @@ public class S3PutHandler extends S3BaseHandler<Void> {
 
   private String calculateETag(RestRequest restRequest) {
     byte[] digest = restRequest.getDigest();
-    StringBuilder hexString = new StringBuilder();
-    for (byte b : digest) {
-      String hex = Integer.toHexString(0xff & b);
-      if (hex.length() == 1) {
-        hexString.append('0');
-      }
-      hexString.append(hex);
-    }
-    LOGGER.debug("ETag calculated for RestRequest {} is {}", restRequest, hexString);
-    return hexString.toString();
+    String eTag = Utils.encodeAsHexString(digest);
+    LOGGER.debug("ETag for RestRequest {} is {}", restRequest, eTag);
+    return eTag;
   }
 }
