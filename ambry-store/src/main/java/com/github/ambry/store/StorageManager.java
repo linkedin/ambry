@@ -175,6 +175,7 @@ public class StorageManager implements StoreManager {
    */
   // Tommy: Make this protected so we can test it in StorageManagerTest?!?!!?!!?
   protected void reshuffleDisksAndMaybeExit(Map<DiskId, List<ReplicaId>> diskToReplicas) {
+    //System.exit(0);
     PartitionFinder partitionFinder = new PartitionFinder();
     Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
     for (DiskId currentDisk : diskToReplicas.keySet()) {

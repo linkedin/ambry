@@ -93,7 +93,7 @@ public class ReplicaPlacementValidator {
       Set<String> partitions = entry.getValue();
       boolean found = true;
       for (ReplicaId replica : expectedReplicas) {
-        String partitionID = replica.getPartitionId().toString();
+        String partitionID = replica.getPartitionId().toPathString();
         if(!partitions.contains(partitionID)) {
           found = false;
           break;
