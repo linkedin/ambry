@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -340,15 +341,14 @@ public class BlobStore implements Store {
    */
   @Override
   public Long getBlobContentCRC(MessageInfo msg) throws StoreException, IOException {
-    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
-        StoreGetOptions.Store_Include_Expired);
+    EnumSet<StoreGetOptions> storeGetOptions =
+        EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
     MessageReadSet rdset = null;
     try {
       StoreInfo stinfo = this.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
       rdset = stinfo.getMessageReadSet();
       MessageInfo minfo = stinfo.getMessageReadSetInfo().get(0);
-      rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
-          MessageFormatRecord.Crc_Size);
+      rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size, MessageFormatRecord.Crc_Size);
       return rdset.getPrefetchedData(0).getLong(0);
     } finally {
       if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
@@ -552,6 +552,7 @@ public class BlobStore implements Store {
       throw new IllegalArgumentException("Message write set cannot be empty");
     }
     checkDuplicates(messageSetToWrite.getMessageSetInfo());
+    checkPartition(messageSetToWrite.getMessageSetInfo());
     final Timer.Context context = metrics.putResponse.time();
     try {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
@@ -644,7 +645,8 @@ public class BlobStore implements Store {
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infosToDelete) {
-        validateMessageInfoForDelete(info, indexEndOffsetBeforeCheck, indexValuesPriorToDelete, lifeVersions, originalPuts);
+        validateMessageInfoForDelete(info, indexEndOffsetBeforeCheck, indexValuesPriorToDelete, lifeVersions,
+            originalPuts);
       }
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
@@ -663,7 +665,8 @@ public class BlobStore implements Store {
         }
         List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
         List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
-        Offset endOffsetOfLastMessage = writeDeleteMessagesToLogSegment(infosToDelete, inputStreams, updatedInfos, lifeVersions);
+        Offset endOffsetOfLastMessage =
+            writeDeleteMessagesToLogSegment(infosToDelete, inputStreams, updatedInfos, lifeVersions);
         logger.trace("Store : {} delete mark written to log", dataDir);
         updateIndexAndStats(updatedInfos, endOffsetOfLastMessage, originalPuts, indexValuesPriorToDelete);
       }
@@ -686,8 +689,7 @@ public class BlobStore implements Store {
     checkStarted();
     List<MessageInfo> infosToDeleteCopy = new ArrayList<>(infosToDelete);
     checkDuplicates(infosToDelete);
-    StoreBatchDeleteInfo storeBatchDeleteInfo = new StoreBatchDeleteInfo(
-        replicaId.getPartitionId(), new ArrayList<>());
+    StoreBatchDeleteInfo storeBatchDeleteInfo = new StoreBatchDeleteInfo(replicaId.getPartitionId(), new ArrayList<>());
     final Timer.Context context = metrics.batchDeleteResponse.time();
     try {
       List<IndexValue> indexValuesPriorToDelete = new ArrayList<>();
@@ -695,16 +697,17 @@ public class BlobStore implements Store {
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       // Update infosToDelete to filteredInfosToDelete returned from this function.
-      infosToDelete = validateAndFilterMessageInfosForBatchDelete(infosToDelete, indexEndOffsetBeforeCheck, indexValuesPriorToDelete, lifeVersions,
-          originalPuts, storeBatchDeleteInfo);
-      if (infosToDelete.isEmpty()){
-        logger.trace("Batch Delete completely failed since all blobs failed. Received InfosToDelete: {}", infosToDeleteCopy);
+      infosToDelete = validateAndFilterMessageInfosForBatchDelete(infosToDelete, indexEndOffsetBeforeCheck,
+          indexValuesPriorToDelete, lifeVersions, originalPuts, storeBatchDeleteInfo);
+      if (infosToDelete.isEmpty()) {
+        logger.trace("Batch Delete completely failed since all blobs failed. Received InfosToDelete: {}",
+            infosToDeleteCopy);
         return storeBatchDeleteInfo;
       }
       synchronized (storeWriteLock) {
         // Update storeBatchDeleteInfo for the remaining infosToDelete via store lock operations.
-        validateAndBatchDelete(infosToDelete, indexEndOffsetBeforeCheck, indexValuesPriorToDelete,
-            lifeVersions, originalPuts, storeBatchDeleteInfo, infosToDeleteCopy);
+        validateAndBatchDelete(infosToDelete, indexEndOffsetBeforeCheck, indexValuesPriorToDelete, lifeVersions,
+            originalPuts, storeBatchDeleteInfo, infosToDeleteCopy);
       }
       onSuccess("BATCH_DELETE");
       return storeBatchDeleteInfo;
@@ -1630,6 +1633,24 @@ public class BlobStore implements Store {
     }
   }
 
+  /**
+   * Sanity check, make sure all blobs belong to this partition.
+   * @param infos The list of {@link MessageInfo} to check partition
+   */
+  private void checkPartition(List<MessageInfo> infos) {
+    for (MessageInfo info : infos) {
+      StoreKey storeKey = info.getStoreKey();
+      if (storeKey instanceof BlobId && replicaId != null) {
+        BlobId blobId = (BlobId) storeKey;
+        if (blobId.getPartition().getId() != replicaId.getPartitionId().getId()) {
+          throw new IllegalArgumentException(
+              "WriteSet contains unexpected blob id : " + info.getStoreKey() + ", it belongs to partition "
+                  + blobId.getPartition() + " but this blobstore's partition is " + replicaId.getPartitionId());
+        }
+      }
+    }
+  }
+
   private MessageInfo fromIndexValue(StoreKey key, IndexValue value) {
     return new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
         value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
@@ -1705,8 +1726,8 @@ public class BlobStore implements Store {
    * Runs 2 validations for blobs to delete for both delete and batchDelete. Throws StoreException for validation failure.
    * This message is separate from common validation function due to store locking required for these validations.
    */
-  private void validateDeleteForDuplicateAndLifeVersioConflicts(MessageInfo info, IndexValue value, short expectedLifeVersion)
-      throws StoreException {
+  private void validateDeleteForDuplicateAndLifeVersioConflicts(MessageInfo info, IndexValue value,
+      short expectedLifeVersion) throws StoreException {
     // There are several possible cases that can exist here. Delete has to follow either PUT, TTL_UPDATE or UNDELETE.
     // let EOBC be end offset before check, and [RECORD] means RECORD is optional
     // 1. PUT [TTL_UPDATE DELETE UNDELETE] EOBC DELETE
@@ -1722,8 +1743,8 @@ public class BlobStore implements Store {
       // value being ttl update is fine, we can just append DELETE to it.
     } else {
       // For the extreme case, we log it out and throw an exception.
-      logger.warn("Concurrent operation for id " + info.getStoreKey() + " in store " + dataDir
-          + ". Newly added value " + value);
+      logger.warn("Concurrent operation for id " + info.getStoreKey() + " in store " + dataDir + ". Newly added value "
+          + value);
       throw new StoreException(
           "Cannot delete id " + info.getStoreKey() + " since there are concurrent operation while delete",
           StoreErrorCodes.Life_Version_Conflict);
@@ -1788,15 +1809,16 @@ public class BlobStore implements Store {
   /*
    * Runs validations and filtration for blobs to delete for batchDelete.
    */
-  private List<MessageInfo> validateAndFilterMessageInfosForBatchDelete(List<MessageInfo> infosToDelete, Offset indexEndOffsetBeforeCheck,
-      List<IndexValue> indexValuesPriorToDelete, List<Short> lifeVersions, List<IndexValue> originalPuts,
-      StoreBatchDeleteInfo storeBatchDeleteInfo) throws StoreException {
+  private List<MessageInfo> validateAndFilterMessageInfosForBatchDelete(List<MessageInfo> infosToDelete,
+      Offset indexEndOffsetBeforeCheck, List<IndexValue> indexValuesPriorToDelete, List<Short> lifeVersions,
+      List<IndexValue> originalPuts, StoreBatchDeleteInfo storeBatchDeleteInfo) throws StoreException {
     List<MessageInfo> filteredInfos = new ArrayList<>();
     for (MessageInfo info : infosToDelete) {
       try {
-        validateMessageInfoForDelete(info, indexEndOffsetBeforeCheck, indexValuesPriorToDelete, lifeVersions, originalPuts);
+        validateMessageInfoForDelete(info, indexEndOffsetBeforeCheck, indexValuesPriorToDelete, lifeVersions,
+            originalPuts);
         filteredInfos.add(info);
-      } catch (StoreException e){
+      } catch (StoreException e) {
         storeBatchDeleteInfo.addMessageErrorInfo(new MessageErrorInfo(info, e.getErrorCode()));
         if (e.getErrorCode() == StoreErrorCodes.IOError) {
           onError();
@@ -1818,16 +1840,14 @@ public class BlobStore implements Store {
           new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
               info.getOperationTimeMs(), lifeVersions.get(i));
       // Don't change the lifeVersion here, there are other logic in markAsDeleted that relies on this lifeVersion.
-      updatedInfos.add(
-          new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
-              info.getOperationTimeMs(), info.getLifeVersion()));
+      updatedInfos.add(new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
+          info.getOperationTimeMs(), info.getLifeVersion()));
       inputStreams.add(stream);
       i++;
     }
     Offset endOffsetOfLastMessage = log.getEndOffset();
     MessageFormatWriteSet writeSet =
-        new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), updatedInfos,
-            false);
+        new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), updatedInfos, false);
     writeSet.writeTo(log);
     return endOffsetOfLastMessage;
   }
@@ -1837,23 +1857,22 @@ public class BlobStore implements Store {
    * batchDelete.
    */
   private void updateIndexAndStats(List<MessageInfo> updatedInfos, Offset endOffsetOfLastMessage,
-      List<IndexValue> originalPuts, List<IndexValue> indexValuesPriorToDelete)
-      throws StoreException {
+      List<IndexValue> originalPuts, List<IndexValue> indexValuesPriorToDelete) throws StoreException {
     int correspondingPutIndex = 0;
     for (MessageInfo info : updatedInfos) {
       FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
       IndexValue deleteIndexValue =
           index.markAsDeleted(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(), info.getLifeVersion());
       endOffsetOfLastMessage = fileSpan.getEndOffset();
-      blobStoreStats.handleNewDeleteEntry(info.getStoreKey(), deleteIndexValue,
-          originalPuts.get(correspondingPutIndex), indexValuesPriorToDelete.get(correspondingPutIndex));
+      blobStoreStats.handleNewDeleteEntry(info.getStoreKey(), deleteIndexValue, originalPuts.get(correspondingPutIndex),
+          indexValuesPriorToDelete.get(correspondingPutIndex));
       correspondingPutIndex++;
     }
     logger.trace("Store : {} delete has been marked in the index ", dataDir);
   }
 
   /*
-    * This method is used to validate and batch delete messages in the store. It is used for batch_delete.
+   * This method is used to validate and batch delete messages in the store. It is used for batch_delete.
    */
   private void validateAndBatchDelete(List<MessageInfo> infosToDelete, Offset indexEndOffsetBeforeCheck,
       List<IndexValue> indexValuesPriorToDelete, List<Short> lifeVersions, List<IndexValue> originalPuts,
@@ -1874,7 +1893,7 @@ public class BlobStore implements Store {
           }
           i++;
           filteredInfos.add(info);
-        } catch (StoreException e){
+        } catch (StoreException e) {
           storeBatchDeleteInfo.addMessageErrorInfo(new MessageErrorInfo(info, e.getErrorCode()));
           if (e.getErrorCode() == StoreErrorCodes.IOError) {
             onError();
@@ -1882,14 +1901,16 @@ public class BlobStore implements Store {
         }
       }
       infosToDelete = filteredInfos;
-      if (infosToDelete.isEmpty()){
-        logger.trace("BATCH_DELETE: Operation completely failed since all blobs failed. Received InfosToDelete: {}", infosToDeleteCopy);
+      if (infosToDelete.isEmpty()) {
+        logger.trace("BATCH_DELETE: Operation completely failed since all blobs failed. Received InfosToDelete: {}",
+            infosToDeleteCopy);
         return;
       }
     }
     List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
     List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
-    Offset endOffsetOfLastMessage = writeDeleteMessagesToLogSegment(infosToDelete, inputStreams, updatedInfos, lifeVersions);
+    Offset endOffsetOfLastMessage =
+        writeDeleteMessagesToLogSegment(infosToDelete, inputStreams, updatedInfos, lifeVersions);
     logger.trace("BATCH_DELETE: Store : {} delete mark written to log", dataDir);
     updateIndexAndStats(updatedInfos, endOffsetOfLastMessage, originalPuts, indexValuesPriorToDelete);
     for (MessageInfo info : updatedInfos) {

@@ -20,10 +20,11 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.HelixFactory;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockHelixParticipant;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
-import com.github.ambry.commons.ErrorMapping;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -60,6 +61,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -83,7 +85,6 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 import sun.nio.ch.FileChannelImpl;
 
@@ -697,7 +698,6 @@ public class BlobStoreTest {
       // cannot get without StoreGetOptions
       verifyGetFailure(id, StoreErrorCodes.TTL_Expired);
 
-      // with StoreGetOptions.Store_Include_Expired
       storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Expired));
       checkStoreInfo(storeInfo, Collections.singleton(id));
 
@@ -711,6 +711,31 @@ public class BlobStoreTest {
 
     // non existent ID has to fail
     verifyGetFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+
+    // Verify the partition failure
+    final String newPartitionString = "newPartitionId";
+    final long newPartitionLongId = 2L;
+    PartitionId newPartitionId = mock(PartitionId.class);
+    when(newPartitionId.toString()).thenReturn(newPartitionString);
+    when(newPartitionId.getId()).thenReturn(newPartitionLongId);
+    when(newPartitionId.getBytes()).thenReturn(new byte[]{0, 2, 0, 0, 0, 0, 0, 0, 0, (byte) newPartitionLongId});
+    BlobId blobId =
+        new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, (short) 1022, (short) 8, newPartitionId,
+            false, BlobId.BlobDataType.SIMPLE, UUID.randomUUID().toString());
+    long crc = random.nextLong();
+    MessageInfo info = new MessageInfo(blobId, 100, false, false, false, expiresAtMs, crc, blobId.getAccountId(),
+        blobId.getContainerId(), Utils.Infinite_Time, (short) -1);
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
+    List<MessageInfo> infos = new ArrayList<>();
+    List<ByteBuffer> buffers = new ArrayList<>();
+    infos.add(info);
+    buffers.add(buffer);
+    try {
+      store.put(new MockMessageWriteSet(infos, buffers));
+      fail("should fail due to invalid partition");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("belongs to partition " + newPartitionString));
+    }
   }
 
   /**

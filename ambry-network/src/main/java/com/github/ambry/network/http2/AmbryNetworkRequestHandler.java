@@ -67,8 +67,8 @@ public class AmbryNetworkRequestHandler extends SimpleChannelInboundHandler<Full
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     http2ServerMetrics.http2StreamExceptionCount.inc();
-    logger.warn("Exception caught in AmbryNetworkRequestHandler, cause: ", cause);
-    ctx.fireExceptionCaught(cause);
+    logger.warn("Exception caught for channel {} in AmbryNetworkRequestHandler", ctx.channel(), cause);
+    ctx.channel().close();
   }
 
   /**

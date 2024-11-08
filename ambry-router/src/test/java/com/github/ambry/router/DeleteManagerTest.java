@@ -174,7 +174,7 @@ public class DeleteManagerTest {
             List<Future> futures = new ArrayList<>();
             for (int i = 0; i < 5; i++) {
               if (i == 1) {
-                futures.add(router.deleteBlob(blobIdString, null, new Callback<Void>() {
+                futures.add(router.deleteBlob(null, blobIdString, null, new Callback<Void>() {
                   @Override
                   public void onCompletion(Void result, Exception exception) {
                     callbackCalled.countDown();
@@ -675,7 +675,7 @@ public class DeleteManagerTest {
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             CountDownLatch operationCompleteLatch = new CountDownLatch(1);
             future =
-                router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeCallback);
+                router.deleteBlob(null, blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeCallback);
             do {
               // increment mock time
               mockTime.sleep(1000);
@@ -707,7 +707,7 @@ public class DeleteManagerTest {
       mockSelectorState.set(state);
       setServerErrorCodes(serverErrorCodes, partition, serverLayout, localDc);
       CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-      future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeCallback);
+      future = router.deleteBlob(null, blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeCallback);
       do {
         // increment mock time
         mockTime.sleep(1000);

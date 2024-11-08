@@ -297,6 +297,16 @@ public class ReplicationConfig {
       "replication.request.network.poll.timeout.ms";
 
   /**
+   * If true, ignore the unexpected blob id when handling ReplicaMetadataResponse, and move on to other blob ids.
+   * Otherwise, throw out an exception.
+   */
+  @Config(REPLICATION_IGNORE_UNEXPECTED_BLOB_ID_ERROR)
+  @Default("false")
+  public final boolean replicationIgnoreUnexpectedBlobIdError;
+  public final static String REPLICATION_IGNORE_UNEXPECTED_BLOB_ID_ERROR =
+      "replication.ignore.unexpected.blob.id.error";
+
+  /**
    * The replication manager used to replicate objects from other backend servers.
    * DEFAULT_REPLICATION_THREAD as the name suggests is the current one.
    * BACKUP_CHECKER_THREAD is the one that checks for missing blobs in backup by comparing blobs from on-prem servers.
@@ -402,6 +412,8 @@ public class ReplicationConfig {
     replicationRequestNetworkTimeoutMs = verifiableProperties.getLong(REPLICATION_REQUEST_NETWORK_TIMEOUT_MS, 10000);
     replicationRequestNetworkPollTimeoutMs =
         verifiableProperties.getLong(REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS, 40);
+    replicationIgnoreUnexpectedBlobIdError =
+        verifiableProperties.getBoolean(REPLICATION_IGNORE_UNEXPECTED_BLOB_ID_ERROR, false);
     replicationUsingNonblockingNetworkClientForRemoteColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
     replicationUsingNonblockingNetworkClientForLocalColo =
