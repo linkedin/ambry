@@ -102,6 +102,12 @@ public class ServerConfig {
   public final boolean serverReplicateTombstoneEnabled;
 
   /**
+   * True to enable log printing of blobs journey to its partition
+   */
+  @Config("server.enable.blob.partition.journey.logs")
+  public final boolean serverEnableBlobPartitionJourneyLogs;
+
+  /**
    * Implementation class for accountServiceFactory
    */
   @Config("server.account.service.factory")
@@ -161,6 +167,8 @@ public class ServerConfig {
     serverHandleForceDeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.force.delete.request.enabled", false);
     serverReplicateTombstoneEnabled = verifiableProperties.getBoolean("server.replicate.tombstone.enabled", false);
+    serverEnableBlobPartitionJourneyLogs =
+        verifiableProperties.getBoolean("server.enable.blob.partition.journey.logs", false);
     serverAccountServiceFactory = verifiableProperties.getString("server.account.service.factory",
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     serverParticipantsConsistencyCheckerPeriodSec =
