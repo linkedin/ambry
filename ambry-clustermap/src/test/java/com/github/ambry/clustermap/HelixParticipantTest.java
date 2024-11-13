@@ -770,9 +770,12 @@ public class HelixParticipantTest {
   public void testSetDisksOrder() throws Exception {
     assumeTrue(dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
             new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
+    DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
 
     // First test some basic failure cases.
     try {
@@ -794,7 +797,22 @@ public class HelixParticipantTest {
     newDiskMapping.put(oldDisk, newDisk);
     newDiskMapping.put(newDisk, oldDisk);
 
+    // Get a copy of Helix' disk configs before attempting to update.
+    Map<String, DataNodeConfig.DiskConfig> initialDiskConfigs = dataNodeConfig.getDiskConfigs();
+    Set<String> initialReplicasMount0 = initialDiskConfigs.get("/mnt0").getReplicaConfigs().keySet();
+    Set<String> initialReplicasMount1 = initialDiskConfigs.get("/mnt1").getReplicaConfigs().keySet();
+
+    // Update the disk order in Helix
     assertTrue(helixParticipant.setDisksOrder(newDiskMapping));
+    Thread.sleep(50);
+
+    // Now read the new disk order back from Helix and verify that the desired swap has been persisted.
+    DataNodeConfig updatedDataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
+    Map<String, DataNodeConfig.DiskConfig> updatedDiskConfigs = updatedDataNodeConfig.getDiskConfigs();
+    Set<String> updatedReplicasMount0 = updatedDiskConfigs.get("/mnt0").getReplicaConfigs().keySet();
+    Set<String> updatedReplicasMount1 = updatedDiskConfigs.get("/mnt1").getReplicaConfigs().keySet();
+    assertTrue(initialReplicasMount0.equals(updatedReplicasMount1));
+    assertTrue(initialReplicasMount1.equals(updatedReplicasMount0));
   }
 
   /**

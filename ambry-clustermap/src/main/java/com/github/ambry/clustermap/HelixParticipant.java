@@ -452,7 +452,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       DataNodeConfig dataNodeConfig = getDataNodeConfig();
 
       // Make a copy of the disk configs to avoid accidentally overwriting state.
-      Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = dataNodeConfig.getDiskConfigs();
+      Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = new HashMap<> (dataNodeConfig.getDiskConfigs());
       for (DiskId oldDisk : newDiskMapping.keySet()) {
         DiskId newDisk = newDiskMapping.get(oldDisk);
 
