@@ -268,6 +268,10 @@ public class AmbryRequests implements RequestAPI {
       DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
       receivedRequest = PutRequest.readFrom(dis, clusterMap);
     }
+    if (serverConfig.serverEnableBlobPartitionJourneyLogs) {
+      logger.info("Received Put Blob request for blob {}, Partition {}", receivedRequest.getBlobId(),
+          receivedRequest.getBlobId().getPartition());
+    }
 
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
@@ -282,6 +286,10 @@ public class AmbryRequests implements RequestAPI {
       } else {
         MessageFormatWriteSet writeSet = getMessageFormatWriteSet(receivedRequest);
         Store storeToPut = storeManager.getStore(receivedRequest.getBlobId().getPartition());
+        if (serverConfig.serverEnableBlobPartitionJourneyLogs) {
+          logger.info("Blob {} with Partition {} will be put to store {}", receivedRequest.getBlobId(),
+              receivedRequest.getBlobId().getPartition(), storeToPut);
+        }
         storeToPut.put(writeSet);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
             ServerErrorCode.No_Error);
