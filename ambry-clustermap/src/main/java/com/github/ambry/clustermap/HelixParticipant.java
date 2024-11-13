@@ -451,10 +451,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     synchronized (helixAdministrationLock) {
       DataNodeConfig dataNodeConfig = getDataNodeConfig();
 
-      // Tommy: we have to have a copy of the old original disk mappings here for swapping to work!
+      // Make a copy of the disk configs to avoid accidentally overwriting state.
       Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = dataNodeConfig.getDiskConfigs();
-
-      boolean success = true;
       for (DiskId oldDisk : newDiskMapping.keySet()) {
         DiskId newDisk = newDiskMapping.get(oldDisk);
 
@@ -462,14 +460,15 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         DataNodeConfig.DiskConfig oldDiskConfig = originalDiskConfigs.get(oldDisk.getMountPath());
         DataNodeConfig.DiskConfig newDiskConfig = originalDiskConfigs.get(newDisk.getMountPath());
         if (oldDiskConfig == null || newDiskConfig == null) {
-          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath() + " can't be found in Helix (DataNodeConfig)");
+          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath() + " cannot be found in Helix (DataNodeConfig)");
         }
 
         // Swap the disks in the DataNodeConfig
         logger.info("Replacing disk {} with disk {}", oldDisk.getMountPath(), newDisk.getMountPath());
-        dataNodeConfig.getDiskConfigs().put(oldDisk.getMountPath(), dataNodeConfig.getDiskConfigs().get(newDisk.getMountPath()));
+        dataNodeConfig.getDiskConfigs().put(oldDisk.getMountPath(), originalDiskConfigs.get(newDisk.getMountPath()));
       }
 
+      // Save the updated DataNodeConfig to Helix.
       if (!dataNodeConfigSource.set(dataNodeConfig)) {
         logger.error("Setting disks order failed DataNodeConfig update");
         return false;

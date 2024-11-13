@@ -148,9 +148,10 @@ public class StorageManager implements StoreManager {
       partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
     }
 
-    // Assume it's safe to place the new code here, AFTER partitionNameToReplicaId is populated.
+    // If configured, attempt to reshuffle any disks that are not mounted in the right order and exit if
+    // the reshuffle was successful.
     if (storeConfig.storeReshuffleDisksOnReorder) {
-      reshuffleDisksAndMaybeExit(diskToReplicaMap);
+      reshuffleDisksAndMaybeExit(diskToReplicaMap, new PartitionFinder(), new ReplicaPlacementValidator());
     }
 
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
@@ -173,23 +174,20 @@ public class StorageManager implements StoreManager {
    * new disk order that we saved to Helix.
    * @param diskToReplicas A map of disks to the replicas on those disks.
    */
-  // Tommy: Make this protected so we can test it in StorageManagerTest?!?!!?!!?
-  protected void reshuffleDisksAndMaybeExit(Map<DiskId, List<ReplicaId>> diskToReplicas) {
-    //System.exit(0);
-    PartitionFinder partitionFinder = new PartitionFinder();
+  protected void reshuffleDisksAndMaybeExit(Map<DiskId, List<ReplicaId>> diskToReplicas, PartitionFinder partitionFinder,
+      ReplicaPlacementValidator placementValidator) {
     Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
     for (DiskId currentDisk : diskToReplicas.keySet()) {
       disksToPartitions.put(currentDisk, partitionFinder.findPartitionsOnDisk(currentDisk));
     }
 
-    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicas, disksToPartitions);
-    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks();
+    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks(diskToReplicas, disksToPartitions);
     if (!disksToReshuffle.isEmpty()) {
       logger.info("Disks need to be reshuffled: {}", disksToReshuffle);
       if(primaryClusterParticipant.setDisksOrder(disksToReshuffle)) {
         logger.info("Successfully reshuffled disks. Now terminating"
             + " the process so we can restart with the new disk order.");
-        System.exit(0);
+        System.exit(1);
       } else {
         logger.error("Failed to reshuffle disks - continuing with the current disk order.");
       }

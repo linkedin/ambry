@@ -32,35 +32,21 @@ import java.util.Set;
  * a map of the broken disks and the disks they should be reshuffled to.
  */
 public class ReplicaPlacementValidator {
-  private final Map<DiskId, Set<String>> foundDiskToPartitionMap;
+  private Map<DiskId, Set<String>> foundDiskToPartitionMap;
   private Map<DiskId, List<ReplicaId>> expectedDiskToReplicaMap;
   private Map<DiskId, List<ReplicaId>> newDiskToReplicaMap;
   private List<DiskId> brokenDisks = new ArrayList<>();
-  public ReplicaPlacementValidator(Map<DiskId, List<ReplicaId>> expectedDiskToReplicaMap,
-      Map<DiskId, Set<String>> actualDiskToPartitionMap) {
-    foundDiskToPartitionMap = actualDiskToPartitionMap;
-    newDiskToReplicaMap = new HashMap<>();
-    this.expectedDiskToReplicaMap = expectedDiskToReplicaMap;
 
-    for (Map.Entry<DiskId, List<ReplicaId>> entry : expectedDiskToReplicaMap.entrySet()) {
-      DiskId currentDisk = entry.getKey();
-      List<ReplicaId> replicas = entry.getValue();
-      for (ReplicaId replica : replicas) {
-        String partitionID = replica.getPartitionId().toString();
-        if(!foundDiskToPartitionMap.get(currentDisk).contains(partitionID)) {
-          brokenDisks.add(currentDisk);
-        }
-      }
-    }
-  }
+  public ReplicaPlacementValidator() {}
 
   /**
    * Check the placement of replicas on the disks and reshuffle them if necessary.
    * @return A map of the broken disks and the disks they should be reshuffled to.
    *         An empty map if no reshuffling is necessary or if the reshuffling failed.
    */
-  public Map<DiskId, DiskId> reshuffleDisks() {
+  public Map<DiskId, DiskId> reshuffleDisks(Map<DiskId, List<ReplicaId>> expectedDiskToReplicaMap, Map<DiskId, Set<String>> actualDiskToPartitionMap) {
     Map<DiskId, DiskId> shuffledDisks = new HashMap<>();
+    computeDiskDifferences(expectedDiskToReplicaMap, actualDiskToPartitionMap);
 
     // Sanity checks: - Abort if we did not find the same number of disks on the
     //                  host as we got from Helix.
@@ -80,6 +66,30 @@ public class ReplicaPlacementValidator {
       }
     }
     return shuffledDisks;
+  }
+
+  /**
+   * Compute the differences between the expected and actual disk-to-partition maps. Populate the list of broken
+   * disks.
+   * @param expectedDiskToReplicaMap
+   * @param actualDiskToPartitionMap
+   */
+  private void computeDiskDifferences(Map<DiskId, List<ReplicaId>> expectedDiskToReplicaMap,
+      Map<DiskId, Set<String>> actualDiskToPartitionMap) {
+    foundDiskToPartitionMap = actualDiskToPartitionMap;
+    newDiskToReplicaMap = new HashMap<>();
+    this.expectedDiskToReplicaMap = expectedDiskToReplicaMap;
+
+    for (Map.Entry<DiskId, List<ReplicaId>> entry : expectedDiskToReplicaMap.entrySet()) {
+      DiskId currentDisk = entry.getKey();
+      List<ReplicaId> replicas = entry.getValue();
+      for (ReplicaId replica : replicas) {
+        String partitionID = replica.getPartitionId().toPathString();
+        if(!foundDiskToPartitionMap.get(currentDisk).contains(partitionID)) {
+          brokenDisks.add(currentDisk);
+        }
+      }
+    }
   }
 
   /**

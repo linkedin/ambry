@@ -763,6 +763,41 @@ public class HelixParticipantTest {
   }
 
   /**
+   * Test setting disk order in property store.
+   * @throws Exception
+   */
+  @Test
+  public void testSetDisksOrder() throws Exception {
+    assumeTrue(dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
+
+    // First test some basic failure cases.
+    try {
+      helixParticipant.setDisksOrder(null);
+      fail("null input map should fail");
+    } catch (Exception e) {
+    }
+    try {
+      helixParticipant.setDisksOrder(Collections.emptyMap());
+      fail("Empty input map should fail");
+    } catch (Exception e) {
+    }
+
+    DiskId oldDisk = mock(DiskId.class);
+    DiskId newDisk = mock(DiskId.class);
+    when(oldDisk.getMountPath()).thenReturn("/mnt0");
+    when(newDisk.getMountPath()).thenReturn("/mnt1");
+    Map<DiskId, DiskId> newDiskMapping = new HashMap<>();
+    newDiskMapping.put(oldDisk, newDisk);
+    newDiskMapping.put(newDisk, oldDisk);
+
+    assertTrue(helixParticipant.setDisksOrder(newDiskMapping));
+  }
+
+  /**
    * Test participate method, which triggers state transition.
    * @throws Exception
    */

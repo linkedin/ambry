@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeConfigSourceType;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.Disk;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.HelixAdminFactory;
@@ -69,6 +70,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -1174,7 +1176,7 @@ public class StorageManagerTest {
     storageManager.shutdown();
 
     // Now enable the feature to remove directory and restart blob store
-    generateConfigs(true, false, false, 2, true, false, false);
+    generateConfigs(true, false, false, 2, true, false);
     storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
 
@@ -1193,7 +1195,7 @@ public class StorageManagerTest {
     List<ReplicaId> badReplicas =
         replicas.stream().filter(r -> r.getMountPath().equals(badDiskMountPath)).collect(Collectors.toList());
 
-    generateConfigs(true, false, false, 2, true, false, false);
+    generateConfigs(true, false, false, 2, true, false);
     StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     storageManager.shutdown();
@@ -1226,7 +1228,7 @@ public class StorageManagerTest {
 
   @Test
   public void storeRemoveDirectoryAndRestartTestWithStoppedReplica() throws Exception {
-    generateConfigs(true, false, false, 2, true, false, false);
+    generateConfigs(true, false, false, 2, true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
 
@@ -1247,7 +1249,7 @@ public class StorageManagerTest {
 
   @Test
   public void storeRemoveDirectoryAndRestartTestWithOtherError() throws Exception {
-    generateConfigs(true, false, false, 2, true, false, false);
+    generateConfigs(true, false, false, 2, true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
 
@@ -1432,7 +1434,7 @@ public class StorageManagerTest {
    */
   @Test
   public void unrecognizedDirsRemovalTest() throws Exception {
-    generateConfigs(true, false, true, 2, false, false, false);
+    generateConfigs(true, false, true, 2, false, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     try {
@@ -1585,7 +1587,7 @@ public class StorageManagerTest {
    */
   @Test
   public void replicaFromOfflineToBootstrapFailureRetryWithDiskSpaceRequirementTest() throws Exception {
-    generateConfigs(true, false, false, 4, false, false, false);
+    generateConfigs(true, false, false, 4, false, false);
     MockClusterMap spyClusterMap = spy(clusterMap);
     MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = spyClusterMap.getReplicaIds(localNode);
@@ -1873,7 +1875,7 @@ public class StorageManagerTest {
       assertFalse(instanceConfig.getInstanceCapacityMap().containsKey("DISK"));
 
       // 2. Start storage manager with restoring disk availability, it will update disk capacity
-      generateConfigs(true, true, false, 2, true, true, false);
+      generateConfigs(true, true, false, 2, true, true);
       storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
           new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
           Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
@@ -1935,58 +1937,14 @@ public class StorageManagerTest {
     }
   }
 
-  @Test
-  public void testReshuffleConfigFalse() throws Exception {
-    generateConfigs(true, true, false, 2, true, true, false);
-    ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
-    clusterHelper.setupCluster();
-    clusterHelper.createAllMountPaths();
-    clusterHelper.turnFullAutoOnForLocalhost();
-
-    HelixClusterManager clusterMap = clusterHelper.clusterMap;
-    HelixParticipant helixParticipant = clusterHelper.helixParticipant;
-    DataNodeId localNode = clusterHelper.localNode;
-
-    Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
-
-    StorageManager storageManagerSpyFalse = Mockito.spy(new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
-        new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
-        Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
-        new InMemAccountService(false, false)));
-    Mockito.verify(storageManagerSpyFalse, Mockito.times(0)).reshuffleDisksAndMaybeExit(diskToReplicaMap);
-  }
-
-  @Test
-  public void testReshuffleConfigTrue() throws Exception {
-//    generateConfigs(true, true, false, 2, true, true, true);
-//    System.out.println("Tommy: right after generateConfigs() the value is " + storeConfig.storeReshuffleDisksOnReorder);
-    ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
-//    System.out.println("Tommy: right after ClusterSetupHelper() the value is " + storeConfig.storeReshuffleDisksOnReorder);
-    clusterHelper.setupCluster();
-//    System.out.println("Tommy: right after setupCluster() the value is " + storeConfig.storeReshuffleDisksOnReorder);
-    clusterHelper.createAllMountPaths();
-//    System.out.println("Tommy: right after createAllMountPaths() the value is " + storeConfig.storeReshuffleDisksOnReorder);
-    clusterHelper.turnFullAutoOnForLocalhost();
-//    System.out.println("Tommy: right after turnFullAutoOnForLocalhost() the value is " + storeConfig.storeReshuffleDisksOnReorder);
-
-    HelixClusterManager clusterMap = clusterHelper.clusterMap;
-    HelixParticipant helixParticipant = clusterHelper.helixParticipant;
-    DataNodeId localNode = clusterHelper.localNode;
-
-    generateConfigs(true, true, false, 2, true, true, true);
-    Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
-
-    System.out.println("Tommy: in testReshuffleConfigTrue the value is " + storeConfig.storeReshuffleDisksOnReorder);
-    StorageManager storageManagerSpyTrue = Mockito.spy(
-        new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
-            Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(), new InMemAccountService(false, false)));
-    //Mockito.verify(storageManagerSpyTrue, Mockito.times(1)).System.exit();
-  }
-
+    /**
+   * When no disks are reshuffled, System.exit() should not be called.
+   * @throws Exception
+   */
   @Rule
   public ExpectedException exceptionRule = ExpectedException.none();
   @Test
-  public void testReshuffleDisksExits() throws Exception {
+  public void testNoExitIfNoDiskReshuffling() throws Exception {
     ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
     clusterHelper.setupCluster();
     clusterHelper.createAllMountPaths();
@@ -1995,7 +1953,7 @@ public class StorageManagerTest {
     HelixClusterManager clusterMap = clusterHelper.clusterMap;
     HelixParticipant helixParticipant = clusterHelper.helixParticipant;
     DataNodeId localNode = clusterHelper.localNode;
-    generateConfigs(true, true, false, 2, true, true, true);
+    generateConfigs(true, true, false, 2, true, true);
 
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : clusterMap.getReplicaIds(localNode)) {
@@ -2003,21 +1961,22 @@ public class StorageManagerTest {
       diskToReplicaMap.computeIfAbsent(disk, key -> new ArrayList<>()).add(replica);
     }
 
+    // Set up a SecurityManager that will throw an exception and fail this test if System.exit() is called.
     System.setSecurityManager(new SystemExitSecurityManager());
-    exceptionRule.expect(SecurityException.class);
-    exceptionRule.expectMessage("System.exit() was called");
+    StorageManager storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+            Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(), new InMemAccountService(false, false));
+    storageManager.reshuffleDisksAndMaybeExit(diskToReplicaMap, new PartitionFinder(), new ReplicaPlacementValidator());
 
-    // Tommy: don't think we actually need to use a spy just regular object here?!
-    StorageManager storageManagerSpy = Mockito.spy(
-        new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
-            Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(), new InMemAccountService(false, false)));
-    storageManagerSpy.reshuffleDisksAndMaybeExit(diskToReplicaMap);
+    // Reset the SecurityManager to the original one so the rest of the tests can proceed normally.
     System.setSecurityManager(originalSecurityManager);
   }
 
-
+  /**
+   * When disks are reshuffled, System.exit() should be called.
+   * @throws Exception
+   */
   @Test
-  public void testReshuffleDisksGood() throws Exception {
+  public void testExitIfDisksReshuffled() throws Exception {
     ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
     clusterHelper.setupCluster();
     clusterHelper.createAllMountPaths();
@@ -2026,7 +1985,7 @@ public class StorageManagerTest {
     HelixClusterManager clusterMap = clusterHelper.clusterMap;
     HelixParticipant helixParticipant = clusterHelper.helixParticipant;
     DataNodeId localNode = clusterHelper.localNode;
-    generateConfigs(true, true, false, 2, true, true, true);
+    generateConfigs(true, true, false, 2, true, true);
 
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : clusterMap.getReplicaIds(localNode)) {
@@ -2038,11 +1997,17 @@ public class StorageManagerTest {
     exceptionRule.expect(SecurityException.class);
     exceptionRule.expectMessage("System.exit() was called");
 
-    // Tommy: don't think we actually need to use a spy just regular object here?!
-    StorageManager storageManagerSpy = Mockito.spy(
-        new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
-            Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(), new InMemAccountService(false, false)));
-    storageManagerSpy.reshuffleDisksAndMaybeExit(diskToReplicaMap);
+    PartitionFinder mockPartitionFinder = Mockito.mock(PartitionFinder.class);
+    Set<String> emptySet = new HashSet<>();
+    Map<DiskId, DiskId> reshuffledDisks = new HashMap<>();
+    reshuffledDisks.put(diskToReplicaMap.keySet().iterator().next(), diskToReplicaMap.keySet().iterator().next());
+    when(mockPartitionFinder.findPartitionsOnDisk(Mockito.any())).thenReturn(emptySet);
+    ReplicaPlacementValidator mockReplicaPlacementValidator = Mockito.mock(ReplicaPlacementValidator.class);
+    when(mockReplicaPlacementValidator.reshuffleDisks(Mockito.any(), Mockito.any())).thenReturn(reshuffledDisks);
+
+    StorageManager storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+            Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(), new InMemAccountService(false, false));
+    storageManager.reshuffleDisksAndMaybeExit(diskToReplicaMap, new PartitionFinder(), mockReplicaPlacementValidator);
     System.setSecurityManager(originalSecurityManager);
   }
 
@@ -2070,8 +2035,8 @@ public class StorageManagerTest {
       disksToPartitions.put(diskId, partitionIds);
     });
 
-    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicaMap, disksToPartitions);
-    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks();
+    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator();
+    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks(diskToReplicaMap, disksToPartitions);
     Assert.assertTrue(disksToReshuffle.isEmpty());
   }
 
@@ -2090,7 +2055,6 @@ public class StorageManagerTest {
       diskToReplicaMap.computeIfAbsent(disk, key -> new ArrayList<>()).add(replica);
     }
 
-    PartitionFinder partitionFinder = new PartitionFinder();
     Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
     diskToReplicaMap.forEach((diskId, replicaIds) -> {
       Set<String> partitionIds = replicaIds.stream()
@@ -2100,14 +2064,14 @@ public class StorageManagerTest {
     });
 
     diskToReplicaMap.remove(diskToReplicaMap.keySet().iterator().next());
-    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicaMap, disksToPartitions);
-    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks();
+    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator();
+    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks(diskToReplicaMap, disksToPartitions);
     Assert.assertTrue(disksToReshuffle.isEmpty());
   }
 
 
   /**
-   * Test the case when there one missing disk that has been reshuffled.
+   * Test the case when there one of the disks has been swapped with another disk.
    * @throws Exception
    */
   @Test
@@ -2121,7 +2085,6 @@ public class StorageManagerTest {
       diskToReplicaMap.computeIfAbsent(disk, key -> new ArrayList<>()).add(replica);
     }
 
-    PartitionFinder partitionFinder = new PartitionFinder();
     Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
     diskToReplicaMap.forEach((diskId, replicaIds) -> {
       Set<String> partitionIds = replicaIds.stream()
@@ -2132,24 +2095,19 @@ public class StorageManagerTest {
 
     assertTrue("We need at least two disks for this test to complete.",diskToReplicaMap.size() > 1);
 
-    List<Map.Entry<DiskId, Set<String>>> entries = new ArrayList<>(disksToPartitions.entrySet());
-    if (entries.size() > 1) {
-      Map.Entry<DiskId, Set<String>> firstEntry = entries.get(0);
-      Map.Entry<DiskId, Set<String>> secondEntry = entries.get(1);
-      entries.set(0, secondEntry);
-      entries.set(1, firstEntry);
-    }
+    // Swap the contents of the first two disks
+    Iterator<DiskId> iterator = disksToPartitions.keySet().iterator();
+    DiskId firstDisk = iterator.next();
+    Set<String> firstDiskContents = disksToPartitions.get(firstDisk);
+    DiskId secondDisk = iterator.next();
+    Set<String> secondDiskContents = disksToPartitions.get(secondDisk);
+    disksToPartitions.put(firstDisk, secondDiskContents);
+    disksToPartitions.put(secondDisk, firstDiskContents);
 
-    disksToPartitions.clear();
-    for (Map.Entry<DiskId, Set<String>> entry : entries) {
-      disksToPartitions.put(entry.getKey(), entry.getValue());
-    }
-
-    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator(diskToReplicaMap, disksToPartitions);
-    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks();
+    ReplicaPlacementValidator placementValidator = new ReplicaPlacementValidator();
+    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks(diskToReplicaMap, disksToPartitions);
     Assert.assertTrue(!disksToReshuffle.isEmpty());
   }
-
 
 
   // helpers
@@ -2456,7 +2414,7 @@ public class StorageManagerTest {
    * @param restoreDiskAvailability {@code true} to restore disk's availability when unavailable disk is fixed.
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig, boolean removeUnexpectedDirs,
-      int numSegment, boolean removeDirectoryAndRestart, boolean restoreDiskAvailability, boolean reshuffle) {
+      int numSegment, boolean removeDirectoryAndRestart, boolean restoreDiskAvailability) {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -2465,9 +2423,7 @@ public class StorageManagerTest {
     properties.put("store.compaction.triggers", "Periodic,Admin");
     properties.put("store.replica.status.delegate.enable", "true");
     properties.put("store.set.local.partition.state.enabled", "true");
-    properties.put("store.reshuffle.disks.on.reorder", Boolean.toString(reshuffle));
     properties.setProperty(StoreConfig.storeRemoveUnexpectedDirsInFullAutoName, String.valueOf(removeUnexpectedDirs));
-    properties.setProperty(StoreConfig.storeReshuffleDisksOnReorderName, String.valueOf(reshuffle));
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.port", "2200");
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
@@ -2498,7 +2454,7 @@ public class StorageManagerTest {
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
-    generateConfigs(segmentedLog, updateInstanceConfig, false, 2, false, false, false);
+    generateConfigs(segmentedLog, updateInstanceConfig, false, 2, false, false);
   }
 
   // unrecognizedDirsOnDiskTest() helpers
