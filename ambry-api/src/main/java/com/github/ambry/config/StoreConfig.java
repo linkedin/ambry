@@ -674,6 +674,14 @@ public class StoreConfig {
   public final boolean storeBlockStaleBlobStoreToStart;
   public final static String storeBlockStaleBlobStoreToStartName = "store.block.stale.blob.store.to.start";
 
+  /**
+   * Whether to attempt reshuffling of reordered disks and subsequent process termination.
+   */
+  @Config("store.reshuffle.disks.on.reorder")
+  @Default("false")
+  public final boolean storeReshuffleDisksOnReorder;
+  public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
@@ -852,5 +860,6 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeProactiveTestDelayInSecondsName, 60, 0, Integer.MAX_VALUE);
     storeStaleTimeInDays = verifiableProperties.getIntInRange(storeStaleTimeInDaysName, 7, 0, Integer.MAX_VALUE);
     storeBlockStaleBlobStoreToStart = verifiableProperties.getBoolean(storeBlockStaleBlobStoreToStartName, false);
+    storeReshuffleDisksOnReorder = verifiableProperties.getBoolean(storeReshuffleDisksOnReorderName, false);
   }
 }
