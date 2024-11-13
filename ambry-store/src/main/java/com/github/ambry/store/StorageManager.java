@@ -147,6 +147,13 @@ public class StorageManager implements StoreManager {
       diskToReplicaMap.computeIfAbsent(disk, key -> new ArrayList<>()).add(replica);
       partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
     }
+
+    // If configured, attempt to reshuffle any disks that are not mounted in the right order and exit if
+    // the reshuffle was successful.
+    if (storeConfig.storeReshuffleDisksOnReorder) {
+      reshuffleDisksAndMaybeExit(diskToReplicaMap, new PartitionFinder(), new ReplicaPlacementValidator());
+    }
+
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
@@ -157,6 +164,32 @@ public class StorageManager implements StoreManager {
       diskToDiskManager.put(disk, diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+      }
+    }
+  }
+
+  /**
+   * Checks whether the replicas are placed on the correct disks. If not, reshuffle the disks, write
+   * the new state to Helix and exit. We assume that this ambry-server instance will then be restarted with the
+   * new disk order that we saved to Helix.
+   * @param diskToReplicas A map of disks to the replicas on those disks.
+   */
+  protected void reshuffleDisksAndMaybeExit(Map<DiskId, List<ReplicaId>> diskToReplicas, PartitionFinder partitionFinder,
+      ReplicaPlacementValidator placementValidator) {
+    Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
+    for (DiskId currentDisk : diskToReplicas.keySet()) {
+      disksToPartitions.put(currentDisk, partitionFinder.findPartitionsOnDisk(currentDisk));
+    }
+
+    Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks(diskToReplicas, disksToPartitions);
+    if (!disksToReshuffle.isEmpty()) {
+      logger.info("Disks need to be reshuffled: {}", disksToReshuffle);
+      if(primaryClusterParticipant.setDisksOrder(disksToReshuffle)) {
+        logger.info("Successfully reshuffled disks. Now terminating"
+            + " the process so we can restart with the new disk order.");
+        System.exit(1);
+      } else {
+        logger.error("Failed to reshuffle disks - continuing with the current disk order.");
       }
     }
   }

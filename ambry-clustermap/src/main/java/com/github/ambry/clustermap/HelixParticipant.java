@@ -436,6 +436,47 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
   }
 
+  /**
+   * Given a map of old disks and new disks, swaps the old disks with the new disks in the DataNodeConfig,
+   * and persists the resulting changes to Helix.
+   * @param newDiskMapping A map of old disks to new disks.
+   * @return {@code true} if the disks order was successfully updated, {@code false} otherwise.
+   */
+  public boolean setDisksOrder(Map<DiskId, DiskId> newDiskMapping) {
+    if (newDiskMapping == null || newDiskMapping.isEmpty()) {
+      throw new IllegalArgumentException("Map of disk mappings is empty when attempting to set disks order");
+    }
+
+    // Update DataNodeConfig and save it.
+    synchronized (helixAdministrationLock) {
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+
+      // Make a copy of the disk configs to avoid accidentally overwriting state.
+      Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = new HashMap<> (dataNodeConfig.getDiskConfigs());
+      for (DiskId oldDisk : newDiskMapping.keySet()) {
+        DiskId newDisk = newDiskMapping.get(oldDisk);
+
+        // Confirm that both disks are present in the DataNodeConfig
+        DataNodeConfig.DiskConfig oldDiskConfig = originalDiskConfigs.get(oldDisk.getMountPath());
+        DataNodeConfig.DiskConfig newDiskConfig = originalDiskConfigs.get(newDisk.getMountPath());
+        if (oldDiskConfig == null || newDiskConfig == null) {
+          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath() + " cannot be found in Helix (DataNodeConfig)");
+        }
+
+        // Swap the disks in the DataNodeConfig
+        logger.info("Replacing disk {} with disk {}", oldDisk.getMountPath(), newDisk.getMountPath());
+        dataNodeConfig.getDiskConfigs().put(oldDisk.getMountPath(), originalDiskConfigs.get(newDisk.getMountPath()));
+      }
+
+      // Save the updated DataNodeConfig to Helix.
+      if (!dataNodeConfigSource.set(dataNodeConfig)) {
+        logger.error("Setting disks order failed DataNodeConfig update");
+        return false;
+      }
+    }
+    return true;
+  }
+
   @Override
   public boolean supportsStateChanges() {
     return true;
