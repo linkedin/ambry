@@ -15,12 +15,15 @@
 package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.DeleteBlobHandler;
 import com.github.ambry.frontend.FrontendMetrics;
+import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.ThrowingConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +37,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 public class S3DeleteHandler extends S3BaseHandler<Void> {
 
   private final S3DeleteObjectHandler objectHandler;
+  private final S3MultipartAbortUploadHandler multipartAbortHandler;
   private final FrontendMetrics metrics;
 
   /**
@@ -41,9 +45,10 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
    *
    * @param deleteBlobHandler the generic {@link DeleteBlobHandler} delegated to by the underlying delete object handler.
    */
-  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler, FrontendMetrics metrics) {
+  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler, S3MultipartAbortUploadHandler multipartAbortHandler, FrontendMetrics metrics) {
     this.metrics = metrics;
     this.objectHandler = new S3DeleteObjectHandler(deleteBlobHandler);
+    this.multipartAbortHandler = multipartAbortHandler;
   }
 
   /**
@@ -57,6 +62,9 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
    */
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
+    if(S3MultipartUploadHandler.isMultipartAbortUploadRequest(restRequest)) {
+      multipartAbortHandler.handle(restRequest, restResponseChannel, callback);
+    }
     objectHandler.handle(restRequest, restResponseChannel, callback);
   }
 

@@ -149,6 +149,11 @@ abstract public class S3BaseHandler<R> {
         && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 
+  public static boolean isMultipartAbortUploadRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.DELETE && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  }
+
   protected class DefaultCallbackChain {
     private final RestRequest restRequest;
     private final Callback<ReadableStreamChannel> finalCallback;
