@@ -27,37 +27,43 @@ public class DatasetVersionRecord {
   private final String version;
   private final long expirationTimeMs;
   private final Long creationTimeMs;
+  private final String renameFrom;
 
   /**
    * Constructor that takes individual arguments.
-   * @param accountId the id of the parent account.
-   * @param containerId the id of the container.
-   * @param datasetName the name of the dataset.
-   * @param version the version of the dataset.
+   *
+   * @param accountId        the id of the parent account.
+   * @param containerId      the id of the container.
+   * @param datasetName      the name of the dataset.
+   * @param version          the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param renameFrom       the original version which renamed from
    */
   public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version,
-      long expirationTimeMs) {
-    this(accountId, containerId, datasetName, version, expirationTimeMs, null);
+      long expirationTimeMs, String renameFrom) {
+    this(accountId, containerId, datasetName, version, expirationTimeMs, null, renameFrom);
   }
 
   /**
    * Constructor for retention policy support.
-   * @param accountId the id of the parent account.
-   * @param containerId the id of the container.
-   * @param datasetName the name of the dataset.
-   * @param version the version of the dataset.
+   *
+   * @param accountId        the id of the parent account.
+   * @param containerId      the id of the container.
+   * @param datasetName      the name of the dataset.
+   * @param version          the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
-   * @param creationTimeMs the creation time in milliseconds since epoch for dataset version.
+   * @param creationTimeMs   the creation time in milliseconds since epoch for dataset version.
+   * @param renameFrom
    */
   public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version, long expirationTimeMs,
-      Long creationTimeMs) {
+      Long creationTimeMs, String renameFrom) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.datasetName = datasetName;
     this.version = version;
     this.expirationTimeMs = expirationTimeMs;
     this.creationTimeMs = creationTimeMs;
+    this.renameFrom = renameFrom;
   }
 
   /**
@@ -100,6 +106,10 @@ public class DatasetVersionRecord {
    */
   public long getCreationTimeMs() {
     return creationTimeMs;
+  }
+
+  public String getRenameFrom() {
+    return renameFrom;
   }
 
   @Override

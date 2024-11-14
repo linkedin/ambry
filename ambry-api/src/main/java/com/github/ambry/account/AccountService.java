@@ -304,6 +304,11 @@ public interface AccountService extends Closeable {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
+  default void deleteDatasetVersionForDatasetDelete(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
   /**
    * Get all valid dataset versions for dataset deletion.
    * @param accountName The name for the parent account.

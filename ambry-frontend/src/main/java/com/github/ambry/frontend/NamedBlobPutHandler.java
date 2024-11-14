@@ -748,15 +748,27 @@ public class NamedBlobPutHandler {
       DatasetVersionRecord record = datasetVersionRecordList.get(idx);
       String version = record.getVersion();
       RequestPath requestPath = getRequestPath(restRequest);
-      RequestPath newRequestPath =
-          new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-              NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
-              requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+      RequestPath newRequestPath;
+      if (record.getRenameFrom() != null) {
+        newRequestPath =
+            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
+                    + record.getRenameFrom(), requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+      } else {
+        newRequestPath =
+            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
+                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+      }
       LOGGER.debug("New request path : " + newRequestPath);
       // Replace RequestPath in the WrappedRestRequest for delete and call DeleteBlobHandler.handle.
       restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-      restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-      restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+      if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) != null) {
+        restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
+      }
+      if (restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY) != null) {
+        restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+      }
       //for delete out of retention request, we don't want to set anything to response channel.
       deleteBlobHandler.handle(restRequest, new NoOpResponseChannel(), (r, e) -> {
         if (e != null) {

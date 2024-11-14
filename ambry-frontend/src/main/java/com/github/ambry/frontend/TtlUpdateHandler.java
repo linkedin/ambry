@@ -160,6 +160,7 @@ class TtlUpdateHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId convertedBlobId) {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
+        //TODO: rebuild the request if the dataset has a renamed field
         router.updateBlobTtl(null, convertedBlobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(convertedBlobId),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);

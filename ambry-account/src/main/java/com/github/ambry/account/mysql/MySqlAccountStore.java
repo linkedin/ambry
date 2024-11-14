@@ -255,6 +255,11 @@ public class MySqlAccountStore {
     datasetDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
   }
 
+  public synchronized void deleteDatasetVersionForDatasetDelete(short accountId, short containerId, String datasetName,
+      String version) throws SQLException, AccountServiceException {
+    datasetDao.deleteDatasetVersionForDatasetDelete(accountId, containerId, datasetName, version);
+  }
+
   /**
    * Update ttl for a version of {@link Dataset}
    * @param accountId the id for the parent account.

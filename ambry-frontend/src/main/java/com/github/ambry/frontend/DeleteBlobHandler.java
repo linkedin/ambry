@@ -135,6 +135,7 @@ public class DeleteBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.deleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, false);
+        //TODO: Delete the renamed blob if rename exist.
         router.deleteBlob(restRequest, null, serviceId, routerCallback(),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -207,7 +208,11 @@ public class DeleteBlobHandler {
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
         version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
-        accountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
+        if (restRequest.getArgs().get(DATASET_DELETE_ENABLED) != null) {
+          accountService.deleteDatasetVersionForDatasetDelete(accountName, containerName, datasetName, version);
+        } else {
+          accountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
+        }
         LOGGER.debug(
             "Successfully deleteDataset version for accountName: " + accountName + " containerName: " + containerName
                 + " datasetName: " + datasetName + " version: " + version);

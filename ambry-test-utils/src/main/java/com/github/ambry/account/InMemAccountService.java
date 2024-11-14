@@ -158,7 +158,7 @@ public class InMemAccountService implements AccountService {
       }
     }
     DatasetVersionRecord datasetVersionRecord =
-        new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs);
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs, null);
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
         .put(new Pair<>(datasetName, version), datasetVersionRecord);
     return datasetVersionRecord;
@@ -180,6 +180,16 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized void deleteDatasetVersion(String accountName, String containerName,
+      String datasetName, String version) throws AccountServiceException {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    //TODO: if state == renamed, return not found.
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).remove(new Pair<>(datasetName, version));
+  }
+
+  @Override
+  public synchronized void deleteDatasetVersionForDatasetDelete(String accountName, String containerName,
       String datasetName, String version) throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
@@ -324,7 +334,7 @@ public class InMemAccountService implements AccountService {
       throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
     }
     DatasetVersionRecord updatedDatasetVersionRecord =
-        new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time);
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time, null);
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
         .put(new Pair<>(datasetName, version), updatedDatasetVersionRecord);
   }

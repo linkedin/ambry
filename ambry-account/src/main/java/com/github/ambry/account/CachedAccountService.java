@@ -622,6 +622,21 @@ public class CachedAccountService extends AbstractAccountService {
   }
 
   @Override
+  public void deleteDatasetVersionForDatasetDelete(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      mySqlAccountStore.deleteDatasetVersion(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), datasetName, version);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
   public void updateDatasetVersionTtl(String accountName, String containerName, String datasetName, String version)
       throws AccountServiceException {
     try {
