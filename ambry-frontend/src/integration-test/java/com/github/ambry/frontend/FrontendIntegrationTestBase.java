@@ -85,8 +85,6 @@ import static com.github.ambry.account.Dataset.VersionSchema.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 
-import static com.github.ambry.frontend.Operations.*;
-import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
@@ -568,7 +566,8 @@ public class FrontendIntegrationTestBase {
     }
   }
 
-  List<Pair<String, String>> doCopyDatasetTestAndVerify(List<Dataset> datasets, String contentType, String ownerId)
+  List<Pair<String, String>> doCopyDatasetTestAndVerify(List<Dataset> datasets, String contentType, String ownerId,
+      int contentSize)
       throws Exception {
     List<Pair<String, String>> datasetVersions = new ArrayList<>();
     for (Dataset dataset : datasets) {
@@ -583,7 +582,6 @@ public class FrontendIntegrationTestBase {
         String containerName = dataset.getContainerName();
         String datasetName = dataset.getDatasetName();
         setAmbryHeadersForPut(headers, ttl, false, accountName, contentType, ownerId, null, null);
-        int contentSize = 100;
         ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
         putDatasetVersionAndVerify(dataset, sourceVersion, headers, content, contentSize, ttl);
 

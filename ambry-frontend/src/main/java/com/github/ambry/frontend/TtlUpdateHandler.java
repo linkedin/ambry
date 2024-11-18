@@ -13,8 +13,10 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -39,6 +41,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
@@ -134,6 +137,17 @@ class TtlUpdateHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessRequestMetrics, result -> {
         blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          String datasetVersionPathString = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+          DatasetVersionRecord datasetVersionRecord =
+              getDatasetVersionHelper(restRequest, datasetVersionPathString, accountService, metrics);
+          if (datasetVersionRecord.getRenameFrom() != null) {
+            DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(blobIdStr, restRequest.getArgs());
+            blobIdStr = NAMED_BLOB_PREFIX + SLASH + datasetVersionPath.getAccountName() + SLASH
+                + datasetVersionPath.getContainerName() + SLASH + datasetVersionRecord.getDatasetName() + SLASH
+                + datasetVersionRecord.getRenameFrom();
+          }
+        }
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -161,7 +175,6 @@ class TtlUpdateHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId convertedBlobId) {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        //TODO: rebuild the request if the dataset has a renamed field
         router.updateBlobTtl(null, convertedBlobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(convertedBlobId),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -183,24 +196,9 @@ class TtlUpdateHandler {
           }
           long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
-          NamedBlobRecord record;
-          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            DatasetVersionRecord datasetVersionRecord = getDatasetVersionHelper();
-            if (datasetVersionRecord.getRenameFrom() != null) {
-              record =
-                  new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                      datasetVersionRecord.getDatasetName() + SLASH + datasetVersionRecord.getVersion(),
-                      convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
-            } else {
-              record =
-                  new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                      namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
-            }
-          } else {
-            record =
-                new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                    namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
-          } CallbackUtils.callCallbackAfter(namedBlobDb.updateBlobTtlAndStateToReady(record),
+          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+              namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
+          CallbackUtils.callCallbackAfter(namedBlobDb.updateBlobTtlAndStateToReady(record),
               updateNamedBlobTtlCallback());
         } else {
           processResponseHelper();
@@ -264,24 +262,6 @@ class TtlUpdateHandler {
             "Dataset version update failed for accountName: " + accountName + " containerName: " + containerName
                 + " datasetName: " + datasetName + " version: " + version, ex);
         metrics.ttlUpdateDatasetVersionError.inc();
-        throw new RestServiceException(ex.getMessage(),
-            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
-      }
-    }
-
-    private DatasetVersionRecord getDatasetVersionHelper() throws RestServiceException {
-      String datasetVersionPathString = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
-      DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(datasetVersionPathString, restRequest.getArgs());
-      String accountName = datasetVersionPath.getAccountName();
-      String containerName = datasetVersionPath.getContainerName();
-      String datasetName = datasetVersionPath.getDatasetName();
-      String version = datasetVersionPath.getVersion();
-      try {
-        return accountService.getDatasetVersion(accountName, containerName, datasetName, version);
-      } catch (AccountServiceException ex) {
-        LOGGER.error("Dataset version get failed for accountName: " + accountName + " containerName: " + containerName
-            + " datasetName: " + datasetName + " version: " + version, ex);
-        metrics.getDatasetVersionError.inc();
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }

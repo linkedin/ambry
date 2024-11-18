@@ -201,7 +201,7 @@ public class RestUtils {
     /**
      * The original named blob name for a certain dataset version.
      */
-    public final static String TARGET_ORIGINAL_NAMED_BLOB_NAME = "x-ambry-target-original-named-blob-name";
+    public final static String TARGET_DATASET_ORIGINAL_VERSION = "x-ambry-dataset-original-version";
     /**
      * The dataset version expiration time.
      */

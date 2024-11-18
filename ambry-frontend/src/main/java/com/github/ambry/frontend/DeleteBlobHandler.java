@@ -140,7 +140,9 @@ public class DeleteBlobHandler {
       return buildCallback(metrics.deleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, false);
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-          DatasetVersionRecord datasetVersionRecord = getDatasetVersionHelper();
+          String datasetVersionPathString = getRequestPath(restRequest).getOperationOrBlobId(false);
+          DatasetVersionRecord datasetVersionRecord =
+              getDatasetVersionHelper(restRequest, datasetVersionPathString, accountService, metrics);
           if (datasetVersionRecord.getRenameFrom() != null) {
             RequestPath requestPath = getRequestPath(restRequest);
             RequestPath newRequestPath = new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(),
@@ -243,24 +245,5 @@ public class DeleteBlobHandler {
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
-
-
-      private DatasetVersionRecord getDatasetVersionHelper() throws RestServiceException {
-        String datasetVersionPathString = getRequestPath(restRequest).getOperationOrBlobId(false);
-        DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(datasetVersionPathString, restRequest.getArgs());
-        String accountName = datasetVersionPath.getAccountName();
-        String containerName = datasetVersionPath.getContainerName();
-        String datasetName = datasetVersionPath.getDatasetName();
-        String version = datasetVersionPath.getVersion();
-        try {
-          return accountService.getDatasetVersion(accountName, containerName, datasetName, version);
-        } catch (AccountServiceException ex) {
-          LOGGER.error("Dataset version get failed for accountName: " + accountName + " containerName: " + containerName
-              + " datasetName: " + datasetName + " version: " + version, ex);
-          metrics.getDatasetVersionError.inc();
-          throw new RestServiceException(ex.getMessage(),
-              RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
-        }
-      }
   }
 }

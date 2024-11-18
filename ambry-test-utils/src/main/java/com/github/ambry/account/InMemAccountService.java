@@ -351,7 +351,7 @@ public class InMemAccountService implements AccountService {
       throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
     }
     DatasetVersionRecord updatedDatasetVersionRecord =
-        new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time, null);
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time, datasetVersionRecord.getRenameFrom());
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
         .put(new Pair<>(datasetName, version), updatedDatasetVersionRecord);
   }

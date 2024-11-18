@@ -13,6 +13,8 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -39,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
@@ -50,6 +53,8 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 public class FrontendUtils {
   static final String NAMED_BLOB_PREFIX = "/named";
   static final String SLASH = "/";
+  private static final Logger LOGGER = LoggerFactory.getLogger(FrontendUtils.class);
+
 
   /**
    * Throws the specified {@link RestServiceException} if isEnabled is {@code true}. No-op otherwise.
@@ -180,6 +185,23 @@ public class FrontendUtils {
               originalRequestPath.getPathAfterPrefixes(), latestOperationOrBlobId, originalRequestPath.getSubResource(),
               originalRequestPath.getBlobSegmentIdx());
       restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
+    }
+  }
+
+  public static DatasetVersionRecord getDatasetVersionHelper(RestRequest restRequest, String datasetVersionPathString, AccountService accountService, FrontendMetrics metrics) throws RestServiceException {
+    DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(datasetVersionPathString, restRequest.getArgs());
+    String accountName = datasetVersionPath.getAccountName();
+    String containerName = datasetVersionPath.getContainerName();
+    String datasetName = datasetVersionPath.getDatasetName();
+    String version = datasetVersionPath.getVersion();
+    try {
+      return accountService.getDatasetVersion(accountName, containerName, datasetName, version);
+    } catch (AccountServiceException ex) {
+      LOGGER.error("Dataset version get failed for accountName: " + accountName + " containerName: " + containerName
+          + " datasetName: " + datasetName + " version: " + version, ex);
+      metrics.getDatasetVersionError.inc();
+      throw new RestServiceException(ex.getMessage(),
+          RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
     }
   }
 }

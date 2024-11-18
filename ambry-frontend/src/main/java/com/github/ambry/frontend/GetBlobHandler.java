@@ -343,7 +343,7 @@ public class GetBlobHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
         if (datasetVersionRecord.getRenameFrom() != null) {
-          restResponseChannel.setHeader(RestUtils.Headers.TARGET_ORIGINAL_NAMED_BLOB_NAME,
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_ORIGINAL_VERSION,
               datasetVersionRecord.getRenameFrom());
         }
         if (datasetVersionRecord.getExpirationTimeMs() != Utils.Infinite_Time) {

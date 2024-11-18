@@ -300,7 +300,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
 
   }
 
-  @Ignore
   @Test
   public void datasetRenameTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -310,12 +309,16 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     ACCOUNT_SERVICE.updateContainers(refAccount.getName(), Arrays.asList(namedBlobOptionalContainer));
     String contentType = "application/octet-stream";
     String ownerId = "datasetTest";
+    int contentSize = 100;
     List<Dataset> datasetList = addSemanticLongDataset(refAccount, namedBlobOptionalContainer, null);
     List<Pair<String, String>> allDatasetVersions = new ArrayList<>();
-    List<Pair<String, String>> datasetVersionsFromCopy = doCopyDatasetTestAndVerify(datasetList, contentType, ownerId);
+    List<Pair<String, String>> datasetVersionsFromCopy = doCopyDatasetTestAndVerify(datasetList, contentType, ownerId,
+        contentSize);
     allDatasetVersions.addAll(datasetVersionsFromCopy);
     //Test List dataset version
     List<Pair<String, String>> allDatasetVersionPairs = doListDatasetVersionAndVerify(datasetList, allDatasetVersions);
+    doDatasetUpdateTtlAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), allDatasetVersionPairs,
+        contentSize, contentType, ownerId);
     //Test delete
     doDeleteDatasetVersionAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), allDatasetVersionPairs);
   }
