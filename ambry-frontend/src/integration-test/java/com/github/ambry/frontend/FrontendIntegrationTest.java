@@ -297,6 +297,27 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doDeleteDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), datasetList);
     //After delete, it should have an empty list.
     doListDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), new ArrayList<>());
+
+  }
+
+  @Ignore
+  @Test
+  public void datasetRenameTest() throws Exception {
+    Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container namedBlobOptionalContainer =
+        new ContainerBuilder((short) 11, "optional", Container.ContainerStatus.ACTIVE, "",
+            refAccount.getId()).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
+    ACCOUNT_SERVICE.updateContainers(refAccount.getName(), Arrays.asList(namedBlobOptionalContainer));
+    String contentType = "application/octet-stream";
+    String ownerId = "datasetTest";
+    List<Dataset> datasetList = addSemanticLongDataset(refAccount, namedBlobOptionalContainer, null);
+    List<Pair<String, String>> allDatasetVersions = new ArrayList<>();
+    List<Pair<String, String>> datasetVersionsFromCopy = doCopyDatasetTestAndVerify(datasetList, contentType, ownerId);
+    allDatasetVersions.addAll(datasetVersionsFromCopy);
+    //Test List dataset version
+    List<Pair<String, String>> allDatasetVersionPairs = doListDatasetVersionAndVerify(datasetList, allDatasetVersions);
+    //Test delete
+    doDeleteDatasetVersionAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), allDatasetVersionPairs);
   }
 
   @Ignore

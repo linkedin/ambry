@@ -27,7 +27,7 @@ public class DatasetVersionRecord {
   private final String version;
   private final long expirationTimeMs;
   private final Long creationTimeMs;
-  private final String renameFrom;
+  private String renameFrom;
 
   /**
    * Constructor that takes individual arguments.
@@ -53,7 +53,7 @@ public class DatasetVersionRecord {
    * @param version          the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    * @param creationTimeMs   the creation time in milliseconds since epoch for dataset version.
-   * @param renameFrom
+   * @param renameFrom       the original version which renamed from
    */
   public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version, long expirationTimeMs,
       Long creationTimeMs, String renameFrom) {
@@ -110,6 +110,10 @@ public class DatasetVersionRecord {
 
   public String getRenameFrom() {
     return renameFrom;
+  }
+
+  public void setRenameFrom(String renameFrom) {
+    this.renameFrom = renameFrom;
   }
 
   @Override

@@ -255,6 +255,12 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
+  public void renameDatasetVersion(String accountName, String containerName, String datasetName, String sourceVersion,
+      String targetVersion) throws AccountServiceException {
+    cachedAccountService.renameDatasetVersion(accountName, containerName, datasetName, sourceVersion, targetVersion);
+  }
+
+  @Override
   public void deleteDatasetVersion(String accountName, String containerName, String datasetName, String version)
       throws AccountServiceException {
     cachedAccountService.deleteDatasetVersion(accountName, containerName, datasetName, version);

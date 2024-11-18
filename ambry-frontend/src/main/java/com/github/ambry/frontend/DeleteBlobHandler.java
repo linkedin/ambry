@@ -13,12 +13,16 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -135,7 +139,19 @@ public class DeleteBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.deleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, false);
-        //TODO: Delete the renamed blob if rename exist.
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          DatasetVersionRecord datasetVersionRecord = getDatasetVersionHelper();
+          if (datasetVersionRecord.getRenameFrom() != null) {
+            RequestPath requestPath = getRequestPath(restRequest);
+            RequestPath newRequestPath = new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(),
+                requestPath.getPathAfterPrefixes(), NAMED_BLOB_PREFIX + SLASH + ((Account) restRequest.getArgs()
+                .get(InternalKeys.TARGET_ACCOUNT_KEY)).getName() + SLASH + ((Container) restRequest.getArgs()
+                .get(InternalKeys.TARGET_CONTAINER_KEY)).getName() + SLASH + datasetVersionRecord.getDatasetName()
+                + SLASH + datasetVersionRecord.getRenameFrom(), requestPath.getSubResource(),
+                requestPath.getBlobSegmentIdx());
+            restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+          }
+        }
         router.deleteBlob(restRequest, null, serviceId, routerCallback(),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -227,5 +243,24 @@ public class DeleteBlobHandler {
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
+
+
+      private DatasetVersionRecord getDatasetVersionHelper() throws RestServiceException {
+        String datasetVersionPathString = getRequestPath(restRequest).getOperationOrBlobId(false);
+        DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(datasetVersionPathString, restRequest.getArgs());
+        String accountName = datasetVersionPath.getAccountName();
+        String containerName = datasetVersionPath.getContainerName();
+        String datasetName = datasetVersionPath.getDatasetName();
+        String version = datasetVersionPath.getVersion();
+        try {
+          return accountService.getDatasetVersion(accountName, containerName, datasetName, version);
+        } catch (AccountServiceException ex) {
+          LOGGER.error("Dataset version get failed for accountName: " + accountName + " containerName: " + containerName
+              + " datasetName: " + datasetName + " version: " + version, ex);
+          metrics.getDatasetVersionError.inc();
+          throw new RestServiceException(ex.getMessage(),
+              RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+        }
+      }
   }
 }

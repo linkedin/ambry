@@ -158,10 +158,28 @@ public class InMemAccountService implements AccountService {
       }
     }
     DatasetVersionRecord datasetVersionRecord =
-        new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs, null);
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs,
+            creationTimeInMs, null);
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
         .put(new Pair<>(datasetName, version), datasetVersionRecord);
     return datasetVersionRecord;
+  }
+
+  @Override
+  public void renameDatasetVersion(String accountName, String containerName, String datasetName, String sourceVersion,
+      String targetVersion) throws AccountServiceException {
+    DatasetVersionRecord datasetVersionRecord =
+        getDatasetVersion(accountName, containerName, datasetName, sourceVersion);
+    deleteDatasetVersion(accountName, containerName, datasetName, sourceVersion);
+    addDatasetVersion(accountName, containerName, datasetName, targetVersion,
+        (datasetVersionRecord.getExpirationTimeMs() - datasetVersionRecord.getCreationTimeMs()) / 1000,
+        datasetVersionRecord.getCreationTimeMs(), false, null);
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    DatasetVersionRecord datasetVersionRecordToUpdate =
+        idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(new Pair<>(datasetName, targetVersion));
+    datasetVersionRecordToUpdate.setRenameFrom(sourceVersion);
   }
 
   @Override
@@ -184,7 +202,6 @@ public class InMemAccountService implements AccountService {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
-    //TODO: if state == renamed, return not found.
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).remove(new Pair<>(datasetName, version));
   }
 
