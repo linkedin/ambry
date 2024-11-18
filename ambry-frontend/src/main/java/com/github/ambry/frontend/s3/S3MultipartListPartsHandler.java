@@ -47,7 +47,7 @@ import static com.github.ambry.rest.RestUtils.*;
  * TODO [S3] For now, this API returns empty list. Flink only uses it before starting a new multipart upload. So,
  *  sending an empty list unblocks them. In future, we may need to fetch the actual part IDs.
  */
-public class S3MultipartListPartsHandler {
+public class S3MultipartListPartsHandler<R> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartListPartsHandler.class);
   private static final ObjectMapper objectMapper = new XmlMapper();
   private final SecurityService securityService;
@@ -74,7 +74,7 @@ public class S3MultipartListPartsHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) {
+      Callback<R> callback) {
     new S3MultipartListPartsHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 

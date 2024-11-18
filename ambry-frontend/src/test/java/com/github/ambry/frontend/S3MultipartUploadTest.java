@@ -280,7 +280,6 @@ public class S3MultipartUploadTest {
 
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
-    s3MultipartAbortHandler = new S3MultipartAbortUploadHandler(securityService, metrics, injector);
-    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartAbortHandler, metrics);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, metrics);
   }
 }

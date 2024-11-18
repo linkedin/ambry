@@ -31,7 +31,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
  * Handles a request for s3 AbortMultipartUploads according to the
  * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html">...</a>
  */
-public class S3MultipartAbortUploadHandler {
+public class S3MultipartAbortUploadHandler<R> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartListPartsHandler.class);
   private final SecurityService securityService;
   private final FrontendMetrics frontendMetrics;
@@ -56,7 +56,7 @@ public class S3MultipartAbortUploadHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<R> callback) {
     new S3MultipartAbortUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 

@@ -37,7 +37,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 public class S3DeleteHandler extends S3BaseHandler<Void> {
 
   private final S3DeleteObjectHandler objectHandler;
-  private final S3MultipartAbortUploadHandler multipartAbortHandler;
+  private final S3MultipartUploadHandler s3MultipartUploadHandler;
   private final FrontendMetrics metrics;
 
   /**
@@ -45,10 +45,10 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
    *
    * @param deleteBlobHandler the generic {@link DeleteBlobHandler} delegated to by the underlying delete object handler.
    */
-  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler, S3MultipartAbortUploadHandler multipartAbortHandler, FrontendMetrics metrics) {
+  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler, S3MultipartUploadHandler s3MultipartUploadHandler, FrontendMetrics metrics) {
     this.metrics = metrics;
     this.objectHandler = new S3DeleteObjectHandler(deleteBlobHandler);
-    this.multipartAbortHandler = multipartAbortHandler;
+    this.s3MultipartUploadHandler = s3MultipartUploadHandler;
   }
 
   /**
@@ -63,7 +63,7 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
     if(S3MultipartUploadHandler.isMultipartAbortUploadRequest(restRequest)) {
-      multipartAbortHandler.handle(restRequest, restResponseChannel, callback);
+      s3MultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     }
     objectHandler.handle(restRequest, restResponseChannel, callback);
   }
