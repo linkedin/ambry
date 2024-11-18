@@ -629,7 +629,7 @@ public class CachedAccountService extends AbstractAccountService {
       if (mySqlAccountStore == null) {
         mySqlAccountStore = this.supplier.get();
       }
-      mySqlAccountStore.deleteDatasetVersion(accountAndContainerIdPair.getFirst(),
+      mySqlAccountStore.deleteDatasetVersionForDatasetDelete(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), datasetName, version);
     } catch (SQLException e) {
       throw translateSQLException(e);

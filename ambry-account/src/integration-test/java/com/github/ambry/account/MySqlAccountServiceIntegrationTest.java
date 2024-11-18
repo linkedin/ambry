@@ -780,7 +780,6 @@ public class MySqlAccountServiceIntegrationTest {
           testContainer.getName(), DATASET_NAME_RENAME, sourceVersion);
       fail();
     } catch (AccountServiceException e) {
-      //TODO: should we return not found?
       assertEquals("Mismatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
 
@@ -924,6 +923,7 @@ public class MySqlAccountServiceIntegrationTest {
               testContainer.getName(), DATASET_NAME_RENAME, version);
       assertEquals("The dataset version should be permanent after ttl update.", -1,
           datasetVersionRecordFromDb.getExpirationTimeMs());
+      mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_RENAME, version);
     }
 
     //DELETE a version which been renamed, should not be found?
@@ -949,6 +949,16 @@ public class MySqlAccountServiceIntegrationTest {
         assertEquals("Mismatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
       }
     }
+
+    //add a deleted version
+    sourceVersion = "1.1.1.1";
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_RENAME, renamedVersion, -1, System.currentTimeMillis(), false,
+        DatasetVersionState.READY);
+    DatasetVersionRecord datasetVersionRecord =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_RENAME, sourceVersion);
+    assertNull("Rename from should be null", datasetVersionRecord.getRenameFrom());
   }
 
   @Test

@@ -217,9 +217,9 @@ public class DatasetDao {
         DATASET_NAME, VERSION);
     //if dataset version is expired, we can create a dataset version with same primary key, but we have to use update instead of insert.
     updateDatasetVersionIfExpiredSql = String.format(
-        "update %s set %s = ?, %s = now(3), %s = now(3), %s = ?, %s = ? where %s = ? and %s = ? and %s = ? and %s = ? and deleted_ts < now(3)",
-        DATASET_VERSION_TABLE, VERSION, CREATION_TIME, LAST_MODIFIED_TIME, DELETED_TS, DATASET_VERSION_STATE, ACCOUNT_ID,
-        CONTAINER_ID, DATASET_NAME, VERSION);
+        "update %s set %s = ?, %s = now(3), %s = now(3), %s = ?, %s = ?, %s = NULL where %s = ? and %s = ? and %s = ? and %s = ? and deleted_ts < now(3)",
+        DATASET_VERSION_TABLE, VERSION, CREATION_TIME, LAST_MODIFIED_TIME, DELETED_TS, DATASET_VERSION_STATE,
+        RENAME_FROM, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
     getDatasetVersionRenameFromSql =
         String.format("SELECT %1$s FROM %2$s WHERE %3$s = ? AND %4$s = ? AND %5$s = ? AND %6$s = ?", RENAME_FROM,
             DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
