@@ -127,7 +127,7 @@ public class DatasetVersionRecord {
     DatasetVersionRecord record = (DatasetVersionRecord) o;
     return accountId == record.accountId && containerId == record.containerId && Objects.equals(datasetName,
         record.datasetName) && Objects.equals(version, record.version) && expirationTimeMs == record.expirationTimeMs
-        && Objects.equals(creationTimeMs, record.creationTimeMs);
+        && Objects.equals(creationTimeMs, record.creationTimeMs) && Objects.equals(renameFrom, record.renameFrom);
   }
 
   @Override

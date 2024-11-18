@@ -30,10 +30,13 @@ import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.protocol.DatasetVersionState;
+import java.util.Set;
 
 import static com.github.ambry.account.Dataset.VersionSchema.*;
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
@@ -441,6 +444,10 @@ public class DatasetDao {
     long targetVersionValue = getVersionBasedOnSchema(targetVersion, versionSchema);
     String renameFromSourceVersion =
         getDatasetVersionRenameFromHelper(accountId, containerId, datasetName, sourceVersionValue);
+    //sanity check for the renameFromSourceVersion
+    if (renameFromSourceVersion != null) {
+      getVersionBasedOnSchema(renameFromSourceVersion, versionSchema);
+    }
     try {
       // Disable auto commits
       dataAccessor.setAutoCommit(false);
@@ -448,13 +455,9 @@ public class DatasetDao {
           dataAccessor.getPreparedStatement(copyToNewDatasetVersionSql, true);
       //copy the source version to the new target version.
       //if source version has a rename field, set to the rename field
-      if (renameFromSourceVersion != null) {
-        executeCopyToNewDatasetVersionStatement(copyToNewDatasetVersionStatement, accountId, containerId, datasetName,
-            sourceVersionValue, targetVersionValue, renameFromSourceVersion);
-      } else {
-        executeCopyToNewDatasetVersionStatement(copyToNewDatasetVersionStatement, accountId, containerId, datasetName,
-            sourceVersionValue, targetVersionValue, sourceVersion);
-      }
+      String renameFromForTarget = renameFromSourceVersion != null? renameFromSourceVersion : sourceVersion;
+      executeCopyToNewDatasetVersionStatement(copyToNewDatasetVersionStatement, accountId, containerId, datasetName,
+          sourceVersionValue, targetVersionValue, renameFromForTarget);
       //mark the original dataset version state to renamed.
       PreparedStatement updateDatasetVersionStateAndDeletedTsStatement =
           dataAccessor.getPreparedStatement(updateDatasetVersionStateAndDeletedTsSql, true);
@@ -2086,7 +2089,7 @@ public class DatasetDao {
   }
 
   private boolean isAutoIncrVersion(String version) {
-    return LATEST.equals(version) || MAJOR.equals(version) || MINOR.equals(version) || PATCH.equals(version)
-        || REVISION.equals(version);
+    final Set<String> ALL_SEMANTIC_COMPONENTS = new HashSet<>(Arrays.asList(LATEST, MAJOR, MINOR, PATCH, REVISION));
+    return ALL_SEMANTIC_COMPONENTS.contains(version);
   }
 }
