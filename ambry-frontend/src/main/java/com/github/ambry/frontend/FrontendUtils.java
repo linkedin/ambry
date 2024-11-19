@@ -221,4 +221,20 @@ public class FrontendUtils {
     }
     return newRequestPath;
   }
+
+  public static void reconstructRestRequest(RestRequest restRequest, DatasetVersionRecord record, String accountName,
+      String containerName) {
+    RequestPath requestPath = getRequestPath(restRequest);
+    RequestPath newRequestPath = reconstructRequestPath(record, requestPath, accountName, containerName);
+    // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
+    restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+    restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
+    if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) != null) {
+      restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
+    }
+    if (restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY) != null) {
+      restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+    }
+    restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
+  }
 }
