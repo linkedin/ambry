@@ -675,6 +675,14 @@ public class StoreConfig {
   public final static String storeBlockStaleBlobStoreToStartName = "store.block.stale.blob.store.to.start";
 
   /**
+   * Config to Decide Replication Protocol For Hydration Of Newly Added Replicas
+   */
+  public static final String SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION = "server.replication.protocol.for.hydration";
+  @Config(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION)
+  public final ServerReplicationMode serverReplicationProtocolForHydration;
+
+
+  /**
    * Whether to attempt reshuffling of reordered disks and subsequent process termination.
    */
   @Config("store.reshuffle.disks.on.reorder")
@@ -683,6 +691,8 @@ public class StoreConfig {
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
+    serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION, ServerReplicationMode.class,
+        ServerReplicationMode.BLOB_BASED);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
