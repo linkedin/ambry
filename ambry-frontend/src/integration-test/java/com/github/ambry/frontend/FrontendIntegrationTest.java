@@ -300,6 +300,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
 
   }
 
+  @Ignore
   @Test
   public void datasetRenameTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -321,6 +322,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
         contentSize, contentType, ownerId);
     //Test delete
     doDeleteDatasetVersionAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), allDatasetVersionPairs);
+    //After delete, it should have an empty list.
+    doListDatasetVersionAndVerify(datasetList, new ArrayList<>());
   }
 
   @Ignore

@@ -140,6 +140,7 @@ public class DeleteBlobHandler {
       return buildCallback(metrics.deleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, false);
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
           String datasetVersionPathString = getRequestPath(restRequest).getOperationOrBlobId(false);
           DatasetVersionRecord datasetVersionRecord =
               getDatasetVersionHelper(restRequest, datasetVersionPathString, accountService, metrics);
@@ -167,7 +168,6 @@ public class DeleteBlobHandler {
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           try {
             metrics.deleteDatasetVersionRate.mark();
-            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
             deleteDatasetVersion(restRequest);
           } catch (RestServiceException e) {
             metrics.deleteDatasetVersionError.inc();
