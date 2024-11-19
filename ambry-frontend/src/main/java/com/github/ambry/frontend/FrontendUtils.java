@@ -204,4 +204,21 @@ public class FrontendUtils {
           RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
     }
   }
+
+  public static RequestPath reconstructRequestPath(DatasetVersionRecord record, RequestPath requestPath,
+      String accountName, String containerName) {
+    RequestPath newRequestPath;
+    if (record.getRenameFrom() != null) {
+      newRequestPath =
+          new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+              record.getRenamedPath(accountName, containerName), requestPath.getSubResource(),
+              requestPath.getBlobSegmentIdx());
+    } else {
+      newRequestPath =
+          new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+              record.getOriginalPath(accountName, containerName), requestPath.getSubResource(),
+              requestPath.getBlobSegmentIdx());
+    }
+    return newRequestPath;
+  }
 }

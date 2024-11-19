@@ -143,9 +143,8 @@ class TtlUpdateHandler {
               getDatasetVersionHelper(restRequest, datasetVersionPathString, accountService, metrics);
           if (datasetVersionRecord.getRenameFrom() != null) {
             DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(blobIdStr, restRequest.getArgs());
-            blobIdStr = NAMED_BLOB_PREFIX + SLASH + datasetVersionPath.getAccountName() + SLASH
-                + datasetVersionPath.getContainerName() + SLASH + datasetVersionRecord.getDatasetName() + SLASH
-                + datasetVersionRecord.getRenameFrom();
+            blobIdStr = datasetVersionRecord.getRenamedPath(datasetVersionPath.getAccountName(),
+                datasetVersionPath.getContainerName());
           }
         }
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());

@@ -146,11 +146,10 @@ public class DeleteBlobHandler {
           if (datasetVersionRecord.getRenameFrom() != null) {
             RequestPath requestPath = getRequestPath(restRequest);
             RequestPath newRequestPath = new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(),
-                requestPath.getPathAfterPrefixes(), NAMED_BLOB_PREFIX + SLASH + ((Account) restRequest.getArgs()
-                .get(InternalKeys.TARGET_ACCOUNT_KEY)).getName() + SLASH + ((Container) restRequest.getArgs()
-                .get(InternalKeys.TARGET_CONTAINER_KEY)).getName() + SLASH + datasetVersionRecord.getDatasetName()
-                + SLASH + datasetVersionRecord.getRenameFrom(), requestPath.getSubResource(),
-                requestPath.getBlobSegmentIdx());
+                requestPath.getPathAfterPrefixes(), datasetVersionRecord.getRenamedPath(
+                ((Account) restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY)).getName(),
+                ((Container) restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY)).getName()),
+                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
             restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
           }
         }

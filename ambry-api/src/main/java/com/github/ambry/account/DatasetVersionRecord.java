@@ -28,6 +28,9 @@ public class DatasetVersionRecord {
   private final long expirationTimeMs;
   private final Long creationTimeMs;
   private String renameFrom;
+  private static final String NAMED_BLOB_PREFIX = "/named";
+  private static final String SLASH = "/";
+
 
   /**
    * Constructor that takes individual arguments.
@@ -110,6 +113,14 @@ public class DatasetVersionRecord {
 
   public String getRenameFrom() {
     return renameFrom;
+  }
+
+  public String getOriginalPath(String accountName, String containerName) {
+    return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version;
+  }
+
+  public String getRenamedPath(String accountName, String containerName) {
+    return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + renameFrom;
   }
 
   public void setRenameFrom(String renameFrom) {

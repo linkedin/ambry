@@ -744,22 +744,9 @@ public class NamedBlobPutHandler {
       Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
       String accountName = dataset.getAccountName();
       String containerName = dataset.getContainerName();
-      String datasetName = dataset.getDatasetName();
       DatasetVersionRecord record = datasetVersionRecordList.get(idx);
-      String version = record.getVersion();
       RequestPath requestPath = getRequestPath(restRequest);
-      RequestPath newRequestPath;
-      if (record.getRenameFrom() != null) {
-        newRequestPath =
-            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
-                    + record.getRenameFrom(), requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-      } else {
-        newRequestPath =
-            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
-                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-      }
+      RequestPath newRequestPath = reconstructRequestPath(record, requestPath, accountName, containerName);
       LOGGER.debug("New request path : " + newRequestPath);
       // Replace RequestPath in the WrappedRestRequest for delete and call DeleteBlobHandler.handle.
       restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);

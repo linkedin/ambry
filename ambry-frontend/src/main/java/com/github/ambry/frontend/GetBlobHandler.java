@@ -353,11 +353,9 @@ public class GetBlobHandler {
         metrics.getDatasetVersionProcessingTimeInMs.update(System.currentTimeMillis() - startGetDatasetVersionTime);
         // If version is null, use the latest version + 1 from DatasetVersionRecord to construct named blob path.
         if (datasetVersionRecord.getRenameFrom() != null) {
-          return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
-              + datasetVersionRecord.getRenameFrom();
+          return datasetVersionRecord.getRenamedPath(accountName, containerName);
         } else {
-          return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
-              + datasetVersionRecord.getVersion();
+          return datasetVersionRecord.getOriginalPath(accountName, containerName);
         }
       } catch (AccountServiceException ex) {
         LOGGER.error(
