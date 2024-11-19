@@ -77,7 +77,7 @@ public class DatasetVersionPath {
     }
     String targetVersion = null;
     if (isRenameRequest) {
-      targetVersion = RestUtils.getHeader(args, TARGET_VERSION, false);
+      targetVersion = RestUtils.getHeader(args, TARGET_VERSION, true);
     }
     datasetName = String.join("/", Arrays.copyOfRange(splitPath, 3, splitPath.length - 1));
     String version = splitPath[splitPath.length - 1];
