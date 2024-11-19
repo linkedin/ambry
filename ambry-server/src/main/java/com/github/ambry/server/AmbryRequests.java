@@ -239,8 +239,6 @@ public class AmbryRequests implements RequestAPI {
           break;
         case FileChunkRequest:
           handleFileChunkRequest(networkRequest);
-        case EnableDisableCompactionRequest:
-          handleStopCompactionRequest(networkRequest);
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }

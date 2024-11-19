@@ -42,6 +42,6 @@ public enum RequestOrResponseType {
   FileMetaDataResponse,
   FileChunkRequest,
   FileChunkResponse,
-  EnableDisableCompactionRequest,
-  EnableDisableCompactionResponse
+  StopCompactionRequest,
+  StopCompactionResponse
 }

@@ -32,4 +32,5 @@ include 'ambry-api',
         'ambry-filesystem',
         'ambry-vcr'
 include 'ambry-files-transfer'
+include 'ambry-prioritization'
 
