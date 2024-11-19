@@ -64,8 +64,9 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
       throws RestServiceException {
     if(S3MultipartUploadHandler.isMultipartAbortUploadRequest(restRequest)) {
       s3MultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
+    } else {
+      objectHandler.handle(restRequest, restResponseChannel, callback);
     }
-    objectHandler.handle(restRequest, restResponseChannel, callback);
   }
 
   private class S3DeleteObjectHandler {
