@@ -447,12 +447,22 @@ public class DiskManager {
         BlobStore store = new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
             diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
             replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
-        store.start();
+        // For Filecopy, we do not init the BlobStore since new log/index isn't required, the files will be directly
+        // copied from remote node.
+        if (!storeConfig.enableFileCopyForBootstrap) {
+          store.start();
+        }
+
         // collect store segment requirements and add into DiskSpaceAllocator
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
         diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
-        // add store into CompactionManager
-        compactionManager.addBlobStore(store);
+
+        // We don't need to add the store into compaction manager for filecopy approach
+        if (!storeConfig.enableFileCopyForBootstrap) {
+          // add store into CompactionManager
+          compactionManager.addBlobStore(store);
+        }
+
         // add new created store into in-memory data structures.
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);

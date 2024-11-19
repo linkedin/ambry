@@ -674,6 +674,13 @@ public class StoreConfig {
   public final boolean storeBlockStaleBlobStoreToStart;
   public final static String storeBlockStaleBlobStoreToStartName = "store.block.stale.blob.store.to.start";
 
+
+  @Config(ENABLE_FILE_COPY_FOR_BOOTSTRAP)
+  @Default("false")
+  public final boolean enableFileCopyForBootstrap;
+  public static final String ENABLE_FILE_COPY_FOR_BOOTSTRAP = "clustermap.enable.file.copy.for.bootstrap";
+
+
   /**
    * Config to Decide Replication Protocol For Hydration Of Newly Added Replicas
    */
@@ -871,5 +878,6 @@ public class StoreConfig {
     storeStaleTimeInDays = verifiableProperties.getIntInRange(storeStaleTimeInDaysName, 7, 0, Integer.MAX_VALUE);
     storeBlockStaleBlobStoreToStart = verifiableProperties.getBoolean(storeBlockStaleBlobStoreToStartName, false);
     storeReshuffleDisksOnReorder = verifiableProperties.getBoolean(storeReshuffleDisksOnReorderName, false);
+    enableFileCopyForBootstrap = verifiableProperties.getBoolean(ENABLE_FILE_COPY_FOR_BOOTSTRAP, false);
   }
 }

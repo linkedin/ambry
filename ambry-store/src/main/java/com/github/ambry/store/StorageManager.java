@@ -716,6 +716,8 @@ public class StorageManager implements StoreManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      // For Filecopy, 4 steps to be taken up here: Prefilecopy, Filecopy, State Build, Exception handling and cleanup
+
       // check if partition exists on current node
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       Store store;
@@ -737,6 +739,9 @@ public class StorageManager implements StoreManager {
           // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
           // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
           // at some point). Then a brand new store associated with this replica should be created and started.
+          // For Filecopy, we do not init the BlobStore since new log/index isn't required, the files will be directly
+          // copied from remote node. We also do not add it to CompactionManager, since we don't want to start compaction
+          // on the new node.
           if (!addBlobStore(replicaToAdd)) {
             // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
             // back since addition of store failed.
@@ -754,6 +759,8 @@ public class StorageManager implements StoreManager {
             replicaAdded = true;
           }
         } while (!replicaAdded);
+
+
 
         if (primaryClusterParticipant != null) {
           // update InstanceConfig in Helix

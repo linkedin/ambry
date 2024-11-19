@@ -452,7 +452,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       DataNodeConfig dataNodeConfig = getDataNodeConfig();
 
       // Make a copy of the disk configs to avoid accidentally overwriting state.
-      Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = new HashMap<> (dataNodeConfig.getDiskConfigs());
+      Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = new HashMap<>(dataNodeConfig.getDiskConfigs());
       for (DiskId oldDisk : newDiskMapping.keySet()) {
         DiskId newDisk = newDiskMapping.get(oldDisk);
 
@@ -460,7 +460,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         DataNodeConfig.DiskConfig oldDiskConfig = originalDiskConfigs.get(oldDisk.getMountPath());
         DataNodeConfig.DiskConfig newDiskConfig = originalDiskConfigs.get(newDisk.getMountPath());
         if (oldDiskConfig == null || newDiskConfig == null) {
-          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath() + " cannot be found in Helix (DataNodeConfig)");
+          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath()
+              + " cannot be found in Helix (DataNodeConfig)");
         }
 
         // Swap the disks in the DataNodeConfig
@@ -825,8 +826,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Register Property Store Clean Up Task for cleaning up expired {@link DataNodeConfig} in Property Store.
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
-  private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
-    if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
+  private void registerPropertyStoreCleanUpTask(StateMachineEngine engine) {
+    if (clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
       logger.info("Registering PropertyStoreCleanUpTask");
       Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
       taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
@@ -863,12 +864,28 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    if (clusterMapConfig.enableFileCopyForBootstrap) {
+      // Filceopy -> filecopy, Replication->Filecopy
+      // TODO: Prefilecopy: Cleanup. TBD
+    }
+    else{
+      // Filceopy -> replication + replication->replication
+      // TODO: Prefilecopy: Cleanup TBD.
+    }
     try {
       // 1. take actions in storage manager (add new replica if necessary)
       PartitionStateChangeListener storageManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
       if (storageManagerListener != null) {
         storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      }
+
+
+      if (clusterMapConfig.enableFileCopyForBootstrap) {
+        // TODO: Filecopy Invocation
+        // TODO: Statebuild Invocation: storageManagerListener.buildStateForFileCopy. Functional signature
+        //        1. TODO: Start the store
+        //        2. TODO: Enable compaction for the new started store
       }
 
       // 2. take actions in replication manager (add new replica if necessary)
@@ -889,6 +906,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
     logger.info("Before setting partition {} to bootstrap", partitionName);
     localPartitionAndState.put(partitionName, ReplicaState.BOOTSTRAP);
+
   }
 
   @Override
