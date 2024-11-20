@@ -2677,19 +2677,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
    */
   static void cleanupIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName)
       throws StoreException {
-    File[] filesToCleanup = new File(dataDir).listFiles(new FilenameFilter() {
-      @Override
-      public boolean accept(File dir, String name) {
-        if (logSegmentName.toString().isEmpty()) {
-          return (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
-              IndexSegment.BLOOM_FILE_NAME_SUFFIX));
-        } else {
-          return name.startsWith(logSegmentName.toString() + BlobStore.SEPARATOR) && (
-              name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
-                  IndexSegment.BLOOM_FILE_NAME_SUFFIX));
-        }
-      }
-    });
+    File[] filesToCleanup = getIndexAndBloomFilterFiles(dataDir, logSegmentName);
     if (filesToCleanup == null) {
       throw new StoreException("Failed to list index segment files", StoreErrorCodes.IOError);
     }
@@ -2698,6 +2686,22 @@ public class PersistentIndex implements LogSegmentSizeProvider {
         throw new StoreException("Could not delete file named " + file, StoreErrorCodes.Unknown_Error);
       }
     }
+  }
+
+  static File[] getIndexAndBloomFilterFiles(String dataDir, LogSegmentName logSegmentName){
+    File[] filesToCleanup = new File(dataDir).listFiles(new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        if (logSegmentName.toString().isEmpty()) {
+          return (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
+              IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        } else {
+          return name.startsWith(logSegmentName.toString() + BlobStore.SEPARATOR) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
+              IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        }
+      }
+    });
+    return filesToCleanup;
   }
 
   class IndexPersistor implements Runnable {

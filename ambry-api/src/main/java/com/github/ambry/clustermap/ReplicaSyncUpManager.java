@@ -35,7 +35,8 @@ public interface ReplicaSyncUpManager {
    * @throws InterruptedException
    */
   void waitBootstrapCompleted(String partitionName) throws InterruptedException;
-
+  void initiateFileCopy(ReplicaId replicaId);
+  void waitForFileCopyCompleted(String partitionName) throws InterruptedException;
   /**
    * Update replica lag (in byte) between two replicas (local and peer replica) and check sync-up status.
    * @param localReplica the replica that resides on current node
