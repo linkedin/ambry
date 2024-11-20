@@ -472,6 +472,15 @@ public class DiskManager {
   }
 
   /**
+   * Add a new FileStore with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addFileStore(ReplicaId replica){
+    return false;
+  }
+
+  /**
    * Start the BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be started.
    * @return {@code true} if start store was successful. {@code false} if not.
@@ -524,6 +533,15 @@ public class DiskManager {
   }
 
   /**
+   * Shutdown the FileStore with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
+   * @return {@code true} if shutdown store was successful. {@code false} if not.
+   */
+  boolean shutdownFileStore(PartitionId id) {
+    return false;
+  }
+
+  /**
    * Given partition id, remove the corresponding blob store in disk manager
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be removed.
    * @return {@code true} if store removal was successful. {@code false} if not.
@@ -553,6 +571,15 @@ public class DiskManager {
       rwLock.writeLock().unlock();
     }
     return succeed;
+  }
+
+  /**
+   * Given partition id, remove the corresponding file store in disk manager
+   * @param id the {@link PartitionId} of the {@link BlobStore} which should be removed.
+   * @return {@code true} if store removal was successful. {@code false} if not.
+   */
+  boolean removeFileStore(PartitionId id) {
+    return false;
   }
 
   /**
