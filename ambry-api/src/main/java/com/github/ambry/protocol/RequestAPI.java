@@ -90,6 +90,15 @@ public interface RequestAPI {
   void handleReplicaMetadataRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
+   *
+   * @param request
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  void handleFileMetaDataRequest(NetworkRequest request) throws IOException, InterruptedException;
+
+  void handleFileChunkRequest(NetworkRequest request) throws IOException, InterruptedException;
+  /**
    * Replicate one specific Blob from a remote host to the local store.
    * @param request The request that contains the remote host information and the blob id to be replicated.
    * @throws IOException if there are I/O errors carrying our the required operation.

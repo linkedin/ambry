@@ -23,6 +23,7 @@ public class PrioritisationManager {
 
   public boolean isRunning(){
     return running;
+    // Start the PrioritisationManager
   }
 
   public void shutdown() {
