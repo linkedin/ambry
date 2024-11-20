@@ -102,6 +102,16 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   }
 
   @Override
+  public void initiateFileCopy(ReplicaId replicaId) {
+
+  }
+
+  @Override
+  public void waitForFileCopyCompleted(String partitionName) throws InterruptedException {
+
+  }
+
+  @Override
   public void waitDeactivationCompleted(String partitionName) throws InterruptedException {
     CountDownLatch latch = partitionToDeactivationLatch.get(partitionName);
     if (latch == null) {
