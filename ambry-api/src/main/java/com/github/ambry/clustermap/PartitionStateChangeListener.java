@@ -75,9 +75,16 @@ public interface PartitionStateChangeListener {
   }
 
   /**
+   * Action to take when state building is triggered for filecopy
+   * @param partitionName of the partition.
+   */
+  void buildStateForFileCopy(String partitionName);
+
+  /**
    * Action to take when reset method is called on certain partition.
    * @param partitionName of the partition.
    */
   default void onReset(String partitionName) {
   }
+
 }

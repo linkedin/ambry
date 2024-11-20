@@ -493,6 +493,11 @@ public class RecoveryManager extends ReplicationEngine {
           partitionName);
     }
 
+    @Override
+    public void buildStateForFileCopy(String partitionName) {
+      // no op
+    }
+
     /**
      * If only config specified list of partitions are being replicated from cloud, then check that the partition
      * belongs to the specified list.

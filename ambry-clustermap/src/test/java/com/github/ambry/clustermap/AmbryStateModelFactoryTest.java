@@ -111,6 +111,11 @@ public class AmbryStateModelFactoryTest {
       public void onPartitionBecomeDroppedFromOffline(String partitionName) {
         // no op
       }
+
+      @Override
+      public void buildStateForFileCopy(String partitionName) {
+        // no op
+      }
     }, mock(HelixClusterManager.class));
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {

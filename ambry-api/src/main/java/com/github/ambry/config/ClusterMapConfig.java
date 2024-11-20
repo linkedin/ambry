@@ -373,9 +373,6 @@ public class ClusterMapConfig {
   public final boolean clusterMapIgnoreDownwardStateTransition;
 
   public static final String ENABLE_FILE_COPY_FOR_BOOTSTRAP = "clustermap.enable.file.copy.for.bootstrap";
-  @Config(ENABLE_FILE_COPY_FOR_BOOTSTRAP)
-  @Default("false")
-  public final boolean enableFileCopyForBootstrap;
 
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
@@ -460,6 +457,5 @@ public class ClusterMapConfig {
         verifiableProperties.getLongInRange("clustermap.default.replica.capacity.in.bytes", 384L * 1024 * 1024 * 1024,
             0, Long.MAX_VALUE);
     clusterMapIgnoreDownwardStateTransition = verifiableProperties.getBoolean(IGNORE_DOWNWARD_STATE_TRANSITION, false);
-    enableFileCopyForBootstrap = verifiableProperties.getBoolean(ENABLE_FILE_COPY_FOR_BOOTSTRAP, false);
   }
 }

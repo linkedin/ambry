@@ -675,10 +675,10 @@ public class StoreConfig {
   public final static String storeBlockStaleBlobStoreToStartName = "store.block.stale.blob.store.to.start";
 
 
-  @Config(ENABLE_FILE_COPY_FOR_BOOTSTRAP)
+  @Config(STORE_ENABLE_FILE_COPY_FOR_BOOTSTRAP)
   @Default("false")
-  public final boolean enableFileCopyForBootstrap;
-  public static final String ENABLE_FILE_COPY_FOR_BOOTSTRAP = "clustermap.enable.file.copy.for.bootstrap";
+  public final boolean storeEnableFileCopyForBootstrap;
+  public static final String STORE_ENABLE_FILE_COPY_FOR_BOOTSTRAP = "store.enable.file.copy.for.bootstrap";
 
 
   /**
@@ -878,6 +878,6 @@ public class StoreConfig {
     storeStaleTimeInDays = verifiableProperties.getIntInRange(storeStaleTimeInDaysName, 7, 0, Integer.MAX_VALUE);
     storeBlockStaleBlobStoreToStart = verifiableProperties.getBoolean(storeBlockStaleBlobStoreToStartName, false);
     storeReshuffleDisksOnReorder = verifiableProperties.getBoolean(storeReshuffleDisksOnReorderName, false);
-    enableFileCopyForBootstrap = verifiableProperties.getBoolean(ENABLE_FILE_COPY_FOR_BOOTSTRAP, false);
+    storeEnableFileCopyForBootstrap = verifiableProperties.getBoolean(STORE_ENABLE_FILE_COPY_FOR_BOOTSTRAP, false);
   }
 }

@@ -45,6 +45,11 @@ public class StateTransitionException extends RuntimeException {
      * If replica is not present in Helix and not found on current node.
      */
     ReplicaNotFound,
+
+    /**
+     * If disk manager not found during state build.
+     */
+    DiskManagerNotFoundForFileCopyStateBuild,
     /**
      * If failure occurs during replica operation (i.e. replica addition/removal in StoreManager, ReplicationManager).
      */

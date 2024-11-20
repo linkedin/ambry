@@ -760,8 +760,6 @@ public class StorageManager implements StoreManager {
           }
         } while (!replicaAdded);
 
-
-
         if (primaryClusterParticipant != null) {
           // update InstanceConfig in Helix
           try {
@@ -1007,6 +1005,13 @@ public class StorageManager implements StoreManager {
       }
       partitionNameToReplicaId.remove(partitionName);
       logger.info("Partition {} is successfully dropped on current node", partitionName);
+    }
+
+
+
+    @Override
+    public void buildStateForFileCopy(String partitionName) {
+      // no op
     }
 
     /**

@@ -412,5 +412,10 @@ public class ReplicationManager extends ReplicationEngine {
       // the transition
       removeReplica(replica);
     }
+
+    @Override
+    public void buildStateForFileCopy(String partitionName) {
+      // no op
+    }
   }
 }

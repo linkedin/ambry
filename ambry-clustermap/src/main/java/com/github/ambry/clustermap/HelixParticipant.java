@@ -65,6 +65,8 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  */
 public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
   public static final String DISK_KEY = "DISK";
+
+  public static final boolean ENABLE_FILE_COPY = false;
   final HelixParticipantMetrics participantMetrics;
   private final HelixClusterManager clusterManager;
   private final String clusterName;
@@ -864,14 +866,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    if (clusterMapConfig.enableFileCopyForBootstrap) {
-      // Filceopy -> filecopy, Replication->Filecopy
-      // TODO: Prefilecopy: Cleanup. TBD
-    }
-    else{
-      // Filceopy -> replication + replication->replication
-      // TODO: Prefilecopy: Cleanup TBD.
-    }
+    // TODO: Prefilecopy steps: Handle scenarios for Filceopy -> filecopy, Replication->Filecopy,
+    //  Filceopy -> replication and replication->replication rollout/rollback.
     try {
       // 1. take actions in storage manager (add new replica if necessary)
       PartitionStateChangeListener storageManagerListener =
@@ -880,12 +876,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
 
-
-      if (clusterMapConfig.enableFileCopyForBootstrap) {
+      if (ENABLE_FILE_COPY) {
         // TODO: Filecopy Invocation
         // TODO: Statebuild Invocation: storageManagerListener.buildStateForFileCopy. Functional signature
         //        1. TODO: Start the store
         //        2. TODO: Enable compaction for the new started store
+
+        // StateBuilding
+        storageManagerListener.buildStateForFileCopy(partitionName);
       }
 
       // 2. take actions in replication manager (add new replica if necessary)
@@ -1075,6 +1073,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeOfflineFromError(String partitionName) {
     localPartitionAndState.put(partitionName, ReplicaState.OFFLINE);
+  }
+
+  @Override
+  public void buildStateForFileCopy(String partitionName) {
+    // no op
   }
 
   @Override
