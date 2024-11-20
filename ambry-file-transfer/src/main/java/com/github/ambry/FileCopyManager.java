@@ -30,8 +30,9 @@ public class FileCopyManager {
           new PartitionStateChangeListenerImpl());
       logger.info("File Copy Manager's state change listener registered!");
     }
-    if(prioritisationManager.)
-    prioritisationManager.start();
+    if(!prioritisationManager.isRunning()) {
+      prioritisationManager.start();
+    }
   }
   public void start() throws InterruptedException, IOException {
 
