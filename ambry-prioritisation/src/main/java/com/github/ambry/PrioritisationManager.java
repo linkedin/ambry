@@ -19,7 +19,10 @@ public class PrioritisationManager {
 
   public void start() {
     running = true;
-    // Start the PrioritisationManager
+  }
+
+  public boolean isRunning(){
+    return running;
   }
 
   public void shutdown() {

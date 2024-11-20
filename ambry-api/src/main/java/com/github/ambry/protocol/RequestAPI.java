@@ -117,9 +117,11 @@ public interface RequestAPI {
     throw new UnsupportedOperationException("Undelete request not supported on this node");
   }
 
-  void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException;
-  void handleFileMetaDataResponse(NetworkRequest request) throws InterruptedException, IOException;
-  void handleFileChunkRequest(NetworkRequest request) throws InterruptedException, IOException;
+  default void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException{
+    throw new UnsupportedOperationException("File Meta Data request not supported on this node");
+  }
+  default void handleFileChunkRequest(NetworkRequest request) throws InterruptedException, IOException{
+    throw new UnsupportedOperationException("File Chunk request not supported on this node");
+  }
 
-  void handleStopCompactionRequest(NetworkRequest request) throws InterruptedException, IOException;
 }
