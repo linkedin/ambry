@@ -115,12 +115,20 @@ public class DatasetVersionRecord {
     return renameFrom;
   }
 
-  public String getOriginalPath(String accountName, String containerName) {
+  private String getOriginalPath(String accountName, String containerName) {
     return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version;
   }
 
   public String getRenamedPath(String accountName, String containerName) {
     return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + renameFrom;
+  }
+
+  public String getNamedBlobNamePath(String accountName, String containerName) {
+    if (this.renameFrom != null) {
+      return getRenamedPath(accountName, containerName);
+    } else {
+      return getOriginalPath(accountName, containerName);
+    }
   }
 
   public void setRenameFrom(String renameFrom) {

@@ -352,11 +352,7 @@ public class GetBlobHandler {
         }
         metrics.getDatasetVersionProcessingTimeInMs.update(System.currentTimeMillis() - startGetDatasetVersionTime);
         // If version is null, use the latest version + 1 from DatasetVersionRecord to construct named blob path.
-        if (datasetVersionRecord.getRenameFrom() != null) {
-          return datasetVersionRecord.getRenamedPath(accountName, containerName);
-        } else {
-          return datasetVersionRecord.getOriginalPath(accountName, containerName);
-        }
+        return datasetVersionRecord.getNamedBlobNamePath(accountName, containerName);
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Failed to get dataset version for accountName: " + accountName + " containerName: " + containerName
