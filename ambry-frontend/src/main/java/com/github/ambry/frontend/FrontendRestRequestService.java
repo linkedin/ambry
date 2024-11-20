@@ -22,6 +22,7 @@ import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
+import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.frontend.s3.S3PostHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
@@ -115,6 +116,7 @@ class FrontendRestRequestService implements RestRequestService {
   private S3HeadHandler s3HeadHandler;
   private S3PostHandler s3PostHandler;
   private S3MultipartUploadHandler s3MultipartUploadHandler;
+  private S3MultipartAbortUploadHandler s3MultipartAbortHandler;
   private S3GetHandler s3GetHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
@@ -229,12 +231,11 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
-    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, frontendMetrics);
-    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3MultipartUploadHandler =
         new S3MultipartUploadHandler(securityService, frontendMetrics, accountAndContainerInjector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, frontendMetrics);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
     s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);

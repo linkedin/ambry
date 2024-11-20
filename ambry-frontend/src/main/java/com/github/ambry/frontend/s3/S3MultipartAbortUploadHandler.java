@@ -14,51 +14,37 @@
  */
 package com.github.ambry.frontend.s3;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.FrontendMetrics;
-import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.SecurityService;
-import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.ReadableStreamChannel;
-import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
-import java.util.GregorianCalendar;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
-import static com.github.ambry.rest.RestUtils.*;
-import static com.github.ambry.rest.RestUtils.InternalKeys.*;
-import static com.github.ambry.frontend.s3.S3MessagePayload.*;
+
 
 /**
- * Handles a request for s3 CreateMultipartUploads according to the
- * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html">...</a>
+ * Handles a request for s3 AbortMultipartUploads according to the
+ * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html">...</a>
  */
-public class S3MultipartCreateUploadHandler<R> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartCreateUploadHandler.class);
-  private static final ObjectMapper objectMapper = new XmlMapper();
+public class S3MultipartAbortUploadHandler<R> {
+  private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartListPartsHandler.class);
   private final SecurityService securityService;
   private final FrontendMetrics frontendMetrics;
   private final AccountAndContainerInjector accountAndContainerInjector;
 
   /**
-   * Construct a handler for handling S3 POST requests during multipart uploads.
+   * Construct a handler for handling S3 abort multi uploads.
    *
    * @param securityService             the {@link SecurityService} to use.
    * @param frontendMetrics             {@link FrontendMetrics} instance where metrics should be recorded.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    */
-  public S3MultipartCreateUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics,
+  public S3MultipartAbortUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics,
       AccountAndContainerInjector accountAndContainerInjector) {
     this.securityService = securityService;
     this.frontendMetrics = frontendMetrics;
@@ -70,9 +56,8 @@ public class S3MultipartCreateUploadHandler<R> {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<R> callback) {
-    new S3MultipartCreateUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<R> callback) {
+    new S3MultipartAbortUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**
@@ -81,7 +66,7 @@ public class S3MultipartCreateUploadHandler<R> {
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<ReadableStreamChannel> finalCallback;
+    private final Callback<Void> finalCallback;
     private final String uri;
 
     /**
@@ -90,7 +75,7 @@ public class S3MultipartCreateUploadHandler<R> {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<ReadableStreamChannel> finalCallback) {
+        Callback<Void> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
@@ -103,7 +88,7 @@ public class S3MultipartCreateUploadHandler<R> {
     private void start() {
       try {
         accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
-            frontendMetrics.postBlobMetricsGroup);
+            frontendMetrics.deleteBlobMetricsGroup);
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);
@@ -116,7 +101,7 @@ public class S3MultipartCreateUploadHandler<R> {
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
     private Callback<Void> securityProcessRequestCallback() {
-      return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics, securityCheckResult -> {
+      return buildCallback(frontendMetrics.s3DeleteHandleMetrics, securityCheckResult -> {
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback());
       }, uri, LOGGER, finalCallback);
     }
@@ -126,25 +111,9 @@ public class S3MultipartCreateUploadHandler<R> {
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
      */
     private Callback<Void> securityPostProcessRequestCallback() {
-      return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        // Return a UUID as upload session ID.
-        String uploadId = UUID.randomUUID().toString();
-        RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
-        String bucket = namedBlobPath.getContainerName();
-        String key = namedBlobPath.getBlobName();
-        InitiateMultipartUploadResult initiateMultipartUploadResult =
-            new InitiateMultipartUploadResult(bucket, key, uploadId);
-        LOGGER.debug("Sending response for CreateMultipartUpload {}", initiateMultipartUploadResult);
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        objectMapper.writeValue(outputStream, initiateMultipartUploadResult);
-        ReadableStreamChannel channel =
-            new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
-        restResponseChannel.setStatus(ResponseStatus.Ok);
-        restResponseChannel.setHeader(Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
-        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, channel.getSize());
-        finalCallback.onCompletion(channel, null);
+      return buildCallback(frontendMetrics.s3DeleteHandleMetrics, securityCheckResult -> {
+        restResponseChannel.setStatus(ResponseStatus.NoContent);
+        finalCallback.onCompletion(null, null);
       }, uri, LOGGER, finalCallback);
     }
   }
