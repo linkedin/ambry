@@ -145,16 +145,8 @@ public class DeleteDatasetHandler {
         List<DatasetVersionRecord> datasetVersionRecordList =
             accountService.getAllValidVersionForDatasetDeletion(accountName, containerName, datasetName);
         if (datasetVersionRecordList.size() > 0) {
-          DatasetVersionRecord record = datasetVersionRecordList.get(0);
-          String version = record.getVersion();
-          RequestPath requestPath = getRequestPath(restRequest);
-          RequestPath newRequestPath =
-              new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                  NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
-                      + version, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-          // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
-          restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-          restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
+          reconstructRestRequest(restRequest, datasetVersionRecordList.get(0), accountName, containerName);
+          restRequest.setArg(InternalKeys.DATASET_DELETE_ENABLED, "true");
           deleteBlobHandler.handle(restRequest, restResponseChannel,
               recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName));
         } else {
@@ -197,15 +189,7 @@ public class DeleteDatasetHandler {
           recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);
       DatasetVersionRecord record = datasetVersionRecordList.get(idx);
       return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
-        String version = record.getVersion();
-        RequestPath requestPath = getRequestPath(restRequest);
-        RequestPath newRequestPath =
-            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
-                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-        // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
-        restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-        restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
+        reconstructRestRequest(restRequest, record, accountName, containerName);
         deleteBlobHandler.handle(restRequest, restResponseChannel, nextCallBack);
       }, uri, LOGGER, finalCallback);
     }
