@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS DatasetVersions (
     lastModifiedTime DATETIME(3) NOT NULL,
     delete_ts DATETIME(6) DEFAULT NULL,
     deleted_ts DATETIME(6) DEFAULT NULL,
+    rename_from VARCHAR(25) DEFAULT NULL,
     PRIMARY KEY (accountId, containerId, datasetName, version)
 )
 CHARACTER SET utf8 COLLATE utf8_bin;

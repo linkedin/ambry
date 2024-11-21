@@ -27,37 +27,46 @@ public class DatasetVersionRecord {
   private final String version;
   private final long expirationTimeMs;
   private final Long creationTimeMs;
+  private String renameFrom;
+  private static final String NAMED_BLOB_PREFIX = "/named";
+  private static final String SLASH = "/";
+
 
   /**
    * Constructor that takes individual arguments.
-   * @param accountId the id of the parent account.
-   * @param containerId the id of the container.
-   * @param datasetName the name of the dataset.
-   * @param version the version of the dataset.
+   *
+   * @param accountId        the id of the parent account.
+   * @param containerId      the id of the container.
+   * @param datasetName      the name of the dataset.
+   * @param version          the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param renameFrom       the original version which renamed from
    */
   public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version,
-      long expirationTimeMs) {
-    this(accountId, containerId, datasetName, version, expirationTimeMs, null);
+      long expirationTimeMs, String renameFrom) {
+    this(accountId, containerId, datasetName, version, expirationTimeMs, null, renameFrom);
   }
 
   /**
    * Constructor for retention policy support.
-   * @param accountId the id of the parent account.
-   * @param containerId the id of the container.
-   * @param datasetName the name of the dataset.
-   * @param version the version of the dataset.
+   *
+   * @param accountId        the id of the parent account.
+   * @param containerId      the id of the container.
+   * @param datasetName      the name of the dataset.
+   * @param version          the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
-   * @param creationTimeMs the creation time in milliseconds since epoch for dataset version.
+   * @param creationTimeMs   the creation time in milliseconds since epoch for dataset version.
+   * @param renameFrom       the original version which renamed from
    */
   public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version, long expirationTimeMs,
-      Long creationTimeMs) {
+      Long creationTimeMs, String renameFrom) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.datasetName = datasetName;
     this.version = version;
     this.expirationTimeMs = expirationTimeMs;
     this.creationTimeMs = creationTimeMs;
+    this.renameFrom = renameFrom;
   }
 
   /**
@@ -102,6 +111,30 @@ public class DatasetVersionRecord {
     return creationTimeMs;
   }
 
+  public String getRenameFrom() {
+    return renameFrom;
+  }
+
+  private String getOriginalPath(String accountName, String containerName) {
+    return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version;
+  }
+
+  public String getRenamedPath(String accountName, String containerName) {
+    return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + renameFrom;
+  }
+
+  public String getNamedBlobNamePath(String accountName, String containerName) {
+    if (this.renameFrom != null) {
+      return getRenamedPath(accountName, containerName);
+    } else {
+      return getOriginalPath(accountName, containerName);
+    }
+  }
+
+  public void setRenameFrom(String renameFrom) {
+    this.renameFrom = renameFrom;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -113,7 +146,7 @@ public class DatasetVersionRecord {
     DatasetVersionRecord record = (DatasetVersionRecord) o;
     return accountId == record.accountId && containerId == record.containerId && Objects.equals(datasetName,
         record.datasetName) && Objects.equals(version, record.version) && expirationTimeMs == record.expirationTimeMs
-        && Objects.equals(creationTimeMs, record.creationTimeMs);
+        && Objects.equals(creationTimeMs, record.creationTimeMs) && Objects.equals(renameFrom, record.renameFrom);
   }
 
   @Override

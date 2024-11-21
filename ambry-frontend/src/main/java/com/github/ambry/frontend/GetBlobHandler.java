@@ -342,14 +342,17 @@ public class GetBlobHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
+        if (datasetVersionRecord.getRenameFrom() != null) {
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_ORIGINAL_VERSION,
+              datasetVersionRecord.getRenameFrom());
+        }
         if (datasetVersionRecord.getExpirationTimeMs() != Utils.Infinite_Time) {
           restResponseChannel.setHeader(RestUtils.Headers.DATASET_EXPIRATION_TIME,
               new Date(datasetVersionRecord.getExpirationTimeMs()));
         }
         metrics.getDatasetVersionProcessingTimeInMs.update(System.currentTimeMillis() - startGetDatasetVersionTime);
         // If version is null, use the latest version + 1 from DatasetVersionRecord to construct named blob path.
-        return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
-            + datasetVersionRecord.getVersion();
+        return datasetVersionRecord.getNamedBlobNamePath(accountName, containerName);
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Failed to get dataset version for accountName: " + accountName + " containerName: " + containerName

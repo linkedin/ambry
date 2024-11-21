@@ -742,21 +742,8 @@ public class NamedBlobPutHandler {
         return;
       }
       Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-      String accountName = dataset.getAccountName();
-      String containerName = dataset.getContainerName();
-      String datasetName = dataset.getDatasetName();
-      DatasetVersionRecord record = datasetVersionRecordList.get(idx);
-      String version = record.getVersion();
-      RequestPath requestPath = getRequestPath(restRequest);
-      RequestPath newRequestPath =
-          new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-              NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
-              requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-      LOGGER.debug("New request path : " + newRequestPath);
-      // Replace RequestPath in the WrappedRestRequest for delete and call DeleteBlobHandler.handle.
-      restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-      restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-      restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+      reconstructRestRequest(restRequest, datasetVersionRecordList.get(idx), dataset.getAccountName(),
+          dataset.getContainerName());
       //for delete out of retention request, we don't want to set anything to response channel.
       deleteBlobHandler.handle(restRequest, new NoOpResponseChannel(), (r, e) -> {
         if (e != null) {
