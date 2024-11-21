@@ -13,8 +13,11 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -38,6 +41,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
@@ -133,6 +137,16 @@ class TtlUpdateHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessRequestMetrics, result -> {
         blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          String datasetVersionPathString = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+          DatasetVersionRecord datasetVersionRecord =
+              getDatasetVersionHelper(restRequest, datasetVersionPathString, accountService, metrics);
+          if (datasetVersionRecord.getRenameFrom() != null) {
+            DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(blobIdStr, restRequest.getArgs());
+            blobIdStr = datasetVersionRecord.getRenamedPath(datasetVersionPath.getAccountName(),
+                datasetVersionPath.getContainerName());
+          }
+        }
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -39,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
@@ -50,6 +53,8 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 public class FrontendUtils {
   static final String NAMED_BLOB_PREFIX = "/named";
   static final String SLASH = "/";
+  private static final Logger LOGGER = LoggerFactory.getLogger(FrontendUtils.class);
+
 
   /**
    * Throws the specified {@link RestServiceException} if isEnabled is {@code true}. No-op otherwise.
@@ -181,5 +186,48 @@ public class FrontendUtils {
               originalRequestPath.getBlobSegmentIdx());
       restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
     }
+  }
+
+  public static DatasetVersionRecord getDatasetVersionHelper(RestRequest restRequest, String datasetVersionPathString, AccountService accountService, FrontendMetrics metrics) throws RestServiceException {
+    DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(datasetVersionPathString, restRequest.getArgs());
+    String accountName = datasetVersionPath.getAccountName();
+    String containerName = datasetVersionPath.getContainerName();
+    String datasetName = datasetVersionPath.getDatasetName();
+    String version = datasetVersionPath.getVersion();
+    try {
+      return accountService.getDatasetVersion(accountName, containerName, datasetName, version);
+    } catch (AccountServiceException ex) {
+      LOGGER.error("Dataset version get failed for accountName: " + accountName + " containerName: " + containerName
+          + " datasetName: " + datasetName + " version: " + version, ex);
+      metrics.getDatasetVersionError.inc();
+      throw new RestServiceException(ex.getMessage(),
+          RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+    }
+  }
+
+  public static RequestPath reconstructRequestPath(DatasetVersionRecord record, RequestPath requestPath,
+      String accountName, String containerName) {
+    RequestPath newRequestPath;
+    newRequestPath =
+        new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+            record.getNamedBlobNamePath(accountName, containerName), requestPath.getSubResource(),
+            requestPath.getBlobSegmentIdx());
+    return newRequestPath;
+  }
+
+  public static void reconstructRestRequest(RestRequest restRequest, DatasetVersionRecord record, String accountName,
+      String containerName) {
+    RequestPath requestPath = getRequestPath(restRequest);
+    RequestPath newRequestPath = reconstructRequestPath(record, requestPath, accountName, containerName);
+    // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
+    restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+    restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
+    if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) != null) {
+      restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
+    }
+    if (restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY) != null) {
+      restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+    }
+    restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
   }
 }

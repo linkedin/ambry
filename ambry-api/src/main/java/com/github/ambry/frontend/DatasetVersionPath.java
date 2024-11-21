@@ -32,6 +32,13 @@ public class DatasetVersionPath {
   private final String containerName;
   private final String datasetName;
   private final String version;
+  private final String targetVersion;
+  public static final String RENAME = "RENAME";
+
+  public static final String OP = "op";
+  public static final String TARGET_VERSION = "targetVersion";
+
+
 
   public static DatasetVersionPath parse(RequestPath requestPath, Map<String, Object> args)
       throws RestServiceException {
@@ -50,6 +57,7 @@ public class DatasetVersionPath {
     Objects.requireNonNull(path, "path should not be null");
     Objects.requireNonNull(args, "args should not be null");
     boolean isListRequest = RestUtils.getBooleanHeader(args, ENABLE_DATASET_VERSION_LISTING, false);
+    boolean isRenameRequest = "RENAME".equals(RestUtils.getHeader(args, OP, false));
     path = path.startsWith("/") ? path.substring(1) : path;
     String[] splitPath = path.split("/");
     int expectedMinimumSegments = isListRequest ? 4 : 5;
@@ -65,25 +73,33 @@ public class DatasetVersionPath {
     //if isListRequest == false, the path format should be /named/<account_name>/<container_name>/<dataset_name>/<version>
     if (isListRequest) {
       datasetName = String.join("/", Arrays.copyOfRange(splitPath, 3, splitPath.length));
-      return new DatasetVersionPath(accountName, containerName, datasetName, null);
+      return new DatasetVersionPath(accountName, containerName, datasetName, null, null);
+    }
+    String targetVersion = null;
+    if (isRenameRequest) {
+      targetVersion = RestUtils.getHeader(args, TARGET_VERSION, true);
     }
     datasetName = String.join("/", Arrays.copyOfRange(splitPath, 3, splitPath.length - 1));
     String version = splitPath[splitPath.length - 1];
-    return new DatasetVersionPath(accountName, containerName, datasetName, version);
+    return new DatasetVersionPath(accountName, containerName, datasetName, version, targetVersion);
   }
 
   /**
    * Construct a {@link DatasetVersionPath}
-   * @param accountName name of the parent account.
+   *
+   * @param accountName   name of the parent account.
    * @param containerName name of the container.
-   * @param datasetName name of the dataset.
-   * @param version the version of the dataset.
+   * @param datasetName   name of the dataset.
+   * @param version       the version of the dataset.
+   * @param targetVersion the target version for copy version API.
    */
-  private DatasetVersionPath(String accountName, String containerName, String datasetName, String version) {
+  private DatasetVersionPath(String accountName, String containerName, String datasetName, String version,
+      String targetVersion) {
     this.accountName = accountName;
     this.containerName = containerName;
     this.datasetName = datasetName;
     this.version = version;
+    this.targetVersion = targetVersion;
   }
 
   /**
@@ -113,4 +129,6 @@ public class DatasetVersionPath {
   public String getVersion() {
     return version;
   }
+
+  public String getTargetVersion() { return targetVersion; }
 }

@@ -16,5 +16,6 @@ package com.github.ambry.protocol;
 
 public enum DatasetVersionState {
   IN_PROGRESS,
-  READY
+  READY,
+  RENAMED
 }

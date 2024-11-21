@@ -55,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.frontend.DatasetVersionPath.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
@@ -97,6 +98,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
+  private CopyDatasetVersionHandler copyDatasetVersionHandler;
   private DeleteBlobHandler deleteBlobHandler;
   private DeleteDatasetHandler deleteDatasetHandler;
   private HeadBlobHandler headBlobHandler;
@@ -200,6 +202,8 @@ class FrontendRestRequestService implements RestRequestService {
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, namedBlobDb, accountService);
+    copyDatasetVersionHandler =
+        new CopyDatasetVersionHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);
@@ -377,6 +381,10 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
         if (isS3Request(restRequest)) {
           s3PutHandler.handle(restRequest, restResponseChannel,
+              (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
+        } else if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())
+            && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getTargetVersion() != null) {
+          copyDatasetVersionHandler.handle(restRequest, restResponseChannel,
               (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
         } else {
           namedBlobPutHandler.handle(restRequest, restResponseChannel,
