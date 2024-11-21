@@ -653,7 +653,11 @@ public class ReplicaThread implements Runnable {
       remoteReplicaGroups.stream()
           .filter(g -> g.isDone() && g.getException() != null)
           .forEach(g -> logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} has exception {}",
-              g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos(), g.getException()));
+              g.getRemoteDataNode(), threadName, g.getRemoteReplicaInfos()
+                  .stream()
+                  .map(remoteReplicaInfo -> remoteReplicaInfo.toString() + ": localstore "
+                      + remoteReplicaInfo.getLocalStore().toString())
+                  .collect(Collectors.toList()), g.getException()));
     } catch (Throwable e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
