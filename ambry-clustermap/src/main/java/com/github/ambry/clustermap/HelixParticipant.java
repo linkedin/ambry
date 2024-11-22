@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -861,6 +862,80 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return dataNodeConfig;
   }
 
+  private void cleanup() {
+    boolean condition1 = isFileExists("FileCopyProgressFile");
+    boolean condition2 = isFeatureEnabled("fileCopy");
+
+    if (condition2) {
+      if (condition1) {
+        // FC -> FC
+        // FileCopy class handles the cleanup
+        // Files to take care of -
+        //    1. FileCopyProgressFile
+        //    2. FileCopyMetadataFile
+        //    3. [FileCopyDataFiles] // Actual unsealed log segments
+      } else {
+        // R -> FC
+        boolean condition3 = isFileExists("BootstrapInProgressFile");
+        boolean condition4 = isFileExists(".*log");
+
+        if (!condition3 && !condition4) {
+          // Enable File copy protocol
+        } else {
+          // Enable normal replication protocol
+        }
+      }
+    } else {
+      if (condition1) {
+        // FC -> R
+        boolean condition6 = IsFileContentMatches(
+            "BootstrapInProgressFile",
+            (o1, o2) -> {
+              // Comparator to serialise BootstrapInProgressFile's content
+              return 0;
+            },
+            "InProgress");
+
+       if (condition6) {
+          // Delete FileCopyProgressFile
+          // Delete FileCopyMetadataFile
+          // Delete [FileCopyDataFiles]
+        } else {
+          throw new IllegalStateException("BootstrapInProgressFile is in invalid state");
+        }
+        // Delete FileCopyProgressFile
+        // Enable normal replication protocol
+      } else {
+        // R -> R
+        // Noop
+        // Enable normal replication protocol
+      }
+    }
+  }
+
+  private boolean IsFileContentMatches(String fileName, Comparator comparator, String expectedValue) {
+    boolean isFileExists = isFileExists(fileName);
+
+    if (isFileExists) {
+      // Check if the file content matches the expectedValue
+      if (comparator.compare(fileName, expectedValue) == 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean isFeatureEnabled(String feature) {
+    // Check if the feature is enabled
+    // Check value for cfg2 key - "[clustermap | store].enable.file.copy.for.bootstrap"
+    return false;
+  }
+
+  private boolean isFileExists(String searchPattern) {
+    // Check if any file matching the searchPattern exists
+    return false;
+  }
+
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     try {
@@ -870,7 +945,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (storageManagerListener != null) {
         storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
-
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
