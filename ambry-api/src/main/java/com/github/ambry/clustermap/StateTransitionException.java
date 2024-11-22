@@ -73,6 +73,8 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If the resource name is not a numeric number.
      */
-    InvalidResourceName
+    InvalidResourceName,
+
+    FileCopyFailure
   }
 }

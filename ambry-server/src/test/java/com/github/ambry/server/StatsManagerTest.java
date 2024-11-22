@@ -670,6 +670,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isFileCopyInProgress() {
+      return false;
+    }
+
+    @Override
     public boolean isDecommissionInProgress() {
       throw new IllegalStateException("Not implemented");
     }

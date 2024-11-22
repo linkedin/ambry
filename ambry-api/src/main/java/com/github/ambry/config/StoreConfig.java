@@ -691,8 +691,8 @@ public class StoreConfig {
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
-    serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION, ServerReplicationMode.class,
-        ServerReplicationMode.BLOB_BASED);
+    serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION,
+        ServerReplicationMode.class, ServerReplicationMode.BLOB_BASED);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);

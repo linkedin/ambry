@@ -870,6 +870,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (storageManagerListener != null) {
         storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
+
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
