@@ -18,6 +18,7 @@ import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.account.DatasetBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -89,7 +90,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import com.github.ambry.account.Dataset;
 
-
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -297,7 +298,49 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doDeleteDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), datasetList);
     //After delete, it should have an empty list.
     doListDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), new ArrayList<>());
+  }
 
+  @Ignore
+  @Test
+  public void datasetOutOfRetentionTest() throws Exception {
+    Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container namedBlobOptionalContainer =
+        new ContainerBuilder((short) 11, "optional", Container.ContainerStatus.ACTIVE, "",
+            refAccount.getId()).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
+    ACCOUNT_SERVICE.updateContainers(refAccount.getName(), Arrays.asList(namedBlobOptionalContainer));
+    String contentType = "application/octet-stream";
+    String ownerId = "datasetTest";
+    String accountName = refAccount.getName();
+    String containerName = namedBlobOptionalContainer.getName();
+    String datasetName = "datasetNameRetention";
+    Dataset dataset = new DatasetBuilder(accountName, containerName, datasetName).setVersionSchema(
+        Dataset.VersionSchema.SEMANTIC_LONG).setRetentionCount(1).build();
+    HttpHeaders headers = new DefaultHttpHeaders();
+    //Test put dataset
+    putDatasetAndVerify(dataset, headers, false);
+    List<Dataset> datasetList = new ArrayList<>();
+    datasetList.add(dataset);
+    //put dataset version
+    headers = new DefaultHttpHeaders();
+    setAmbryHeadersForPut(headers, (long)-1, false, accountName, contentType, ownerId, null, null);
+    headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    int contentSize = 100;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
+    String version1 = "1.2.3.4";
+    putDatasetVersionAndVerify(dataset, version1, headers, content, contentSize, -1);
+    String version2 = "1.2.3.5";
+    putDatasetVersionAndVerify(dataset, version2, headers, content, contentSize, -1);
+
+    //Test List dataset version
+    InMemAccountService.PAGE_SIZE = -1;
+    HttpHeaders listHeaders = new DefaultHttpHeaders();
+    listHeaders.add(TARGET_ACCOUNT_NAME, dataset.getAccountName());
+    listHeaders.add(TARGET_CONTAINER_NAME, dataset.getContainerName());
+    listHeaders.add(TARGET_DATASET_NAME, dataset.getDatasetName());
+    listHeaders.add(ENABLE_DATASET_VERSION_LISTING, true);
+    listHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    List<Pair<String, String>> datasetVersions = listDatasetVersions(dataset, listHeaders);
+    assertEquals("Should only have 1 version", 1, datasetVersions.size());
   }
 
   @Ignore

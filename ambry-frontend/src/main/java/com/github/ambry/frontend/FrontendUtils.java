@@ -168,7 +168,8 @@ public class FrontendUtils {
    */
   static void replaceRequestPathWithNewOperationOrBlobIdIfNeeded(RestRequest restRequest,
       DatasetVersionRecord datasetVersionRecord, String version) throws RestServiceException {
-    if (version.equals("LATEST") || version.equals("MAJOR") || version.equals("MINOR") || version.equals("PATCH")) {
+    if (version.equals("LATEST") || version.equals("MAJOR") || version.equals("MINOR") || version.equals("PATCH")
+        || version.equals("REVISION")) {
       RequestPath originalRequestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
       String originalOperationOrBlobId = originalRequestPath.getOperationOrBlobId(false);
       int index = originalOperationOrBlobId.lastIndexOf(PATH_SEPARATOR_STRING);
@@ -223,10 +224,10 @@ public class FrontendUtils {
     restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
     restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
     if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) != null) {
-      restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
+      restRequest.removeArg(InternalKeys.TARGET_ACCOUNT_KEY);
     }
     if (restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY) != null) {
-      restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+      restRequest.removeArg(InternalKeys.TARGET_CONTAINER_KEY);
     }
     restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
   }
