@@ -199,25 +199,6 @@ public class MySqlAccountStore {
         timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
   }
 
-  /**
-   * Rename a dataset version of {@link Dataset}
-   * @param accountId the id for the parent account.
-   * @param containerId the id of the container.
-   * @param accountName the name for the parent account.
-   * @param containerName the name for the container.
-   * @param datasetName the name of the dataset.
-   * @param sourceVersion the source version to rename.
-   * @param targetVersion the target version to rename.
-   * @throws SQLException
-   * @throws AccountServiceException
-   */
-  public synchronized void renameDatasetVersion(int accountId, int containerId, String accountName,
-      String containerName, String datasetName, String sourceVersion, String targetVersion)
-      throws SQLException, AccountServiceException {
-    datasetDao.renameDatasetVersion(accountId, containerId, accountName, containerName, datasetName, sourceVersion,
-        targetVersion);
-  }
-
   public synchronized void updateDatasetVersionState(int accountId, int containerId, String accountName, String containerName,
       String datasetName, String version, DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
@@ -253,11 +234,6 @@ public class MySqlAccountStore {
   public synchronized void deleteDatasetVersion(short accountId, short containerId, String datasetName, String version)
       throws SQLException, AccountServiceException {
     datasetDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
-  }
-
-  public synchronized void deleteDatasetVersionForDatasetDelete(short accountId, short containerId, String datasetName,
-      String version) throws SQLException, AccountServiceException {
-    datasetDao.deleteDatasetVersionForDatasetDelete(accountId, containerId, datasetName, version);
   }
 
   /**

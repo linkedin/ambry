@@ -85,6 +85,8 @@ import static com.github.ambry.account.Dataset.VersionSchema.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 
+import static com.github.ambry.frontend.Operations.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
@@ -471,35 +473,6 @@ public class FrontendIntegrationTestBase {
     return datasetList;
   }
 
-  List<Dataset> addSemanticLongDataset(Account account, Container container, Long ttl) throws Exception {
-    String accountName = account.getName();
-    String containerName = container.getName();
-    List<Dataset.VersionSchema> versionSchemas = new ArrayList<>();
-    List<Dataset> datasetList = new ArrayList<>();
-    versionSchemas.add(SEMANTIC_LONG);
-    for (Dataset.VersionSchema versionSchema : versionSchemas) {
-      String datasetName = "zzzz" + TestUtils.getRandomString(10);
-      Dataset dataset;
-      if (ttl == null) {
-        dataset = new DatasetBuilder(accountName, containerName, datasetName).setVersionSchema(versionSchema).build();
-      } else {
-        dataset = new DatasetBuilder(accountName, containerName, datasetName).setVersionSchema(versionSchema)
-            .setRetentionTimeInSeconds(ttl)
-            .build();
-      }
-      HttpHeaders headers = new DefaultHttpHeaders();
-      //Test put dataset
-      putDatasetAndVerify(dataset, headers, false);
-      HttpHeaders getHeaders = new DefaultHttpHeaders();
-      getHeaders.add(TARGET_ACCOUNT_NAME, dataset.getAccountName());
-      getHeaders.add(TARGET_CONTAINER_NAME, dataset.getContainerName());
-      getHeaders.add(TARGET_DATASET_NAME, dataset.getDatasetName());
-      getDatasetAndVerify(dataset, getHeaders);
-      datasetList.add(dataset);
-    }
-    return datasetList;
-  }
-
   List<Pair<String, String>> doDatasetVersionPutGetWithTtlTest(Account account, Container container, List<Dataset> datasets,
       String contentType, String ownerId, int contentSize) throws Exception {
     String accountName = account.getName();
@@ -564,51 +537,6 @@ public class FrontendIntegrationTestBase {
       getDatasetVersionInfoAndVerify(accountName, containerName, datasetName, version, getHeaders, Utils.Infinite_Time,
           expectedGetHeaders);
     }
-  }
-
-  List<Pair<String, String>> doCopyDatasetTestAndVerify(List<Dataset> datasets, String contentType, String ownerId,
-      int contentSize)
-      throws Exception {
-    List<Pair<String, String>> datasetVersions = new ArrayList<>();
-    for (Dataset dataset : datasets) {
-      Dataset.VersionSchema versionSchema = dataset.getVersionSchema();
-      if (SEMANTIC_LONG.equals(versionSchema)) {
-        long ttl = TTL_SECS;
-        String sourceVersion = generateDatasetVersion(dataset);
-        String targetVersion = generateDatasetVersion(dataset);
-        HttpHeaders headers = new DefaultHttpHeaders();
-        headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
-        String accountName = dataset.getAccountName();
-        String containerName = dataset.getContainerName();
-        String datasetName = dataset.getDatasetName();
-        setAmbryHeadersForPut(headers, ttl, false, accountName, contentType, ownerId, null, null);
-        ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
-        putDatasetVersionAndVerify(dataset, sourceVersion, headers, content, contentSize, ttl);
-
-        HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(headers);
-        expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
-        expectedGetHeaders.add(RestUtils.Headers.LIFE_VERSION, "0");
-        expectedGetHeaders.add(TARGET_ACCOUNT_NAME, accountName);
-        expectedGetHeaders.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
-
-        headers = new DefaultHttpHeaders();
-        headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
-        FullHttpRequest httpRequest = buildRequest(HttpMethod.PUT,
-            buildUriForDatasetVersionForCopy(accountName, containerName, datasetName, sourceVersion, targetVersion),
-            headers, null);
-        NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-        HttpResponse response = getHttpResponse(responseParts);
-        assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
-
-        HttpHeaders getHeaders = new DefaultHttpHeaders();
-        getHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
-
-        getDatasetVersionInfoAndVerify(accountName, containerName, dataset.getDatasetName(), targetVersion, getHeaders, ttl,
-            expectedGetHeaders);
-        datasetVersions.add(new Pair<>(dataset.getDatasetName(), targetVersion));
-      }
-    }
-    return datasetVersions;
   }
 
   List<Pair<String, String>> doDatasetVersionPutGetTest(Account account, Container container, List<Dataset> datasets,
@@ -896,7 +824,7 @@ public class FrontendIntegrationTestBase {
     if (expectTtl != -1) {
       assertEquals("Unexpected ttl value", expectTtl,
           (gmtToEpoch(response.headers().get(RestUtils.Headers.DATASET_EXPIRATION_TIME)) - gmtToEpoch(
-                 response.headers().get(RestUtils.Headers.CREATION_TIME))) / 1000);
+              response.headers().get(RestUtils.Headers.CREATION_TIME))) / 1000);
     }
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     assertEquals(RestUtils.Headers.LIFE_VERSION + " does not match",
@@ -996,12 +924,6 @@ public class FrontendIntegrationTestBase {
    */
   String buildUriForDatasetVersion(String accountName, String containerName, String blobName, String version) {
     return String.format("/named/%s/%s/%s/%s", accountName, containerName, blobName, version);
-  }
-
-  String buildUriForDatasetVersionForCopy(String accountName, String containerName, String blobName,
-      String sourceVersion, String targetVersion) {
-    return String.format("/named/%s/%s/%s/%s?op=RENAME&targetVersion=%s", accountName, containerName, blobName,
-        sourceVersion, targetVersion);
   }
 
   /**

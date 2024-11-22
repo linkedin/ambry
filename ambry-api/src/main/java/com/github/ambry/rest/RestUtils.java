@@ -199,10 +199,6 @@ public class RestUtils {
      */
     public final static String TARGET_DATASET_VERSION = "x-ambry-target-dataset-version";
     /**
-     * The original named blob name for a certain dataset version.
-     */
-    public final static String TARGET_DATASET_ORIGINAL_VERSION = "x-ambry-dataset-original-version";
-    /**
      * The dataset version expiration time.
      */
     public final static String DATASET_EXPIRATION_TIME = "x-ambry-dataset-expiration-time";
@@ -481,12 +477,6 @@ public class RestUtils {
      * The key for the {@link RequestPath} that represents the parsed path of an incoming request.
      */
     public static final String REQUEST_PATH = KEY_PREFIX + "request-path";
-
-    /**
-     * The internal header to determine if the delete request is coming from a dataset deletion.
-     */
-    public static final String DATASET_DELETE_ENABLED = KEY_PREFIX + "dataset-delete-enabled";
-
 
     /**
      * To be set to {@code true} if failures reason should be attached to frontend responses.

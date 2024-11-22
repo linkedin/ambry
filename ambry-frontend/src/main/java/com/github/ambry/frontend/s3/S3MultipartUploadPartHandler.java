@@ -50,7 +50,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  * Handles a request for S3 Multipart upload part requests according to the
  * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html">...</a>
  */
-public class S3MultipartUploadPartHandler<R> {
+public class S3MultipartUploadPartHandler {
   private static final Logger logger = LoggerFactory.getLogger(S3MultipartUploadPartHandler.class);
   private final SecurityService securityService;
   private final IdConverter idConverter;
@@ -89,7 +89,7 @@ public class S3MultipartUploadPartHandler<R> {
    * @throws RestServiceException exception when the processing fails
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-    Callback<R> callback) throws RestServiceException {
+    Callback<ReadableStreamChannel> callback) throws RestServiceException {
     // 1. Set headers required by Ambry. These become the blob properties.
     NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
     String accountName = namedBlobPath.getAccountName();

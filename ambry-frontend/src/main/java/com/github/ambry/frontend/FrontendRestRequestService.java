@@ -22,7 +22,6 @@ import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
-import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.frontend.s3.S3PostHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
@@ -55,7 +54,6 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.frontend.DatasetVersionPath.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
@@ -98,7 +96,6 @@ class FrontendRestRequestService implements RestRequestService {
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
-  private CopyDatasetVersionHandler copyDatasetVersionHandler;
   private DeleteBlobHandler deleteBlobHandler;
   private DeleteDatasetHandler deleteDatasetHandler;
   private HeadBlobHandler headBlobHandler;
@@ -118,7 +115,6 @@ class FrontendRestRequestService implements RestRequestService {
   private S3HeadHandler s3HeadHandler;
   private S3PostHandler s3PostHandler;
   private S3MultipartUploadHandler s3MultipartUploadHandler;
-  private S3MultipartAbortUploadHandler s3MultipartAbortHandler;
   private S3GetHandler s3GetHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
@@ -202,8 +198,6 @@ class FrontendRestRequestService implements RestRequestService {
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, namedBlobDb, accountService);
-    copyDatasetVersionHandler =
-        new CopyDatasetVersionHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);
@@ -235,11 +229,12 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, frontendMetrics);
+    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3MultipartUploadHandler =
         new S3MultipartUploadHandler(securityService, frontendMetrics, accountAndContainerInjector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
-    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, frontendMetrics);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
     s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
@@ -381,10 +376,6 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
         if (isS3Request(restRequest)) {
           s3PutHandler.handle(restRequest, restResponseChannel,
-              (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
-        } else if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())
-            && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getTargetVersion() != null) {
-          copyDatasetVersionHandler.handle(restRequest, restResponseChannel,
               (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
         } else {
           namedBlobPutHandler.handle(restRequest, restResponseChannel,
