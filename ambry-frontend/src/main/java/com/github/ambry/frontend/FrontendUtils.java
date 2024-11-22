@@ -168,7 +168,8 @@ public class FrontendUtils {
    */
   static void replaceRequestPathWithNewOperationOrBlobIdIfNeeded(RestRequest restRequest,
       DatasetVersionRecord datasetVersionRecord, String version) throws RestServiceException {
-    if (version.equals("LATEST") || version.equals("MAJOR") || version.equals("MINOR") || version.equals("PATCH")) {
+    if (version.equals("LATEST") || version.equals("MAJOR") || version.equals("MINOR") || version.equals("PATCH")
+        || version.equals("REVISION")) {
       RequestPath originalRequestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
       String originalOperationOrBlobId = originalRequestPath.getOperationOrBlobId(false);
       int index = originalOperationOrBlobId.lastIndexOf(PATH_SEPARATOR_STRING);
