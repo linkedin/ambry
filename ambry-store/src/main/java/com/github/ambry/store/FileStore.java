@@ -36,7 +36,6 @@ public class FileStore {
       throw new IllegalArgumentException("File not found");
     }
 
-    long currentOffset =
+    //long currentOffset =
   }
-
 }
