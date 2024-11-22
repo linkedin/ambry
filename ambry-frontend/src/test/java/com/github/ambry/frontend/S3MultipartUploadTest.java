@@ -19,7 +19,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
@@ -29,8 +28,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.frontend.s3.S3DeleteHandler;
-import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.frontend.s3.S3PostHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
@@ -49,7 +46,6 @@ import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.router.Router;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
@@ -79,11 +75,8 @@ public class S3MultipartUploadTest {
   private S3PutHandler s3PutHandler;
   private NamedBlobDb namedBlobDb;
   private GetBlobHandler getBlobHandler;
-  private DeleteBlobHandler deleteBlobHandler;
   private S3MultipartUploadHandler s3MultipartUploadHandler;
-  private S3MultipartAbortUploadHandler s3MultipartAbortHandler;
   private S3PostHandler s3PostHandler;
-  private S3DeleteHandler s3DeleteHandler;
 
   private final ObjectMapper xmlMapper;
 
@@ -232,17 +225,6 @@ public class S3MultipartUploadTest {
     buffer.put(content2);
     assertArrayEquals("Mismatch in blob content", buffer.array(),
         ((ByteBufferRSC) readableStreamChannel).getBuffer().array());
-
-    // 6. Verify AbortMultipart will return no content after completion
-    headers = new JSONObject();
-    uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
-    request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, headers, null);
-    request.setArg(InternalKeys.REQUEST_PATH,
-        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
-    restResponseChannel = new MockRestResponseChannel();
-    FutureResult<Void> deleteResult = new FutureResult<>();
-    s3DeleteHandler.handle(request, restResponseChannel, deleteResult::done);
-    assertEquals("Mismatch on status", ResponseStatus.NoContent, restResponseChannel.getStatus());
   }
 
   /**
@@ -273,13 +255,9 @@ public class S3MultipartUploadTest {
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
             quotaManager, ACCOUNT_SERVICE);
-    deleteBlobHandler =
-        new DeleteBlobHandler(router, securityService, idConverter, injector, metrics, clusterMap, quotaManager, ACCOUNT_SERVICE);
     s3MultipartUploadHandler = new S3MultipartUploadHandler(securityService, metrics, injector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
-
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
-    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, metrics);
   }
 }

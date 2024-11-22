@@ -33,12 +33,11 @@ import com.github.ambry.router.Router;
 /**
  * Handles requests for s3 multipart uploads.
  */
-public class S3MultipartUploadHandler<R> extends S3BaseHandler<R> {
+public class S3MultipartUploadHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final S3MultipartCreateUploadHandler createMultipartUploadHandler;
   private final S3MultipartCompleteUploadHandler completeMultipartUploadHandler;
   private final S3MultipartUploadPartHandler uploadPartHandler;
   private final S3MultipartListPartsHandler listPartsHandler;
-  private final S3MultipartAbortUploadHandler abortMultipartUploadHandler;
 
   /**
    * Construct a handler for handling S3 POST requests during multipart uploads.
@@ -55,16 +54,14 @@ public class S3MultipartUploadHandler<R> extends S3BaseHandler<R> {
       AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig, NamedBlobDb namedBlobDb,
       IdConverter idConverter, Router router, QuotaManager quotaManager) {
     createMultipartUploadHandler =
-        new S3MultipartCreateUploadHandler<ReadableStreamChannel>(securityService, frontendMetrics, accountAndContainerInjector);
+        new S3MultipartCreateUploadHandler(securityService, frontendMetrics, accountAndContainerInjector);
     completeMultipartUploadHandler =
-        new S3MultipartCompleteUploadHandler<ReadableStreamChannel>(securityService, namedBlobDb, idConverter, router,
+        new S3MultipartCompleteUploadHandler(securityService, namedBlobDb, idConverter, router,
             accountAndContainerInjector, frontendMetrics, frontendConfig, quotaManager);
     uploadPartHandler =
-        new S3MultipartUploadPartHandler<ReadableStreamChannel>(securityService, idConverter, router, accountAndContainerInjector,
+        new S3MultipartUploadPartHandler(securityService, idConverter, router, accountAndContainerInjector,
             frontendConfig, frontendMetrics, quotaManager);
-    listPartsHandler = new S3MultipartListPartsHandler<ReadableStreamChannel>(securityService, frontendMetrics, accountAndContainerInjector);
-    abortMultipartUploadHandler = new S3MultipartAbortUploadHandler<Void>(securityService, frontendMetrics, accountAndContainerInjector);
-
+    listPartsHandler = new S3MultipartListPartsHandler(securityService, frontendMetrics, accountAndContainerInjector);
   }
 
   /**
@@ -75,7 +72,7 @@ public class S3MultipartUploadHandler<R> extends S3BaseHandler<R> {
    */
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<R> callback) throws RestServiceException {
+      Callback<ReadableStreamChannel> callback) throws RestServiceException {
     if (isMultipartCreateUploadRequest(restRequest)) {
       createMultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     } else if (isMultipartUploadPartRequest(restRequest)) {
@@ -84,8 +81,6 @@ public class S3MultipartUploadHandler<R> extends S3BaseHandler<R> {
       completeMultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     } else if (isMultipartListPartRequest(restRequest)) {
       listPartsHandler.handle(restRequest, restResponseChannel, callback);
-    } else if(isMultipartAbortUploadRequest(restRequest)) {
-      abortMultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       callback.onCompletion(null,
           new RestServiceException("Invalid S3 Multipart request", RestServiceErrorCode.BadRequest));

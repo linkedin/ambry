@@ -36,8 +36,6 @@ public class FrontendMetrics {
   // DELETE
   public final RestRequestMetricsGroup deleteBlobMetricsGroup;
   public final RestRequestMetricsGroup deleteDatasetsMetricsGroup;
-  //COPY
-  public final RestRequestMetricsGroup copyBlobMetricsGroup;
 
   // GET
   public final RestRequestMetricsGroup getBlobMetricsGroup;
@@ -132,8 +130,6 @@ public class FrontendMetrics {
 
   public final AsyncOperationTracker.Metrics getDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getDatasetsSecurityPostProcessRequestMetrics;
-  public final AsyncOperationTracker.Metrics copyDatasetsSecurityPostProcessRequestMetrics;
-
 
   public final AsyncOperationTracker.Metrics listDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics listDatasetsSecurityPostProcessRequestMetrics;
@@ -285,7 +281,6 @@ public class FrontendMetrics {
   public final Counter deleteDatasetVersionError;
   public final Counter ttlUpdateDatasetVersionError;
   public final Counter listDatasetVersionError;
-  public final Counter copyDatasetVersionError;
   public final Counter deleteDatasetVersionOutOfRetentionError;
   public final Counter deleteDatasetVersionIfUploadFailCount;
   public final Meter addDatasetVersionRate;
@@ -293,15 +288,11 @@ public class FrontendMetrics {
   public final Meter deleteDatasetVersionRate;
   public final Meter updateTtlDatasetVersionRate;
   public final Meter listDatasetVersionRate;
-  public final Meter copyDatasetVersionRate;
-
   public final Histogram addDatasetVersionProcessingTimeInMs;
   public final Histogram getDatasetVersionProcessingTimeInMs;
   public final Histogram deleteDatasetVersionProcessingTimeInMs;
   public final Histogram updateTtlDatasetVersionProcessingTimeInMs;
   public final Histogram listDatasetVersionProcessingTimeInMs;
-  public final Histogram copyDatasetVersionProcessingTimeInMs;
-
   private final MetricRegistry metricRegistry;
 
   /**
@@ -318,9 +309,6 @@ public class FrontendMetrics {
     deleteDatasetsMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "DeleteDataset", false, metricRegistry,
             frontendConfig);
-    //COPY
-    copyBlobMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "CopyBlob", true, metricRegistry, frontendConfig);
     // GET
     getBlobMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetBlob", true, metricRegistry, frontendConfig);
@@ -487,8 +475,6 @@ public class FrontendMetrics {
     getDatasetsSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityProcessRequest", metricRegistry);
     getDatasetsSecurityPostProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityPostProcessRequest", metricRegistry);
-    copyDatasetsSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityPostProcessRequest", metricRegistry);
 
     listDatasetsSecurityProcessRequestMetrics =
@@ -739,8 +725,6 @@ public class FrontendMetrics {
         metricRegistry.counter(MetricRegistry.name(TtlUpdateHandler.class, "TtlUpdateDatasetVersionError"));
     listDatasetVersionError =
         metricRegistry.counter(MetricRegistry.name(ListDatasetVersionHandler.class, "ListDatasetVersionError"));
-    copyDatasetVersionError =
-        metricRegistry.counter(MetricRegistry.name(ListDatasetVersionHandler.class, "CopyDatasetVersionError"));
     deleteDatasetVersionOutOfRetentionError = metricRegistry.counter(
         MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionOutOfRetentionError"));
     deleteDatasetVersionIfUploadFailCount =
@@ -754,8 +738,6 @@ public class FrontendMetrics {
         metricRegistry.meter(MetricRegistry.name(TtlUpdateHandler.class, "UpdateTtlDatasetVersionRate"));
     listDatasetVersionRate =
         metricRegistry.meter(MetricRegistry.name(ListDatasetVersionHandler.class, "ListDatasetVersionRate"));
-    copyDatasetVersionRate =
-        metricRegistry.meter(MetricRegistry.name(ListDatasetVersionHandler.class, "CopyDatasetVersionRate"));
     addDatasetVersionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionProcessingTimeInMs"));
     getDatasetVersionProcessingTimeInMs =
@@ -766,8 +748,6 @@ public class FrontendMetrics {
         MetricRegistry.name(TtlUpdateHandler.class, "updateTtlDatasetVersionProcessingTimeInMs"));
     listDatasetVersionProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(ListDatasetVersionHandler.class, "ListDatasetVersionProcessingTimeInMs"));
-    copyDatasetVersionProcessingTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(ListDatasetVersionHandler.class, "CopyDatasetVersionProcessingTimeInMs"));
     this.metricRegistry = metricRegistry;
   }
 

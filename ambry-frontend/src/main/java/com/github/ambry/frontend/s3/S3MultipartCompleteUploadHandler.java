@@ -79,7 +79,7 @@ import static com.github.ambry.router.RouterErrorCode.*;
  * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html">...</a>
  * TODO [S3] Add support for Abort multipart uploads.
  */
-public class S3MultipartCompleteUploadHandler<R> {
+public class S3MultipartCompleteUploadHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartCompleteUploadHandler.class);
   private static final ObjectMapper objectMapper = new XmlMapper();
   private final SecurityService securityService;
@@ -125,7 +125,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<R> callback) {
+      Callback<ReadableStreamChannel> callback) {
     new S3MultipartCompleteUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
