@@ -95,6 +95,7 @@ public class StoreMetrics {
   public final Counter undeleteAuthorizationFailureCount;
   public final Counter keyInFindEntriesAbsent;
   public final Counter duplicateKeysInBatch;
+  public final Counter blobPartitionUnmatchError;
   public final Counter storeIoErrorTriggeredShutdownCount;
   public final Counter blobStoreRecoverCompactionPolicySwitchInfoErrorCount;
   public final Counter handleDiskFailureCount;
@@ -236,6 +237,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStore.class, name + "UndeleteAuthorizationFailureCount"));
     keyInFindEntriesAbsent = registry.counter(MetricRegistry.name(BlobStore.class, name + "KeyInFindEntriesAbsent"));
     duplicateKeysInBatch = registry.counter(MetricRegistry.name(BlobStore.class, name + "DuplicateKeysInBatch"));
+    blobPartitionUnmatchError =
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "BlobPartitionUnmatchError"));
     storeIoErrorTriggeredShutdownCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "StoreIoErrorTriggeredShutdownCount"));
     Gauge<Integer> staleBlobStoreCount = BlobStore.staleBlobCount::get;
