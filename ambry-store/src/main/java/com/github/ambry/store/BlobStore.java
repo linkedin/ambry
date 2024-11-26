@@ -1643,6 +1643,7 @@ public class BlobStore implements Store {
       if (storeKey instanceof BlobId && replicaId != null) {
         BlobId blobId = (BlobId) storeKey;
         if (blobId.getPartition().getId() != replicaId.getPartitionId().getId()) {
+          metrics.blobPartitionUnmatchError.inc();
           throw new IllegalArgumentException(
               "WriteSet contains unexpected blob id : " + info.getStoreKey() + ", it belongs to partition "
                   + blobId.getPartition() + " but this blobstore's partition is " + replicaId.getPartitionId());
