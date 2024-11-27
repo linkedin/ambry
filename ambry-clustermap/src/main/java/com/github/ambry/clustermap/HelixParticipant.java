@@ -863,66 +863,84 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   private void cleanup() {
-    boolean condition1 = isFileExists("FileCopyProgressFile");
-    boolean condition2 = isFeatureEnabled("fileCopy");
+    boolean isFileCopyProgressFileExists = isFileExists("FileCopyProgressFile");
+    boolean isBootstrapProgressFileExists = isFileExists("BootstrapProgressFile");
+    boolean isFileCopyFeatureEnabled = isFeatureEnabled("fileCopy");
+    boolean isAnyLogSegmentExists = isFileExists(".*log");
 
-    if (condition2) {
-      if (condition1) {
-        // FC -> FC
-        // FileCopy class handles the cleanup
-        // Files to take care of -
-        //    1. FileCopyProgressFile
-        //    2. FileCopyMetadataFile
-        //    3. [FileCopyDataFiles] // Actual unsealed log segments
+    if (isFileCopyFeatureEnabled) {
+      if (isBootstrapProgressFileExists) {
+        // R.Incomplete -> FC
+        // -> initiate existing flow, Don't init FCM
+        // --> State transition from Bootstrap to Standby
+        // --> Normal replication continues
       } else {
-        // R -> FC
-        boolean condition3 = isFileExists("BootstrapInProgressFile");
-        boolean condition4 = isFileExists(".*log");
-
-        if (!condition3 && !condition4) {
-          // Enable File copy protocol
+        // Either of the following cases
+        // R.Complete -> FC
+        // FC.Complete -> FC
+        // FC.Incomplete -> FC
+        // Nothing -> FC
+        if(isAnyLogSegmentExists) {
+          // Either of the following cases
+          // R.Complete -> FC
+          // FC.Complete -> FC
+          // FC.Incomplete -> FC
+          if (isFileCopyProgressFileExists) {
+            // FC.Incomplete -> FC
+            // FC will resume
+          } else {
+            // Either of the following cases
+            // R.Complete -> FC
+            // FC.Complete -> FC
+            // -> initiate existing flow, Don't init FCM
+            // --> State transition from Bootstrap to Standby
+            // --> Normal replication continues
+          }
         } else {
-          // Enable normal replication protocol
+          // -> FC
+          // -> initiate existing flow, Don't init FCM
+          // --> State transition from Bootstrap to Standby
+          // --> Normal replication continues
         }
       }
     } else {
-      if (condition1) {
-        // FC -> R
-        boolean condition6 = IsFileContentMatches(
-            "BootstrapInProgressFile",
-            (o1, o2) -> {
-              // Comparator to serialise BootstrapInProgressFile's content
-              return 0;
-            },
-            "InProgress");
-
-       if (condition6) {
-          // Delete FileCopyProgressFile
-          // Delete FileCopyMetadataFile
-          // Delete [FileCopyDataFiles]
-        } else {
-          throw new IllegalStateException("BootstrapInProgressFile is in invalid state");
-        }
-        // Delete FileCopyProgressFile
-        // Enable normal replication protocol
+      // Either of the following cases
+      // R.complete -> R
+      // R.Incomplete -> R
+      // Nothing -> R
+      // FC.complete -> R
+      // FC.Incomplete -> R
+      if (isBootstrapProgressFileExists) {
+        // R.Incomplete -> R
+        // -> initiate existing flow, Don't init FCM
+        // -> Normal replication continues
       } else {
-        // R -> R
-        // Noop
-        // Enable normal replication protocol
+        if(isAnyLogSegmentExists) {
+          // Either of the following cases
+          // R.complete -> R
+          // FC.complete -> R
+          // FC.Incomplete -> R
+          if (isFileCopyProgressFileExists) {
+            // FC.Incomplete -> R
+            // -> Delete FileCopyProgressFile, FileCopyMetadataFile
+            // -> P0 Del all datasets
+            // -> P2 Del incomplete datasets (LS + Index + Bf)?
+          } else {
+            // Either of the following cases
+            // R.complete -> R
+            // FC.complete -> R
+            // -> initiate existing flow, Don't init FCM
+            // --> State transition from Bootstrap to Standby
+            // -> Normal replication continues
+          }
+        } else {
+          // Nothing -> R
+          // -> initiate existing flow, Don't init FCM
+          // --> State transition from Bootstrap to Standby
+          // -> Normal replication continues
+        }
       }
     }
-  }
-
-  private boolean IsFileContentMatches(String fileName, Comparator comparator, String expectedValue) {
-    boolean isFileExists = isFileExists(fileName);
-
-    if (isFileExists) {
-      // Check if the file content matches the expectedValue
-      if (comparator.compare(fileName, expectedValue) == 0) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private boolean isFeatureEnabled(String feature) {
@@ -945,6 +963,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (storageManagerListener != null) {
         storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
+
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
