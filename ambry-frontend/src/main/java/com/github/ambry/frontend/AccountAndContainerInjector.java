@@ -441,9 +441,6 @@ public class AccountAndContainerInjector {
       }
       try {
         Dataset dataset = accountService.getDataset(accountName, containerName, datasetName);
-        if (restRequest.getArgs().get(InternalKeys.TARGET_DATASET) != null) {
-          return;
-        }
         restRequest.setArg(InternalKeys.TARGET_DATASET, dataset);
         if (version != null) {
           restRequest.setArg(InternalKeys.TARGET_DATASET_VERSION, version);
