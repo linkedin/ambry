@@ -34,6 +34,8 @@ public interface StoreManager {
    */
   boolean addBlobStore(ReplicaId replica);
 
+  void buildStateForFileCopy(String partitionName);
+
   /**
    * Remove store from storage manager.
    * @param id the {@link PartitionId} associated with store

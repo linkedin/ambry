@@ -65,8 +65,6 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  */
 public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
   public static final String DISK_KEY = "DISK";
-
-  public static final boolean ENABLE_FILE_COPY = false;
   final HelixParticipantMetrics participantMetrics;
   private final HelixClusterManager clusterManager;
   private final String clusterName;
@@ -876,15 +874,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
 
-      if (ENABLE_FILE_COPY) {
-        // TODO: Filecopy Invocation
-        // TODO: Statebuild Invocation: storageManagerListener.buildStateForFileCopy. Functional signature
-        //        1. TODO: Start the store
-        //        2. TODO: Enable compaction for the new started store
-
-        // StateBuilding
-        storageManagerListener.buildStateForFileCopy(partitionName);
-      }
+      // TODO: Filecopy Invocation
+      // TODO: Statebuild Invocation
+      //        1. TODO: Start the store
+      //        2. TODO: Enable compaction for the new started store
 
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
@@ -1073,11 +1066,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeOfflineFromError(String partitionName) {
     localPartitionAndState.put(partitionName, ReplicaState.OFFLINE);
-  }
-
-  @Override
-  public void buildStateForFileCopy(String partitionName) {
-    // no op
   }
 
   @Override

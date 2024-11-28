@@ -372,8 +372,6 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapIgnoreDownwardStateTransition;
 
-  public static final String ENABLE_FILE_COPY_FOR_BOOTSTRAP = "clustermap.enable.file.copy.for.bootstrap";
-
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);

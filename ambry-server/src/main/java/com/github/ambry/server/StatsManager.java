@@ -532,10 +532,5 @@ class StatsManager {
       // remove replica from in-mem data structure. If replica doesn't exist, log info but don't fail the transition
       removeReplica(replica);
     }
-
-    @Override
-    public void buildStateForFileCopy(String partitionName) {
-      // no op
-    }
   }
 }

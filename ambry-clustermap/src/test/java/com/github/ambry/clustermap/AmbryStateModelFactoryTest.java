@@ -112,10 +112,6 @@ public class AmbryStateModelFactoryTest {
         // no op
       }
 
-      @Override
-      public void buildStateForFileCopy(String partitionName) {
-        // no op
-      }
     }, mock(HelixClusterManager.class));
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {
