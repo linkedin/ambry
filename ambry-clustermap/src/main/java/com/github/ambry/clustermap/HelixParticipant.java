@@ -452,7 +452,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       DataNodeConfig dataNodeConfig = getDataNodeConfig();
 
       // Make a copy of the disk configs to avoid accidentally overwriting state.
-      Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = new HashMap<>(dataNodeConfig.getDiskConfigs());
+      Map<String, DataNodeConfig.DiskConfig> originalDiskConfigs = new HashMap<> (dataNodeConfig.getDiskConfigs());
       for (DiskId oldDisk : newDiskMapping.keySet()) {
         DiskId newDisk = newDiskMapping.get(oldDisk);
 
@@ -874,10 +874,16 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
 
-      // TODO: Filecopy Invocation
-      // TODO: Statebuild Invocation
-      //        1. TODO: Start the store
-      //        2. TODO: Enable compaction for the new started store
+      /**
+       * Should be invoked after storage manager listener to ensure that the replica is added to the store.
+       * Conditional execution based on requirement for File Copy.
+       */
+      PartitionStateChangeListener fileCopyManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
+      if(fileCopyManagerListener != null){
+        fileCopyManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+      }
 
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =

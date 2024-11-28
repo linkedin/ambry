@@ -420,13 +420,6 @@ public class DiskManager {
   }
 
   /**
-   * Add store to compaction manager
-   */
-  void addBlobStoreToCompactionManager(BlobStore store){
-    compactionManager.addBlobStore(store);
-  }
-
-  /**
    * Add a new BlobStore with given {@link ReplicaId}.
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
    * @return {@code true} if adding store was successful. {@code false} if not.

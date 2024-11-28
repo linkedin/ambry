@@ -675,12 +675,6 @@ public class StoreConfig {
   public final static String storeBlockStaleBlobStoreToStartName = "store.block.stale.blob.store.to.start";
 
 
-  @Config(STORE_ENABLE_FILE_COPY_FOR_BOOTSTRAP)
-  @Default("false")
-  public final boolean storeEnableFileCopyForBootstrap;
-  public static final String STORE_ENABLE_FILE_COPY_FOR_BOOTSTRAP = "store.enable.file.copy.for.bootstrap";
-
-
   /**
    * Config to Decide Replication Protocol For Hydration Of Newly Added Replicas
    */
