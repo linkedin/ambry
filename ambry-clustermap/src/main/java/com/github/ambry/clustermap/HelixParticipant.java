@@ -460,8 +460,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         DataNodeConfig.DiskConfig oldDiskConfig = originalDiskConfigs.get(oldDisk.getMountPath());
         DataNodeConfig.DiskConfig newDiskConfig = originalDiskConfigs.get(newDisk.getMountPath());
         if (oldDiskConfig == null || newDiskConfig == null) {
-          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath()
-              + " cannot be found in Helix (DataNodeConfig)");
+          throw new IllegalArgumentException("Disk " + oldDisk.getMountPath() + " or " + newDisk.getMountPath() + " cannot be found in Helix (DataNodeConfig)");
         }
 
         // Swap the disks in the DataNodeConfig
@@ -826,8 +825,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Register Property Store Clean Up Task for cleaning up expired {@link DataNodeConfig} in Property Store.
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
-  private void registerPropertyStoreCleanUpTask(StateMachineEngine engine) {
-    if (clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
+  private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
+    if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
       logger.info("Registering PropertyStoreCleanUpTask");
       Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
       taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
@@ -903,7 +902,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
     logger.info("Before setting partition {} to bootstrap", partitionName);
     localPartitionAndState.put(partitionName, ReplicaState.BOOTSTRAP);
-
   }
 
   @Override

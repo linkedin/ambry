@@ -111,7 +111,6 @@ public class AmbryStateModelFactoryTest {
       public void onPartitionBecomeDroppedFromOffline(String partitionName) {
         // no op
       }
-
     }, mock(HelixClusterManager.class));
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {

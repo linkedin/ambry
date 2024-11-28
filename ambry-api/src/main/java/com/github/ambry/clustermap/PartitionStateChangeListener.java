@@ -80,5 +80,4 @@ public interface PartitionStateChangeListener {
    */
   default void onReset(String partitionName) {
   }
-
 }
