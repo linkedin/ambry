@@ -90,7 +90,7 @@ public class ReplicaMetadataRequestInfo {
 
   public long sizeInBytes() {
     long size = HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
-        + replicaPath.getBytes().length + +partitionId.getBytes().length + token.toBytes().length;
+        + replicaPath.getBytes().length + partitionId.getBytes().length + token.toBytes().length;
     if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
       size += ReplicaType_Size_In_Bytes;
     }
