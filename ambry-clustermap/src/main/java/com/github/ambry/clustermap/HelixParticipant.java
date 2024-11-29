@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -859,6 +860,98 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           "No config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
     return dataNodeConfig;
+  }
+
+  private void cleanup() {
+    boolean isFileCopyProgressFileExists = isFileExists("FileCopyProgressFile");
+    boolean isBootstrapProgressFileExists = isFileExists("BootstrapProgressFile");
+    boolean isFileCopyFeatureEnabled = isFeatureEnabled("fileCopy");
+    boolean isAnyLogSegmentExists = isFileExists(".*log");
+
+    if (isFileCopyFeatureEnabled) {
+      if (isBootstrapProgressFileExists) {
+        // R.Incomplete -> FC
+        // -> initiate existing flow, Don't init FCM
+        // --> State transition from Bootstrap to Standby
+        // --> Normal replication continues
+      } else {
+        // Either of the following cases
+        // R.Complete -> FC
+        // FC.Complete -> FC
+        // FC.Incomplete -> FC
+        // Nothing -> FC
+        if(isAnyLogSegmentExists) {
+          // Either of the following cases
+          // R.Complete -> FC
+          // FC.Complete -> FC
+          // FC.Incomplete -> FC
+          if (isFileCopyProgressFileExists) {
+            // FC.Incomplete -> FC
+            // FC will resume
+          } else {
+            // Either of the following cases
+            // R.Complete -> FC
+            // FC.Complete -> FC
+            // -> initiate existing flow, Don't init FCM
+            // --> State transition from Bootstrap to Standby
+            // --> Normal replication continues
+          }
+        } else {
+          // -> FC
+          // -> initiate existing flow, Don't init FCM
+          // --> State transition from Bootstrap to Standby
+          // --> Normal replication continues
+        }
+      }
+    } else {
+      // Either of the following cases
+      // R.complete -> R
+      // R.Incomplete -> R
+      // Nothing -> R
+      // FC.complete -> R
+      // FC.Incomplete -> R
+      if (isBootstrapProgressFileExists) {
+        // R.Incomplete -> R
+        // -> initiate existing flow, Don't init FCM
+        // -> Normal replication continues
+      } else {
+        if(isAnyLogSegmentExists) {
+          // Either of the following cases
+          // R.complete -> R
+          // FC.complete -> R
+          // FC.Incomplete -> R
+          if (isFileCopyProgressFileExists) {
+            // FC.Incomplete -> R
+            // -> Delete FileCopyProgressFile, FileCopyMetadataFile
+            // -> P0 Del all datasets
+            // -> P2 Del incomplete datasets (LS + Index + Bf)?
+          } else {
+            // Either of the following cases
+            // R.complete -> R
+            // FC.complete -> R
+            // -> initiate existing flow, Don't init FCM
+            // --> State transition from Bootstrap to Standby
+            // -> Normal replication continues
+          }
+        } else {
+          // Nothing -> R
+          // -> initiate existing flow, Don't init FCM
+          // --> State transition from Bootstrap to Standby
+          // -> Normal replication continues
+        }
+      }
+    }
+  }
+
+  private boolean isFeatureEnabled(String feature) {
+    // Check if the feature is enabled
+    // Check value for cfg2 key - "[clustermap | store].enable.file.copy.for.bootstrap"
+    return false;
+  }
+
+  private boolean isFileExists(String searchPattern) {
+    // Check if any file matching the searchPattern exists
+    return false;
   }
 
   @Override
