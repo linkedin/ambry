@@ -532,7 +532,37 @@ public class StorageManager implements StoreManager {
   }
   @Override
   public void buildStateForFileCopy(String partitionName){
-    // no-op
+    // The partition map should have the replica for the current partition since it was called in pre-file-copy step.
+    ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+
+    if (replica == null) {
+      logger.error("No existing replica found for partition {} in partitionNameToReplicaId", partitionName);
+      throw new StateTransitionException(
+          "Existing replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
+    }
+    if (!addBlobStore(replica)){
+      // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+      // back since addition of store failed.
+      replica.getDiskId().increaseAvailableSpaceInBytes(replica.getCapacityInBytes());
+      if (!clusterMap.isDataNodeInFullAutoMode(currentNode)) {
+        logger.error("Failed to add store {} into storage manager", partitionName);
+        throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
+            ReplicaOperationFailure);
+      } else {
+        logger.info("Failed to add store {} at location {}. Retrying bootstrapping replica at different location",
+            partitionName, replica.getReplicaPath());
+        tryRemoveFailedBootstrapBlobStore(replica);
+      }
+    }
+    Store store = getStore(replica.getPartitionId(), false);
+    // Only update store state if this is a state transition for primary participant. Since replication Manager
+    // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
+    // stuck in BOOTSTRAP if this is updated by second participant listener too
+    ReplicaState currentState = store.getCurrentState();
+    if (currentState != ReplicaState.LEADER && currentState != ReplicaState.STANDBY) {
+      // Only set the current state to BOOTSTRAP when it's not LEADER or STANDBY
+      store.setCurrentState(ReplicaState.BOOTSTRAP);
+    }
   }
 
   /**
