@@ -56,6 +56,10 @@ public class CloudStorageManager implements StoreManager {
   public boolean addBlobStore(ReplicaId replica) {
     return createAndStartBlobStoreIfAbsent(replica.getPartitionId()) != null;
   }
+  @Override
+  public void buildStateForFileCopy(String partitionName){
+    // no-op
+  }
 
   @Override
   public boolean shutdownBlobStore(PartitionId id) {
