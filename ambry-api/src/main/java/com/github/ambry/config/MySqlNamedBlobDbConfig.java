@@ -29,6 +29,30 @@ public class MySqlNamedBlobDbConfig {
   public static final String  QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String  STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
+  public static final String LIST_NAMED_BLOBS_SQL = "list.named.blobs.sql";
+
+  /**
+   * List named-blobs query
+   */
+  @Config(LIST_NAMED_BLOBS_SQL)
+  public final String DEFAULT_LIST_NAMED_BLOBS_SQL = "\n"
+      + "WITH LatestBlob AS (\n"
+      + "  SELECT blob_name, blob_id, MAX(version) AS version, deleted_ts, blob_size, modified_ts\n"
+      + "  FROM named_blobs_v2\n"
+      + "  WHERE account_id = ?\n"
+      + "    AND container_id = ?\n"
+      + "    AND blob_state = %1$s\n"
+      + "    AND blob_name LIKE ?\n"
+      + "    AND blob_name >= ?\n"
+      + "  GROUP BY blob_name\n"
+      + ")\n"
+      + "SELECT *\n"
+      + "FROM LatestBlob\n"
+      + "WHERE (deleted_ts IS NULL OR deleted_ts > %2$S)\n"
+      + "ORDER BY blob_name ASC\n"
+      + "LIMIT ?;";
+  public final String listNamedBlobsSQL;
+
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -93,6 +117,7 @@ public class MySqlNamedBlobDbConfig {
   public final TransactionIsolationLevel transactionIsolationLevel;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
+    this.listNamedBlobsSQL = verifiableProperties.getString(LIST_NAMED_BLOBS_SQL, defaultListNamedBlobsSQL);
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);

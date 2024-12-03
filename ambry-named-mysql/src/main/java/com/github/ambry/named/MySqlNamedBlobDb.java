@@ -112,22 +112,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    *    with filter on the blob_name, and order by blob_name.
    */
   // @formatter:off
-  private static final String LIST_QUERY_V2 = String.format("\n"
-      + "WITH BlobVersions AS (\n"
-      + "  SELECT blob_name, blob_id, MAX(version) AS version, deleted_ts, blob_size, modified_ts\n"
-      + "  FROM named_blobs_v2\n"
-      + "  WHERE account_id = ?\n"
-      + "    AND container_id = ?\n"
-      + "    AND blob_state = %1$s\n"
-      + "    AND blob_name LIKE ?\n"
-      + "    AND blob_name >= ?\n"
-      + "  GROUP BY blob_name\n"
-      + ")\n"
-      + "SELECT *\n"
-      + "FROM BlobVersions\n"
-      + "WHERE (deleted_ts IS NULL OR deleted_ts>%2$S)\n"
-      + "ORDER BY blob_name ASC\n"
-      + "LIMIT ?;", STATE_MATCH, CURRENT_TIME);
+  private String LIST_NAMED_BLOBS_SQL;
   // @formatter:on
 
   /**
@@ -235,6 +220,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String localDatacenter, MetricRegistry metricRegistry, Time time) {
     this.accountService = accountService;
     this.config = config;
+    this.LIST_NAMED_BLOBS_SQL = String.format(config.listNamedBlobsSQL, STATE_MATCH, CURRENT_TIME);
     this.localDatacenter = localDatacenter;
     this.retryExecutor = new RetryExecutor(null);
     this.transactionExecutors = MySqlUtils.getDbEndpointsPerDC(config.dbInfo)
@@ -633,7 +619,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
     String query = "";
-    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY_V2 : LIST_QUERY_V2;
+    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY_V2 : LIST_NAMED_BLOBS_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       statement.setInt(1, accountId);
