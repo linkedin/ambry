@@ -16,6 +16,6 @@ public class FileStoreException extends RuntimeException{
   }
 
   public enum FileStoreErrorCode{
-    FileStore
+    FileStoreRunningFailure
   }
 }
