@@ -33,7 +33,8 @@ public class MySqlNamedBlobDbConfig {
 
   /**
    * List named-blobs query.
-   * The inner query selects blob with the highest version that is ready to serve.
+   * The inner query selects blobs based on the filters, and groups them on blob_name.
+   * In each group, it selects the blob with the highest version.
    * The outer query filters out blobs that have been deleted, and return the latest blob in each group that is ready.
    */
   @Config(LIST_NAMED_BLOBS_SQL)
@@ -52,6 +53,7 @@ public class MySqlNamedBlobDbConfig {
       + "SELECT * "
       + "FROM LatestBlobs "
       + "WHERE (deleted_ts IS NULL OR deleted_ts > %2$S) "
+      + "ORDER BY blob_name ASC "
       + "LIMIT ?; ";
   public final String listNamedBlobsSQL;
 
