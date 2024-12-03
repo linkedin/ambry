@@ -24,18 +24,17 @@ public class FileStore {
     isRunning = false;
   }
 
-  public void putChunkToFile(String mountPath, String fileName, ByteBuffer byteBuffer, long offset, long size){
-    if(!isRunning){
+  public void putChunkToFile(String mountPath, String fileName, ByteBuffer byteBuffer, long offset, long size) {
+    if (!isRunning) {
       throw new FileStoreException("FileStore is not running", File);
     }
-    if(byteBuffer == null){
+    if (byteBuffer == null) {
       throw new IllegalArgumentException("ByteBuffer is null");
     }
     FileChannel currentFileBuffer = fileNameToFileChannelMap.get(fileName);
-    if(currentFileBuffer == null){
+    if (currentFileBuffer == null) {
       throw new IllegalArgumentException("File not found");
     }
-
-    //long currentOffset =
   }
+
 }

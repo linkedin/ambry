@@ -35,11 +35,25 @@ public interface StoreManager {
   boolean addBlobStore(ReplicaId replica);
 
   /**
+   * Add a new FileStore with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addFileStore(ReplicaId replica);
+
+  /**
    * Remove store from storage manager.
    * @param id the {@link PartitionId} associated with store
    * @return {@code true} if removal succeeds. {@code false} otherwise.
    */
   boolean removeBlobStore(PartitionId id) throws IOException, StoreException;
+
+  /**
+   * Remove store from storage manager.
+   * @param id the {@link PartitionId} associated with store
+   * @return {@code true} if removal succeeds. {@code false} otherwise.
+   */
+  boolean removeFileStore(PartitionId id) throws IOException, StoreException;
 
   /**
    * Start BlobStore with given {@link PartitionId} {@code id}.
@@ -54,6 +68,13 @@ public interface StoreManager {
    * @return true if successfully shutdown, false otherwise.
    */
   boolean shutdownBlobStore(PartitionId id);
+
+  /**
+   * Shutdown FileStore with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
+   * @return true if successfully shutdown, false otherwise.
+   */
+  boolean shutdownFileStore(PartitionId id);
 
   /**
    * @param id the {@link PartitionId} to find the store for.
