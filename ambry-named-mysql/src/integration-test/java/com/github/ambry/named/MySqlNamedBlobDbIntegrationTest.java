@@ -275,16 +275,20 @@ public class MySqlNamedBlobDbIntegrationTest {
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobName = "testListNamedBlobsWithStaleRecords";
-    NamedBlobRecord v1, v2;
+    NamedBlobRecord v1, v1_other, v2, v2_other;
     Page<NamedBlobRecord> page;
 
     // put blob Ready and list should return the blob
     v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b1-ready",
         now + TimeUnit.MINUTES.toMillis(5));
+    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-ready-other",
+        now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+    namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
-    assertEquals(1, page.getEntries().size());
+    assertEquals(2, page.getEntries().size());
     assertEquals(v1, page.getEntries().get(0));
+    assertEquals(v1_other, page.getEntries().get(1));
     time.sleep(100);
 
     // put blob in-progress and list should return the Ready blob
@@ -292,21 +296,32 @@ public class MySqlNamedBlobDbIntegrationTest {
         now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
-    assertEquals(1, page.getEntries().size());
+    assertEquals(2, page.getEntries().size());
     assertEquals(v1, page.getEntries().get(0));
+    assertEquals(v1_other, page.getEntries().get(1));
     time.sleep(100);
 
     // update blob and list should return the new blob
     v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-ready",
         now + TimeUnit.MINUTES.toMillis(5));
+    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b2-ready-other",
+        now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v2, NamedBlobState.READY, true).get();
+    namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
-    assertEquals(1, page.getEntries().size());
+    assertEquals(2, page.getEntries().size());
     assertEquals(v2, page.getEntries().get(0));
+    assertEquals(v2_other, page.getEntries().get(1));
     time.sleep(100);
 
     // delete blob and list should return empty
     namedBlobDb.delete(account.getName(), container.getName(), blobName).get();
+    page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
+    assertEquals(1, page.getEntries().size());
+    assertEquals(v2_other, page.getEntries().get(1));
+    time.sleep(100);
+
+    namedBlobDb.delete(account.getName(), container.getName(), blobName + "-other").get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(0, page.getEntries().size());
   }
