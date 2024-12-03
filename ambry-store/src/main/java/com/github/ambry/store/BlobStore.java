@@ -28,7 +28,6 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
-//import com.github.ambry.protocol.FileInfo;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.SystemTime;
