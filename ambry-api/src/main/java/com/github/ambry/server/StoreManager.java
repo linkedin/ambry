@@ -48,13 +48,6 @@ public interface StoreManager {
   boolean removeBlobStore(PartitionId id) throws IOException, StoreException;
 
   /**
-   * Remove store from storage manager.
-   * @param id the {@link PartitionId} associated with store
-   * @return {@code true} if removal succeeds. {@code false} otherwise.
-   */
-  boolean removeFileStore(PartitionId id) throws IOException, StoreException;
-
-  /**
    * Start BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link Store} which would be started.
    * @return true if successfully started, false otherwise.
@@ -67,13 +60,6 @@ public interface StoreManager {
    * @return true if successfully shutdown, false otherwise.
    */
   boolean shutdownBlobStore(PartitionId id);
-
-  /**
-   * Shutdown FileStore with given {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
-   * @return true if successfully shutdown, false otherwise.
-   */
-  boolean shutdownFileStore(PartitionId id);
 
   /**
    * @param id the {@link PartitionId} to find the store for.
