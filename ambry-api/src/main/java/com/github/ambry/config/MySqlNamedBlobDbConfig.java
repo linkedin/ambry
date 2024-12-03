@@ -117,7 +117,7 @@ public class MySqlNamedBlobDbConfig {
   public final TransactionIsolationLevel transactionIsolationLevel;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
-    this.listNamedBlobsSQL = verifiableProperties.getString(LIST_NAMED_BLOBS_SQL, defaultListNamedBlobsSQL);
+    this.listNamedBlobsSQL = verifiableProperties.getString(LIST_NAMED_BLOBS_SQL, DEFAULT_LIST_NAMED_BLOBS_SQL);
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
