@@ -535,6 +535,11 @@ public class StorageManager implements StoreManager {
     // no-op
   }
 
+  @Override
+  public boolean addFileStore(ReplicaId replica) {
+    return false;
+  }
+
   /**
    * If a bootstrap replica fails, try to remove all the files and directories associated with it.
    * @param replica The failed bootstrap {@link ReplicaId}.
@@ -559,6 +564,11 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
+  public boolean shutdownFileStore(PartitionId id) {
+    return false;
+  }
+
+  @Override
   public boolean removeBlobStore(PartitionId id) throws IOException, StoreException {
     DiskManager diskManager = partitionToDiskManager.remove(id);
     if (diskManager == null) {
@@ -571,6 +581,11 @@ public class StorageManager implements StoreManager {
     }
     logger.info("Store {} is successfully removed from storage manager", id);
     return true;
+  }
+
+  @Override
+  public boolean removeFileStore(PartitionId id) {
+    return false;
   }
 
   @Override
