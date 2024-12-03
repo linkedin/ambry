@@ -290,7 +290,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     // put blob in-progress and list should return the Ready blob
     v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-in-progress",
         now + TimeUnit.MINUTES.toMillis(5));
-    namedBlobDb.put(v1, NamedBlobState.IN_PROGRESS, true).get();
+    namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(1, page.getEntries().size());
     assertEquals(v1, page.getEntries().get(0));
