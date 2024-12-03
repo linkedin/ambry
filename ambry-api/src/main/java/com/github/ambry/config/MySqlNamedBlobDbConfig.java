@@ -38,22 +38,22 @@ public class MySqlNamedBlobDbConfig {
    * The outer query will then filter out blobs that have been deleted, and return the latest blob in each group.
    */
   @Config(LIST_NAMED_BLOBS_SQL)
-  public final String DEFAULT_LIST_NAMED_BLOBS_SQL = "\n"
-      + "WITH LatestBlob AS (\n"
-      + "  SELECT blob_name, blob_id, MAX(version) AS version, deleted_ts, blob_size, modified_ts\n"
-      + "  FROM named_blobs_v2\n"
-      + "  WHERE account_id = ?\n"
-      + "    AND container_id = ?\n"
-      + "    AND blob_state = %1$s\n"
-      + "    AND blob_name LIKE ?\n"
-      + "    AND blob_name >= ?\n"
-      + "  GROUP BY blob_name\n"
-      + ")\n"
-      + "SELECT *\n"
-      + "FROM LatestBlob\n"
-      + "WHERE (deleted_ts IS NULL OR deleted_ts > %2$S)\n"
-      + "ORDER BY blob_name ASC\n"
-      + "LIMIT ?;";
+  public final String DEFAULT_LIST_NAMED_BLOBS_SQL = ""
+      + "WITH LatestBlob AS ( "
+      + "  SELECT blob_name, blob_id, MAX(version) AS version, deleted_ts, blob_size, modified_ts "
+      + "  FROM named_blobs_v2 "
+      + "  WHERE account_id = ? "
+      + "    AND container_id = ? "
+      + "    AND blob_state = %1$s "
+      + "    AND blob_name LIKE ? "
+      + "    AND blob_name >= ? "
+      + "  GROUP BY blob_name "
+      + ") "
+      + "SELECT * "
+      + "FROM LatestBlob "
+      + "WHERE (deleted_ts IS NULL OR deleted_ts > %2$S) "
+      + "ORDER BY blob_name ASC "
+      + "LIMIT ?; ";
   public final String listNamedBlobsSQL;
 
 
