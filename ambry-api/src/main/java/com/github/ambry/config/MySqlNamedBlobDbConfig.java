@@ -38,7 +38,7 @@ public class MySqlNamedBlobDbConfig {
    * The outer query will then filter out blobs that have been deleted, and return the latest blob in each group.
    */
   @Config(LIST_NAMED_BLOBS_SQL)
-  public final String DEFAULT_LIST_NAMED_BLOBS_SQL = ""
+  public static final String DEFAULT_LIST_NAMED_BLOBS_SQL = ""
       + "WITH LatestBlobs AS ( "
       + "  SELECT blob_name, blob_id, MAX(version) AS version, deleted_ts, blob_size, modified_ts "
       + "  FROM named_blobs_v2 "
