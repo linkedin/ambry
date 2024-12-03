@@ -39,21 +39,35 @@ public class MySqlNamedBlobDbConfig {
    */
   @Config(LIST_NAMED_BLOBS_SQL)
   public static final String DEFAULT_LIST_NAMED_BLOBS_SQL = ""
-      + "WITH LatestBlobs AS ( "
-      + "  SELECT blob_name, blob_id, MAX(version) AS version, deleted_ts, blob_size, modified_ts "
+      + "WITH "
+      + "BlobsAllVersion AS ( "
+      + "  SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
       + "  FROM named_blobs_v2 "
-      + "  WHERE account_id = ? "
-      + "    AND container_id = ? "
-      + "    AND blob_state = %1$s "
-      + "    AND blob_name LIKE ? "
-      + "    AND blob_name >= ? "
+      + "  WHERE account_id = ?1 "
+      + "    AND container_id = ?2 "
+      + "    AND blob_state = %1$S "
+      + "    AND blob_name LIKE ?3 "
+      + "    AND blob_name >= ?4 "
+      + "    AND (deleted_ts IS NULL OR deleted_ts > %2$S) "
+      + "), "
+      + "BlobsMaxVersion AS ( "
+      + "  SELECT blob_name, MAX(version) as version "
+      + "  FROM named_blobs_v2 "
+      + "  WHERE account_id = ?1 "
+      + "    AND container_id = ?2 "
+      + "    AND blob_state = %1$S "
+      + "    AND blob_name LIKE ?3 "
+      + "    AND blob_name >= ?4 "
       + "  GROUP BY blob_name "
       + ") "
-      + "SELECT * "
-      + "FROM LatestBlobs "
-      + "WHERE (deleted_ts IS NULL OR deleted_ts > %2$S) "
-      + "ORDER BY blob_name ASC "
-      + "LIMIT ?; ";
+      + "SELECT BlobsAllVersion.* "
+      + "FROM BlobsAllVersion "
+      + "INNER JOIN BlobsMaxVersion "
+      + "ON BlobsAllVersion.blob_name = BlobsMaxVersion.blob_name "
+      + "  AND BlobsAllVersion.version = BlobsMaxVersion.version"
+      + "ORDER BY BlobsAllVersion.blob_name "
+      + "LIMIT ?5";
+;
   public final String listNamedBlobsSQL;
 
 
