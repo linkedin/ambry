@@ -122,7 +122,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       + "    AND blob_name LIKE ?"
       + "    AND blob_name >= ?"
       + "  GROUP BY blob_name"
-      + "  ORDER BY blob_name ASC;", STATE_MATCH, CURRENT_TIME);
+      + "  ORDER BY blob_name ASC"
+      + "  LIMIT ?;", STATE_MATCH, CURRENT_TIME);
   // @formatter:on
 
   /**
