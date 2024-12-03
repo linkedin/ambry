@@ -1,9 +1,14 @@
 package com.github.ambry.store;
 
 import com.github.ambry.clustermap.FileStoreException;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.github.ambry.clustermap.FileStoreException.FileStoreErrorCode.*;
 
 
 public class FileStore {
@@ -24,17 +29,6 @@ public class FileStore {
     isRunning = false;
   }
 
-  public void putChunkToFile(String mountPath, String fileName, ByteBuffer byteBuffer, long offset, long size) {
-    if (!isRunning) {
-      throw new FileStoreException("FileStore is not running", File);
-    }
-    if (byteBuffer == null) {
-      throw new IllegalArgumentException("ByteBuffer is null");
-    }
-    FileChannel currentFileBuffer = fileNameToFileChannelMap.get(fileName);
-    if (currentFileBuffer == null) {
-      throw new IllegalArgumentException("File not found");
-    }
   }
 
 
