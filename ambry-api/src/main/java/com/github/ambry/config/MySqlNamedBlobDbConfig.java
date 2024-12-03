@@ -39,7 +39,7 @@ public class MySqlNamedBlobDbConfig {
    */
   @Config(LIST_NAMED_BLOBS_SQL)
   public final String DEFAULT_LIST_NAMED_BLOBS_SQL = ""
-      + "WITH LatestBlob AS ( "
+      + "WITH LatestBlobs AS ( "
       + "  SELECT blob_name, blob_id, MAX(version) AS version, deleted_ts, blob_size, modified_ts "
       + "  FROM named_blobs_v2 "
       + "  WHERE account_id = ? "
@@ -50,7 +50,7 @@ public class MySqlNamedBlobDbConfig {
       + "  GROUP BY blob_name "
       + ") "
       + "SELECT * "
-      + "FROM LatestBlob "
+      + "FROM LatestBlobs "
       + "WHERE (deleted_ts IS NULL OR deleted_ts > %2$S) "
       + "ORDER BY blob_name ASC "
       + "LIMIT ?; ";
