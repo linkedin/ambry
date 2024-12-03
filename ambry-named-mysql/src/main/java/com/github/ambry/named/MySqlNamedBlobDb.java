@@ -622,22 +622,25 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY_V2 : LIST_NAMED_BLOBS_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
-      statement.setInt(1, accountId);
-      statement.setInt(2, containerId);
-      statement.setInt(5, accountId);
-      statement.setInt(6, containerId);
       if (blobNamePrefix == null) {
+        // list-all no prefix
+        statement.setInt(1, accountId);
+        statement.setInt(2, containerId);
         statement.setString(3, pageToken);
         statement.setString(4, pageToken);
-        statement.setString(7, pageToken);
-        statement.setString(8, pageToken);
+        statement.setInt(5, maxKeysValue + 1);
       } else {
+        // list with prefix
+        statement.setInt(1, accountId);
+        statement.setInt(2, containerId);
         statement.setString(3, blobNamePrefix + "%");
         statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+        statement.setInt(5, accountId);
+        statement.setInt(6, containerId);
         statement.setString(7, blobNamePrefix + "%");
         statement.setString(8, pageToken != null ? pageToken : blobNamePrefix);
+        statement.setInt(9, maxKeysValue + 1);
       }
-      statement.setInt(9, maxKeysValue + 1);
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
       try (ResultSet resultSet = statement.executeQuery()) {
