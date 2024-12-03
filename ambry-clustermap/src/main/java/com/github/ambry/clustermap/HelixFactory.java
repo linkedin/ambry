@@ -19,8 +19,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.HelixManager;
-import org.apache.helix.HelixManagerFactory;
+import org.apache.helix.HelixManagerProperty;
 import org.apache.helix.InstanceType;
+import org.apache.helix.constants.InstanceConstants;
+import org.apache.helix.manager.zk.ZKHelixManager;
+import org.apache.helix.model.InstanceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +36,7 @@ public class HelixFactory {
   // exposed for use in testing
   private final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
   private final Map<String, DataNodeConfigSource> dataNodeConfigSources = new ConcurrentHashMap<>();
+  private static final String INSTANCE_CONFIG_HELIX_PORT = "15088";
 
   /**
    * Get a reference to a {@link HelixManager}
@@ -96,7 +100,9 @@ public class HelixFactory {
    * @return a new instance of {@link HelixManager}.
    */
   HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
-    return HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
+    return new ZKHelixManager(clusterName, instanceName, instanceType, zkAddr, null,
+        instanceType == InstanceType.PARTICIPANT ? new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(
+        new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN).setPort(INSTANCE_CONFIG_HELIX_PORT)).build() : null);
   }
 
   /**

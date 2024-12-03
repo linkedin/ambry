@@ -21,7 +21,7 @@ ext {
     nettyVersion = "4.1.79.Final"
     nettyTcNativeBoringSSLStatic_linux_x86_64 = "2.0.61.Final:linux-x86_64"
     nettyTcNativeBoringSSLStatic_osx_aarch_64 = "2.0.61.Final:osx-aarch_64"
-    helixVersion = "1.1.0"
+    helixVersion = "1.4.0"
     jacksonVersion = "2.13.5"
     jaydioVersion = "0.1"
     azureMsal4jVersion="1.7.1"
