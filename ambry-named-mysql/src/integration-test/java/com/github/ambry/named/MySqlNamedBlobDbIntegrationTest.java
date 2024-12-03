@@ -280,7 +280,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     NamedBlobRecord v1, v2, v3;
     Page<NamedBlobRecord> page;
 
-    // put blob and list should return the blob
+    // put blob Ready and list should return the blob
     b1 = getBlobId(account, container);
     v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b1, expiry);
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
@@ -288,7 +288,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     assertEquals(1, page.getEntries().size());
     assertEquals(v1, page.getEntries().get(0));
 
-    // put blob and list should return the blob
+    // put blob in-progress and list should return the Ready blob
     b2 = getBlobId(account, container);
     v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b2, expiry);
     namedBlobDb.put(v1, NamedBlobState.IN_PROGRESS, true).get();
