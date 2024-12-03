@@ -271,8 +271,7 @@ public class MySqlNamedBlobDbIntegrationTest {
    */
   @Test
   public void testListNamedBlobsWithStaleRecords() throws Exception {
-    long expiry = Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis()
-        + TimeUnit.MINUTES.toMillis(5);
+    long now = Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobName = "testListNamedBlobsWithStaleRecords";
@@ -282,27 +281,30 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // put blob Ready and list should return the blob
     b1 = getBlobId(account, container);
-    v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b1, expiry);
+    v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b1, now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(1, page.getEntries().size());
     assertEquals(v1, page.getEntries().get(0));
+    time.sleep(100);
 
     // put blob in-progress and list should return the Ready blob
     b2 = getBlobId(account, container);
-    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b2, expiry);
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b2, now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v1, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(1, page.getEntries().size());
     assertEquals(v1, page.getEntries().get(0));
+    time.sleep(100);
 
     // update blob and list should return the new blob
     b3 = getBlobId(account, container);
-    v3 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b3, expiry);
+    v3 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b3, now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v3, NamedBlobState.READY, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(1, page.getEntries().size());
     assertEquals(v3, page.getEntries().get(0));
+    time.sleep(100);
 
     // delete blob and list should return empty
     namedBlobDb.delete(account.getName(), container.getName(), blobName).get();
