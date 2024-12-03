@@ -112,7 +112,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    *    with filter on the blob_name, and order by blob_name.
    */
   // @formatter:off
-  private String LIST_NAMED_BLOBS_SQL;
+  private final String LIST_NAMED_BLOBS_SQL;
   // @formatter:on
 
   /**
