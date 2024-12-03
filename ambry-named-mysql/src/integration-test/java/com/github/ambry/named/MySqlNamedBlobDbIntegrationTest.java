@@ -270,6 +270,50 @@ public class MySqlNamedBlobDbIntegrationTest {
    * Test behavior with list named blob
    */
   @Test
+  public void testListNamedBlobsWithStaleRecords() throws Exception {
+    long expiry = Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis()
+        + TimeUnit.MINUTES.toMillis(5);
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobName = "testListNamedBlobsWithStaleRecords";
+    String b1, b2, b3;
+    NamedBlobRecord v1, v2, v3;
+    Page<NamedBlobRecord> page;
+
+    // put blob and list should return the blob
+    b1 = getBlobId(account, container);
+    v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b1, expiry);
+    namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+    page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
+    assertEquals(1, page.getEntries().size());
+    assertEquals(v1, page.getEntries().get(0));
+
+    // put blob and list should return the blob
+    b2 = getBlobId(account, container);
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b2, expiry);
+    namedBlobDb.put(v1, NamedBlobState.IN_PROGRESS, true).get();
+    page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
+    assertEquals(1, page.getEntries().size());
+    assertEquals(v1, page.getEntries().get(0));
+
+    // update blob and list should return the new blob
+    b3 = getBlobId(account, container);
+    v3 = new NamedBlobRecord(account.getName(), container.getName(), blobName, b3, expiry);
+    namedBlobDb.put(v3, NamedBlobState.READY, true).get();
+    page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
+    assertEquals(1, page.getEntries().size());
+    assertEquals(v3, page.getEntries().get(0));
+
+    // delete blob and list should return empty
+    namedBlobDb.delete(account.getName(), container.getName(), blobName).get();
+    page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
+    assertEquals(0, page.getEntries().size());
+  }
+
+  /**
+   * Test behavior with list named blob
+   */
+  @Test
   public void testListNamedBlobs() throws Exception {
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
 
