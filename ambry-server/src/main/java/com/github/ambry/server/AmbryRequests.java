@@ -237,10 +237,6 @@ public class AmbryRequests implements RequestAPI {
         case FileMetaDataRequest:
           handleFileMetaDataRequest(networkRequest);
           break;
-
-        case FileChunkResponse:
-          handleFileMetaDataResponse(networkRequest);
-          break;
         case FileChunkRequest:
           handleFileChunkRequest(networkRequest);
           break;

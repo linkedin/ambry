@@ -26,7 +26,7 @@ public class FileStore {
 
   public void putChunkToFile(String mountPath, String fileName, ByteBuffer byteBuffer, long offset, long size){
     if(!isRunning){
-      throw new FileStoreException("FileStore is not running", File);
+      //throw new FileStoreException("FileStore is not running", FileStore);
     }
     if(byteBuffer == null){
       throw new IllegalArgumentException("ByteBuffer is null");
