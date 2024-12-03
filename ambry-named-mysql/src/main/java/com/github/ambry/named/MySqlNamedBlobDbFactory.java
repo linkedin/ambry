@@ -75,6 +75,7 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
       hikariConfig.setTransactionIsolation(config.transactionIsolationLevel.name());
     }
     hikariConfig.setMetricRegistry(metricRegistry);
+    hikariConfig.setConnectionInitSql("SET SESSION sql_mode=''"); // Disable strict mode ONLY_FULL_GROUP_BY
     return new HikariDataSource(hikariConfig);
   }
 }
