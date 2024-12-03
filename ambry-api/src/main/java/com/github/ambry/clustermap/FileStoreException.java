@@ -15,9 +15,6 @@ public class FileStoreException extends RuntimeException{
   }
 
 
-  public StateTransitionException.TransitionErrorCode getErrorCode() {
-    return error;
-  }
   public enum FileStoreErrorCode{
     FileStoreError,
 

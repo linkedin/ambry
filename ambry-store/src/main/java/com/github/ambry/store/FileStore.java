@@ -28,8 +28,4 @@ public class FileStore {
   public void stop() {
     isRunning = false;
   }
-
-  }
-
-
 }

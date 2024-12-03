@@ -42,7 +42,7 @@ public class FileCopyManager {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       // StateBuilding at the end of FCM's Offline->Bootstrap transition
-      storeManager.buildStateForFileCopy(partitionName);
+      //storeManager.buildStateForFileCopy(partitionName);
     }
 
     @Override
@@ -75,6 +75,5 @@ public class FileCopyManager {
 
     }
   }
-}
 
 }
