@@ -32,7 +32,10 @@ public class MySqlNamedBlobDbConfig {
   public static final String LIST_NAMED_BLOBS_SQL = "list.named.blobs.sql";
 
   /**
-   * List named-blobs query
+   * List named-blobs query.
+   * The inner query will select blobs based on the filters, and then group them on blob_name.
+   * In each group, it will then select the one with the highest version.
+   * The outer query will then filter out blobs that have been deleted, and return the latest blob in each group.
    */
   @Config(LIST_NAMED_BLOBS_SQL)
   public final String DEFAULT_LIST_NAMED_BLOBS_SQL = "\n"
