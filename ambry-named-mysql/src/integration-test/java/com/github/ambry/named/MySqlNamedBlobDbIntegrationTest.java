@@ -279,9 +279,9 @@ public class MySqlNamedBlobDbIntegrationTest {
     Page<NamedBlobRecord> page;
 
     // put blob Ready and list should return the blob
-    v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b1-ready",
+    v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b1",
         now + TimeUnit.HOURS.toMillis(1));
-    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-readytoo",
+    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b2",
         now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
     NamedBlobRecord v1_get = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
@@ -296,7 +296,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.sleep(100);
 
     // put blob in-progress and list should return the Ready blob
-    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-inprogress",
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b3",
         now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
@@ -306,9 +306,9 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.sleep(100);
 
     // update blob and list should return the new blob
-    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-ready",
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b4",
         now + TimeUnit.HOURS.toMillis(1));
-    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b2-readytoo",
+    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b5",
         now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.READY, true).get();
     // namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
