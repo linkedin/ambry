@@ -287,8 +287,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     NamedBlobRecord v1_get = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
     assertEquals(v1, v1_get);
     namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
-    NamedBlobRecord v2_get = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
-    assertEquals(v1, v2_get);
+    NamedBlobRecord v1_other_get = namedBlobDb.get(account.getName(), container.getName(), blobName + "-other").get();
+    assertEquals(v1_other, v1_other_get);
 
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(2, page.getEntries().size());
