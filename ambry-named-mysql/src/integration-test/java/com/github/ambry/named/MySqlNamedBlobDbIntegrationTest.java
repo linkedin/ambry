@@ -279,9 +279,9 @@ public class MySqlNamedBlobDbIntegrationTest {
     Page<NamedBlobRecord> page;
 
     // put blob Ready and list should return the blob
-    v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b1-ready",
+    v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
         now + TimeUnit.MINUTES.toMillis(5));
-    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-ready-other",
+    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", getBlobId(account, container),
         now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
     namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
@@ -292,7 +292,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.sleep(100);
 
     // put blob in-progress and list should return the Ready blob
-    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-in-progress",
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
         now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
@@ -302,9 +302,9 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.sleep(100);
 
     // update blob and list should return the new blob
-    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-ready",
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
         now + TimeUnit.MINUTES.toMillis(5));
-    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b2-ready-other",
+    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", getBlobId(account, container),
         now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v2, NamedBlobState.READY, true).get();
     namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
