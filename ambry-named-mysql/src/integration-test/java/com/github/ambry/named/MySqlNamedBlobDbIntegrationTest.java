@@ -296,7 +296,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.sleep(100);
 
     // put blob in-progress and list should return the Ready blob
-    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b3",
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
         now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
@@ -306,9 +306,9 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.sleep(100);
 
     // update blob and list should return the new blob
-    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b4",
+    v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
         now + TimeUnit.HOURS.toMillis(1));
-    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b5",
+    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", getBlobId(account, container),
         now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.READY, true).get();
     // namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
