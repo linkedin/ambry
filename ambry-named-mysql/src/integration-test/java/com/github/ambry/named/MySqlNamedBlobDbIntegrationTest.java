@@ -284,11 +284,16 @@ public class MySqlNamedBlobDbIntegrationTest {
     v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-ready-other",
         now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+    NamedBlobRecord v1_get = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
+    assertEquals(v1, v1_get);
     namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
+    NamedBlobRecord v2_get = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
+    assertEquals(v1, v2_get);
+
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(2, page.getEntries().size());
     assertEquals(v1, page.getEntries().get(0));
-    // assertEquals(v1_other, page.getEntries().get(1));
+    assertEquals(v1_other, page.getEntries().get(1));
     time.sleep(100);
 
     // put blob in-progress and list should return the Ready blob
