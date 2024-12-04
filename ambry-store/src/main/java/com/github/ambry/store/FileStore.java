@@ -4,7 +4,7 @@ import com.github.ambry.clustermap.FileStoreException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.concurrent.ConcurrentHashMap;
-import com.github.ambry.clustermap.FileStoreException;
+import com.github.ambry.clustermap.FileStoreException.FileStoreErrorCode;
 
 
 public class FileStore {
@@ -27,7 +27,7 @@ public class FileStore {
 
   public void putChunkToFile(String mountPath, String fileName, ByteBuffer byteBuffer, long offset, long size){
     if(!isRunning){
-      throw new FileStoreException("FileStore is not running", FileStoreException.FileStoreErrorCode.FileStore);
+      throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
     }
     if(byteBuffer == null){
       throw new IllegalArgumentException("ByteBuffer is null");

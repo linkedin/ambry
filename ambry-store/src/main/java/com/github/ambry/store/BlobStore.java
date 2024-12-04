@@ -1320,23 +1320,23 @@ public class BlobStore implements Store {
     shutdown(false);
   }
 
-//  public List<FileInfo> getSealedLogsAndMetaDataFiles(){
-//    List<FileInfo> logSegments = log.getAllLogSegmentNames().stream().filter(segment -> log.getActiveSegment().getName() != segment)
-//          .map(segment -> log.getSegment(segment))
-//          .map(segment -> new FileInfo(segment.getName().toString(), segment.getView().getFirst().length())).collect(Collectors.toList());
-//    return logSegments;
-//  }
-//
-//  public List<FileInfo> getAllIndexSegmentsForALogSegment(String dataDir, LogSegmentName logSegmentName){
-//    return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
-//        .map(file -> new FileInfo(file.getName(), file.length())).collect(
-//        Collectors.toList());
-//  }
-//
-//  public List<FileInfo> getAllBloomFiltersForALogSegment(String dataDir, LogSegmentName logSegmentName){
-//    return Arrays.stream(PersistentIndex.getIndexAndBloomFilterFiles(dataDir, logSegmentName))
-//        .map(file -> new FileInfo(file.getName(), file.length())).collect(Collectors.toList());
-//  }
+  public List<SealedFileInfo> getSealedLogsAndMetaDataFiles(){
+    List<SealedFileInfo> logSegments = log.getAllLogSegmentNames().stream().filter(segment -> log.getActiveSegment().getName() != segment)
+          .map(segment -> log.getSegment(segment))
+          .map(segment -> new SealedFileInfo(segment.getName().toString(), segment.getView().getFirst().length())).collect(Collectors.toList());
+    return logSegments;
+  }
+
+  public List<SealedFileInfo> getAllIndexSegmentsForALogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
+        .map(file -> new SealedFileInfo(file.getName(), file.length())).collect(
+        Collectors.toList());
+  }
+
+  public List<SealedFileInfo> getAllBloomFiltersForALogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getIndexAndBloomFilterFiles(dataDir, logSegmentName))
+        .map(file -> new SealedFileInfo(file.getName(), file.length())).collect(Collectors.toList());
+  }
 
   /**
    * Update the sealed status of the replica.

@@ -688,9 +688,22 @@ public class StoreConfig {
   @Config("store.reshuffle.disks.on.reorder")
   @Default("false")
   public final boolean storeReshuffleDisksOnReorder;
+
+  public static final String FILE_COPY_IN_PROGRESS_FILE_NAME = "file.copy.in.progress.file.name";
+  @Config(FILE_COPY_IN_PROGRESS_FILE_NAME)
+  @Default("file_copy_in_progress")
+  public final String fileCopyInProgressFileName;
+
+  public static final String BOOTSTRAP_IN_PROGRESS_FILE = "bootstrap.in.progress.file.name";
+  @Config(BOOTSTRAP_IN_PROGRESS_FILE)
+  @Default("bootstrap_in_progress")
+  public final String bootstrapInProgressFile;
+
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
+    bootstrapInProgressFile = verifiableProperties.getString(BOOTSTRAP_IN_PROGRESS_FILE, "bootstrap_in_progress");
+    fileCopyInProgressFileName = verifiableProperties.getString(FILE_COPY_IN_PROGRESS_FILE_NAME, "file_copy_in_progress");
     serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION,
         ServerReplicationMode.class, ServerReplicationMode.BLOB_BASED);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
