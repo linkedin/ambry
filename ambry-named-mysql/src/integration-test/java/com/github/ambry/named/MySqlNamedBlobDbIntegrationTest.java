@@ -321,7 +321,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.delete(account.getName(), container.getName(), blobName).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(1, page.getEntries().size());
-    assertEquals(v2_other, page.getEntries().get(1));
+    assertEquals(v2_other, page.getEntries().get(0));
     time.sleep(100);
     namedBlobDb.delete(account.getName(), container.getName(), blobName + "-other").get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
