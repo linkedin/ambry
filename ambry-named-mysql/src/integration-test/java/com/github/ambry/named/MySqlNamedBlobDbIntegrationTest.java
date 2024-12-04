@@ -280,9 +280,9 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // put blob Ready and list should return the blob
     v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b1-ready",
-        now + TimeUnit.MINUTES.toMillis(5));
+        now + TimeUnit.HOURS.toMillis(1));
     v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-ready-other",
-        now + TimeUnit.MINUTES.toMillis(5));
+        now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
     namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
@@ -293,7 +293,7 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // put blob in-progress and list should return the Ready blob
     v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-in-progress",
-        now + TimeUnit.MINUTES.toMillis(5));
+        now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(2, page.getEntries().size());
@@ -303,9 +303,9 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // update blob and list should return the new blob
     v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-ready",
-        now + TimeUnit.MINUTES.toMillis(5));
+        now + TimeUnit.HOURS.toMillis(1));
     v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b2-ready-other",
-        now + TimeUnit.MINUTES.toMillis(5));
+        now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.READY, true).get();
     namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
