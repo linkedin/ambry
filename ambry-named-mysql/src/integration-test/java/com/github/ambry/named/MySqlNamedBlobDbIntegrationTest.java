@@ -281,7 +281,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     // put blob Ready and list should return the blob
     v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b1-ready",
         now + TimeUnit.MINUTES.toMillis(5));
-    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-ready-other",
+    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-ready-o",
         now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
     namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
@@ -304,7 +304,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     // update blob and list should return the new blob
     v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b2-ready",
         now + TimeUnit.MINUTES.toMillis(5));
-    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b2-ready-other",
+    v2_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b2-ready-o",
         now + TimeUnit.MINUTES.toMillis(5));
     namedBlobDb.put(v2, NamedBlobState.READY, true).get();
     namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
