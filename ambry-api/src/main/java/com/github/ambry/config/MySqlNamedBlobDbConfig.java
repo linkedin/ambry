@@ -33,9 +33,12 @@ public class MySqlNamedBlobDbConfig {
 
   /**
    * Option to pick the SQL query to use for listing named blobs.
+   * Check getListNamedBlobsSQL() for more details.
    */
   @Config(LIST_NAMED_BLOBS_SQL_OPTION)
   public static final int DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION = 2;
+  public static final int MIN_LIST_NAMED_BLOBS_SQL_OPTION = 1;
+  public static final int MAX_LIST_NAMED_BLOBS_SQL_OPTION = 2;
   public final int listNamedBlobsSQLOption;
 
 
@@ -102,8 +105,8 @@ public class MySqlNamedBlobDbConfig {
   public final TransactionIsolationLevel transactionIsolationLevel;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
-    this.listNamedBlobsSQLOption = verifiableProperties.getInt(LIST_NAMED_BLOBS_SQL_OPTION,
-        DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
+    this.listNamedBlobsSQLOption = verifiableProperties.getIntInRange(LIST_NAMED_BLOBS_SQL_OPTION,
+        DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION, MIN_LIST_NAMED_BLOBS_SQL_OPTION, MAX_LIST_NAMED_BLOBS_SQL_OPTION);
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);

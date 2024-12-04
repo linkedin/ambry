@@ -294,8 +294,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "   AND BlobsAllVersion.version = BlobsMaxVersion.version) "
           + " ORDER BY BlobsAllVersion.blob_name "
           + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
+      default:
+        throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
     }
-    return null;
   }
 
   @Override
