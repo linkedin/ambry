@@ -41,8 +41,7 @@ public class FileCopyManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-      // StateBuilding at the end of FCM's Offline->Bootstrap transition
-      //storeManager.buildStateForFileCopy(partitionName);
+      // StateBuilding (storeManager.buildStateForFileCopy()) will be triggered at the end of FCM's async handler.
     }
 
     @Override

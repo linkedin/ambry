@@ -863,8 +863,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    // TODO: Prefilecopy steps: Handle scenarios for Filceopy -> filecopy, Replication->Filecopy,
-    //  Filceopy -> replication and replication->replication rollout/rollback.
     try {
       // 1. take actions in storage manager (add new replica if necessary)
       PartitionStateChangeListener storageManagerListener =
