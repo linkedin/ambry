@@ -237,10 +237,6 @@ public class AmbryRequests implements RequestAPI {
         case FileMetaDataRequest:
           handleFileMetaDataRequest(networkRequest);
           break;
-
-        case FileChunkResponse:
-          handleFileMetaDataResponse(networkRequest);
-          break;
         case FileChunkRequest:
           handleFileChunkRequest(networkRequest);
           break;
@@ -338,6 +334,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.putBlobSendTimeInMs, metrics.putBlobTotalTimeInMs, totalTimeSpent, receivedRequest.getBlobSize(),
         metrics);
   }
+
+
 
   @Override
   public void handleGetRequest(NetworkRequest request) throws IOException, InterruptedException {
