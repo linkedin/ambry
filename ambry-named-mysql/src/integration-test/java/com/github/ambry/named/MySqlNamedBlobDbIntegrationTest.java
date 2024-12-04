@@ -281,7 +281,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     // put blob Ready and list should return the blob
     v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName, "b1-ready",
         now + TimeUnit.HOURS.toMillis(1));
-    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-ready-other",
+    v1_other = new NamedBlobRecord(account.getName(), container.getName(), blobName + "-other", "b1-readytoo",
         now + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v1, NamedBlobState.READY, true).get();
     NamedBlobRecord v1_get = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
