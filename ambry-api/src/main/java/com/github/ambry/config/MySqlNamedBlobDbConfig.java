@@ -29,46 +29,14 @@ public class MySqlNamedBlobDbConfig {
   public static final String  QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String  STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
-  public static final String LIST_NAMED_BLOBS_SQL = "list.named.blobs.sql";
+  public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
 
   /**
-   * List named-blobs query.
-   * The inner query selects blobs based on the filters, and groups them on blob_name.
-   * In each group, it selects the blob with the highest version.
-   * The outer query filters out blobs that have been deleted, and return the latest blob in each group that is ready.
+   * Option to pick the SQL query to use for listing named blobs.
    */
-  @Config(LIST_NAMED_BLOBS_SQL)
-  public static final String DEFAULT_LIST_NAMED_BLOBS_SQL = ""
-      + " WITH "
-      + "  BlobsAllVersion AS ( "
-      + "   SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
-      + "   FROM named_blobs_v2 "
-      + "   WHERE account_id = ? " // 1
-      + "     AND container_id = ? " // 2
-      + "     AND %1$s " // blob_state = x
-      + "     AND blob_name LIKE ? " // 3
-      + "     AND blob_name >= ? " // 4
-      + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
-      + " ), "
-      + " BlobsMaxVersion AS ( "
-      + "   SELECT blob_name, MAX(version) as version "
-      + "   FROM named_blobs_v2 "
-      + "   WHERE account_id = ? " // 5
-      + "     AND container_id = ? " // 6
-      + "     AND %1$s " // blob_state = x
-      + "     AND blob_name LIKE ? " // 7
-      + "     AND blob_name >= ? " // 8
-      + "   GROUP BY blob_name "
-      + " ) "
-      + " SELECT BlobsAllVersion.* "
-      + " FROM BlobsAllVersion "
-      + " INNER JOIN BlobsMaxVersion "
-      + " ON (BlobsAllVersion.blob_name = BlobsMaxVersion.blob_name "
-      + "   AND BlobsAllVersion.version = BlobsMaxVersion.version) "
-      + " ORDER BY BlobsAllVersion.blob_name "
-      + " LIMIT ?"; // 9
-;
-  public final String listNamedBlobsSQL;
+  @Config(LIST_NAMED_BLOBS_SQL_OPTION)
+  public static final int DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION = 2;
+  public final int listNamedBlobsSQLOption;
 
 
   /**
@@ -134,7 +102,8 @@ public class MySqlNamedBlobDbConfig {
   public final TransactionIsolationLevel transactionIsolationLevel;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
-    this.listNamedBlobsSQL = verifiableProperties.getString(LIST_NAMED_BLOBS_SQL, DEFAULT_LIST_NAMED_BLOBS_SQL);
+    this.listNamedBlobsSQLOption = verifiableProperties.getInt(LIST_NAMED_BLOBS_SQL_OPTION,
+        DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
