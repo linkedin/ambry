@@ -290,8 +290,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     assertEquals(v1_other, v1_other_get);
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(2, page.getEntries().size());
-    assertEquals(v1, page.getEntries().get(0));
-    assertEquals(v1_other, page.getEntries().get(1));
+    assertEquals(v1_get, page.getEntries().get(0));
+    assertEquals(v1_other_get, page.getEntries().get(1));
     time.sleep(100);
 
     // put blob in-progress and list should return the Ready blob
@@ -300,8 +300,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
     page = namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals(2, page.getEntries().size());
-    assertEquals(v1, page.getEntries().get(0));
-    assertEquals(v1_other, page.getEntries().get(1));
+    assertEquals(v1_get, page.getEntries().get(0));
+    assertEquals(v1_other_get, page.getEntries().get(1));
     time.sleep(100);
 
     // update blob and list should return the new blob
