@@ -45,7 +45,7 @@ public class MySqlNamedBlobDbConfig {
       + "   FROM named_blobs_v2 "
       + "   WHERE account_id = ? " // 1
       + "     AND container_id = ? " // 2
-      + "     AND blob_state = %1$s "
+      + "     AND %1$s " // blob_state = x
       + "     AND blob_name LIKE ? " // 3
       + "     AND blob_name >= ? " // 4
       + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
@@ -55,7 +55,7 @@ public class MySqlNamedBlobDbConfig {
       + "   FROM named_blobs_v2 "
       + "   WHERE account_id = ? " // 5
       + "     AND container_id = ? " // 6
-      + "     AND blob_state = %1$s "
+      + "     AND %1$s " // blob_state = x
       + "     AND blob_name LIKE ? " // 7
       + "     AND blob_name >= ? " // 8
       + "   GROUP BY blob_name "
