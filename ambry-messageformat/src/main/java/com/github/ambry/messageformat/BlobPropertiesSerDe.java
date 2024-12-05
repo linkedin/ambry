@@ -72,7 +72,7 @@ public class BlobPropertiesSerDe {
     String filename = version > VERSION_3 ? Utils.readNullableIntString(stream) : null;
     String reservedMetadataBlobId = version > VERSION_4 ? Utils.readNullableIntString(stream) : null;
     return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-        containerId, isEncrypted, null, contentEncoding, filename, reservedMetadataBlobId, null);
+        containerId, isEncrypted, null, contentEncoding, filename, reservedMetadataBlobId);
   }
 
   /**

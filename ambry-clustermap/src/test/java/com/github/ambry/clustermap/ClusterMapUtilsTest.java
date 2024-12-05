@@ -264,7 +264,7 @@ public class ClusterMapUtilsTest {
     // test a simple success case.
     BlobId blobId =
         ClusterMapUtils.reserveMetadataBlobId(partitionClass, partitionsToExclude, reservedMetadataIdMetrics,
-            clusterMap, accountId, containerId, isEncrypted, routerConfig, null);
+            clusterMap, accountId, containerId, isEncrypted, routerConfig);
     assertNotNull(blobId);
     assertEquals(partitionClass, blobId.getPartition().getPartitionClass());
     assertEquals(0, reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.getCount());
@@ -273,7 +273,7 @@ public class ClusterMapUtilsTest {
     // test for non-existent partition class.
     blobId =
         ClusterMapUtils.reserveMetadataBlobId(invalidPartitionClass, partitionsToExclude, reservedMetadataIdMetrics,
-            clusterMap, accountId, containerId, isEncrypted, routerConfig, null);
+            clusterMap, accountId, containerId, isEncrypted, routerConfig);
     assertNotNull(blobId);
     assertNotEquals(partitionClass, blobId.getPartition().getPartitionClass());
     assertEquals(MockClusterMap.DEFAULT_PARTITION_CLASS, blobId.getPartition().getPartitionClass());
@@ -284,7 +284,7 @@ public class ClusterMapUtilsTest {
     List<PartitionId> partitionIdList = clusterMap.getAllPartitionIds(null).stream().map(p -> ((PartitionId) p)).collect(
         Collectors.toList());
     assertNull(ClusterMapUtils.reserveMetadataBlobId(partitionClass, partitionIdList, reservedMetadataIdMetrics,
-        clusterMap, accountId, containerId, isEncrypted, routerConfig, null));
+        clusterMap, accountId, containerId, isEncrypted, routerConfig));
     assertEquals(1, reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.getCount());
     assertEquals(1, reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.getCount());
   }
