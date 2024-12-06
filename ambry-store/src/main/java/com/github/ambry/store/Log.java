@@ -298,6 +298,10 @@ class Log implements Write {
     return segmentsByName.get(name);
   }
 
+
+  LogSegment getActiveSegment() {
+    return activeSegment;
+  }
   /**
    * @return the end offset of the log abstraction.
    */

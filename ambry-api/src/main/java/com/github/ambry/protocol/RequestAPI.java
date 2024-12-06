@@ -90,6 +90,13 @@ public interface RequestAPI {
   void handleReplicaMetadataRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
+   *
+   * @param request
+   * @throws IOException
+   * @throws InterruptedException
+   */
+
+  /**
    * Replicate one specific Blob from a remote host to the local store.
    * @param request The request that contains the remote host information and the blob id to be replicated.
    * @throws IOException if there are I/O errors carrying our the required operation.
@@ -115,5 +122,13 @@ public interface RequestAPI {
    */
   default void handleUndeleteRequest(NetworkRequest request) throws InterruptedException, IOException {
     throw new UnsupportedOperationException("Undelete request not supported on this node");
+  }
+
+  default void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException{
+    throw new UnsupportedOperationException("File Meta Data request not supported on this node");
+  }
+
+  default void handleFileChunkRequest(NetworkRequest request) throws InterruptedException, IOException{
+    throw new UnsupportedOperationException("File Chunk request not supported on this node");
   }
 }

@@ -35,6 +35,8 @@ public interface ReplicaSyncUpManager {
    * @throws InterruptedException
    */
   void waitBootstrapCompleted(String partitionName) throws InterruptedException;
+  void initiateFileCopy(ReplicaId replicaId);
+  void waitForFileCopyCompleted(String partitionName) throws InterruptedException;
 
   /**
    * Update replica lag (in byte) between two replicas (local and peer replica) and check sync-up status.
@@ -63,6 +65,8 @@ public interface ReplicaSyncUpManager {
    * @param replicaId the replica which completes bootstrap.
    */
   void onBootstrapComplete(ReplicaId replicaId);
+
+  void onFileCopyComplete(ReplicaId replicaId);
 
   /**
    * Deactivation on given replica is complete.

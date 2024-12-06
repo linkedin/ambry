@@ -15,6 +15,8 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
+import com.github.ambry.FileCopyManager;
+import com.github.ambry.PrioritisationManager;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
@@ -43,6 +45,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
@@ -223,6 +226,8 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
+      FileCopyConfig fileCopyConfig = new FileCopyConfig(properties);
+
       // verify the configs
       properties.verify();
 
@@ -288,6 +293,7 @@ public class AmbryServer {
             new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, staticClusterManager, nodeId,
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
+
         /**
          * Backup integrity monitor here because vcr does not have code to store to disk. Only server does.
          * DataNodeId -> AmbryDataNode -> AmbryServerDataNode : for helix
@@ -326,6 +332,13 @@ public class AmbryServer {
             new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
+
+        PrioritisationManager prioritisationManager= new PrioritisationManager();
+        FileCopyManager
+            fileCopyManager = new FileCopyManager(prioritisationManager, fileCopyConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+            clusterMap, scheduler, nodeId, networkClientFactory, registry, clusterParticipant);
+        fileCopyManager.start();
+
 
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
         // mismatch in sealed/stopped replica lists that maintained by each participant.

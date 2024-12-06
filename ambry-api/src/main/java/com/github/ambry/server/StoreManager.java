@@ -35,6 +35,12 @@ public interface StoreManager {
   boolean addBlobStore(ReplicaId replica);
 
   /**
+   * Build state after filecopy is completed
+   * @param partitionName the partition id for which state is to be built..
+   */
+  void buildStateForFileCopy(String partitionName);
+
+  /**
    * Remove store from storage manager.
    * @param id the {@link PartitionId} associated with store
    * @return {@code true} if removal succeeds. {@code false} otherwise.
