@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.protocol.FileMetaDataRequest;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.messageformat.BlobProperties;
@@ -48,6 +49,7 @@ import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -670,6 +672,37 @@ public class RequestResponseTest {
           replicaType);
     }
     MessageInfoAndMetadataListSerde.AUTO_VERSION = oldMessageInfoVersion;
+  }
+
+
+  @Test
+  public void doFileMetaDataRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    short requestVersionToUse = 1;
+    FileMetaDataRequest request = new FileMetaDataRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "host3");
+    DataInputStream requestStream = serAndPrepForRead(request, -1, true);
+    FileMetaDataRequest fileMetadataRequestFromBytes = FileMetaDataRequest.readFrom(requestStream, new MockClusterMap());
+    Assert.assertEquals(fileMetadataRequestFromBytes.getHostName(), "host3");
+    Assert.assertEquals(fileMetadataRequestFromBytes.getPartitionId().getId(), 0l);
+    Assert.assertEquals(fileMetadataRequestFromBytes.getPartitionId().toPathString(), "0");
+
+
+    List<LogInfo> logInfoList = new ArrayList<>();
+    List<FileInfo> indexInfoList = new ArrayList<>();
+    indexInfoList.add(new FileInfo("0_8_index", 100));
+    List<FileInfo> bloomInfolist = new ArrayList<>();
+    bloomInfolist.add(new FileInfo("0_1_bloom" ,50));
+
+    FileInfo fileInfo = new FileInfo("0_log", 20);
+    fileInfo.writeTo(ByteBuffer.allocate((int) fileInfo.sizeInBytes()));
+//    logInfoList.add(new LogInfo("0_log", 20, indexInfoList, bloomInfolist));
+//    FileMetaDataResponse response = new FileMetaDataResponse(requestVersionToUse, 111, "id2", 4, logInfoList,  ServerErrorCode.No_Error);
+//    requestStream = serAndPrepForRead(response, -1, false);
+//    FileMetaDataResponse fileMetaDataResponse = FileMetaDataResponse.readFrom(requestStream);
+//    fileMetaDataResponse.getNumberOfLgogfiles();
+
+    FileInfo fileInfo = new FileInfo("g");
+    request.release();
   }
 
   private void doReplicaMetadataRequestTest(short responseVersionToUse, short requestVersionToUse,
