@@ -24,6 +24,7 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.store.BootstrapController;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -864,24 +865,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     try {
-      // 1. take actions in storage manager (add new replica if necessary)
-      PartitionStateChangeListener storageManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-      if (storageManagerListener != null) {
-        storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      // 1. take actions in bootstrap controller
+      PartitionStateChangeListener bootstrapControllerListener =
+            partitionStateChangeListeners.get(StateModelListenerType.BootstrapControllerListener);
+      if (bootstrapControllerListener != null) {
+        bootstrapControllerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
-
-      /**
-       * Should be invoked after storage manager listener to ensure that the replica is added to the store.
-       * Conditional execution based on requirement for File Copy.
-       */
-      PartitionStateChangeListener fileCopyManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
-      if(fileCopyManagerListener != null){
-        fileCopyManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
-        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
-      }
-
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
@@ -894,11 +883,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (statsManagerListener != null) {
         statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
-    } catch (InterruptedException e) {
-      //TODO: Handle the exception more gracefully.
-      logger.error("Bootstrap was interrupted on partition {}", partitionName);
-      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
-      throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;

@@ -15,7 +15,9 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
@@ -109,6 +111,11 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
     throw new UnsupportedOperationException("Method not supported");
   }
 
