@@ -699,11 +699,17 @@ public class StoreConfig {
   @Default("bootstrap_in_progress")
   public final String bootstrapInProgressFile;
 
+  public static final String FILECOPY_FEATURE_ENABLED = "file.copy.feature.enabled";
+  @Config(FILECOPY_FEATURE_ENABLED)
+  @Default("false")
+  public final String fileCopyFeatureEnabled;
+
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
     bootstrapInProgressFile = verifiableProperties.getString(BOOTSTRAP_IN_PROGRESS_FILE, "bootstrap_in_progress");
     fileCopyInProgressFileName = verifiableProperties.getString(FILE_COPY_IN_PROGRESS_FILE_NAME, "file_copy_in_progress");
+    fileCopyFeatureEnabled = verifiableProperties.getString(FILECOPY_FEATURE_ENABLED, "false");
     serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION,
         ServerReplicationMode.class, ServerReplicationMode.BLOB_BASED);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");

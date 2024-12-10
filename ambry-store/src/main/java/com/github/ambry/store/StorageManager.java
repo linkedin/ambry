@@ -81,7 +81,7 @@ public class StorageManager implements StoreManager {
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final List<ClusterParticipant> clusterParticipants;
-  private final ClusterParticipant primaryClusterParticipant;
+  final ClusterParticipant primaryClusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
@@ -446,6 +446,11 @@ public class StorageManager implements StoreManager {
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
   }
 
+  @Override
+  public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
+    return this.primaryClusterParticipant.getPartitionStateChangeListeners();
+  }
+
   /**
    * Return the disk capacity for healthy disks. This capacity is the sum of all healthy disks. The unit
    * is GiB. This disk capacity is the value to report in instance config.
@@ -716,6 +721,27 @@ public class StorageManager implements StoreManager {
      */
     PartitionStateChangeListenerImpl(boolean isPrimaryClusterManagerListener) {
       this.isPrimaryClusterManagerListener = isPrimaryClusterManagerListener;
+    }
+
+    public void foo(String partitionName) {
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      if (replica == null) {
+        logger.error("Replica {} not found in storage manager", partitionName);
+        throw new StateTransitionException("Replica " + partitionName + " not found in storage manager",
+            ReplicaNotFound);
+      }
+      ReplicaId replicaToAdd;
+      boolean replicaAdded = false;
+      // there can be two scenarios:
+      // 1. this is the first time to add new replica onto current node;
+      // 2. last replica addition failed at some point before updating InstanceConfig in Helix
+      // In either case, we should add replica to current node by calling "addBlobStore(ReplicaId replica)"
+      replicaToAdd = clusterMap.getBootstrapReplica(partitionName, currentNode);
+      if (replicaToAdd == null) {
+        logger.error("No new replica found for partition {} in cluster map", partitionName);
+        throw new StateTransitionException(
+            "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
+      }
     }
 
     @Override
