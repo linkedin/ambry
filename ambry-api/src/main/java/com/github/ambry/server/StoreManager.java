@@ -14,12 +14,15 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -106,4 +109,10 @@ public interface StoreManager {
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
+
+  /**
+   * Get all {@link PartitionStateChangeListener} attached to the Store.
+   * @return map of {@link StateModelListenerType} to {@link PartitionStateChangeListener}
+   */
+  Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners();
 }

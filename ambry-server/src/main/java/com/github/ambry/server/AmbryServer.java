@@ -86,6 +86,7 @@ import com.github.ambry.rest.ServerSecurityService;
 import com.github.ambry.rest.ServerSecurityServiceFactory;
 import com.github.ambry.rest.StorageServerNettyFactory;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.store.BootstrapController;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -326,6 +327,15 @@ public class AmbryServer {
             new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
+
+        PrioritisationManager prioritisationManager= new PrioritisationManager();
+        FileCopyManager
+            fileCopyManager = new FileCopyManager(prioritisationManager, fileCopyConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+            clusterMap, scheduler, nodeId, networkClientFactory, registry, clusterParticipant);
+        fileCopyManager.start();
+
+        BootstrapController bootstrapController = new BootstrapController(storageManager, storeConfig, clusterParticipant);
+        bootstrapController.start();
 
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
         // mismatch in sealed/stopped replica lists that maintained by each participant.

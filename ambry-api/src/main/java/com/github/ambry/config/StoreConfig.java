@@ -680,6 +680,12 @@ public class StoreConfig {
   @Config("store.reshuffle.disks.on.reorder")
   @Default("false")
   public final boolean storeReshuffleDisksOnReorder;
+
+  public static final String FILECOPY_FEATURE_ENABLED = "file.copy.feature.enabled";
+  @Config(FILECOPY_FEATURE_ENABLED)
+  @Default("false")
+  public final String fileCopyFeatureEnabled;
+
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
   /**
@@ -707,6 +713,7 @@ public class StoreConfig {
   public final String storeBootstrapInProgressFile;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
+    fileCopyFeatureEnabled = verifiableProperties.getString(FILECOPY_FEATURE_ENABLED, "false");
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
