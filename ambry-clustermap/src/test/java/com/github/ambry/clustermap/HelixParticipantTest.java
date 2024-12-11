@@ -890,7 +890,7 @@ public class HelixParticipantTest {
     helixParticipant.participate( Collections.emptyList(), null, null);
     assertNotNull("PropertyStoreCleanUpTask should be registered",
         helixParticipant.getHelixManager().getStateMachineEngine()
-            .getStateModelFactory(TaskConstants.STATE_MODEL_NAME, PropertyStoreCleanUpTask.COMMAND));
+            .getStateModelFactory(TaskConstants.STATE_MODEL_NAME));
     helixParticipant.close();
 
   }
@@ -910,7 +910,7 @@ public class HelixParticipantTest {
     helixParticipant.participate(Collections.emptyList(), null, null);
     assertNull("PropertyStoreCleanUpTask should not be registered",
         helixParticipant.getHelixManager().getStateMachineEngine()
-            .getStateModelFactory(TaskConstants.STATE_MODEL_NAME, PropertyStoreCleanUpTask.COMMAND));
+            .getStateModelFactory(TaskConstants.STATE_MODEL_NAME));
     helixParticipant.close();
   }
 
