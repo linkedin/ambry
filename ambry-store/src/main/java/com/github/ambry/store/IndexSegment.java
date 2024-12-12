@@ -1414,8 +1414,6 @@ class IndexSegment implements Iterable<IndexEntry> {
           bloomFilter = FilterFactory.deserialize(stream, config.storeBloomFilterMaximumPageCount);
           long crcValue = crcBloom.getValue();
           if (crcValue != stream.readLong()) {
-            //
-            // TODO metrics
             metrics.bloomFilterCRCValidationFailureCount.inc();
             bloomFilter = null;
             throw new IllegalStateException(
