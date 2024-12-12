@@ -17,6 +17,8 @@ package com.github.ambry.config;
 
 import com.github.ambry.named.TransactionIsolationLevel;
 
+import static com.github.ambry.rest.RestUtils.*;
+
 
 public class MySqlNamedBlobDbConfig {
   private static final String PREFIX = "mysql.named.blob.";
@@ -110,7 +112,7 @@ public class MySqlNamedBlobDbConfig {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
-    this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
+    this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
     this.queryStaleDataMaxResults = verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays = verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
     this.dbTransition = verifiableProperties.getBoolean(DB_TRANSITION, false);

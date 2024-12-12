@@ -56,7 +56,6 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static final ObjectMapper xmlMapper = new XmlMapper();
   public static final String PREFIX_PARAM_NAME = "prefix";
   public static final String MAXKEYS_PARAM_NAME = "max-keys";
-  public static final int DEFAULT_MAX_KEY_VALUE = 1000;
   public static final String DELIMITER_PARAM_NAME = "delimiter";
   public static final String ENCODING_TYPE_PARAM_NAME = "encoding-type";
   private final NamedBlobListHandler namedBlobListHandler;
