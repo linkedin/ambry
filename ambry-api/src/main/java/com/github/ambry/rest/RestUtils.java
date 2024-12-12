@@ -70,6 +70,8 @@ public class RestUtils {
   public static final String UPLOAD_ID_QUERY_PARAM = "uploadId";
   public static final String CONTINUE = "100-continue";
   public static final String OBJECT_LOCK_PARAM = "object-lock";
+  // Default number of keys that are returned in named blob or s3 api list response.
+  public static final int DEFAULT_MAX_KEY_VALUE = 1000;
 
   /**
    * prefix for all Ambry specific heaeders
