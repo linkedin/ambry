@@ -122,6 +122,11 @@ abstract public class S3BaseHandler<R> {
         && restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM);
   }
 
+  public static boolean isBatchDelete(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(BATCH_DELETE_QUERY_PARAM);
+  }
+
   /**
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @return {@code True} if it is a completion/abortion of multipart uploads.

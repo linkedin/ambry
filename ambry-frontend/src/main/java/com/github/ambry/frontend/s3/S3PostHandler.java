@@ -31,7 +31,7 @@ public class S3PostHandler extends S3BaseHandler<ReadableStreamChannel> {
   /**
    * Constructs a handler for uploading s3 POST requests.
    */
-  public S3PostHandler(S3MultipartUploadHandler multipartPostHandler) {
+  public S3PostHandler(S3MultipartUploadHandler multipartPostHandler, S3BatchDeleteHandler s3BatchDeleteHandler) {
     this.multipartPostHandler = multipartPostHandler;
   }
 
@@ -48,6 +48,8 @@ public class S3PostHandler extends S3BaseHandler<ReadableStreamChannel> {
     if (S3MultipartUploadHandler.isMultipartCreateUploadRequest(restRequest)
         || S3MultipartUploadHandler.isMultipartCompleteUploadRequest(restRequest)) {
       multipartPostHandler.handle(restRequest, restResponseChannel, callback);
+    } else if (isBatchDelete(restRequest)) {
+      // Placeholder for handling batch delete requests in the future.
     } else {
       // Placeholder for handling any non-multipart S3 POST requests in the future.
       throw new RestServiceException("Unsupported S3 POST request", RestServiceErrorCode.BadRequest);

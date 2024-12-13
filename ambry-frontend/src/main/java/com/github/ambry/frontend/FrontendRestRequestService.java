@@ -18,6 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3BatchDeleteHandler;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
@@ -113,6 +114,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
   private S3DeleteHandler s3DeleteHandler;
+  private S3BatchDeleteHandler s3BatchDeleteHandler;
   private S3ListHandler s3ListHandler;
   private S3PutHandler s3PutHandler;
   private S3HeadHandler s3HeadHandler;
@@ -240,7 +242,8 @@ class FrontendRestRequestService implements RestRequestService {
         new S3MultipartUploadHandler(securityService, frontendMetrics, accountAndContainerInjector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, frontendMetrics);
-    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
+    s3BatchDeleteHandler = new S3BatchDeleteHandler(s3DeleteHandler, frontendMetrics);
+    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, s3BatchDeleteHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
     s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
     s3GetHandler =

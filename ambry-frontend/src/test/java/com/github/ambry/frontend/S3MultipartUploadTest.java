@@ -19,7 +19,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
@@ -49,7 +48,6 @@ import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.router.Router;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
@@ -278,7 +276,7 @@ public class S3MultipartUploadTest {
     s3MultipartUploadHandler = new S3MultipartUploadHandler(securityService, metrics, injector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
 
-    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
+    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, null);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, metrics);
   }
