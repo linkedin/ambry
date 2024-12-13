@@ -78,6 +78,7 @@ public class StoreMetrics {
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public final Counter bloomRebuildOnLoadFailureCount;
+  public final Counter bloomCRCValidationFailureCount;
   public final Counter bloomPersistFailureCount;
   public final Counter mappedSegmentIsLoadedDuringFindCount;
   public final Counter mappedSegmentIsNotLoadedDuringFindCount;
@@ -208,6 +209,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomFalsePositiveCount"));
     bloomRebuildOnLoadFailureCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomRebuildOnLoadFailureCount"));
+    bloomCRCValidationFailureCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomCRCValidationFailureCount"));
     bloomPersistFailureCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPersistFailureCount"));
     mappedSegmentIsLoadedDuringFindCount =
