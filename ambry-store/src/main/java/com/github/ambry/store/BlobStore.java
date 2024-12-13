@@ -28,6 +28,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
+import com.github.ambry.protocol.FileInfo;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.SystemTime;
@@ -40,6 +41,7 @@ import java.io.SequenceInputStream;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -56,6 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1316,6 +1319,24 @@ public class BlobStore implements Store {
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);
+  }
+
+  public List<FileInfo> getSealedLogsAndMetaDataFiles(){
+    List<FileInfo> logSegments = log.getAllLogSegmentNames().stream().filter(segment -> log.getActiveSegment().getName() != segment)
+          .map(segment -> log.getSegment(segment))
+          .map(segment -> new FileInfo(segment.getName().toString(), segment.getView().getFirst().length())).collect(Collectors.toList());
+    return logSegments;
+  }
+
+  public List<FileInfo> getAllIndexSegmentsForALogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
+        .map(file -> new FileInfo(file.getName(), file.length())).collect(
+        Collectors.toList());
+  }
+
+  public List<FileInfo> getAllBloomFiltersForALogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getIndexAndBloomFilterFiles(dataDir, logSegmentName))
+        .map(file -> new FileInfo(file.getName(), file.length())).collect(Collectors.toList());
   }
 
   /**

@@ -453,6 +453,11 @@ public class InMemoryStore implements Store {
   }
 
   @Override
+  public boolean isFileCopyInProgress() {
+    return false;
+  }
+
+  @Override
   public boolean isDecommissionInProgress() {
     throw new UnsupportedOperationException("Method not supported");
   }

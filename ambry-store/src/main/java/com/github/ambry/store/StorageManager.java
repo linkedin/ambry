@@ -530,6 +530,10 @@ public class StorageManager implements StoreManager {
     logger.info("New store is successfully added into StorageManager");
     return true;
   }
+  @Override
+  public void buildStateForFileCopy(String partitionName){
+    // no-op
+  }
 
   /**
    * If a bootstrap replica fails, try to remove all the files and directories associated with it.

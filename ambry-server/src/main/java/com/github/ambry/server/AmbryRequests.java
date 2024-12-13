@@ -234,6 +234,16 @@ public class AmbryRequests implements RequestAPI {
         case ReplicateBlobRequest:
           handleReplicateBlobRequest(networkRequest);
           break;
+        case FileMetaDataRequest:
+          handleFileMetaDataRequest(networkRequest);
+          break;
+
+        case FileChunkResponse:
+          handleFileMetaDataResponse(networkRequest);
+          break;
+        case FileChunkRequest:
+          handleFileChunkRequest(networkRequest);
+          break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
@@ -1670,6 +1680,15 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.undeleteBlobResponseQueueTimeInMs, metrics.undeleteBlobSendTimeInMs,
             metrics.undeleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  @Override
+  public void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
+    //geStore, Call Blob Store APIs here.
+  }
+  @Override
+  public void handleFileChunkRequest(NetworkRequest request) throws InterruptedException, IOException {
+
   }
 
   /**
