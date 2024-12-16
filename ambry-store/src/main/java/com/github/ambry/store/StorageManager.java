@@ -50,6 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,7 +82,7 @@ public class StorageManager implements StoreManager {
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final List<ClusterParticipant> clusterParticipants;
-  private final ClusterParticipant primaryClusterParticipant;
+  final ClusterParticipant primaryClusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
@@ -444,6 +445,22 @@ public class StorageManager implements StoreManager {
   public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
+  }
+
+  @Override
+  public ClusterParticipant getPrimaryClusterParticipant() {
+    return this.primaryClusterParticipant;
+  }
+
+  @Override
+  public boolean isFileExists(PartitionId partitionId, String fileName) {
+    return this.getDiskManager(partitionId).isFileExists(fileName);
+  }
+
+  @Override
+  public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) throws IOException {
+    List<File> result =  this.getDiskManager(partitionId).getFilesForPattern(allLogSegmentFilesPattern);
+    return (null != result && !result.isEmpty());
   }
 
   /**
