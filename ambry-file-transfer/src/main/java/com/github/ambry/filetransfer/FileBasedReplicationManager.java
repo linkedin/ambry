@@ -1,0 +1,90 @@
+package com.github.ambry.filetransfer;
+
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.repliaprioritization.PrioritizationManager;
+import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.StoreKeyFactory;
+import java.io.IOException;
+import java.util.concurrent.ScheduledExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+public class FileBasedReplicationManager {
+
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  protected final PrioritizationManager prioritizationManager;
+
+  //private final FileCopyController fileCopyController;
+
+  private final StoreManager storeManager;
+
+  public FileBasedReplicationManager(PrioritizationManager prioritizationManager, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
+      StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
+      MetricRegistry metricRegistry, ClusterParticipant clusterParticipant) throws InterruptedException {
+    if (clusterParticipant != null) {
+      clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.FileCopyManagerListener,
+          new PartitionStateChangeListenerImpl());
+      logger.info("File Copy Manager's state change listener registered!");
+    }
+    this.prioritizationManager = prioritizationManager;
+    if(!prioritizationManager.isRunning()) {
+      prioritizationManager.start();
+    }
+
+//    fileCopyController = new FileCopyController(prioritizationManager, storeManager);
+//    fileCopyController.start();
+    this.storeManager = storeManager;
+  }
+  public void start() throws InterruptedException, IOException {
+
+  }
+  class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+
+    @Override
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      if(storeManager.getReplica(partitionName) == null){
+        //storeManager.setUpReplica(partitionName);
+      }
+      prioritizationManager.addReplica(partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+
+    }
+
+    @Override
+    public void onPartitionBecomeLeaderFromStandby(String partitionName) {
+
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromLeader(String partitionName) {
+
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+
+    }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+
+    }
+
+    @Override
+    public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+
+    }
+  }
+}

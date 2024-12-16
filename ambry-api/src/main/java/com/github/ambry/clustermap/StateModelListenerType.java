@@ -41,5 +41,11 @@ public enum StateModelListenerType {
    * leadership hand-off occurs. For example, if any replica becomes LEADER from STANDBY, it is supposed to replicate
    * data from VCR nodes. This is part of two-way replication between Ambry and cloud.
    */
-  CloudToStoreReplicationManagerListener
+  CloudToStoreReplicationManagerListener,
+
+  /**
+   * The partition state change listener owned by file copy manager. It takes actions when new replica is added (OFFLINE ->
+   * BOOTSTRAP)
+   */
+  FileCopyManagerListener
 }

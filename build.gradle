@@ -321,6 +321,27 @@ project(':ambry-network') {
     }
 }
 
+project (':ambry-prioritization') {
+    dependencies{
+        compile project(':ambry-api')
+        compile project(':ambry-mysql')
+        compile project(':ambry-commons')
+        compile project(':ambry-store')
+        compile project(':ambry-clustermap')
+
+    }
+}
+
+project (':ambry-file-transfer') {
+    dependencies{
+        compile project(':ambry-api')
+        compile project(':ambry-mysql')
+        compile project(':ambry-commons')
+        compile project(':ambry-store')
+        compile project(':ambry-prioritization')
+    }
+}
+
 project(':ambry-server') {
     dependencies {
         compile project(':ambry-cloud'),
@@ -334,7 +355,9 @@ project(':ambry-server') {
                 project(':ambry-rest'),
                 project(':ambry-account'),
                 project(':ambry-replication'),
-                project(':ambry-mysql')
+                project(':ambry-mysql'),
+                project(':ambry-prioritization'),
+                project(':ambry-file-transfer')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         runtimeOnly "org.apache.logging.log4j:log4j-core:$log4jVersion"
