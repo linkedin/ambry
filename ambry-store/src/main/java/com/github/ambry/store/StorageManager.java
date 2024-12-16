@@ -536,7 +536,11 @@ public class StorageManager implements StoreManager {
     });
   }
 
-
+  /**
+   * Add a new store to the storage manager for file copy based replication post filecopy is completed.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return
+   */
   @Override
   public boolean addBlobStoreForFileCopy(ReplicaId replica) {
     if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
@@ -571,19 +575,22 @@ public class StorageManager implements StoreManager {
     return true;
   }
 
+  /**
+   * Build inmemory state for file copy based replication post filecopy is completed.
+   * @param replica the {@link ReplicaId} of the {@link Store} for which store needs to be built
+   */
   @Override
   public boolean addFileStore(ReplicaId replicaId) {
     //TODO: Implementation To Be added.
     return false;
   }
   public void buildStateForFileCopy(ReplicaId replica){
+    if (replica == null) {
+      logger.error("ReplicaId is null");
+      throw new StateTransitionException("ReplicaId null is not found in clustermap for " + currentNode, ReplicaNotFound);
+    }
     PartitionId partitionId = replica.getPartitionId();
 
-    if (replica == null) {
-      logger.error("No existing replica found for partition {} in partitionNameToReplicaId", partitionId.getId());
-      throw new StateTransitionException(
-          "Existing replica " + partitionId.getId() + " is not found in clustermap for " + currentNode, ReplicaNotFound);
-    }
     if (!addBlobStoreForFileCopy(replica)){
       // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
       // back since addition of store failed.
