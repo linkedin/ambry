@@ -50,6 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -447,8 +448,19 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
-    return this.primaryClusterParticipant.getPartitionStateChangeListeners();
+  public ClusterParticipant getPrimaryClusterParticipant() {
+    return this.primaryClusterParticipant;
+  }
+
+  @Override
+  public boolean isFileExists(PartitionId partitionId, String fileName) {
+    return this.getDiskManager(partitionId).isFileExists(fileName);
+  }
+
+  @Override
+  public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) throws IOException {
+    List<File> result =  this.getDiskManager(partitionId).getFilesForPattern(allLogSegmentFilesPattern);
+    return (null != result && !result.isEmpty());
   }
 
   /**
@@ -721,27 +733,6 @@ public class StorageManager implements StoreManager {
      */
     PartitionStateChangeListenerImpl(boolean isPrimaryClusterManagerListener) {
       this.isPrimaryClusterManagerListener = isPrimaryClusterManagerListener;
-    }
-
-    public void foo(String partitionName) {
-      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
-      if (replica == null) {
-        logger.error("Replica {} not found in storage manager", partitionName);
-        throw new StateTransitionException("Replica " + partitionName + " not found in storage manager",
-            ReplicaNotFound);
-      }
-      ReplicaId replicaToAdd;
-      boolean replicaAdded = false;
-      // there can be two scenarios:
-      // 1. this is the first time to add new replica onto current node;
-      // 2. last replica addition failed at some point before updating InstanceConfig in Helix
-      // In either case, we should add replica to current node by calling "addBlobStore(ReplicaId replica)"
-      replicaToAdd = clusterMap.getBootstrapReplica(partitionName, currentNode);
-      if (replicaToAdd == null) {
-        logger.error("No new replica found for partition {} in cluster map", partitionName);
-        throw new StateTransitionException(
-            "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
-      }
     }
 
     @Override

@@ -24,7 +24,6 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
-import com.github.ambry.store.BootstrapController;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
