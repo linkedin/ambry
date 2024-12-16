@@ -22,9 +22,14 @@ public class FileCopyConfig {
   @Default("1000")
   public final long storeDataFlushIntervalInMbs;
 
+  public static final String File_COPY_META_DATA_FILE_NAME = "file.copy.meta.data.file.name";
+  @Config(File_COPY_META_DATA_FILE_NAME)
+  @Default("sealed_logs_metadata_file")
+  public final String fileCopyMetaDataFileName;
 
 
   public FileCopyConfig(VerifiableProperties verifiableProperties) {
+    fileCopyMetaDataFileName = verifiableProperties.getString(File_COPY_META_DATA_FILE_NAME, "sealed_logs_metadata_file");
     parallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
     numberOfFileCopyThreads = verifiableProperties.getInt(NUMBER_OF_FILE_COPY_THREADS, 4);
     fileChunkTimeoutInMins = verifiableProperties.getInt(FILE_CHUNK_TIMEOUT_IN_MINUTES, 5);

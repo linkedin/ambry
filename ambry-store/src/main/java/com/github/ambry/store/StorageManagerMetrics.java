@@ -34,6 +34,7 @@ public class StorageManagerMetrics {
   public final Histogram diskShutdownTimeMs;
   public final Counter totalStoreStartFailures;
   public final Counter totalStoreShutdownFailures;
+  public final Counter totalFileStoreShutDownFailures;
   public final Counter diskMountPathFailures;
   public final Counter diskDownCount;
   public final Counter resumeDecommissionErrorCount;
@@ -76,6 +77,7 @@ public class StorageManagerMetrics {
     diskShutdownTimeMs = registry.histogram(MetricRegistry.name(DiskManager.class, "DiskShutdownTimeMs"));
     totalStoreStartFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreStartFailures"));
     totalStoreShutdownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreShutdownFailures"));
+    totalFileStoreShutDownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalFileStoreShutDownFailures"));
     diskMountPathFailures = registry.counter(MetricRegistry.name(DiskManager.class, "DiskMountPathFailures"));
     diskDownCount = registry.counter(MetricRegistry.name(DiskManager.class, "DiskDownCount"));
 

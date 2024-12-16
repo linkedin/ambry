@@ -699,6 +699,8 @@ public class StoreConfig {
   @Default("bootstrap_in_progress")
   public final String bootstrapInProgressFile;
 
+
+
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {

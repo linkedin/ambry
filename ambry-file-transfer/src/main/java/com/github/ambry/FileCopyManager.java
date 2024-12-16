@@ -11,6 +11,7 @@ import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyFactory;
 import java.io.IOException;
 import java.util.Map;
@@ -20,19 +21,29 @@ import org.slf4j.LoggerFactory;
 public class FileCopyManager {
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
+  protected final PrioritisationManager prioritisationManager;
+
+  private final FileCopyController fileCopyController;
+
+  private final StoreManager storeManager;
 
   public FileCopyManager(PrioritisationManager prioritisationManager, FileCopyConfig fileCopyConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
-      MetricRegistry metricRegistry, ClusterParticipant clusterParticipant) {
+      MetricRegistry metricRegistry, ClusterParticipant clusterParticipant) throws InterruptedException {
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.FileCopyManagerListener,
           new PartitionStateChangeListenerImpl());
       logger.info("File Copy Manager's state change listener registered!");
     }
+    this.prioritisationManager = prioritisationManager;
     if(!prioritisationManager.isRunning()) {
       prioritisationManager.start();
     }
+
+    fileCopyController = new FileCopyController(prioritisationManager, storeManager);
+    fileCopyController.start();
+    this.storeManager = storeManager;
   }
   public void start() throws InterruptedException, IOException {
 
@@ -41,6 +52,10 @@ public class FileCopyManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      if(storeManager.getReplica(partitionName) == null){
+        storeManager.setUpReplica(partitionName);
+      }
+      prioritisationManager.addReplica(partitionName);
       // StateBuilding (storeManager.buildStateForFileCopy()) will be triggered at the end of FCM's async handler.
     }
 

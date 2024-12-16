@@ -3,18 +3,21 @@ package com.github.ambry;
 import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 
 public class PrioritisationManager {
   private Map<String, String> diskToReplicaQueue;
 
+  private final List<String> listOfDisks;
   private boolean running;
   public PrioritisationManager() {
     diskToReplicaQueue = new HashMap<>();
     running = false;
-    // Constructor
+    listOfDisks = new ArrayList<>();
   }
 
   public void start() {
@@ -48,6 +51,10 @@ public class PrioritisationManager {
 
   public void updatePartitionResult() {
     // Update the result of a task in the PrioritisationManager
+  }
+
+  public List<String> getListOfDisks(){
+   return  listOfDisks;
   }
 
   public String getPartitionForDisk(DiskId diskId){

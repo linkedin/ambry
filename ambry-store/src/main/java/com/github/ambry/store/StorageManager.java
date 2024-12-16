@@ -361,6 +361,12 @@ public class StorageManager implements StoreManager {
     return diskManager != null ? diskManager.getStore(id, skipStateCheck) : null;
   }
 
+
+  public FileStore getFileStore(PartitionId id){
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null ? diskManager.getFileStore(id) : null;
+  }
+
   /**
    * True is the replica is on a failed disk
    * @param replicaId
@@ -514,6 +520,7 @@ public class StorageManager implements StoreManager {
     });
   }
 
+
   @Override
   public boolean addBlobStore(ReplicaId replica) {
     if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
@@ -530,6 +537,46 @@ public class StorageManager implements StoreManager {
     logger.info("New store is successfully added into StorageManager");
     return true;
   }
+
+  @Override
+  public boolean addFileStore(ReplicaId replicaId) {
+    return false;
+  }
+
+  @Override
+  public void setUpReplica(String partitionName) {
+    // check if partition exists on current node
+    ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+    Store store;
+    if (replica == null) {
+      ReplicaId replicaToAdd;
+      boolean replicaAdded = false;
+      do {
+        // there can be two scenarios:
+        // 1. this is the first time to add new replica onto current node;
+        // 2. last replica addition failed at some point before updating InstanceConfig in Helix
+        // In either case, we should add replica to current node by calling "addBlobStore(ReplicaId replica)"
+        replicaToAdd = clusterMap.getBootstrapReplica(partitionName, currentNode);
+        if (replicaToAdd == null) {
+          logger.error("No new replica found for partition {} in cluster map", partitionName);
+          throw new StateTransitionException(
+              "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
+        }
+        // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
+        // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
+        // at some point). Then a brand new store associated with this replica should be created and started.
+        if (!addFileStore(replicaToAdd)) {
+          // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+          // back since addition of store failed.
+          replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
+
+          logger.info("Failed to add store {} at location {}. Retrying bootstrapping replica at different location",
+                partitionName, replicaToAdd.getReplicaPath());
+          tryRemoveFailedBootstrapBlobStore(replicaToAdd);
+          }
+        } else {
+  }
+
   @Override
   public void buildStateForFileCopy(String partitionName){
     // no-op
