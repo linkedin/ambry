@@ -270,6 +270,14 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
+  /**
+   * Helper util to add blobs to a given Store
+   * @param store store to add blob to.
+   * @param size size in bytes of the randomized blob
+   * @param expiresAtMs expiry in milliseconds to be set for the blob
+   * @return {@link MockId} the mock id of the blob added
+   * @throws StoreException
+   */
   public MockId addRandomBlobToStore(Store store, long size, long expiresAtMs) throws StoreException {
     final Random random = new Random();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -288,6 +296,7 @@ public class StorageManagerTest {
 
   /**
    * Test buildStateForFileCopy with newly created {@link ReplicaId}.
+   * @throws Exception
    */
   @Test
   public void buildStateForFileCopyTest() throws Exception {
@@ -323,6 +332,66 @@ public class StorageManagerTest {
     store = dm.getStore(newPartition, false);
     assertNotNull(store.get(Collections.singletonList(id1), EnumSet.noneOf(StoreGetOptions.class)));
     assertNotNull(store.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class)));
+  }
+
+
+  /**
+   * Test buildStateForFileCopy with newly created {@link ReplicaId} for failure to add an already started blob store.
+   * @throws Exception
+   */
+  @Test
+  public void buildStateForFileCopyFailureToAddBlobStoreTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    int newMountPathIndex = 3;
+    // add new MountPath to local node
+    File f = File.createTempFile("ambry", ".tmp");
+    File mountFile =
+        new File(f.getParent(), "mountpathfile" + MockClusterMap.PLAIN_TEXT_PORT_START_NUMBER + newMountPathIndex);
+    MockClusterMap.deleteFileOrDirectory(mountFile);
+    assertTrue("Couldn't create mount path directory", mountFile.mkdir());
+    localNode.addMountPaths(Collections.singletonList(mountFile.getAbsolutePath()));
+    int newPartitionId = 803;
+    PartitionId newPartition =
+        new MockPartitionId(newPartitionId, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), newMountPathIndex);
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
+    // test add store onto a new disk, which should succeed
+    assertTrue("Add new store should succeed", storageManager.addBlobStore(newPartition.getReplicaIds().get(0)));
+    assertNotNull("The store shouldn't be null because new store is successfully added",
+        storageManager.getStore(newPartition, false));
+    // This should fail since the newPartition already has store started.
+    assertFalse("Add store which is already existing should fail", storageManager.addBlobStoreForFileCopy(newPartition.getReplicaIds().get(0)));
+  }
+
+  /**
+   * Test buildStateForFileCopy with {@link ReplicaId} as null.
+   * @throws Exception
+   */
+  @Test(expected = StateTransitionException.class)
+  public void buildStateForFileCopyReplicaNullFailureTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    int newMountPathIndex = 3;
+    // add new MountPath to local node
+    File f = File.createTempFile("ambry", ".tmp");
+    File mountFile =
+        new File(f.getParent(), "mountpathfile" + MockClusterMap.PLAIN_TEXT_PORT_START_NUMBER + newMountPathIndex);
+    MockClusterMap.deleteFileOrDirectory(mountFile);
+    assertTrue("Couldn't create mount path directory", mountFile.mkdir());
+    localNode.addMountPaths(Collections.singletonList(mountFile.getAbsolutePath()));
+    int newPartitionId = 803;
+    PartitionId newPartition =
+        new MockPartitionId(newPartitionId, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), newMountPathIndex);
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
+    // test add store onto a new disk, which should succeed
+    assertTrue("Add new store should succeed", storageManager.addBlobStore(newPartition.getReplicaIds().get(0)));
+    assertNotNull("The store shouldn't be null because new store is successfully added",
+        storageManager.getStore(newPartition, false));
+    // This should fail since the newPartition already has store started.
+    assertFalse("Add store which is already existing should fail", storageManager.addBlobStoreForFileCopy(newPartition.getReplicaIds().get(0)));
+    storageManager.buildStateForFileCopy(null);
   }
 
 
