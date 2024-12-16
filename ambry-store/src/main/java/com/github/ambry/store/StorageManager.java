@@ -536,6 +536,24 @@ public class StorageManager implements StoreManager {
     });
   }
 
+
+  @Override
+  public boolean addBlobStoreForFileCopy(ReplicaId replica) {
+    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
+      return false;
+    }
+    DiskManager diskManager = addDisk(replica.getDiskId());
+    if (diskManager == null || !diskManager.addBlobStoreForFileCopy(replica)) {
+      logger.error("Failed to add new store into DiskManager");
+      return false;
+    }
+    partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+    partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
+    logger.info("New store is successfully added into StorageManager");
+    return true;
+  }
+
   @Override
   public boolean addBlobStore(ReplicaId replica) {
     if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
@@ -557,6 +575,38 @@ public class StorageManager implements StoreManager {
   public boolean addFileStore(ReplicaId replicaId) {
     //TODO: Implementation To Be added.
     return false;
+  }
+  public void buildStateForFileCopy(ReplicaId replica){
+    PartitionId partitionId = replica.getPartitionId();
+
+    if (replica == null) {
+      logger.error("No existing replica found for partition {} in partitionNameToReplicaId", partitionId.getId());
+      throw new StateTransitionException(
+          "Existing replica " + partitionId.getId() + " is not found in clustermap for " + currentNode, ReplicaNotFound);
+    }
+    if (!addBlobStoreForFileCopy(replica)){
+      // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+      // back since addition of store failed.
+      replica.getDiskId().increaseAvailableSpaceInBytes(replica.getCapacityInBytes());
+      if (!clusterMap.isDataNodeInFullAutoMode(currentNode)) {
+        logger.error("Failed to add store for replica {} into storage manager", partitionId.getId());
+        throw new StateTransitionException("Failed to add store for replica " + partitionId.getId() + " into storage manager",
+            ReplicaOperationFailure);
+      } else {
+        logger.info("Failed to add store for replica {} at location {}. Retrying bootstrapping replica at different location",
+            partitionId.getId(), replica.getReplicaPath());
+        tryRemoveFailedBootstrapBlobStore(replica);
+      }
+    }
+    Store store = getStore(replica.getPartitionId(), false);
+    // Only update store state if this is a state transition for primary participant. Since replication Manager
+    // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
+    // stuck in BOOTSTRAP if this is updated by second participant listener too
+    ReplicaState currentState = store.getCurrentState();
+    if (currentState != ReplicaState.LEADER && currentState != ReplicaState.STANDBY) {
+      // Only set the current state to BOOTSTRAP when it's not LEADER or STANDBY
+      store.setCurrentState(ReplicaState.BOOTSTRAP);
+    }
   }
 
   /**
