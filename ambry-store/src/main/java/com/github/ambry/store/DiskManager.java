@@ -51,6 +51,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -773,6 +774,15 @@ public class DiskManager {
 
   public DiskHealthStatus getDiskHealthStatus() {
     return diskHealthStatus;
+  }
+
+  public boolean isFileExists(String fileName) {
+    String filePath = this.disk.getMountPath() + File.separator + fileName;
+    return new File(filePath).exists();
+  }
+
+  public List<File> getFilesForPattern(Pattern allLogSegmentFilesPattern) throws IOException {
+    return Utils.getFilesForPattern(this.disk.getMountPath(), allLogSegmentFilesPattern);
   }
 
   /**

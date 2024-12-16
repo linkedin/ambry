@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,7 +113,17 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
+  public ClusterParticipant getPrimaryClusterParticipant() {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean isFileExists(PartitionId partitionId, String fileName) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

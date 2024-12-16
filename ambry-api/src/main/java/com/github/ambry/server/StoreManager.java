@@ -13,16 +13,15 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.regex.Pattern;
 
 
 /**
@@ -111,8 +110,16 @@ public interface StoreManager {
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
 
   /**
-   * Get all {@link PartitionStateChangeListener} attached to the Store.
-   * @return map of {@link StateModelListenerType} to {@link PartitionStateChangeListener}
+   * Get the primary {@link ClusterParticipant} for the cluster.
+   * @return the primary {@link ClusterParticipant} for the cluster.
    */
-  Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners();
+  ClusterParticipant getPrimaryClusterParticipant();
+
+  /**
+   * Check if a file exists in the store directory.
+   * @return {@code true} if the file exists, {@code false} otherwise.
+   */
+  boolean isFileExists(PartitionId partitionId, String fileName);
+
+  boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) throws IOException;
 }

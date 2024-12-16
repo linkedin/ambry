@@ -1,26 +1,32 @@
 package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.utils.Utils;
-import java.io.File;
 import java.io.IOException;
 import java.util.Map;
+import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
 
 public class BootstrapController {
 
   static final String BOOTSTRAP_IN_PROGRESS_FILE_NAME = "bootstrap_in_progress";
   static final String FILECOPY_IN_PROGRESS_FILE_NAME = "filecopy_in_progress";
-  static final String FILECOPY_METADATA_FILE_NAME = "filecopy_metadata";
+  private final Pattern allLogSegmentFilesPattern = Pattern.compile("\\d+\\.log");
   private final StoreConfig storeConfig;
+  private final StoreManager storeManager;
+  private final PartitionStateChangeListener storageManagerListener;
+  private final PartitionStateChangeListener fileCopyManagerListener;
 
   private static final Logger logger = LoggerFactory.getLogger(BootstrapController.class);
 
@@ -29,9 +35,20 @@ public class BootstrapController {
       @Nonnull StoreConfig storeConfig,
       @Nonnull ClusterParticipant clusterParticipant) {
     this.storeConfig = storeConfig;
+    this.storeManager = storeManager;
 
     clusterParticipant.registerPartitionStateChangeListener(
-        StateModelListenerType.BootstrapControllerListener, new BootstrapControllerImpl(storeManager));
+        StateModelListenerType.BootstrapControllerListener, new BootstrapControllerImpl());
+
+    Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
+        storeManager.getPrimaryClusterParticipant().getPartitionStateChangeListeners();
+
+    this.storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+
+    this.fileCopyManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
+
     logger.info("Bootstrap Controller's state change listener registered!");
   }
 
@@ -40,26 +57,16 @@ public class BootstrapController {
 
   class BootstrapControllerImpl implements PartitionStateChangeListener {
 
-    private final StoreManager storeManager;
-
-    public BootstrapControllerImpl(StoreManager storeManager) {
-      this.storeManager = storeManager;
-    }
-
     @Override
     public void onPartitionBecomeBootstrapFromOffline(@Nonnull String partitionName) {
-      Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
-          this.storeManager.getPartitionStateChangeListeners();
-
-      PartitionStateChangeListener storageManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-
-      PartitionStateChangeListener fileCopyManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
-
-      ReplicaId replica = this.storeManager.getReplica(partitionName);
+      ReplicaId replica = storeManager.getReplica(partitionName);
       PartitionStateChangeListener listenerToInvoke = null;
 
+      /**
+       * This algo is based on this design doc :-
+       * https://docs.google.com/document/d/1u57C0BU8oMMuMHC6Fh_B-6R612EaQb2AxtnBDlN6sAs
+       * The decision branches can be better understood with the doc.
+       */
       if (null == replica) {
         // there can be two scenarios:
         // 1. this is the first time to add new replica onto current node;
@@ -67,40 +74,49 @@ public class BootstrapController {
         if (isFileCopyFeatureEnabled()) {
           // "New partition -> FC"
           listenerToInvoke = fileCopyManagerListener;
+          logStateChange("New partition -> FC", partitionName);
         } else {
           // "New partition -> R"
           listenerToInvoke = storageManagerListener;
+          logStateChange("New partition -> R", partitionName);
         }
       } else {
         if (isFileCopyFeatureEnabled()) {
-          if (isFileExists(replica.getReplicaPath(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
+          if (isFileExists(replica.getPartitionId(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
             // R.Incomplete -> FC
             listenerToInvoke = storageManagerListener;
-          } else if (isAnyLogSegmentExists()) {
-            if (isFileExists(replica.getReplicaPath(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
+            logStateChange("R.Incomplete -> FC", partitionName);
+          } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
+            if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
               // FC.Incomplete -> FC
               listenerToInvoke = fileCopyManagerListener;
+              logStateChange("FC.Incomplete -> FC", partitionName);
             } else {
               // R.complete -> FC or FC.complete -> FC
               listenerToInvoke = storageManagerListener;
+              logStateChange("R.complete -> FC or FC.complete -> FC", partitionName);
             }
           }
         } else {
-          if (isFileExists(replica.getReplicaPath(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
+          if (isFileExists(replica.getPartitionId(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
             // R.Incomplete -> R
             listenerToInvoke = storageManagerListener;
-          } else if (isAnyLogSegmentExists()) {
-            if (isFileExists(replica.getReplicaPath(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
+            logStateChange("R.Incomplete -> R", partitionName);
+          } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
+            if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
               // FC.Incomplete -> R
               try {
-                deleteFileCopyData(replica.getReplicaPath());
-              } catch (IOException e) {
-                throw new RuntimeException(e);
+                deleteFileCopyData(replica.getPartitionId());
+              } catch (IOException | StoreException e) {
+                String message = "Failed `deleteFileCopyData` step for " + partitionName;
+                throw new StateTransitionException(message, BootstrapControllerFailure);
               }
               listenerToInvoke = storageManagerListener;
+              logStateChange("FC.Incomplete -> R", partitionName);
             } else {
               // R.complete -> R or FC.complete -> R
               listenerToInvoke = storageManagerListener;
+              logStateChange("R.complete -> R or FC.complete -> R", partitionName);
             }
           }
         }
@@ -108,6 +124,18 @@ public class BootstrapController {
 
       assert listenerToInvoke != null;
       listenerToInvoke.onPartitionBecomeBootstrapFromOffline(partitionName);
+      if (listenerToInvoke == fileCopyManagerListener) {
+        try {
+          storeManager.getPrimaryClusterParticipant().getReplicaSyncUpManager().waitForFileCopyCompleted(partitionName);
+        } catch (InterruptedException e) {
+          String message = "Failed `waitForFileCopyCompleted` step for " + partitionName;
+          throw new StateTransitionException(message, BootstrapControllerFailure);
+        }
+      }
+    }
+
+    private void logStateChange(String stateChange, String partitionName) {
+      logger.info("BootstrapController State change `{}` for partition `{}`", stateChange, partitionName);
     }
 
     @Override
@@ -145,23 +173,25 @@ public class BootstrapController {
     }
 
     private boolean isFileExists(
-        @Nonnull String replicaPath, @Nonnull String fileName) {
-      return new File(replicaPath, fileName).exists();
+        @Nonnull PartitionId partitionId, @Nonnull String fileName) {
+      return storeManager.isFileExists(partitionId, fileName);
     }
 
-    private boolean isAnyLogSegmentExists() {
-      // TODO: Implement this method
-      return false;
+    private boolean isAnyLogSegmentExists(@Nonnull PartitionId partitionId) {
+      try {
+        return storeManager.isFilesExistForPattern(partitionId, allLogSegmentFilesPattern);
+      } catch (IOException e) {
+        String message = "Failed `isFilesExistForPattern` step for " + partitionId;
+        throw new StateTransitionException(message, BootstrapControllerFailure);
+      }
     }
 
-    private void deleteFileCopyData(@Nonnull String replicaPath) throws IOException {
-      File fileCopyInProgressFile = new File(replicaPath, FILECOPY_IN_PROGRESS_FILE_NAME);
-      Utils.deleteFileOrDirectory(fileCopyInProgressFile);
-
-      File fileCopyMetaDataFile = new File(replicaPath, FILECOPY_METADATA_FILE_NAME);
-      Utils.deleteFileOrDirectory(fileCopyMetaDataFile);
-
-      // TODO: Delete log segments
+    private void deleteFileCopyData(@Nonnull PartitionId partitionId) throws IOException, StoreException {
+      // Currently we’ll delete all datasets by removing this partition's BlobStore
+      // An optimisation could be explored to only delete incomplete datasets
+      // More about this can be found here :-
+      // https://docs.google.com/document/d/1u57C0BU8oMMuMHC6Fh_B-6R612EaQb2AxtnBDlN6sAs/edit?disco=AAABZyj2rHo
+      storeManager.removeBlobStore(partitionId);
     }
   }
 }
