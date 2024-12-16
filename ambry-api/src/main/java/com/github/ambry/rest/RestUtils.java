@@ -43,7 +43,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
@@ -599,7 +598,7 @@ public class RestUtils {
     // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
     boolean isPrivate = !container.isCacheable();
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
-        container.isEncrypted(), externalAssetTag, contentEncoding, filename, reservedMetadataBlobid, UUID.randomUUID().toString());
+        container.isEncrypted(), externalAssetTag, contentEncoding, filename, reservedMetadataBlobid);
   }
 
   /**
