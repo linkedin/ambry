@@ -14,7 +14,6 @@
 package com.github.ambry.tools.perf.serverperf;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
@@ -34,34 +33,46 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
+/**
+ * Acts as a Bounded blocking queue for Network requests and response
+ * Adds the submitted requests to a queue
+ * Polls the submitted requests and submits to network clients
+ * Polls the network clients and adds the responses to a queue
+ * This response queue is used for polling and processing the responses
+ * Makes sure that maximum {@code maxParallelRequest} requests are getting processed.
+ */
 public class ServerPerfNetworkQueue extends Thread {
-  Http2NetworkClient networkClient;
+  private final List<Http2NetworkClient> networkClients;
+  private int clientIndex;
+  private final ConcurrentLinkedQueue<RequestInfo> requestInfos;
+  private final ConcurrentLinkedQueue<ResponseInfo> responseInfos;
+  private final int pollTimeout;
+  private final Semaphore maxParallelRequest;
+  private final ExecutorService executorService;
 
-  List<Http2NetworkClient> networkClients;
+  private static final Logger logger = LoggerFactory.getLogger(ServerPerfNetworkQueue.class);
 
-  int clientIndex;
-  ConcurrentLinkedQueue<RequestInfo> requestInfos;
-
-  ConcurrentLinkedQueue<ResponseInfo> responseInfos;
-
-  DataNodeId dataNodeId;
-  int pollTimeout;
-
-  Semaphore maxParallelRequest;
-  ExecutorService executorService;
-
+  /**
+   *
+   * @param verifiableProperties properties
+   * @param clusterMap clustermap
+   * @param time  ambry Time
+   * @param maxParallelism maximum parallel requests that can be processed
+   * @throws Exception exception
+   */
   ServerPerfNetworkQueue(VerifiableProperties verifiableProperties, ClusterMap clusterMap, Time time,
-      int maxParallelism, DataNodeId dataNodeId) throws Exception {
+      int maxParallelism, int clientCount) throws Exception {
     SSLFactory sslFactory = new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
     Http2ClientMetrics metrics = new Http2ClientMetrics(clusterMap.getMetricRegistry());
     Http2ClientConfig http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     Http2NetworkClientFactory networkClientFactory =
         new Http2NetworkClientFactory(metrics, http2ClientConfig, sslFactory, time);
-    networkClient = networkClientFactory.getNetworkClient();
     networkClients = new ArrayList<>();
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < clientCount; i++) {
       networkClients.add(networkClientFactory.getNetworkClient());
     }
     clientIndex = 0;
@@ -70,14 +81,23 @@ public class ServerPerfNetworkQueue extends Thread {
     pollTimeout = 0;
     maxParallelRequest = new Semaphore(maxParallelism);
     executorService = Executors.newFixedThreadPool(maxParallelism);
-    this.dataNodeId = dataNodeId;
   }
 
+  /**
+   * Adds the request info to the queue and ready for polling
+   * @param requestInfo request info
+   * @throws Exception
+   */
   void submit(RequestInfo requestInfo) throws Exception {
     maxParallelRequest.acquire();
     requestInfos.offer(requestInfo);
   }
 
+  /**
+   * Checks and processes if any responses are in the queue
+   * @param responseInfoProcessor processor
+   * @throws Exception
+   */
   void poll(ResponseInfoProcessor responseInfoProcessor) throws Exception {
     ResponseInfo responseInfo = responseInfos.poll();
     if (responseInfo == null) {
@@ -87,17 +107,23 @@ public class ServerPerfNetworkQueue extends Thread {
       try {
         responseInfoProcessor.process(responseInfo);
       } catch (Exception e) {
-        //do n
+        logger.error("Encountered error while processing", e);
       } finally {
         maxParallelRequest.release();
       }
     }));
   }
 
+  /**
+   * This keeps running continuously
+   * Polls the request queue and submits the requests to network clients
+   * in round robin way
+   * Polls all network clients for responses that have arrived and
+   * adds these to the queue
+   */
   @Override
   public void run() {
     while (true) {
-
       List<ResponseInfo> responseInfos = new ArrayList<>();
       networkClients.forEach(networkClient -> {
         responseInfos.addAll(networkClient.sendAndPoll(Collections.emptyList(), new HashSet<>(), pollTimeout));

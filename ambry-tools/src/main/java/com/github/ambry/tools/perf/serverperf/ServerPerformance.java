@@ -117,8 +117,7 @@ public class ServerPerformance {
         config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
 
     networkQueue =
-        new ServerPerfNetworkQueue(verifiableProperties, clusterMap, new SystemTime(), config.maxParallelRequests,
-            clusterMap.getDataNodeId(config.hostname, config.port));
+        new ServerPerfNetworkQueue(verifiableProperties, clusterMap, new SystemTime(), config.maxParallelRequests, 10);
     networkQueue.start();
   }
 
