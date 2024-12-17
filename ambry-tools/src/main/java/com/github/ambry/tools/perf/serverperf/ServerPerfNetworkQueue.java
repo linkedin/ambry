@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * Polls the submitted requests and submits to network clients
  * Polls the network clients and adds the responses to a queue
  * This response queue is used for polling and processing the responses
- * Makes sure that maximum {@code maxParallelRequest} requests are getting processed.
+ * Makes sure that maximum {@link #maxParallelRequest} requests are getting processed.
  */
 public class ServerPerfNetworkQueue extends Thread {
   private final List<Http2NetworkClient> networkClients;
