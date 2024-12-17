@@ -28,6 +28,13 @@ import java.util.List;
 public interface StoreManager {
 
   /**
+   * Add a new BlobStore for FileCopy based replication with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStoreForFileCopy(ReplicaId replica);
+
+  /**
    * Add a new BlobStore with given {@link ReplicaId}.
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
    * @return {@code true} if adding store was successful. {@code false} if not.
@@ -36,9 +43,9 @@ public interface StoreManager {
 
   /**
    * Build state after filecopy is completed
-   * @param partitionName the partition id for which state is to be built..
+   * @param replica the {@link ReplicaId} of the {@link Store} for which store needs to be built
    */
-  void buildStateForFileCopy(String partitionName);
+  void buildStateForFileCopy(ReplicaId replica);
 
   /**
    * Remove store from storage manager.
