@@ -317,6 +317,10 @@ public class S3MessagePayload {
 
     public long getSize() { return size; }
 
+    public String getLastModified() {
+      return lastModified;
+    }
+
     @Override
     public String toString() {
       return "Key=" + key + ", " + "LastModified=" + lastModified + ", " + "Size=" + size;

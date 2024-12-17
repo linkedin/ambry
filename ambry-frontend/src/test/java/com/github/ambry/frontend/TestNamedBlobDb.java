@@ -266,6 +266,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   private void putInternal(NamedBlobRecord record, NamedBlobState state, long deleteTs) {
+    record.setModifiedTimeMs(time.milliseconds());
     Pair<NamedBlobState, Long> stateAndDeleteTs = new Pair<>(state, deleteTs);
     Pair<NamedBlobRecord, Pair<NamedBlobState, Long>> newRecord = new Pair<>(record, stateAndDeleteTs);
     List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList =

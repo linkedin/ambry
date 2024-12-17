@@ -29,7 +29,7 @@ public class NamedBlobRecord {
   private final long version;
   private final String blobId;
   private final long blobSize;
-  private final long modifiedTimeMs;
+  private long modifiedTimeMs;
 
   /**
    * @param accountName the account name.
@@ -171,5 +171,13 @@ public class NamedBlobRecord {
    */
   public long getModifiedTimeMs() {
     return modifiedTimeMs;
+  }
+
+  /**
+   * Set the modified timestamp of this blob. Exposed for testing
+   * @param modifiedTimeMs the modified timestamp to set in milliseconds since epoch
+   */
+  public void setModifiedTimeMs(long modifiedTimeMs) {
+    this.modifiedTimeMs = modifiedTimeMs;
   }
 }
