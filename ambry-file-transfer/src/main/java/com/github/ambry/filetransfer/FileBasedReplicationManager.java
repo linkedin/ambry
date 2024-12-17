@@ -23,7 +23,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClientFactory;
-import com.github.ambry.repliaprioritization.PrioritizationManager;
+import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.StoreKeyFactory;
 import java.io.IOException;

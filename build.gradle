@@ -324,7 +324,6 @@ project(':ambry-network') {
 project (':ambry-prioritization') {
     dependencies{
         compile project(':ambry-api')
-        compile project(':ambry-mysql')
         compile project(':ambry-commons')
         compile project(':ambry-store')
         compile project(':ambry-clustermap')
@@ -335,7 +334,6 @@ project (':ambry-prioritization') {
 project (':ambry-file-transfer') {
     dependencies{
         compile project(':ambry-api')
-        compile project(':ambry-mysql')
         compile project(':ambry-commons')
         compile project(':ambry-store')
         compile project(':ambry-prioritization')

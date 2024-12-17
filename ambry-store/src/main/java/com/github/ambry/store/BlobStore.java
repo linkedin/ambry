@@ -1183,7 +1183,7 @@ public class BlobStore implements Store {
 
   @Override
   public boolean isBootstrapInProgress() {
-    return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
+    return (new File(dataDir, config.storeBootstrapInProgressFile)).exists();
   }
 
   @Override
@@ -1195,7 +1195,7 @@ public class BlobStore implements Store {
 
   @Override
   public void completeBootstrap() {
-    File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
+    File bootstrapFile = new File(dataDir, config.storeBootstrapInProgressFile);
     try {
       // the method will check if file exists or not
       Utils.deleteFileOrDirectory(bootstrapFile);

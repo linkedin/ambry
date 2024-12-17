@@ -11,12 +11,13 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.repliaprioritization;
+package com.github.ambry.replica.prioritization;
 
 import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,11 +34,11 @@ public class PrioritizationManager {
 
   public void start() {
     running = true;
+    // Start the PrioritisationManager
   }
 
   public boolean isRunning(){
     return running;
-    // Start the PrioritisationManager
   }
 
   public void shutdown() {
@@ -65,7 +66,7 @@ public class PrioritizationManager {
   }
 
   public List<DiskId> getListOfDisks(){
-    return  listOfDisks;
+    return  Collections.unmodifiableList(listOfDisks);
   }
 
   public String getPartitionForDisk(DiskId diskId){
