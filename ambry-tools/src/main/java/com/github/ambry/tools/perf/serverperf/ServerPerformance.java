@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StaticClusterAgentsFactory;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
@@ -71,7 +72,7 @@ public class ServerPerformance {
   public static class ServerPerformanceConfig {
     /**
      * The path to the hardware layout file. Needed if using
-     * {@link com.github.ambry.clustermap.StaticClusterAgentsFactory}.
+     * {@link StaticClusterAgentsFactory}.
      */
     @Config("hardware.layout.file.path")
     @Default("")
@@ -79,7 +80,7 @@ public class ServerPerformance {
 
     /**
      * The path to the partition layout file. Needed if using
-     * {@link com.github.ambry.clustermap.StaticClusterAgentsFactory}.
+     * {@link StaticClusterAgentsFactory}.
      */
     @Config("partition.layout.file.path")
     @Default("")
@@ -230,17 +231,9 @@ public class ServerPerformance {
           partitionErrorCode == ServerErrorCode.No_Error ? getResponse.getError() : partitionErrorCode;
       InputStream stream = errorCode == ServerErrorCode.No_Error ? getResponse.getInputStream() : null;
       BlobData blobData = stream != null ? MessageFormatRecord.deserializeBlob(stream) : null;
-      long blobDataSize = blobData.getSize();
-      byte[] outputBuffer = new byte[(int) blobData.getSize()];
-      ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
-      ByteBuf buffer = blobData.content();
-      try {
-        buffer.readBytes(streamOut, (int) blobDataSize);
-      } finally {
-        buffer.release();
-        responseInfo.release();
-        getResponse.release();
-      }
+      long blobDataSize = blobData != null ? blobData.getSize() : 0;
+      responseInfo.release();
+      getResponse.release();
       logger.info("blob id {} blob size {}  correlation id {}",
           getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getStoreKey(), blobDataSize,
           responseInfo.getRequestInfo().getRequest().getCorrelationId());
