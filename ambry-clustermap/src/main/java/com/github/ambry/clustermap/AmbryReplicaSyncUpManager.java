@@ -41,8 +41,6 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private static final Logger logger = LoggerFactory.getLogger(AmbryReplicaSyncUpManager.class);
   private final ConcurrentHashMap<String, CountDownLatch> partitionToBootstrapLatch = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, CountDownLatch> partitionToFileCopyLatch = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, Boolean> partitionToFileCopySuccessLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, CountDownLatch> partitionToDeactivationLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, CountDownLatch> partitionToDisconnectionLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> partitionToBootstrapSuccess = new ConcurrentHashMap<>();
@@ -67,8 +65,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void initiateFileCopy(ReplicaId replicaId) {
-    partitionToFileCopyLatch.put(replicaId.getPartitionId().toPathString(), new CountDownLatch(1));
-    partitionToFileCopySuccessLatch.put(replicaId.getPartitionId().toPathString(), false);
+    //To Be Added With File Copy Protocol
   }
 
   @Override
@@ -111,18 +108,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void waitForFileCopyCompleted(String partitionName) throws InterruptedException {
-    CountDownLatch latch = partitionToFileCopyLatch.get(partitionName);
-    if(latch == null) {
-      logger.info("Skipping file copy for existing partition {}", partitionName);
-    } else{
-      logger.info("Waiting for new partition to {} to complete FileCopy", partitionName);
-      latch.await();
-      partitionToFileCopyLatch.remove(partitionName);
-      if(!partitionToFileCopySuccessLatch.remove(partitionName)){
-        throw new StateTransitionException("Partition " + partitionName + " failed to copy files.", FileCopyProtocolFailure);
-      }
-      logger.info("File Copy is complete on partition {}", partitionName);
-    }
+    //To Be Added With File Copy Protocol
   }
 
   @Override
@@ -218,8 +204,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void onFileCopyComplete(ReplicaId replicaId) {
-    partitionToFileCopySuccessLatch.put(replicaId.getPartitionId().toPathString(), true);
-    countDownLatch(partitionToFileCopyLatch, replicaId.getPartitionId().toPathString());
+    //To Be Added With File Copy Protocol
   }
 
   @Override
