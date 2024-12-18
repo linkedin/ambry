@@ -38,8 +38,8 @@ public enum RequestOrResponseType {
   PurgeResponse,
   BatchDeleteRequest,
   BatchDeleteResponse,
-  FileCopyProtocolChunkGetRequest,
-  FileCopyProtocolChunkGetResponse,
-  FileCopyProtocolMetaDataGetRequest,
-  FileCopyProtocolMetaDataGetResponse
+  FileCopyProtocolGetChunkRequest,
+  FileCopyProtocolGetChunkResponse,
+  FileCopyProtocolGetMetaDataRequest,
+  FileCopyProtocolGetMetaDataResponse
 }

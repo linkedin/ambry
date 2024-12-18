@@ -5,43 +5,53 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.PooledByteBufAllocator;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
 
-public class FileCopyProtocolMetaDataGetResponse extends Response {
-  private int numberOfLogfiles;
-  private List<LogInfo> logInfoList;
+public class FileCopyProtocolGetMetaDataResponse extends Response {
+  private final int numberOfLogfiles;
 
+  private final String hostName;
+  private final List<LogInfo> logInfoList;
   private static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
+  private static final int HostName_Field_Size_In_Bytes = 4;
 
-  public FileCopyProtocolMetaDataGetResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
-      List<LogInfo> logInfoList, ServerErrorCode errorCode) {
-    super(RequestOrResponseType.FileCopyMetaDataGetResponse, versionId, correlationId, clientId, errorCode);
+  public FileCopyProtocolGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
+      List<LogInfo> logInfoList, ServerErrorCode errorCode, String hostName) {
+    super(RequestOrResponseType.FileCopyProtocolGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
     this.numberOfLogfiles = numberOfLogfiles;
     this.logInfoList = logInfoList;
+    this.hostName = hostName;
   }
 
-  public static FileCopyProtocolMetaDataGetResponse readFrom(DataInputStream stream) throws IOException {
+  public static FileCopyProtocolGetMetaDataResponse readFrom(DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
-    if (type != RequestOrResponseType.FileCopyProtocolMetaDataGetRequest) {
-      //throw new IllegalArgumentException("The type of request response is not compatible");
+    if (type != RequestOrResponseType.FileCopyProtocolGetMetaDataResponse) {
+      throw new IllegalArgumentException("The type of request response is not compatible");
     }
     short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode errorCode = ServerErrorCode.values()[stream.readShort()];
+
+    if(errorCode != ServerErrorCode.No_Error) {
+      return new FileCopyProtocolGetMetaDataResponse(versionId, correlationId, clientId, -1, new ArrayList<>(), errorCode, null);
+    }
+
     int numberOfLogfiles = stream.readInt();
+    String hostName = Utils.readIntString(stream);
     int logInfoListSize = stream.readInt();
     List<LogInfo> logInfoList = new ArrayList<>();
     for (int i = 0; i < logInfoListSize; i++) {
       logInfoList.add(LogInfo.readFrom(stream));
     }
-    return new FileCopyProtocolMetaDataGetResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfoList, errorCode);
+    return new FileCopyProtocolGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfoList, errorCode, hostName);
   }
   protected void prepareBuffer() {
-    bufferToSend = PooledByteBufAllocator.DEFAULT.ioBuffer((int)sizeInBytes());
-    writeHeader();
+    super.prepareBuffer();
+    Utils.serializeString(bufferToSend, hostName, Charset.defaultCharset());
     bufferToSend.writeInt(numberOfLogfiles);
     bufferToSend.writeInt(logInfoList.size());
     for (LogInfo logInfo : logInfoList) {
@@ -50,7 +60,7 @@ public class FileCopyProtocolMetaDataGetResponse extends Response {
   }
 
   public long sizeInBytes() {
-    return super.sizeInBytes() + Integer.BYTES + Integer.BYTES + logInfoList.stream().mapToLong(LogInfo::sizeInBytes).sum();
+    return super.sizeInBytes() + Integer.BYTES + HostName_Field_Size_In_Bytes + hostName.length() + Integer.BYTES + logInfoList.stream().mapToLong(LogInfo::sizeInBytes).sum();
   }
 
   public String toString() {
