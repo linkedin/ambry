@@ -33,6 +33,9 @@ public class FileCopyProtocolGetChunkRequest extends RequestOrResponse{
   public FileCopyProtocolGetChunkRequest( short versionId, int correlationId,
       String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
     super(RequestOrResponseType.FileCopyProtocolGetChunkRequest, versionId, correlationId, clientId);
+    if(partitionId == null || fileName.isEmpty() || startOffset < 0 || sizeInBytes < 0){
+      throw new IllegalArgumentException("PartitionId, FileName, StartOffset and SizeInBytes cannot be null or negative");
+    }
     this.partitionId = partitionId;
     this.fileName = fileName;
     this.startOffset = startOffset;
