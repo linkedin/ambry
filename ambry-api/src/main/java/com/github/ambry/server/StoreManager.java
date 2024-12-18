@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;
+import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.List;
 
@@ -33,6 +34,13 @@ public interface StoreManager {
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
   boolean addBlobStore(ReplicaId replica);
+
+  /**
+   * Add a new FileStore with given {@link ReplicaId}.
+   * @param replicaId the {@link ReplicaId} of the {@link FileStore} which would be added.
+   * @return {@code true} if adding FileStore was successful. {@code false} if not.
+   */
+  boolean addFileStore(ReplicaId replicaId);
 
   /**
    * Remove store from storage manager.
@@ -61,6 +69,14 @@ public interface StoreManager {
    *         that partition, or that store was not started.
    */
   Store getStore(PartitionId id);
+
+  /**
+   *
+   * @param id the {@link PartitionId} to find the store for.
+   * @return the {@link FileStore} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
+   *         that partition, or that store was not started.
+   */
+  FileStore getFileStore(PartitionId id);
 
   /**
    * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific
