@@ -88,6 +88,8 @@ public class StorageManager implements StoreManager {
   private final AccountService accountService;
   private DiskFailureHandler diskFailureHandler;
 
+  private static String bootstrapInProgressFileName;
+
   /**
    * Constructs a {@link StorageManager}
    * @param storeConfig the settings for store configuration.
@@ -130,6 +132,7 @@ public class StorageManager implements StoreManager {
     currentNode = dataNodeId;
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
+    this.bootstrapInProgressFileName = storeConfig.storeBootstrapInProgressFile;
     storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
     if (clusterParticipants != null && !clusterParticipants.isEmpty()) {
       replicaStatusDelegates = new ArrayList<>();
@@ -630,7 +633,7 @@ public class StorageManager implements StoreManager {
    * @throws IOException
    */
   static void createBootstrapFileIfAbsent(ReplicaId replica) throws IOException {
-    File bootstrapFile = new File(replica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
+    File bootstrapFile = new File(replica.getReplicaPath(), bootstrapInProgressFileName);
     if (!bootstrapFile.exists()) {
       bootstrapFile.createNewFile();
     }
