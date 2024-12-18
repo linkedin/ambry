@@ -68,7 +68,6 @@ import static com.github.ambry.clustermap.VcrClusterParticipant.*;
 public class BlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(BlobStore.class);
   static final String SEPARATOR = "_";
-  static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
   static final String DECOMMISSION_FILE_NAME = "decommission_in_progress";
   final static String LockFile = ".lock";
 
