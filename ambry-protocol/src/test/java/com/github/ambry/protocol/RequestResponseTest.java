@@ -678,7 +678,8 @@ public class RequestResponseTest {
     MockClusterMap clusterMap = new MockClusterMap();
     short requestVersionToUse = 1;
     FileCopyProtocolGetMetaDataRequest request =
-        new FileCopyProtocolGetMetaDataRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "host3");
+        new FileCopyProtocolGetMetaDataRequest(requestVersionToUse, 111, "id1",
+            new MockPartitionId(), "host3");
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     FileCopyProtocolGetMetaDataRequest fileMetadataRequestFromBytes =
         FileCopyProtocolGetMetaDataRequest.readFrom(requestStream, new MockClusterMap());
@@ -761,7 +762,8 @@ public class RequestResponseTest {
   public void doFileCopyChunkRequestTest() throws IOException{
     short requestVersionToUse = 1;
     FileCopyProtocolGetChunkRequest request =
-        new FileCopyProtocolGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "file1", 1000, 100);
+        new FileCopyProtocolGetChunkRequest(requestVersionToUse, 111, "id1",
+            new MockPartitionId(), "file1", 1000, 100);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     FileCopyProtocolGetChunkRequest.readFrom(requestStream, new MockClusterMap());
     Assert.assertEquals(request.getFileName(), "file1");
@@ -780,9 +782,12 @@ public class RequestResponseTest {
     String str = "Hello, Netty ByteBuf!";
     ByteBuf byteBuf = Unpooled.copiedBuffer(str, StandardCharsets.UTF_8);
     FileCopyProtocolGetChunkResponse response =
-        new FileCopyProtocolGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.No_Error, new MockPartitionId(), "file1", byteBuf, 1000,byteBuf.readableBytes(), false );
+        new FileCopyProtocolGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.No_Error,
+            new MockPartitionId(), "file1", byteBuf, 1000,byteBuf.readableBytes(),
+            false );
     DataInputStream requestStream = serAndPrepForRead(response, -1, false);
-    FileCopyProtocolGetChunkResponse fileCopyProtocolGetChunkResponse = FileCopyProtocolGetChunkResponse.readFrom(requestStream, new MockClusterMap());
+    FileCopyProtocolGetChunkResponse fileCopyProtocolGetChunkResponse = FileCopyProtocolGetChunkResponse.readFrom(
+        requestStream, new MockClusterMap());
     Assert.assertEquals(fileCopyProtocolGetChunkResponse.getFileName(), "file1");
     Assert.assertEquals(fileCopyProtocolGetChunkResponse.getChunkSizeInBytes(), str.length());
     Assert.assertEquals(fileCopyProtocolGetChunkResponse.getPartitionId().getId(), 0);
