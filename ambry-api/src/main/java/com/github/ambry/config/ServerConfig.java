@@ -144,6 +144,13 @@ public class ServerConfig {
   @Config(SERVER_EXECUTION_MODE)
   public final ServerExecutionMode serverExecutionMode;
 
+  /**
+   * Decide Replication Protocol For Hydration Of Newly Added Replicas
+   */
+  public static final String SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION = "server.replication.protocol.for.hydration";
+  @Config(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION)
+  public final ServerReplicationMode serverReplicationProtocolForHydration;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverExecutionMode = verifiableProperties.getEnum(SERVER_EXECUTION_MODE, ServerExecutionMode.class,
         ServerExecutionMode.DATA_SERVING_MODE);
@@ -176,5 +183,7 @@ public class ServerConfig {
     serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",
         "com.github.ambry.server.AmbryServerSecurityServiceFactory");
     serverRepairRequestsDbFactory = verifiableProperties.getString("server.repair.requests.db.factory", null);
+    serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION,
+        ServerReplicationMode.class, ServerReplicationMode.BLOB_BASED);
   }
 }

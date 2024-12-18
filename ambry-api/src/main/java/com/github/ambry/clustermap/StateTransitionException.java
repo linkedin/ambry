@@ -73,6 +73,11 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If the resource name is not a numeric number.
      */
-    InvalidResourceName
+    InvalidResourceName,
+
+    /**
+     * If File Based Replication Protocol fails at some point for specific replica.
+     */
+    FileCopyProtocolFailure
   }
 }

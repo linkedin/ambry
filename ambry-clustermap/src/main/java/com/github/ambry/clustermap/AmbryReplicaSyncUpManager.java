@@ -64,6 +64,11 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   }
 
   @Override
+  public void initiateFileCopy(ReplicaId replicaId) {
+    //To BE Filled.
+  }
+
+  @Override
   public void initiateDeactivation(ReplicaId replicaId) {
     partitionToDeactivationLatch.put(replicaId.getPartitionId().toPathString(), new CountDownLatch(1));
     partitionToDeactivationSuccess.put(replicaId.getPartitionId().toPathString(), false);
@@ -99,6 +104,11 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       }
       logger.info("Bootstrap is complete on partition {}", partitionName);
     }
+  }
+
+  @Override
+  public void waitForFileCopyCompleted(String partitionName) throws InterruptedException {
+    //To Be Filled
   }
 
   @Override
@@ -190,6 +200,11 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     partitionToBootstrapSuccess.put(replicaId.getPartitionId().toPathString(), true);
     replicaToLagInfos.remove(replicaId);
     countDownLatch(partitionToBootstrapLatch, replicaId.getPartitionId().toPathString());
+  }
+
+  @Override
+  public void onFileCopyComplete(ReplicaId replicaId) {
+    // To Be Filled
   }
 
   @Override

@@ -30,5 +30,7 @@ include 'ambry-api',
         'ambry-quota',
         'ambry-mysql',
         'ambry-filesystem',
-        'ambry-vcr'
+        'ambry-vcr',
+        'ambry-file-transfer',
+        'ambry-prioritization'
 
