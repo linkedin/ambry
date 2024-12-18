@@ -47,14 +47,12 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -678,11 +676,11 @@ public class RequestResponseTest {
   public void doFileCopyMetaDataRequestTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     short requestVersionToUse = 1;
-    FileCopyProtocolMetaDataRequest request =
-        new FileCopyProtocolMetaDataRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "host3");
+    FileCopyProtocolMetaDataGetRequest request =
+        new FileCopyProtocolMetaDataGetRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "host3");
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
-    FileCopyProtocolMetaDataRequest fileMetadataRequestFromBytes =
-        FileCopyProtocolMetaDataRequest.readFrom(requestStream, new MockClusterMap());
+    FileCopyProtocolMetaDataGetRequest fileMetadataRequestFromBytes =
+        FileCopyProtocolMetaDataGetRequest.readFrom(requestStream, new MockClusterMap());
     Assert.assertEquals(fileMetadataRequestFromBytes.getHostName(), "host3");
     Assert.assertEquals(fileMetadataRequestFromBytes.getPartitionId().getId(), 0l);
     Assert.assertEquals(fileMetadataRequestFromBytes.getPartitionId().toPathString(), "0");
@@ -724,19 +722,39 @@ public class RequestResponseTest {
     LogInfo logInfo1 = new LogInfo("0_log", 1000,
         new ArrayList<>(Arrays.asList(new FileInfo("0_1_index", 1010))),
         new ArrayList<>(Arrays.asList(new FileInfo("0_1_bloom", 1020))));
-    LogInfo logInfo2 = new LogInfo("1_log", 1000,
-        new ArrayList<>(Arrays.asList(new FileInfo("1_1_index", 1010))),
-        new ArrayList<>(Arrays.asList(new FileInfo("1_1_bloom", 1020))));
+    LogInfo logInfo2 = new LogInfo("1_log", 1050,
+        new ArrayList<>(Arrays.asList(new FileInfo("1_1_index", 1030))),
+        new ArrayList<>(Arrays.asList(new FileInfo("1_1_bloom", 1040))));
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
-    FileCopyProtocolMetaDataResponse reponse =
-        new FileCopyProtocolMetaDataResponse(requestVersionToUse, 111, "id1", 2 ,
+    FileCopyProtocolMetaDataGetResponse response =
+        new FileCopyProtocolMetaDataGetResponse(requestVersionToUse, 111, "id1", 2 ,
             logInfoList, ServerErrorCode.No_Error);
 
-    DataInputStream requestStream = serAndPrepForRead(reponse, -1, true);
-    FileCopyProtocolMetaDataResponse fileCopyProtocolMetaDataResponseTranformed =
-        FileCopyProtocolMetaDataResponse.readFrom(requestStream);
+    DataInputStream requestStream = serAndPrepForRead(response, -1, false);
+    FileCopyProtocolMetaDataGetResponse fileCopyProtocolMetaDataResponseTranformed =
+        FileCopyProtocolMetaDataGetResponse.readFrom(requestStream);
     Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getCorrelationId(), 111);
-
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.versionId, 1);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getNumberOfLogfiles(), 2);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().size(), 2);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getFileName(), "0_log");
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getFileSizeInBytes(), 1000);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getListOfIndexFiles().size(), 1);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getListOfBloomFilters().size(), 1);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getFileName(), "1_log");
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getFileSizeInBytes(), 1050);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getListOfIndexFiles().size(), 1);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getListOfBloomFilters().size(), 1);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getListOfIndexFiles().get(0).getFileName(), "0_1_index");
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getListOfIndexFiles().get(0).getFileSizeInBytes(), 1010);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getListOfBloomFilters().get(0).getFileName(), "0_1_bloom");
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(0).getListOfBloomFilters().get(0).getFileSizeInBytes(), 1020);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getListOfIndexFiles().get(0).getFileName(), "1_1_index");
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getListOfIndexFiles().get(0).getFileSizeInBytes(), 1030);
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getListOfBloomFilters().get(0).getFileName(), "1_1_bloom");
+    Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfoList().get(1).getListOfBloomFilters().get(0).getFileSizeInBytes(), 1040);
+    response.release();
   }
 
   private void doReplicaMetadataRequestTest(short responseVersionToUse, short requestVersionToUse,

@@ -7,15 +7,15 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 
-public class FileCopyProtocolMetaDataRequest extends RequestOrResponse{
+public class FileCopyProtocolMetaDataGetRequest extends RequestOrResponse{
   private PartitionId partitionId;
   private String hostName;
   private static final short File_Metadata_Request_Version_V1 = 1;
   private static final int HostName_Field_Size_In_Bytes = 4;
 
-  public FileCopyProtocolMetaDataRequest(short versionId, int correlationId, String clientId,
+  public FileCopyProtocolMetaDataGetRequest(short versionId, int correlationId, String clientId,
       PartitionId partitionId, String hostName) {
-    super(RequestOrResponseType.FileCopyMetaDataRequest, versionId, correlationId, clientId);
+    super(RequestOrResponseType.FileCopyProtocolMetaDataGetRequest, versionId, correlationId, clientId);
     if (partitionId == null || hostName.isEmpty()) {
       throw new IllegalArgumentException("Partition and Host Name cannot be null");
     }
@@ -31,14 +31,14 @@ public class FileCopyProtocolMetaDataRequest extends RequestOrResponse{
     return partitionId;
   }
 
-  protected static FileCopyProtocolMetaDataRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
+  protected static FileCopyProtocolMetaDataGetRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     Short versionId = stream.readShort();
     validateVersion(versionId);
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     String hostName = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-    return new FileCopyProtocolMetaDataRequest(versionId, correlationId, clientId, partitionId, hostName);
+    return new FileCopyProtocolMetaDataGetRequest(versionId, correlationId, clientId, partitionId, hostName);
   }
 
   public String toString() {

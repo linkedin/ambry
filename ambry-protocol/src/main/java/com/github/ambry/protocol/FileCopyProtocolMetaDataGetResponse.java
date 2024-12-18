@@ -2,27 +2,30 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.PooledByteBufAllocator;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 
-public class FileCopyProtocolMetaDataResponse extends Response {
+public class FileCopyProtocolMetaDataGetResponse extends Response {
   private int numberOfLogfiles;
   private List<LogInfo> logInfoList;
 
-  public FileCopyProtocolMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
+  private static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
+
+  public FileCopyProtocolMetaDataGetResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
       List<LogInfo> logInfoList, ServerErrorCode errorCode) {
-    super(RequestOrResponseType.FileCopyMetaDataRequest, versionId, correlationId, clientId, errorCode);
+    super(RequestOrResponseType.FileCopyMetaDataGetResponse, versionId, correlationId, clientId, errorCode);
     this.numberOfLogfiles = numberOfLogfiles;
     this.logInfoList = logInfoList;
   }
 
-  public static FileCopyProtocolMetaDataResponse readFrom(DataInputStream stream) throws IOException {
+  public static FileCopyProtocolMetaDataGetResponse readFrom(DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
-    if (type != RequestOrResponseType.FileCopyMetaDataRequest) {
-      throw new IllegalArgumentException("The type of request response is not compatible");
+    if (type != RequestOrResponseType.FileCopyProtocolMetaDataGetRequest) {
+      //throw new IllegalArgumentException("The type of request response is not compatible");
     }
     short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -34,10 +37,11 @@ public class FileCopyProtocolMetaDataResponse extends Response {
     for (int i = 0; i < logInfoListSize; i++) {
       logInfoList.add(LogInfo.readFrom(stream));
     }
-    return new FileCopyProtocolMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfoList, errorCode);
+    return new FileCopyProtocolMetaDataGetResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfoList, errorCode);
   }
   protected void prepareBuffer() {
-    super.prepareBuffer();
+    bufferToSend = PooledByteBufAllocator.DEFAULT.ioBuffer((int)sizeInBytes());
+    writeHeader();
     bufferToSend.writeInt(numberOfLogfiles);
     bufferToSend.writeInt(logInfoList.size());
     for (LogInfo logInfo : logInfoList) {
@@ -61,5 +65,11 @@ public class FileCopyProtocolMetaDataResponse extends Response {
 
   public List<LogInfo> getLogInfoList() {
     return logInfoList;
+  }
+
+  static void validateVersion(short version) {
+    if (version != File_Copy_Protocol_Metadata_Response_Version_V1) {
+      throw new IllegalArgumentException("Unknown version for FileCopyProtocolMetaDataResponse: " + version);
+    }
   }
 }
