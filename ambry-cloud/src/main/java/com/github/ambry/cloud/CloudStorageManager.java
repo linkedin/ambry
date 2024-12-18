@@ -20,6 +20,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
+import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -58,6 +59,11 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
+  public boolean addFileStore(ReplicaId replicaId) {
+    return false;
+  }
+
+  @Override
   public boolean shutdownBlobStore(PartitionId id) {
     try {
       lock.writeLock().lock();
@@ -82,6 +88,11 @@ public class CloudStorageManager implements StoreManager {
       lock.readLock().unlock();
     }
     return createAndStartBlobStoreIfAbsent(id);
+  }
+
+  @Override
+  public FileStore getFileStore(PartitionId id) {
+    return null;
   }
 
   @Override
