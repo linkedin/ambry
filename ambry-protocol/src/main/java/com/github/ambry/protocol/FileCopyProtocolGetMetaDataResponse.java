@@ -53,8 +53,8 @@ public class FileCopyProtocolGetMetaDataResponse extends Response {
       return new FileCopyProtocolGetMetaDataResponse(versionId, correlationId, clientId, -1, new ArrayList<>(), errorCode, null);
     }
 
-    int numberOfLogfiles = stream.readInt();
     String hostName = Utils.readIntString(stream);
+    int numberOfLogfiles = stream.readInt();
     int logInfoListSize = stream.readInt();
     List<LogInfo> logInfoList = new ArrayList<>();
     for (int i = 0; i < logInfoListSize; i++) {
