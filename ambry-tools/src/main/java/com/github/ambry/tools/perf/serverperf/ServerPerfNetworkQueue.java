@@ -76,7 +76,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
   private final int operationsTimeOutMs;
 
   private final Map<Integer, Long> pendingCorrelationIdToStartTimeMs = new LinkedHashMap<>();
-  private final Map<Integer, Integer> pendingCorrelationIdToNetworkClient = new HashMap<>();
+  private final Map<Integer, Integer> pendingCorrelationIdToNetworkClientIdx = new HashMap<>();
   private final Map<Integer, RequestInfo> pendingCorrelationIdToRequestInfo = new HashMap<>();
 
   private static final Logger logger = LoggerFactory.getLogger(ServerPerfNetworkQueue.class);
@@ -170,7 +170,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
    * 1. Collects the timed out requests and submits to corresponding network clients
    * 2. Polls all network clients for any responses that are available
    * 3. Polls the front of {@link #requestInfos} and submits to one network client in round robin way and adds the submitted
-   *    correlation id to {@link #pendingCorrelationIdToStartTimeMs}{@link #pendingCorrelationIdToNetworkClient}
+   *    correlation id to {@link #pendingCorrelationIdToStartTimeMs}{@link #pendingCorrelationIdToNetworkClientIdx}
    *    {@link #pendingCorrelationIdToRequestInfo}
    *  4. Removes all the collected responses from pending correlation id maps and adds to {@link #responseInfos}
    *
@@ -197,7 +197,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
           responseInfos.add(new ResponseInfo(pendingCorrelationIdToRequestInfo.get(correlationId),
               NetworkClientErrorCode.TimeoutError, null));
 
-          responseInfos.addAll(networkClients.get(pendingCorrelationIdToNetworkClient.get(correlationId))
+          responseInfos.addAll(networkClients.get(pendingCorrelationIdToNetworkClientIdx.get(correlationId))
               .sendAndPoll(Collections.emptyList(), new HashSet<>(Collections.singletonList(correlationId)),
                   pollTimeout));
           pendingRequestIterator.remove();
@@ -214,7 +214,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
         RequestInfo requestInfo = requestInfos.peek();
 
         pendingCorrelationIdToStartTimeMs.put(requestInfo.getRequest().getCorrelationId(), time.milliseconds());
-        pendingCorrelationIdToNetworkClient.put(requestInfo.getRequest().getCorrelationId(), clientIndex);
+        pendingCorrelationIdToNetworkClientIdx.put(requestInfo.getRequest().getCorrelationId(), clientIndex);
         pendingCorrelationIdToRequestInfo.put(requestInfo.getRequest().getCorrelationId(), requestInfo);
         requestInfos.remove();
 
@@ -229,7 +229,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
 
       responseInfos.forEach(responseInfo -> {
         pendingCorrelationIdToStartTimeMs.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
-        pendingCorrelationIdToNetworkClient.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+        pendingCorrelationIdToNetworkClientIdx.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
         pendingCorrelationIdToRequestInfo.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
       });
     }
