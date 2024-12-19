@@ -82,7 +82,7 @@ public class StorageManager implements StoreManager {
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final List<ClusterParticipant> clusterParticipants;
-  final ClusterParticipant primaryClusterParticipant;
+  private final ClusterParticipant primaryClusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);

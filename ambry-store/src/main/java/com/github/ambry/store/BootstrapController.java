@@ -112,6 +112,7 @@ public class BootstrapController {
                 deleteFileCopyData(replica.getPartitionId());
               } catch (IOException | StoreException e) {
                 String message = "Failed `deleteFileCopyData` step for " + partitionName;
+                logger.error(message);
                 throw new StateTransitionException(message, BootstrapControllerFailure);
               }
               listenerToInvoke = storageManagerListener;
@@ -132,6 +133,7 @@ public class BootstrapController {
           storeManager.getPrimaryClusterParticipant().getReplicaSyncUpManager().waitForFileCopyCompleted(partitionName);
         } catch (InterruptedException e) {
           String message = "Failed `waitForFileCopyCompleted` step for " + partitionName;
+          logger.error(message);
           throw new StateTransitionException(message, BootstrapControllerFailure);
         }
       }
@@ -143,32 +145,32 @@ public class BootstrapController {
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      throw new UnsupportedOperationException("Not implemented");
+      // no op
     }
 
     @Override
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
-      throw new UnsupportedOperationException("Not implemented");
+      // no op
     }
 
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
-      throw new UnsupportedOperationException("Not implemented");
+      // no op
     }
 
     @Override
     public void onPartitionBecomeInactiveFromStandby(String partitionName) {
-      throw new UnsupportedOperationException("Not implemented");
+      // no op
     }
 
     @Override
     public void onPartitionBecomeOfflineFromInactive(String partitionName) {
-      throw new UnsupportedOperationException("Not implemented");
+      // no op
     }
 
     @Override
     public void onPartitionBecomeDroppedFromOffline(String partitionName) {
-      throw new UnsupportedOperationException("Not implemented");
+      // no op
     }
 
     private boolean isFileCopyFeatureEnabled() {
@@ -185,6 +187,7 @@ public class BootstrapController {
         return storeManager.isFilesExistForPattern(partitionId, allLogSegmentFilesPattern);
       } catch (IOException e) {
         String message = "Failed `isFilesExistForPattern` step for " + partitionId;
+        logger.error(message);
         throw new StateTransitionException(message, BootstrapControllerFailure);
       }
     }
@@ -192,7 +195,7 @@ public class BootstrapController {
     private void deleteFileCopyData(@Nonnull PartitionId partitionId) throws IOException, StoreException {
       // Currently we’ll delete all datasets by removing this partition's BlobStore
       // An optimisation could be explored to only delete incomplete datasets
-      // More about this can be found here :-
+      // More about this can be found in this comment :-
       // https://docs.google.com/document/d/1u57C0BU8oMMuMHC6Fh_B-6R612EaQb2AxtnBDlN6sAs/edit?disco=AAABZyj2rHo
       storeManager.removeBlobStore(partitionId);
     }
