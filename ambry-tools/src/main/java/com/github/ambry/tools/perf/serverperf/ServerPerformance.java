@@ -40,10 +40,14 @@ import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
+import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.FileReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,11 +61,15 @@ import org.slf4j.LoggerFactory;
  *
  */
 
-public class ServerPerformance {
+public class ServerPerformance implements Closeable {
   private final ServerPerfNetworkQueue networkQueue;
   private final ServerPerformanceConfig config;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationId = new AtomicInteger();
+
+  private boolean isShutDown;
+
+  private CountDownLatch shutDownLatch;
 
   private static final String CLIENT_ID = "ServerReadPerformance";
   private static final Logger logger = LoggerFactory.getLogger(ServerPerformance.class);
@@ -94,15 +102,15 @@ public class ServerPerformance {
      * Total number of network clients
      */
     @Config("network.clients.count")
-    @Default("10")
+    @Default("2")
     final int networkClientsCount;
 
     /**
      * Path to file from which to read the blob ids
      */
-    @Config("log.to.read")
+    @Config("blob.id.file.path")
     @Default("")
-    final String logToRead;
+    final String blobIdFilePath;
 
     /**
      * The hostname of the target server as it appears in the partition layout.
@@ -118,14 +126,19 @@ public class ServerPerformance {
     @Default("6667")
     final int port;
 
+    @Config("time.out.seconds")
+    @Default("30")
+    final int timeOutSeconds;
+
     ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
       hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path", "");
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path", "");
-      logToRead = verifiableProperties.getString("log.to.read", "");
+      blobIdFilePath = verifiableProperties.getString("blob.id.file.path", "");
       hostname = verifiableProperties.getString("hostname", "localhost");
       port = verifiableProperties.getInt("port", 6667);
       maxParallelRequests = verifiableProperties.getInt("max.parallel.requests", 20);
-      networkClientsCount = verifiableProperties.getInt("network.clients.count", 10);
+      networkClientsCount = verifiableProperties.getInt("network.clients.count", 2);
+      timeOutSeconds = verifiableProperties.getInt("time.out.seconds", 30);
     }
   }
 
@@ -134,22 +147,50 @@ public class ServerPerformance {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     clusterMap = ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
         config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
+    shutDownLatch = new CountDownLatch(1);
 
     networkQueue =
         new ServerPerfNetworkQueue(verifiableProperties, clusterMap, new SystemTime(), config.maxParallelRequests,
             config.networkClientsCount);
+    isShutDown = false;
     networkQueue.start();
   }
 
   public static void main(String[] args) throws Exception {
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     ServerPerformance serverPerformance = new ServerPerformance(verifiableProperties);
-    Thread getLoadProducer = serverPerformance.getGetLoadProducerThread();
-    Thread getLoadConsumer = serverPerformance.getGetLoadConsumerThread();
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+      try {
+        logger.info("Starting the shutdown");
+        serverPerformance.shutDown();
+      } catch (Exception e) {
+        logger.error("Caught error while shut down", e);
+      }
+    }));
+    serverPerformance.startGetLoadTest();
+    serverPerformance.close();
+  }
+
+  void startGetLoadTest() throws Exception {
+    Thread getLoadProducer = getGetLoadProducerThread();
+    Thread getLoadConsumer = getGetLoadConsumerThread();
+    Thread shutDownThread = getTimedShutDownThread();
+    shutDownThread.start();
     getLoadProducer.start();
     getLoadConsumer.start();
     getLoadProducer.join();
     getLoadConsumer.join();
+  }
+
+  Thread getTimedShutDownThread() {
+    return new Thread(() -> {
+      try {
+        shutDownLatch.await(config.timeOutSeconds, TimeUnit.SECONDS);
+        shutDown();
+      } catch (Exception e) {
+        logger.error("Caught exception in shutdown thread", e);
+      }
+    });
   }
 
   /**
@@ -159,7 +200,7 @@ public class ServerPerformance {
    */
   Thread getGetLoadProducerThread() {
     return new Thread(() -> {
-      while (true) {
+      while (!isShutDown) {
         try {
           loadProducerGETBlob();
         } catch (Exception e) {
@@ -170,15 +211,15 @@ public class ServerPerformance {
   }
 
   /**
-   * Iterates over {@link ServerPerformanceConfig#logToRead}
+   * Iterates over {@link ServerPerformanceConfig#blobIdFilePath}
    * and creates a {@link RequestInfo} for get requests and submits
    * to {@link #networkQueue}
    * @throws Exception exception
    */
   void loadProducerGETBlob() throws Exception {
-    final BufferedReader br = new BufferedReader(new FileReader(config.logToRead));
+    final BufferedReader br = new BufferedReader(new FileReader(config.blobIdFilePath));
     String line;
-    while ((line = br.readLine()) != null) {
+    while (!isShutDown && (line = br.readLine()) != null) {
       String[] id = line.split("\n");
       logger.info("submitting the blob id to network queue {}", id[0]);
       BlobId blobId = new BlobId(id[0], clusterMap);
@@ -204,7 +245,7 @@ public class ServerPerformance {
    */
   Thread getGetLoadConsumerThread() {
     return new Thread(() -> {
-      while (true) {
+      while (!isShutDown) {
         try {
           networkQueue.poll(this::processGetResponse);
         } catch (Exception e) {
@@ -253,5 +294,17 @@ public class ServerPerformance {
       replicaToReturn = clusterMap.getReplicaIds(dataNodeId).get(0);
     }
     return replicaToReturn;
+  }
+
+  public void earlyShutDown() {
+    shutDownLatch.countDown();
+  }
+
+  public void shutDown() throws Exception {
+    networkQueue.shutDown();
+  }
+  @Override
+  public void close() throws IOException {
+    networkQueue.close();
   }
 }
