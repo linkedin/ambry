@@ -78,6 +78,11 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If File Based Replication Protocol fails at some point for specific replica.
      */
-    FileCopyProtocolFailure
+    FileCopyProtocolFailure,
+
+    /**
+     * If Bootstap Controller fails in pre-filecopy steps for specific replica.
+     */
+    BootstrapControllerFailure
   }
 }
