@@ -20,8 +20,8 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 
 public class BootstrapController {
 
-  static final String BOOTSTRAP_IN_PROGRESS_FILE_NAME = "bootstrap_in_progress";
-  static final String FILECOPY_IN_PROGRESS_FILE_NAME = "filecopy_in_progress";
+  private final String BOOTSTRAP_IN_PROGRESS_FILE_NAME;
+  private final String FILECOPY_IN_PROGRESS_FILE_NAME;
   private final Pattern allLogSegmentFilesPattern = Pattern.compile("\\d+\\.log");
   private final StoreConfig storeConfig;
   private final StoreManager storeManager;
@@ -36,6 +36,9 @@ public class BootstrapController {
       @Nonnull ClusterParticipant clusterParticipant) {
     this.storeConfig = storeConfig;
     this.storeManager = storeManager;
+
+    this.BOOTSTRAP_IN_PROGRESS_FILE_NAME = storeConfig.storeBootstrapInProgressFile;
+    this.FILECOPY_IN_PROGRESS_FILE_NAME = storeConfig.storeFileCopyInProgressFileName;
 
     clusterParticipant.registerPartitionStateChangeListener(
         StateModelListenerType.BootstrapControllerListener, new BootstrapControllerImpl());

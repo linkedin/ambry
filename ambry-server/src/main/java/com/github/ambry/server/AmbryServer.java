@@ -328,12 +328,6 @@ public class AmbryServer {
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
 
-        PrioritisationManager prioritisationManager= new PrioritisationManager();
-        FileCopyManager
-            fileCopyManager = new FileCopyManager(prioritisationManager, fileCopyConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-            clusterMap, scheduler, nodeId, networkClientFactory, registry, clusterParticipant);
-        fileCopyManager.start();
-
         BootstrapController bootstrapController = new BootstrapController(storageManager, storeConfig, clusterParticipant);
         bootstrapController.start();
 
