@@ -64,6 +64,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
   private final ConcurrentLinkedQueue<ResponseInfo> responseInfos;
   private final int pollTimeout;
   private final int maxParallelism;
+  private final int shutDownThresholdSec;
 
   private final Semaphore maxParallelRequest;
   private final ExecutorService executorService;
@@ -92,7 +93,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
    * @throws Exception exception
    */
   ServerPerfNetworkQueue(VerifiableProperties verifiableProperties, Http2ClientMetrics metrics, Time time,
-      int maxParallelism, int clientCount, int operationsTimeOutSec) throws Exception {
+      int maxParallelism, int clientCount, int operationsTimeOutSec, int shutDownThresholdSec) throws Exception {
     SSLFactory sslFactory = new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
     Http2ClientConfig http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     Http2NetworkClientFactory networkClientFactory =
@@ -108,6 +109,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
     responseInfos = new ConcurrentLinkedQueue<>();
     pollTimeout = 0;
     this.operationsTimeOutMs = operationsTimeOutSec * 1000;
+    this.shutDownThresholdSec = shutDownThresholdSec;
     this.maxParallelism = maxParallelism;
     maxParallelRequest = new Semaphore(maxParallelism, true);
     executorService = Executors.newFixedThreadPool(maxParallelism);
@@ -236,12 +238,13 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
 
     try {
       maxParallelRequest.release(1);
-      maxParallelRequest.tryAcquire(maxParallelism + 1, 5, TimeUnit.SECONDS);
+      maxParallelRequest.tryAcquire(maxParallelism + 1, this.shutDownThresholdSec, TimeUnit.SECONDS);
     } catch (InterruptedException e) {
-      throw new RuntimeException(e);
+      logger.warn("Caught exception while waiting for executor service to finish", e);
+    } finally {
+      executorService.shutdownNow();
+      shutDownLatch.countDown();
     }
-    executorService.shutdownNow();
-    shutDownLatch.countDown();
   }
 
   void shutDown() throws Exception {

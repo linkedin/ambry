@@ -144,6 +144,13 @@ public class ServerPerformance implements Closeable {
     @Default("30")
     final int timeOutSeconds;
 
+    /**
+     * Total time for wait for pending responses to process during shutdown
+     */
+    @Config("shutdown.threshold.sec")
+    @Default("10")
+    final int shutDownThresholdSec;
+
     ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
       hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path", "");
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path", "");
@@ -154,6 +161,7 @@ public class ServerPerformance implements Closeable {
       networkClientsCount = verifiableProperties.getInt("network.clients.count", 2);
       timeOutSeconds = verifiableProperties.getInt("time.out.seconds", 30);
       operationsTimeOutSec = verifiableProperties.getInt("operations.time.out.sec", 15);
+      shutDownThresholdSec = verifiableProperties.getInt("shutdown.threshold.sec", 10);
     }
   }
 
@@ -167,7 +175,7 @@ public class ServerPerformance implements Closeable {
     shutDownLatch = new CountDownLatch(1);
     networkQueue =
         new ServerPerfNetworkQueue(verifiableProperties, clientMetrics, new SystemTime(), config.maxParallelRequests,
-            config.networkClientsCount, config.operationsTimeOutSec);
+            config.networkClientsCount, config.operationsTimeOutSec, config.shutDownThresholdSec);
     networkQueue.start();
   }
 
