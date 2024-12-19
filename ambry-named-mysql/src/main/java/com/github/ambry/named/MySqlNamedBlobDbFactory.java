@@ -63,6 +63,7 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
     hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
+    hikariConfig.addDataSourceProperty("sslMode", "VERIFY_CA");
     hikariConfig.setMaximumPoolSize(
         dbEndpoint.getDatacenter().equals(localDatacenter) ? config.localPoolSize : config.remotePoolSize);
     // Recommended properties for automatic prepared statement caching
