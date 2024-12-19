@@ -83,6 +83,7 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
         restResponseChannel.setStatus(ResponseStatus.NoContent);
         finalCallback.onCompletion(null, null);
       };
+
       deleteBlobHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3DeleteHandleMetrics,
           successAction, restRequest.getUri(), LOGGER, finalCallback));
     }
