@@ -13,7 +13,6 @@
  */
 package com.github.ambry.tools.perf.serverperf;
 
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
@@ -34,10 +33,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -76,7 +73,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
   private final Time time;
   private boolean isShutDown;
 
-  private final int operationsTimeOut;
+  private final int operationsTimeOutMs;
 
   private final Map<Integer, Long> pendingCorrelationIdToStartTimeMs = new LinkedHashMap<>();
   private final Map<Integer, Integer> pendingCorrelationIdToNetworkClient = new HashMap<>();
@@ -87,15 +84,16 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
   /**
    *
    * @param verifiableProperties properties
-   * @param clusterMap clustermap
+   * @param metrics http2 client metrics
    * @param time  ambry Time
    * @param maxParallelism maximum parallel requests that can be processed
+   * @param clientCount total number of network clients to use
+   * @param operationsTimeOutSec time for a request to mark as timed out
    * @throws Exception exception
    */
-  ServerPerfNetworkQueue(VerifiableProperties verifiableProperties, ClusterMap clusterMap, Time time,
-      int maxParallelism, int clientCount) throws Exception {
+  ServerPerfNetworkQueue(VerifiableProperties verifiableProperties, Http2ClientMetrics metrics, Time time,
+      int maxParallelism, int clientCount, int operationsTimeOutSec) throws Exception {
     SSLFactory sslFactory = new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
-    Http2ClientMetrics metrics = new Http2ClientMetrics(clusterMap.getMetricRegistry());
     Http2ClientConfig http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     Http2NetworkClientFactory networkClientFactory =
         new Http2NetworkClientFactory(metrics, http2ClientConfig, sslFactory, time);
@@ -109,7 +107,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
     requestInfos = new ConcurrentLinkedQueue<>();
     responseInfos = new ConcurrentLinkedQueue<>();
     pollTimeout = 0;
-    operationsTimeOut = 5;
+    this.operationsTimeOutMs = operationsTimeOutSec * 1000;
     this.maxParallelism = maxParallelism;
     maxParallelRequest = new Semaphore(maxParallelism, true);
     executorService = Executors.newFixedThreadPool(maxParallelism);
@@ -166,10 +164,22 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
    * in round robin way
    * Polls all network clients for responses that have arrived and
    * adds these to the queue
+   *
+   * It exits when shutdown is triggered and there are no pending requests
+   *
+   * 1. Collects the timed out requests and submits to corresponding network clients
+   * 2. Polls all network clients for any responses that are available
+   * 3. Polls the front of {@link #requestInfos} and submits to one network client in round robin way and adds the submitted
+   *    correlation id to {@link #pendingCorrelationIdToStartTimeMs}{@link #pendingCorrelationIdToNetworkClient}
+   *    {@link #pendingCorrelationIdToRequestInfo}
+   *  4. Removes all the collected responses from pending correlation id maps and adds to {@link #responseInfos}
+   *
+   *
+   *  If shutdown is triggered , waits for all responses to be processed and shuts down  {@link #executorService}
    */
   @Override
   public void run() {
-    while (!requestInfos.isEmpty() && !pendingCorrelationIdToStartTimeMs.isEmpty() && !isShutDown) {
+    while (!isShutDown || !requestInfos.isEmpty() || !pendingCorrelationIdToStartTimeMs.isEmpty()) {
       List<ResponseInfo> responseInfos = new ArrayList<>();
 
       Iterator<Map.Entry<Integer, Long>> pendingRequestIterator =
@@ -182,7 +192,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
 
         long currentTimeInMs = time.milliseconds();
 
-        if (startTimeMs + operationsTimeOut < currentTimeInMs) {
+        if (startTimeMs + operationsTimeOutMs < currentTimeInMs) {
 
           responseInfos.add(new ResponseInfo(pendingCorrelationIdToRequestInfo.get(correlationId),
               NetworkClientErrorCode.TimeoutError, null));
@@ -201,11 +211,12 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
       });
 
       if (!requestInfos.isEmpty()) {
-        RequestInfo requestInfo = requestInfos.poll();
+        RequestInfo requestInfo = requestInfos.peek();
 
         pendingCorrelationIdToStartTimeMs.put(requestInfo.getRequest().getCorrelationId(), time.milliseconds());
         pendingCorrelationIdToNetworkClient.put(requestInfo.getRequest().getCorrelationId(), clientIndex);
         pendingCorrelationIdToRequestInfo.put(requestInfo.getRequest().getCorrelationId(), requestInfo);
+        requestInfos.remove();
 
         List<ResponseInfo> responses = networkClients.get(clientIndex)
             .sendAndPoll(Collections.singletonList(requestInfo), new HashSet<>(), pollTimeout);
@@ -214,17 +225,18 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
         responseInfos.addAll(responses);
       }
 
+      this.responseInfos.addAll(responseInfos);
+
       responseInfos.forEach(responseInfo -> {
         pendingCorrelationIdToStartTimeMs.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
         pendingCorrelationIdToNetworkClient.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+        pendingCorrelationIdToRequestInfo.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
       });
-
-      this.responseInfos.addAll(responseInfos);
     }
 
     try {
       maxParallelRequest.release(1);
-      maxParallelRequest.acquire(maxParallelism + 1);
+      maxParallelRequest.tryAcquire(maxParallelism + 1, 5, TimeUnit.SECONDS);
     } catch (InterruptedException e) {
       throw new RuntimeException(e);
     }

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.tools.perf.serverperf;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -27,9 +28,11 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -66,10 +69,11 @@ public class ServerPerformance implements Closeable {
   private final ServerPerformanceConfig config;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationId = new AtomicInteger();
+  Http2ClientMetrics clientMetrics;
 
-  private boolean isShutDown;
+  private final CountDownLatch timedShutDownLatch;
 
-  private CountDownLatch shutDownLatch;
+  private final CountDownLatch shutDownLatch;
 
   private static final String CLIENT_ID = "ServerReadPerformance";
   private static final Logger logger = LoggerFactory.getLogger(ServerPerformance.class);
@@ -106,6 +110,13 @@ public class ServerPerformance implements Closeable {
     final int networkClientsCount;
 
     /**
+     * Time after which to drop a request
+     */
+    @Config("operations.time.out.sec")
+    @Default("15")
+    final int operationsTimeOutSec;
+
+    /**
      * Path to file from which to read the blob ids
      */
     @Config("blob.id.file.path")
@@ -126,6 +137,9 @@ public class ServerPerformance implements Closeable {
     @Default("6667")
     final int port;
 
+    /**
+     * Total time after which to stop the performance test
+     */
     @Config("time.out.seconds")
     @Default("30")
     final int timeOutSeconds;
@@ -139,6 +153,7 @@ public class ServerPerformance implements Closeable {
       maxParallelRequests = verifiableProperties.getInt("max.parallel.requests", 20);
       networkClientsCount = verifiableProperties.getInt("network.clients.count", 2);
       timeOutSeconds = verifiableProperties.getInt("time.out.seconds", 30);
+      operationsTimeOutSec = verifiableProperties.getInt("operations.time.out.sec", 15);
     }
   }
 
@@ -147,12 +162,12 @@ public class ServerPerformance implements Closeable {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     clusterMap = ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
         config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
+    clientMetrics = new Http2ClientMetrics(new MetricRegistry());
+    timedShutDownLatch = new CountDownLatch(1);
     shutDownLatch = new CountDownLatch(1);
-
     networkQueue =
-        new ServerPerfNetworkQueue(verifiableProperties, clusterMap, new SystemTime(), config.maxParallelRequests,
-            config.networkClientsCount);
-    isShutDown = false;
+        new ServerPerfNetworkQueue(verifiableProperties, clientMetrics, new SystemTime(), config.maxParallelRequests,
+            config.networkClientsCount, config.operationsTimeOutSec);
     networkQueue.start();
   }
 
@@ -162,15 +177,25 @@ public class ServerPerformance implements Closeable {
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       try {
         logger.info("Starting the shutdown");
-        serverPerformance.shutDown();
+        serverPerformance.forceShutDown();
+        serverPerformance.printMetrics();
       } catch (Exception e) {
         logger.error("Caught error while shut down", e);
       }
     }));
     serverPerformance.startGetLoadTest();
     serverPerformance.close();
+    System.exit(0);
   }
 
+  /**
+   * starts a thread to produce get requests
+   * starts a thread to consume responses
+   * starts a thread to start the shutdown at given time
+   * When all threads are done, {@link #shutDownLatch} is lowered
+   * so any waiting thread can continue
+   * @throws Exception
+   */
   void startGetLoadTest() throws Exception {
     Thread getLoadProducer = getGetLoadProducerThread();
     Thread getLoadConsumer = getGetLoadConsumerThread();
@@ -180,12 +205,29 @@ public class ServerPerformance implements Closeable {
     getLoadConsumer.start();
     getLoadProducer.join();
     getLoadConsumer.join();
+    shutDownLatch.countDown();
   }
 
+  void printMetrics() {
+    logger.info("HTTP2 error count {}", clientMetrics.http2NetworkErrorCount.getCount());
+    logger.info("HTTP2 dropped request count {}", clientMetrics.http2RequestsToDropCount.getCount());
+    logger.info("HTTP2 send Mean rate {}", clientMetrics.http2ClientSendRate.getMeanRate());
+    logger.info("HTTP2 stream median read time {}",
+        clientMetrics.http2StreamFirstToLastFrameTime.getSnapshot().getMedian());
+    logger.info("HTTP2 stream median acquire time, {}",
+        clientMetrics.http2FirstStreamAcquireTime.getSnapshot().getMedian());
+  }
+
+  /**
+   * Waits until the {@link ServerPerformanceConfig#timeOutSeconds} to elapse
+   * or is forced out of wait and starts the shutdown
+   * @return
+   */
   Thread getTimedShutDownThread() {
     return new Thread(() -> {
       try {
-        shutDownLatch.await(config.timeOutSeconds, TimeUnit.SECONDS);
+        timedShutDownLatch.await(config.timeOutSeconds, TimeUnit.SECONDS);
+        logger.info("Timed shutdown triggerred");
         shutDown();
       } catch (Exception e) {
         logger.error("Caught exception in shutdown thread", e);
@@ -200,9 +242,10 @@ public class ServerPerformance implements Closeable {
    */
   Thread getGetLoadProducerThread() {
     return new Thread(() -> {
+      boolean isShutDown = false;
       while (!isShutDown) {
         try {
-          loadProducerGETBlob();
+          isShutDown = loadProducerGETBlob();
         } catch (Exception e) {
           logger.error("encountered error in loadProducer", e);
         }
@@ -216,12 +259,12 @@ public class ServerPerformance implements Closeable {
    * to {@link #networkQueue}
    * @throws Exception exception
    */
-  void loadProducerGETBlob() throws Exception {
+  boolean loadProducerGETBlob() throws Exception {
     final BufferedReader br = new BufferedReader(new FileReader(config.blobIdFilePath));
     String line;
-    while (!isShutDown && (line = br.readLine()) != null) {
+    boolean isShutDown = false;
+    while ((line = br.readLine()) != null) {
       String[] id = line.split("\n");
-      logger.info("submitting the blob id to network queue {}", id[0]);
       BlobId blobId = new BlobId(id[0], clusterMap);
 
       PartitionRequestInfo partitionRequestInfo =
@@ -234,9 +277,17 @@ public class ServerPerformance implements Closeable {
       String hostname = dataNodeId.getHostname();
       Port port = dataNodeId.getPortToConnectTo();
       RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replicaId, null);
-      networkQueue.submit(requestInfo);
+      logger.info("submitting the blob id {} to network queue correlation id {}", blobId,
+          requestInfo.getRequest().getCorrelationId());
+      try {
+        networkQueue.submit(requestInfo);
+      } catch (ServerPerfNetworkQueue.ShutDownException e) {
+        isShutDown = true;
+        break;
+      }
     }
     br.close();
+    return isShutDown;
   }
 
   /**
@@ -245,9 +296,12 @@ public class ServerPerformance implements Closeable {
    */
   Thread getGetLoadConsumerThread() {
     return new Thread(() -> {
-      while (!isShutDown) {
+      while (true) {
         try {
           networkQueue.poll(this::processGetResponse);
+        } catch (ServerPerfNetworkQueue.ShutDownException e) {
+          logger.info("Network queue is shutdown. Exiting from thread");
+          break;
         } catch (Exception e) {
           logger.error("error in load consumer thread", e);
         }
@@ -262,6 +316,11 @@ public class ServerPerformance implements Closeable {
    */
   void processGetResponse(ResponseInfo responseInfo) {
     try {
+      if (responseInfo.getError() == NetworkClientErrorCode.TimeoutError) {
+        logger.info("Timeout error for correlation id {}",
+            responseInfo.getRequestInfo().getRequest().getCorrelationId());
+        return;
+      }
       InputStream serverResponseStream = new NettyByteBufDataInputStream(responseInfo.content());
       GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
       ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
@@ -296,13 +355,29 @@ public class ServerPerformance implements Closeable {
     return replicaToReturn;
   }
 
-  public void earlyShutDown() {
-    shutDownLatch.countDown();
+  /**
+   * forces the {@link #getTimedShutDownThread()} to wake up and
+   * start the shutdown, waits until the shutdown is complete
+   */
+  public void forceShutDown() {
+    timedShutDownLatch.countDown();
+    try {
+      shutDownLatch.await();
+    } catch (Exception e) {
+      logger.error("Error while waiting gor shutdown latch", e);
+    }
   }
 
+  /**
+   * Shuts down the network client,
+   * which will cause load producer thread to stop and load consumer threads to
+   * stop after consuming the pending requests
+   * @throws Exception
+   */
   public void shutDown() throws Exception {
     networkQueue.shutDown();
   }
+
   @Override
   public void close() throws IOException {
     networkQueue.close();
