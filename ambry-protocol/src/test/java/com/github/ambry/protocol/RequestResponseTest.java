@@ -728,7 +728,7 @@ public class RequestResponseTest {
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
     FileCopyGetMetaDataResponse response =
         new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2 ,
-            logInfoList, ServerErrorCode.No_Error, "host1");
+            logInfoList, ServerErrorCode.No_Error);
 
     DataInputStream requestStream = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse fileCopyProtocolMetaDataResponseTranformed =

@@ -28,7 +28,7 @@ public class FileCopyGetMetaDataResponse extends Response {
   private static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
 
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
-      List<LogInfo> logInfos, ServerErrorCode errorCode, String hostName) {
+      List<LogInfo> logInfos, ServerErrorCode errorCode) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
     validateVersion(versionId);
     this.numberOfLogfiles = numberOfLogfiles;
@@ -46,16 +46,15 @@ public class FileCopyGetMetaDataResponse extends Response {
     ServerErrorCode errorCode = ServerErrorCode.values()[stream.readShort()];
 
     if(errorCode != ServerErrorCode.No_Error) {
-      return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, -1, new ArrayList<>(), errorCode, null);
+      return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, -1, new ArrayList<>(), errorCode);
     }
 
-    String hostName = Utils.readIntString(stream);
     int numberOfLogfiles = stream.readInt();
     List<LogInfo> logInfos = new ArrayList<>();
     for (int i = 0; i < numberOfLogfiles; i++) {
       logInfos.add(LogInfo.readFrom(stream));
     }
-    return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode, hostName);
+    return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode);
   }
   protected void prepareBuffer() {
     super.prepareBuffer();
