@@ -71,7 +71,8 @@ public class FileCopyGetMetaDataResponse extends Response {
   }
 
   public long sizeInBytes() {
-    return super.sizeInBytes() + Integer.BYTES + HostName_Field_Size_In_Bytes + hostName.length() + Integer.BYTES + logInfos.stream().mapToLong(LogInfo::sizeInBytes).sum();
+    return super.sizeInBytes() + Integer.BYTES + HostName_Field_Size_In_Bytes + hostName.length() + Integer.BYTES +
+        logInfos.stream().mapToLong(LogInfo::sizeInBytes).sum();
   }
 
   public String toString() {
