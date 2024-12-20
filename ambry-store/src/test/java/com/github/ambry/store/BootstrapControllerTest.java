@@ -33,6 +33,7 @@ import java.util.regex.Pattern;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
@@ -419,6 +420,158 @@ public class BootstrapControllerTest {
         ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_COMPLETE_TO_FILE_BASED_HYDRATION);
     assert bootstrapControllerImpl.replicationProtocolTransitionType.contains(
         ReplicationProtocolTransitionType.FILE_BASED_HYDRATION_COMPLETE_TO_FILE_BASED_HYDRATION);
+  }
+
+  @Test
+  public void testStart() {
+    // Arrange
+    final BootstrapController bootstrapController =
+        new BootstrapController(storeManager, storeConfig, serverConfig, primaryClusterParticipant);
+
+    // Act
+    bootstrapController.start();
+
+    // Assert
+    // Verify the controller is marked as running
+    assertTrue(bootstrapController.isRunning());
+  }
+
+  @Test
+  public void testShutdown() {
+    // Arrange
+    final BootstrapController bootstrapController =
+        new BootstrapController(storeManager, storeConfig, serverConfig, primaryClusterParticipant);
+
+    // Act
+    bootstrapController.start();
+    bootstrapController.shutdown();
+
+    // Assert
+    // Verify the controller is no longer running
+    assertFalse(bootstrapController.isRunning());
+  }
+
+  @Test
+  public void testIsRunning() {
+    final BootstrapController bootstrapController =
+        new BootstrapController(storeManager, storeConfig, serverConfig, primaryClusterParticipant);
+
+    // Initially, the controller should not be running
+    assertFalse(bootstrapController.isRunning());
+
+    // Start the controller
+    bootstrapController.start();
+
+    // Verify the controller is running
+    assertTrue(bootstrapController.isRunning());
+  }
+
+  @Test
+  public void testIsFileExists_FilePresent() {
+    // Arrange
+    final BootstrapController bootstrapController =
+        new BootstrapController(storeManager, storeConfig, serverConfig, primaryClusterParticipant);
+
+    PartitionId partitionId = mock(PartitionId.class);
+    String fileName = "test_file";
+
+    // Act
+    // Mock file existence
+    when(storeManager.isFileExists(partitionId, fileName)).thenReturn(true);
+
+    // Assert
+    // Verify the method returns true
+    assertTrue(bootstrapController.new BootstrapControllerImpl().isFileExists(partitionId, fileName));
+  }
+
+  @Test
+  public void testIsFileExists_FileAbsent() {
+    // Arrange
+    final BootstrapController bootstrapController =
+        new BootstrapController(storeManager, storeConfig, serverConfig, primaryClusterParticipant);
+
+    PartitionId partitionId = mock(PartitionId.class);
+    String fileName = "test_file";
+
+    // Act
+    // Mock file absence
+    when(storeManager.isFileExists(partitionId, fileName)).thenReturn(false);
+
+    // Assert
+    // Verify the method returns false
+    assertFalse(bootstrapController.new BootstrapControllerImpl().isFileExists(partitionId, fileName));
+  }
+
+  @Test
+  public void testIsAnyLogSegmentExists_LogSegmentPresent() throws IOException {
+    // Arrange
+    final BootstrapController bootstrapController =
+        new BootstrapController(storeManager, storeConfig, serverConfig, primaryClusterParticipant);
+
+    PartitionId partitionId = mock(PartitionId.class);
+
+    // Act
+    // Mock log segment existence
+    when(storeManager.isFilesExistForPattern(eq(partitionId), any())).thenReturn(true);
+
+    // Assert
+    // Verify the method returns true
+    assertTrue(bootstrapController.new BootstrapControllerImpl().isAnyLogSegmentExists(partitionId));
+  }
+
+  @Test
+  public void testIsAnyLogSegmentExists_LogSegmentAbsent() throws IOException {
+    // Arrange
+    final BootstrapController bootstrapController =
+        new BootstrapController(storeManager, storeConfig, serverConfig, primaryClusterParticipant);
+
+    PartitionId partitionId = mock(PartitionId.class);
+
+    // Act
+    // Mock log segment absence
+    when(storeManager.isFilesExistForPattern(eq(partitionId), any())).thenReturn(false);
+
+    // Assert
+    // Verify the method returns false
+    assertFalse(bootstrapController.new BootstrapControllerImpl().isAnyLogSegmentExists(partitionId));
+  }
+
+  @Test
+  public void testStressTest_MultiplePartitions() throws InterruptedException {
+    // Arrange
+    final BootstrapController.BootstrapControllerImpl bootstrapControllerImpl =
+        getBootstrapControllerImpl(ServerReplicationMode.BLOB_BASED);
+
+    int partitionCount = 300;
+    String[] partitionNames = new String[partitionCount];
+
+    for (int i = 0; i < partitionCount; i++) {
+      partitionNames[i] = "partition" + i;
+      when(storeManager.getReplica(partitionNames[i])).thenReturn(null);
+    }
+
+    // Act
+    // Run bootstrap transitions for all partitions concurrently
+    Thread[] threads = new Thread[partitionCount];
+    for (int i = 0; i < partitionCount; i++) {
+      final int index = i;
+      threads[i] = new Thread(() -> {
+        bootstrapControllerImpl
+            .onPartitionBecomeBootstrapFromOffline(partitionNames[index]);
+      });
+      threads[i].start();
+    }
+
+    // Wait for all threads to finish
+    for (Thread thread : threads) {
+      thread.join();
+    }
+
+    // Assert
+    // Verify each partition was processed
+    for (String partitionName : partitionNames) {
+      verify(storageManagerListener, times(1)).onPartitionBecomeBootstrapFromOffline(partitionName);
+    }
   }
 
   private static BootstrapController.BootstrapControllerImpl getBootstrapControllerImpl(

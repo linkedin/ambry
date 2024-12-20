@@ -248,7 +248,7 @@ public class BootstrapController {
     }
 
     // Helper method to check if FileCopy bootstrap protocol is enabled.
-    private boolean isFileCopyFeatureEnabled() {
+    boolean isFileCopyFeatureEnabled() {
       return serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED);
     }
 
