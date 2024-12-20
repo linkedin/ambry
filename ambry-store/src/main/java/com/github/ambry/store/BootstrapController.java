@@ -6,6 +6,8 @@ import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
+import com.github.ambry.config.ServerConfig;
+import com.github.ambry.config.ServerReplicationMode;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
@@ -23,36 +25,35 @@ public class BootstrapController {
   private final String BOOTSTRAP_IN_PROGRESS_FILE_NAME;
   private final String FILECOPY_IN_PROGRESS_FILE_NAME;
   private final Pattern allLogSegmentFilesPattern = Pattern.compile("\\d+\\.log");
-  private final StoreConfig storeConfig;
+  private final ServerConfig serverConfig;
   private final StoreManager storeManager;
   private final PartitionStateChangeListener storageManagerListener;
   private final PartitionStateChangeListener fileCopyManagerListener;
+  private final ClusterParticipant primaryClusterParticipant;
 
   private static final Logger logger = LoggerFactory.getLogger(BootstrapController.class);
 
   public BootstrapController(
-      @Nonnull StoreManager storeManager,
-      @Nonnull StoreConfig storeConfig,
-      @Nonnull ClusterParticipant clusterParticipant) {
-    this.storeConfig = storeConfig;
+      @Nonnull StoreManager storeManager, @Nonnull StoreConfig storeConfig,
+      @Nonnull ServerConfig serverConfig, @Nonnull ClusterParticipant primaryClusterParticipant) {
+    this.serverConfig = serverConfig;
     this.storeManager = storeManager;
+    this.primaryClusterParticipant = primaryClusterParticipant;
 
     this.BOOTSTRAP_IN_PROGRESS_FILE_NAME = storeConfig.storeBootstrapInProgressFile;
     this.FILECOPY_IN_PROGRESS_FILE_NAME = storeConfig.storeFileCopyInProgressFileName;
 
-    clusterParticipant.registerPartitionStateChangeListener(
+    primaryClusterParticipant.registerPartitionStateChangeListener(
         StateModelListenerType.BootstrapControllerListener, new BootstrapControllerImpl());
+    logger.info("Bootstrap Controller's state change listener registered!");
 
     Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
-        storeManager.getPrimaryClusterParticipant().getPartitionStateChangeListeners();
+        primaryClusterParticipant.getPartitionStateChangeListeners();
 
     this.storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-
     this.fileCopyManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
-
-    logger.info("Bootstrap Controller's state change listener registered!");
   }
 
   public void start() {
@@ -62,24 +63,24 @@ public class BootstrapController {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(@Nonnull String partitionName) {
+      logger.info("Bootstrap Controller's state change listener invoked for partition `{}`, state change `{}`",
+          partitionName, "Offline -> Bootstrap");
+
       ReplicaId replica = storeManager.getReplica(partitionName);
       PartitionStateChangeListener listenerToInvoke = null;
 
-      /**
-       * This algo is based on this design doc :-
-       * https://docs.google.com/document/d/1u57C0BU8oMMuMHC6Fh_B-6R612EaQb2AxtnBDlN6sAs
-       * The decision branches can be better understood with the doc.
-       */
       if (null == replica) {
         // there can be two scenarios:
         // 1. this is the first time to add new replica onto current node;
         // 2. last replica addition failed at some point before updating InstanceConfig in Helix
         if (isFileCopyFeatureEnabled()) {
           // "New partition -> FC"
+          // This is a new partition placement and FileCopy bootstrap protocol is enabled.
           listenerToInvoke = fileCopyManagerListener;
           logStateChange("New partition -> FC", partitionName);
         } else {
           // "New partition -> R"
+          // This is a new partition placement and FileCopy bootstrap protocol is disabled.
           listenerToInvoke = storageManagerListener;
           logStateChange("New partition -> R", partitionName);
         }
@@ -87,15 +88,22 @@ public class BootstrapController {
         if (isFileCopyFeatureEnabled()) {
           if (isFileExists(replica.getPartitionId(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
             // R.Incomplete -> FC
+            // Last attempt with blob based bootstrap protocol had failed for this partition.
+            // FileCopy bootstrap protocol is enabled but we will still continue with blob based bootstrap protocol.
             listenerToInvoke = storageManagerListener;
             logStateChange("R.Incomplete -> FC", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
             if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
               // FC.Incomplete -> FC
+              // Last attempt with FileCopy bootstrap protocol had failed for this partition.
+              // We will resume the boostrap with FileCopy bootstrap protocol.
               listenerToInvoke = fileCopyManagerListener;
               logStateChange("FC.Incomplete -> FC", partitionName);
             } else {
               // R.complete -> FC or FC.complete -> FC
+              // Last attempt either with blob based or file based bootstrap protocol had succeeded for this partition.
+              // We'll continue with blob based bootstrap protocol for this partition to catch up with its peers.
+              // as part of Bootstrap->Standby state transition.
               listenerToInvoke = storageManagerListener;
               logStateChange("R.complete -> FC or FC.complete -> FC", partitionName);
             }
@@ -103,11 +111,15 @@ public class BootstrapController {
         } else {
           if (isFileExists(replica.getPartitionId(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
             // R.Incomplete -> R
+            // Last attempt with blob based bootstrap protocol had failed for this partition.
+            // FileCopy bootstrap protocol is disabled and we will continue with blob based bootstrap protocol.
             listenerToInvoke = storageManagerListener;
             logStateChange("R.Incomplete -> R", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
             if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
               // FC.Incomplete -> R
+              // Last attempt with FileCopy bootstrap protocol had failed for this partition.
+              // First we delete FileCopy data and then continue with blob based bootstrap protocol.
               try {
                 deleteFileCopyData(replica.getPartitionId());
               } catch (IOException | StoreException e) {
@@ -119,6 +131,9 @@ public class BootstrapController {
               logStateChange("FC.Incomplete -> R", partitionName);
             } else {
               // R.complete -> R or FC.complete -> R
+              // Last attempt either with blob based or file based bootstrap protocol had succeeded for this partition.
+              // We'll continue with blob based bootstrap protocol for this partition to catch up with its peers.
+              // as part of Bootstrap->Standby state transition.
               listenerToInvoke = storageManagerListener;
               logStateChange("R.complete -> R or FC.complete -> R", partitionName);
             }
@@ -130,17 +145,16 @@ public class BootstrapController {
       listenerToInvoke.onPartitionBecomeBootstrapFromOffline(partitionName);
       if (listenerToInvoke == fileCopyManagerListener) {
         try {
-          storeManager.getPrimaryClusterParticipant().getReplicaSyncUpManager().waitForFileCopyCompleted(partitionName);
+          primaryClusterParticipant.getReplicaSyncUpManager().waitForFileCopyCompleted(partitionName);
         } catch (InterruptedException e) {
           String message = "Failed `waitForFileCopyCompleted` step for " + partitionName;
           logger.error(message);
           throw new StateTransitionException(message, BootstrapControllerFailure);
+        } catch (Exception e) {
+          logger.error(e.getMessage());
+          throw new StateTransitionException(e.getMessage(), BootstrapControllerFailure);
         }
       }
-    }
-
-    private void logStateChange(String stateChange, String partitionName) {
-      logger.info("BootstrapController State change `{}` for partition `{}`", stateChange, partitionName);
     }
 
     @Override
@@ -173,15 +187,22 @@ public class BootstrapController {
       // no op
     }
 
-    private boolean isFileCopyFeatureEnabled() {
-      return storeConfig.fileCopyFeatureEnabled.equals("true");
+    private void logStateChange(String stateChange, String partitionName) {
+      logger.info("BootstrapController State change `{}` for partition `{}`", stateChange, partitionName);
     }
 
+    // Helper method to check if FileCopy bootstrap protocol is enabled.
+    private boolean isFileCopyFeatureEnabled() {
+      return serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED);
+    }
+
+    // Helper method to check if a file exists in the partition.
     private boolean isFileExists(
         @Nonnull PartitionId partitionId, @Nonnull String fileName) {
       return storeManager.isFileExists(partitionId, fileName);
     }
 
+    // Helper method to check if any log segment files exist in the partition.
     private boolean isAnyLogSegmentExists(@Nonnull PartitionId partitionId) {
       try {
         return storeManager.isFilesExistForPattern(partitionId, allLogSegmentFilesPattern);
@@ -192,11 +213,10 @@ public class BootstrapController {
       }
     }
 
+    // Helper method to delete the file copy data.
     private void deleteFileCopyData(@Nonnull PartitionId partitionId) throws IOException, StoreException {
       // Currently we’ll delete all datasets by removing this partition's BlobStore
-      // An optimisation could be explored to only delete incomplete datasets
-      // More about this can be found in this comment :-
-      // https://docs.google.com/document/d/1u57C0BU8oMMuMHC6Fh_B-6R612EaQb2AxtnBDlN6sAs/edit?disco=AAABZyj2rHo
+      // TODO: An optimisation could be explored to only delete incomplete datasets.
       storeManager.removeBlobStore(partitionId);
     }
   }

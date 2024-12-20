@@ -113,11 +113,6 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public ClusterParticipant getPrimaryClusterParticipant() {
-    throw new UnsupportedOperationException("Method not supported");
-  }
-
-  @Override
   public boolean isFileExists(PartitionId partitionId, String fileName) {
     throw new UnsupportedOperationException("Method not supported");
   }

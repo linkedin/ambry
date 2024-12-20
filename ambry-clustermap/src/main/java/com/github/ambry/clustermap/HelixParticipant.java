@@ -858,11 +858,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     try {
-      // 1. take actions in bootstrap controller
-      PartitionStateChangeListener bootstrapControllerListener =
-            partitionStateChangeListeners.get(StateModelListenerType.BootstrapControllerListener);
-      if (bootstrapControllerListener != null) {
-        bootstrapControllerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      // 1. take actions in storage manager (add new replica if necessary)
+      PartitionStateChangeListener storageManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+      if (storageManagerListener != null) {
+        storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =

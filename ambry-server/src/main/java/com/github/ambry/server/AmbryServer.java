@@ -328,7 +328,8 @@ public class AmbryServer {
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
 
-        BootstrapController bootstrapController = new BootstrapController(storageManager, storeConfig, clusterParticipant);
+        BootstrapController bootstrapController = new BootstrapController(
+            storageManager, storeConfig, serverConfig, clusterParticipant);
         bootstrapController.start();
 
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any

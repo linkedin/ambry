@@ -110,16 +110,17 @@ public interface StoreManager {
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
 
   /**
-   * Get the primary {@link ClusterParticipant} for the cluster.
-   * @return the primary {@link ClusterParticipant} for the cluster.
-   */
-  ClusterParticipant getPrimaryClusterParticipant();
-
-  /**
    * Check if a file exists in the store directory.
    * @return {@code true} if the file exists, {@code false} otherwise.
    */
   boolean isFileExists(PartitionId partitionId, String fileName);
 
-  boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) throws IOException;
+  /**
+   * Check if files exist for a given pattern in the store directory.
+   * @param partitionId
+   * @param pattern
+   * @return {@code true} if the files exist, {@code false} otherwise.
+   * @throws IOException
+   */
+  boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
 }

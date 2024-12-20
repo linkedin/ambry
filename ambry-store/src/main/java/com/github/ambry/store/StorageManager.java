@@ -451,18 +451,13 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public ClusterParticipant getPrimaryClusterParticipant() {
-    return this.primaryClusterParticipant;
-  }
-
-  @Override
   public boolean isFileExists(PartitionId partitionId, String fileName) {
     return this.getDiskManager(partitionId).isFileExists(fileName);
   }
 
   @Override
-  public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) throws IOException {
-    List<File> result =  this.getDiskManager(partitionId).getFilesForPattern(allLogSegmentFilesPattern);
+  public boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException {
+    List<File> result =  this.getDiskManager(partitionId).getFilesForPattern(pattern);
     return (null != result && !result.isEmpty());
   }
 

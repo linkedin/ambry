@@ -781,8 +781,8 @@ public class DiskManager {
     return new File(filePath).exists();
   }
 
-  public List<File> getFilesForPattern(Pattern allLogSegmentFilesPattern) throws IOException {
-    return Utils.getFilesForPattern(this.disk.getMountPath(), allLogSegmentFilesPattern);
+  public List<File> getFilesForPattern(Pattern pattern) throws IOException {
+    return Utils.getFilesForPattern(this.disk.getMountPath(), pattern);
   }
 
   /**
