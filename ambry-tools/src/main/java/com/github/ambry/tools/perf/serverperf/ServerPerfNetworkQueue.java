@@ -141,6 +141,7 @@ public class ServerPerfNetworkQueue extends Thread {
     }
     maxParallelRequest.acquire();
     if (isShutDown) {
+      maxParallelRequest.release();
       throw new ShutDownException();
     }
     requestInfos.offer(requestInfo);
