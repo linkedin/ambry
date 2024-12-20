@@ -65,7 +65,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void initiateFileCopy(ReplicaId replicaId) {
-    //To BE Filled.
+    //To Be Added With File Copy Protocol
   }
 
   @Override
@@ -108,7 +108,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void waitForFileCopyCompleted(String partitionName) throws InterruptedException {
-    //To Be Filled
+    //To Be Added With File Copy Protocol
   }
 
   @Override
@@ -204,7 +204,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void onFileCopyComplete(ReplicaId replicaId) {
-    // To Be Filled
+    //To Be Added With File Copy Protocol
   }
 
   @Override
