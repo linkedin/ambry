@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,28 +21,28 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 
 
-public class FileCopyProtocolGetChunkRequest extends RequestOrResponse{
+public class FileCopyGetChunkRequest extends RequestOrResponse{
   private PartitionId partitionId;
   private String fileName;
   private long startOffset;
-  private long sizeInBytes;
+  private long chunkLengthInBytes;
   private static final short File_Chunk_Request_Version_V1 = 1;
   private static final int File_Name_Size_In_Bytes = 4;
 
 
-  public FileCopyProtocolGetChunkRequest( short versionId, int correlationId,
+  public FileCopyGetChunkRequest( short versionId, int correlationId,
       String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
-    super(RequestOrResponseType.FileCopyProtocolGetChunkRequest, versionId, correlationId, clientId);
+    super(RequestOrResponseType.FileCopyGetChunkRequest, versionId, correlationId, clientId);
     if(partitionId == null || fileName.isEmpty() || startOffset < 0 || sizeInBytes < 0){
       throw new IllegalArgumentException("PartitionId, FileName, StartOffset and SizeInBytes cannot be null or negative");
     }
     this.partitionId = partitionId;
     this.fileName = fileName;
     this.startOffset = startOffset;
-    this.sizeInBytes = sizeInBytes;
+    this.chunkLengthInBytes = sizeInBytes;
   }
 
-  public static FileCopyProtocolGetChunkRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
+  public static FileCopyGetChunkRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
       throws IOException {
     Short versionId = stream.readShort();
     validateVersion(versionId);
@@ -52,7 +52,7 @@ public class FileCopyProtocolGetChunkRequest extends RequestOrResponse{
     String fileName = Utils.readIntString(stream);
     long startOffset = stream.readLong();
     long sizeInBytes = stream.readLong();
-    return new FileCopyProtocolGetChunkRequest(versionId, correlationId, clientId, partitionId, fileName, startOffset, sizeInBytes);
+    return new FileCopyGetChunkRequest(versionId, correlationId, clientId, partitionId, fileName, startOffset, sizeInBytes);
   }
 
   protected void prepareBuffer(){
@@ -60,7 +60,7 @@ public class FileCopyProtocolGetChunkRequest extends RequestOrResponse{
     bufferToSend.writeBytes(partitionId.getBytes());
     Utils.serializeString(bufferToSend, fileName, Charset.defaultCharset());
     bufferToSend.writeLong(startOffset);
-    bufferToSend.writeLong(sizeInBytes);
+    bufferToSend.writeLong(chunkLengthInBytes);
   }
 
   public String toString(){
@@ -69,7 +69,7 @@ public class FileCopyProtocolGetChunkRequest extends RequestOrResponse{
       .append("PartitionId=").append(partitionId)
       .append(", FileName=").append(fileName)
       .append(", StartOffset=").append(startOffset)
-      .append(", SizeInBytes=").append(sizeInBytes)
+      .append(", SizeInBytes=").append(chunkLengthInBytes)
       .append("]");
     return sb.toString();
   }
@@ -78,10 +78,18 @@ public class FileCopyProtocolGetChunkRequest extends RequestOrResponse{
     return super.sizeInBytes() + partitionId.getBytes().length + File_Name_Size_In_Bytes + fileName.length() + Long.BYTES + Long.BYTES;
   }
 
-  public PartitionId getPartitionId() { return partitionId; }
-  public String getFileName() { return fileName; }
-  public long getStartOffset() { return startOffset; }
-  public long getSizeInBytes() { return sizeInBytes; }
+  public PartitionId getPartitionId() {
+    return partitionId;
+  }
+  public String getFileName() {
+    return fileName;
+  }
+  public long getStartOffset() {
+    return startOffset;
+  }
+  public long getChunkLengthInBytes() {
+    return chunkLengthInBytes;
+  }
 
   static void validateVersion(short version){
     if (version != File_Chunk_Request_Version_V1) {

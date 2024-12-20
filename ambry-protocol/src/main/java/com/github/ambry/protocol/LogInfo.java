@@ -1,5 +1,5 @@
 /**
- * Copyright 2019 LinkedIn Corp. All rights reserved.
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ import java.util.List;
 public class LogInfo {
   private String fileName;
   private long fileSizeInBytes;
-  List<FileInfo> listOfIndexFiles;
-  List<FileInfo> listOfBloomFilters;
+  List<FileInfo> indexFiles;
+  List<FileInfo> bloomFilters;
 
   private static final int FileName_Field_Size_In_Bytes = 4;
   private static final int FileSize_Field_Size_In_Bytes = 8;
@@ -34,8 +34,8 @@ public class LogInfo {
   public LogInfo(String fileName, long fileSizeInBytes, List<FileInfo> listOfIndexFiles, List<FileInfo> listOfBloomFilters) {
     this.fileName = fileName;
     this.fileSizeInBytes = fileSizeInBytes;
-    this.listOfIndexFiles = listOfIndexFiles;
-    this.listOfBloomFilters = listOfBloomFilters;
+    this.indexFiles = listOfIndexFiles;
+    this.bloomFilters = listOfBloomFilters;
   }
 
   public String getFileName() {
@@ -46,21 +46,21 @@ public class LogInfo {
     return fileSizeInBytes;
   }
 
-  public List<FileInfo> getListOfBloomFilters() {
-    return listOfBloomFilters;
+  public List<FileInfo> getBloomFilters() {
+    return bloomFilters;
   }
 
-  public List<FileInfo> getListOfIndexFiles() {
-    return listOfIndexFiles;
+  public List<FileInfo> getIndexFiles() {
+    return indexFiles;
   }
 
   public long sizeInBytes() {
     long size = FileName_Field_Size_In_Bytes + fileName.length() + FileSize_Field_Size_In_Bytes + ListSize_In_Bytes;
-    for (FileInfo fileInfo : listOfIndexFiles) {
+    for (FileInfo fileInfo : indexFiles) {
       size += fileInfo.sizeInBytes();
     }
     size += ListSize_In_Bytes;
-    for (FileInfo fileInfo : listOfBloomFilters) {
+    for (FileInfo fileInfo : bloomFilters) {
       size += fileInfo.sizeInBytes();
     }
     return size;
@@ -87,12 +87,12 @@ public class LogInfo {
   public void writeTo(ByteBuf buf){
     Utils.serializeString(buf, fileName, Charset.defaultCharset());
     buf.writeLong(fileSizeInBytes);
-    buf.writeInt(listOfIndexFiles.size());
-    for(FileInfo fileInfo : listOfIndexFiles){
+    buf.writeInt(indexFiles.size());
+    for(FileInfo fileInfo : indexFiles){
       fileInfo.writeTo(buf);
     }
-    buf.writeInt(listOfBloomFilters.size());
-    for(FileInfo fileInfo: listOfBloomFilters){
+    buf.writeInt(bloomFilters.size());
+    for(FileInfo fileInfo: bloomFilters){
       fileInfo.writeTo(buf);
     }
   }
@@ -101,10 +101,10 @@ public class LogInfo {
     StringBuilder sb = new StringBuilder();
     sb.append("LogInfo[");
     sb.append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes).append(",");
-    for(FileInfo fileInfo : listOfIndexFiles) {
+    for(FileInfo fileInfo : indexFiles) {
       sb.append(fileInfo.toString());
     }
-    for(FileInfo fileInfo: listOfBloomFilters){
+    for(FileInfo fileInfo: bloomFilters){
       sb.append(fileInfo.toString());
     }
     sb.append("]");
