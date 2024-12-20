@@ -38,6 +38,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileStore;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -353,6 +354,12 @@ public class StorageManager implements StoreManager {
     return getStore(id, false);
   }
 
+  @Override
+  public FileStore getFileStore(PartitionId id) {
+    //TODO: Implementation To Be added.
+    return null;
+  }
+
   /**
    * @param id the {@link PartitionId} to find the store for.
    * @param skipStateCheck whether to skip checking state of the store. if true, it also returns store that is not started yet.
@@ -532,6 +539,12 @@ public class StorageManager implements StoreManager {
     partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
     logger.info("New store is successfully added into StorageManager");
     return true;
+  }
+
+  @Override
+  public boolean addFileStore(ReplicaId replicaId) {
+    //TODO: Implementation To Be added.
+    return false;
   }
 
   /**
