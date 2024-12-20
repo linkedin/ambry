@@ -31,11 +31,11 @@ public class LogInfo {
   private static final int FileSize_Field_Size_In_Bytes = 8;
 
   private static final int ListSize_In_Bytes = 4;
-  public LogInfo(String fileName, long fileSizeInBytes, List<FileInfo> listOfIndexFiles, List<FileInfo> listOfBloomFilters) {
+  public LogInfo(String fileName, long fileSizeInBytes, List<FileInfo> indexFiles, List<FileInfo> bloomFilters) {
     this.fileName = fileName;
     this.fileSizeInBytes = fileSizeInBytes;
-    this.indexFiles = listOfIndexFiles;
-    this.bloomFilters = listOfBloomFilters;
+    this.indexFiles = indexFiles;
+    this.bloomFilters = bloomFilters;
   }
 
   public String getFileName() {
