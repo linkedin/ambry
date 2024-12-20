@@ -20,23 +20,6 @@ import org.junit.Test;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
-
-// Permits Replica to be constructed with a null Partition
-class TestReplica extends Replica {
-  public TestReplica(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
-    super(hardwareLayout, null, jsonObject);
-  }
-
-  public TestReplica(TestHardwareLayout hardwareLayout, Disk disk) throws JSONException {
-    super(null, disk, hardwareLayout.clusterMapConfig);
-  }
-
-  @Override
-  public void validatePartition() {
-    // Null OK
-  }
-}
-
 /**
  * Tests {@link Replica} class.
  */

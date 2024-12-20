@@ -67,6 +67,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
@@ -1352,6 +1353,32 @@ public class Utils {
         }
       });
     }
+  }
+
+  /**
+   * Walks the directory and returns all files that match the pattern
+   * @param path
+   * @param pattern
+   * @return List<File>
+   * @throws IOException
+   */
+  public static List<File> getFilesForPattern(String path, Pattern pattern) throws IOException {
+    List<File> result = new ArrayList<>();
+    Files.walkFileTree(Paths.get(path), new SimpleFileVisitor<Path>() {
+      @Override
+      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+        if (pattern.matcher(file.toFile().getName()).matches()) {
+          result.add(file.toFile());
+        }
+        return FileVisitResult.CONTINUE;
+      }
+
+      @Override
+      public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+        return FileVisitResult.CONTINUE;
+      }
+    });
+    return result;
   }
 
   /**

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.Store;
@@ -21,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.List;
+import java.util.regex.Pattern;
 
 
 /**
@@ -123,4 +125,19 @@ public interface StoreManager {
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
+
+  /**
+   * Check if a file exists in the store directory.
+   * @return {@code true} if the file exists, {@code false} otherwise.
+   */
+  boolean isFileExists(PartitionId partitionId, String fileName);
+
+  /**
+   * Check if files exist for a given pattern in the store directory.
+   * @param partitionId
+   * @param pattern
+   * @return {@code true} if the files exist, {@code false} otherwise.
+   * @throws IOException
+   */
+  boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
 }

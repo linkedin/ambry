@@ -680,6 +680,7 @@ public class StoreConfig {
   @Config("store.reshuffle.disks.on.reorder")
   @Default("false")
   public final boolean storeReshuffleDisksOnReorder;
+
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
   /**
