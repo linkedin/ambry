@@ -18,28 +18,25 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClient;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.utils.Time;
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,9 +49,31 @@ import org.slf4j.LoggerFactory;
  * This response queue is used for polling and processing the responses
  * Makes sure that maximum {@link #maxParallelRequest} requests are getting processed.
  */
-public class ServerPerfNetworkQueue extends Thread implements Closeable {
+public class ServerPerfNetworkQueue extends Thread {
 
   public static class ShutDownException extends Exception {
+  }
+
+  private static class InflightNetworkClientRequest {
+    private final long startTimeMs;
+    private final RequestInfo requestInfo;
+
+    InflightNetworkClientRequest(long startTimeMs, RequestInfo requestInfo) {
+      this.startTimeMs = startTimeMs;
+      this.requestInfo = requestInfo;
+    }
+
+    long getStartTimeMs() {
+      return startTimeMs;
+    }
+
+    RequestInfo getRequestInfo() {
+      return requestInfo;
+    }
+
+    int getCorrelationId() {
+      return requestInfo.getRequest().getCorrelationId();
+    }
   }
 
   private final List<Http2NetworkClient> networkClients;
@@ -74,10 +93,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
 
   private final int operationsTimeOutMs;
 
-  private final Map<Integer, Long> pendingCorrelationIdToStartTimeMs = new LinkedHashMap<>();
-  private final Map<Integer, Integer> pendingCorrelationIdToNetworkClientIdx = new HashMap<>();
-  private final Map<Integer, RequestInfo> pendingCorrelationIdToRequestInfo = new HashMap<>();
-
+  private final Map<Integer, LinkedHashSet<InflightNetworkClientRequest>> networkClientIdToInflightRequest;
   private static final Logger logger = LoggerFactory.getLogger(ServerPerfNetworkQueue.class);
 
   /**
@@ -105,6 +121,7 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
     clientIndex = 0;
     requestInfos = new ConcurrentLinkedQueue<>();
     responseInfos = new ConcurrentLinkedQueue<>();
+    networkClientIdToInflightRequest = new HashMap<>();
     pollTimeout = 0;
     this.operationsTimeOutMs = operationsTimeOutSec * 1000;
     this.maxParallelism = maxParallelism;
@@ -129,19 +146,22 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
     requestInfos.offer(requestInfo);
   }
 
+  private boolean networkClientInflightRequestsEmpty() {
+    return networkClientIdToInflightRequest.values().stream().allMatch(Set::isEmpty);
+  }
+
   /**
    * Checks and processes if any responses are in the queue
    * @param responseInfoProcessor processor
    * @throws Exception
    */
   void poll(ResponseInfoProcessor responseInfoProcessor) throws Exception {
-    ResponseInfo responseInfo = responseInfos.poll();
 
-    if (isShutDown && requestInfos.isEmpty() && responseInfos.isEmpty()
-        && pendingCorrelationIdToStartTimeMs.isEmpty()) {
+    if (isShutDown && requestInfos.isEmpty() && responseInfos.isEmpty() && networkClientInflightRequestsEmpty()) {
       throw new ShutDownException();
     }
 
+    ResponseInfo responseInfo = responseInfos.poll();
     if (responseInfo == null) {
       return;
     }
@@ -159,78 +179,80 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
 
   /**
    * This keeps running continuously
+   *
    * Polls the request queue and submits the requests to network clients
-   * in round robin way
-   * Polls all network clients for responses that have arrived and
+   * in round robin way and responses that have arrived and
    * adds these to the queue
    *
    * It exits when shutdown is triggered and there are no pending requests
    *
-   * 1. Collects the timed out requests and submits to corresponding network clients
-   * 2. Polls all network clients for any responses that are available
-   * 3. Polls the front of {@link #requestInfos} and submits to one network client in round robin way and adds the submitted
-   *    correlation id to {@link #pendingCorrelationIdToStartTimeMs}{@link #pendingCorrelationIdToNetworkClientIdx}
-   *    {@link #pendingCorrelationIdToRequestInfo}
-   *  4. Removes all the collected responses from pending correlation id maps and adds to {@link #responseInfos}
+   * 1. Picks a network client in round robin use {@link #clientIndex}
+   * 2. Checks the requests that are timed out using {@link #networkClientIdToInflightRequest} and collects them to drop
+   * 3. Polls the top of {@link #requestInfos} for submitting to network client
+   * 4. Submits the requests and dropped requests to network client and collects responses
+   * 5. Adds the sent requests to {@link #networkClientIdToInflightRequest}
+   * 6. Removes the top of {@link #requestInfos} if earlier any request was polled.
+   * 7. Removes the responses received from {@link #networkClientIdToInflightRequest}
+   * 8. moves {@link #clientIndex} by 1 so, next client can be picked
    *
    *
    *  If shutdown is triggered , waits for all responses to be processed and shuts down  {@link #executorService}
+   *  1. Releases a token so if any thread trying to submit is waiting stops waiting.
+   *  2. Tries to acquire {@link #maxParallelism+1} tokens as it can only acquire all tokens when
+   *      all responses get processed
    */
   @Override
   public void run() {
-    while (!isShutDown || !requestInfos.isEmpty() || !pendingCorrelationIdToStartTimeMs.isEmpty()) {
-      List<ResponseInfo> responseInfos = new ArrayList<>();
+    while (!isShutDown || !requestInfos.isEmpty() || !networkClientInflightRequestsEmpty()) {
 
-      Iterator<Map.Entry<Integer, Long>> pendingRequestIterator =
-          pendingCorrelationIdToStartTimeMs.entrySet().iterator();
+      Http2NetworkClient networkClient = networkClients.get(clientIndex);
+      Set<Integer> correlationIdsToDrop = new HashSet<>();
 
-      while (pendingRequestIterator.hasNext()) {
-        Map.Entry<Integer, Long> entry = pendingRequestIterator.next();
-        int correlationId = entry.getKey();
-        long startTimeMs = entry.getValue();
+      networkClientIdToInflightRequest.computeIfAbsent(clientIndex, (clientIndex) -> new LinkedHashSet<>());
+      LinkedHashSet<InflightNetworkClientRequest> pendingNetworkClientRequest =
+          networkClientIdToInflightRequest.get(clientIndex);
 
+      for (InflightNetworkClientRequest request : pendingNetworkClientRequest) {
+        long startTimeMs = request.getStartTimeMs();
         long currentTimeInMs = time.milliseconds();
 
         if (startTimeMs + operationsTimeOutMs < currentTimeInMs) {
-
-          responseInfos.add(new ResponseInfo(pendingCorrelationIdToRequestInfo.get(correlationId),
-              NetworkClientErrorCode.TimeoutError, null));
-
-          responseInfos.addAll(networkClients.get(pendingCorrelationIdToNetworkClientIdx.get(correlationId))
-              .sendAndPoll(Collections.emptyList(), new HashSet<>(Collections.singletonList(correlationId)),
-                  pollTimeout));
-          pendingRequestIterator.remove();
+          correlationIdsToDrop.add(request.getCorrelationId());
         } else {
           break;
         }
       }
 
-      networkClients.forEach(networkClient -> {
-        responseInfos.addAll(networkClient.sendAndPoll(Collections.emptyList(), new HashSet<>(), pollTimeout));
-      });
+      List<RequestInfo> requestInfosToSubmit = new ArrayList<>();
+      RequestInfo requestInfo = requestInfos.peek();
 
-      if (!requestInfos.isEmpty()) {
-        RequestInfo requestInfo = requestInfos.peek();
-
-        pendingCorrelationIdToStartTimeMs.put(requestInfo.getRequest().getCorrelationId(), time.milliseconds());
-        pendingCorrelationIdToNetworkClientIdx.put(requestInfo.getRequest().getCorrelationId(), clientIndex);
-        pendingCorrelationIdToRequestInfo.put(requestInfo.getRequest().getCorrelationId(), requestInfo);
-        requestInfos.remove();
-
-        List<ResponseInfo> responses = networkClients.get(clientIndex)
-            .sendAndPoll(Collections.singletonList(requestInfo), new HashSet<>(), pollTimeout);
-        clientIndex++;
-        clientIndex = clientIndex % networkClients.size();
-        responseInfos.addAll(responses);
+      if (requestInfo != null) {
+        requestInfosToSubmit.add(requestInfo);
       }
 
-      this.responseInfos.addAll(responseInfos);
+      List<ResponseInfo> responseInfos =
+          networkClient.sendAndPoll(requestInfosToSubmit, correlationIdsToDrop, pollTimeout);
 
+      networkClientIdToInflightRequest.get(clientIndex)
+          .addAll(requestInfosToSubmit.stream()
+              .map(r -> new InflightNetworkClientRequest(time.milliseconds(), r))
+              .collect(Collectors.toList()));
+
+      Set<Integer> receivedCorrelationIds = new HashSet<>();
       responseInfos.forEach(responseInfo -> {
-        pendingCorrelationIdToStartTimeMs.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
-        pendingCorrelationIdToNetworkClientIdx.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
-        pendingCorrelationIdToRequestInfo.remove(responseInfo.getRequestInfo().getRequest().getCorrelationId());
+        receivedCorrelationIds.add(responseInfo.getRequestInfo().getRequest().getCorrelationId());
       });
+
+      this.responseInfos.addAll(responseInfos);
+      networkClientIdToInflightRequest.get(clientIndex)
+          .removeIf(request -> receivedCorrelationIds.contains(request.getCorrelationId()));
+
+      if (requestInfo != null) {
+        requestInfos.remove();
+      }
+
+      clientIndex++;
+      clientIndex = clientIndex % networkClients.size();
     }
 
     try {
@@ -245,12 +267,11 @@ public class ServerPerfNetworkQueue extends Thread implements Closeable {
   }
 
   void shutDown() throws Exception {
+    logger.info("Shutting down the network queue");
     isShutDown = true;
     shutDownLatch.await();
-  }
 
-  @Override
-  public void close() throws IOException {
     networkClients.forEach(Http2NetworkClient::close);
+    logger.info("Shutdown complete for network queue");
   }
 }

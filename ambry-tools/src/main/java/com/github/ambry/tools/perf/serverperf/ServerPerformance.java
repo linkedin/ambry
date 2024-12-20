@@ -43,10 +43,8 @@ import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
-import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.FileReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
@@ -64,7 +62,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 
-public class ServerPerformance implements Closeable {
+public class ServerPerformance {
   private final ServerPerfNetworkQueue networkQueue;
   private final ServerPerformanceConfig config;
   private final ClusterMap clusterMap;
@@ -184,7 +182,6 @@ public class ServerPerformance implements Closeable {
       }
     }));
     serverPerformance.startGetLoadTest();
-    serverPerformance.close();
     System.exit(0);
   }
 
@@ -250,6 +247,7 @@ public class ServerPerformance implements Closeable {
           logger.error("encountered error in loadProducer", e);
         }
       }
+      logger.info("Load producer thread is finished");
     });
   }
 
@@ -306,6 +304,7 @@ public class ServerPerformance implements Closeable {
           logger.error("error in load consumer thread", e);
         }
       }
+      logger.info("Load consumer thread is finished");
     });
   }
 
@@ -376,10 +375,5 @@ public class ServerPerformance implements Closeable {
    */
   public void shutDown() throws Exception {
     networkQueue.shutDown();
-  }
-
-  @Override
-  public void close() throws IOException {
-    networkQueue.close();
   }
 }
