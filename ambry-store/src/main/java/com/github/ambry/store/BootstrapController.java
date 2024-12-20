@@ -40,10 +40,9 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  */
 public class BootstrapController {
   private boolean isRunning = false;
-  private final String BOOTSTRAP_IN_PROGRESS_FILE_NAME;
-  private final String FILECOPY_IN_PROGRESS_FILE_NAME;
-  private final Pattern allLogSegmentFilesPattern = Pattern.compile(".*_log.*");
+  private final Pattern allLogSegmentFilesPattern = Pattern.compile(".*_log");
   private final ServerConfig serverConfig;
+  private final StoreConfig storeConfig;
   private final StoreManager storeManager;
   private final PartitionStateChangeListener storageManagerListener;
   private final PartitionStateChangeListener fileCopyManagerListener;
@@ -54,12 +53,10 @@ public class BootstrapController {
   public BootstrapController(
       @Nonnull StoreManager storeManager, @Nonnull StoreConfig storeConfig,
       @Nonnull ServerConfig serverConfig, @Nonnull ClusterParticipant primaryClusterParticipant) {
-    this.serverConfig = serverConfig;
     this.storeManager = storeManager;
+    this.storeConfig = storeConfig;
+    this.serverConfig = serverConfig;
     this.primaryClusterParticipant = primaryClusterParticipant;
-
-    this.BOOTSTRAP_IN_PROGRESS_FILE_NAME = storeConfig.storeBootstrapInProgressFile;
-    this.FILECOPY_IN_PROGRESS_FILE_NAME = storeConfig.storeFileCopyInProgressFileName;
 
     primaryClusterParticipant.registerPartitionStateChangeListener(
         StateModelListenerType.BootstrapControllerListener, new BootstrapControllerImpl());
@@ -99,8 +96,8 @@ public class BootstrapController {
      */
     @Override
     public void onPartitionBecomeBootstrapFromOffline(@Nonnull String partitionName) {
-      logger.info("Bootstrap Controller's state change listener invoked for partition `{}`, state change `{}`",
-          partitionName, "Offline -> Bootstrap");
+      logger.info("Bootstrap Controller's state change listener invoked for partition `{}`, "
+              + "state change `Offline -> Bootstrap`", partitionName);
 
       ReplicaId replica = storeManager.getReplica(partitionName);
       PartitionStateChangeListener listenerToInvoke = null;
@@ -125,7 +122,7 @@ public class BootstrapController {
         }
       } else {
         if (isFileCopyFeatureEnabled()) {
-          if (isFileExists(replica.getPartitionId(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
+          if (isFileExists(replica.getPartitionId(), storeConfig.storeBootstrapInProgressFile)) {
             // R.Incomplete -> FC
             // Last attempt with blob based bootstrap protocol had failed for this partition.
             // FileCopy bootstrap protocol is enabled but we will still continue with blob based bootstrap protocol.
@@ -135,7 +132,7 @@ public class BootstrapController {
                 ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_INCOMPLETE_TO_FILE_BASED_HYDRATION);
             logStateChange("R.Incomplete -> FC", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
-            if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
+            if (isFileExists(replica.getPartitionId(), storeConfig.storeFileCopyInProgressFileName)) {
               // FC.Incomplete -> FC
               // Last attempt with FileCopy bootstrap protocol had failed for this partition.
               // We will resume the boostrap with FileCopy bootstrap protocol.
@@ -158,7 +155,7 @@ public class BootstrapController {
             }
           }
         } else {
-          if (isFileExists(replica.getPartitionId(), BOOTSTRAP_IN_PROGRESS_FILE_NAME)) {
+          if (isFileExists(replica.getPartitionId(), storeConfig.storeBootstrapInProgressFile)) {
             // R.Incomplete -> R
             // Last attempt with blob based bootstrap protocol had failed for this partition.
             // FileCopy bootstrap protocol is disabled and we will continue with blob based bootstrap protocol.
@@ -168,7 +165,7 @@ public class BootstrapController {
                 ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_INCOMPLETE_TO_BLOB_BASED_HYDRATION);
             logStateChange("R.Incomplete -> R", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
-            if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
+            if (isFileExists(replica.getPartitionId(), storeConfig.storeFileCopyInProgressFileName)) {
               // FC.Incomplete -> R
               // Last attempt with FileCopy bootstrap protocol had failed for this partition.
               // First we delete FileCopy data and then continue with blob based bootstrap protocol.
