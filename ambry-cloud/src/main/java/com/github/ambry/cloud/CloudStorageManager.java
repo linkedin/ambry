@@ -58,8 +58,17 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
+  public boolean addBlobStoreForFileCopy(ReplicaId replica) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public boolean addBlobStore(ReplicaId replica) {
     return createAndStartBlobStoreIfAbsent(replica.getPartitionId()) != null;
+  }
+  @Override
+  public void buildStateForFileCopy(ReplicaId replica){
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   /**

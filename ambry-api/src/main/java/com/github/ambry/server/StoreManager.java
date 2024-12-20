@@ -31,6 +31,13 @@ import java.util.regex.Pattern;
 public interface StoreManager {
 
   /**
+   * Add a new BlobStore for FileCopy based replication with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStoreForFileCopy(ReplicaId replica);
+
+  /**
    * Add a new BlobStore with given {@link ReplicaId}.
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
    * @return {@code true} if adding store was successful. {@code false} if not.
@@ -43,6 +50,12 @@ public interface StoreManager {
    * @return {@code true} if adding FileStore was successful. {@code false} if not.
    */
   boolean addFileStore(ReplicaId replicaId);
+
+  /**
+   * Build state after filecopy is completed
+   * @param replica the {@link ReplicaId} of the {@link Store} for which store needs to be built
+   */
+  void buildStateForFileCopy(ReplicaId replica);
 
   /**
    * Remove store from storage manager.
