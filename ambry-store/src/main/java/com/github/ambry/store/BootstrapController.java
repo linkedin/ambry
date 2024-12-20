@@ -1,3 +1,16 @@
+/**
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -11,6 +24,7 @@ import com.github.ambry.config.ServerReplicationMode;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
@@ -24,7 +38,7 @@ public class BootstrapController {
 
   private final String BOOTSTRAP_IN_PROGRESS_FILE_NAME;
   private final String FILECOPY_IN_PROGRESS_FILE_NAME;
-  private final Pattern allLogSegmentFilesPattern = Pattern.compile("\\d+\\.log");
+  private final Pattern allLogSegmentFilesPattern = Pattern.compile(".*_log.*");
   private final ServerConfig serverConfig;
   private final StoreManager storeManager;
   private final PartitionStateChangeListener storageManagerListener;
@@ -60,6 +74,7 @@ public class BootstrapController {
   }
 
   class BootstrapControllerImpl implements PartitionStateChangeListener {
+    EnumSet<ReplicationProtocolTransitionType> replicationProtocolTransitionType;
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(@Nonnull String partitionName) {
@@ -77,11 +92,17 @@ public class BootstrapController {
           // "New partition -> FC"
           // This is a new partition placement and FileCopy bootstrap protocol is enabled.
           listenerToInvoke = fileCopyManagerListener;
+
+          replicationProtocolTransitionType = EnumSet.of(
+              ReplicationProtocolTransitionType.NEW_PARTITION_TO_FILE_BASED_BOOTSTRAP);
           logStateChange("New partition -> FC", partitionName);
         } else {
           // "New partition -> R"
           // This is a new partition placement and FileCopy bootstrap protocol is disabled.
           listenerToInvoke = storageManagerListener;
+
+          replicationProtocolTransitionType = EnumSet.of(
+              ReplicationProtocolTransitionType.NEW_PARTITION_TO_BLOB_BASED_BOOTSTRAP);
           logStateChange("New partition -> R", partitionName);
         }
       } else {
@@ -91,6 +112,9 @@ public class BootstrapController {
             // Last attempt with blob based bootstrap protocol had failed for this partition.
             // FileCopy bootstrap protocol is enabled but we will still continue with blob based bootstrap protocol.
             listenerToInvoke = storageManagerListener;
+
+            replicationProtocolTransitionType = EnumSet.of(
+                ReplicationProtocolTransitionType.BLOB_BASED_INCOMPLETE_TO_FILE_BASED_BOOTSTRAP);
             logStateChange("R.Incomplete -> FC", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
             if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
@@ -98,6 +122,9 @@ public class BootstrapController {
               // Last attempt with FileCopy bootstrap protocol had failed for this partition.
               // We will resume the boostrap with FileCopy bootstrap protocol.
               listenerToInvoke = fileCopyManagerListener;
+
+              replicationProtocolTransitionType = EnumSet.of(
+                  ReplicationProtocolTransitionType.FILE_BASED_INCOMPLETE_TO_FILE_BASED_BOOTSTRAP);
               logStateChange("FC.Incomplete -> FC", partitionName);
             } else {
               // R.complete -> FC or FC.complete -> FC
@@ -105,6 +132,10 @@ public class BootstrapController {
               // We'll continue with blob based bootstrap protocol for this partition to catch up with its peers.
               // as part of Bootstrap->Standby state transition.
               listenerToInvoke = storageManagerListener;
+
+              replicationProtocolTransitionType = EnumSet.of(
+                  ReplicationProtocolTransitionType.BLOB_BASED_COMPLETE_TO_FILE_BASED_BOOTSTRAP,
+                  ReplicationProtocolTransitionType.FILE_BASED_COMPLETE_TO_FILE_BASED_BOOTSTRAP);
               logStateChange("R.complete -> FC or FC.complete -> FC", partitionName);
             }
           }
@@ -114,6 +145,9 @@ public class BootstrapController {
             // Last attempt with blob based bootstrap protocol had failed for this partition.
             // FileCopy bootstrap protocol is disabled and we will continue with blob based bootstrap protocol.
             listenerToInvoke = storageManagerListener;
+
+            replicationProtocolTransitionType = EnumSet.of(
+                ReplicationProtocolTransitionType.BLOB_BASED_INCOMPLETE_TO_BLOB_BASED_BOOTSTRAP);
             logStateChange("R.Incomplete -> R", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
             if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
@@ -128,6 +162,9 @@ public class BootstrapController {
                 throw new StateTransitionException(message, BootstrapControllerFailure);
               }
               listenerToInvoke = storageManagerListener;
+
+              replicationProtocolTransitionType = EnumSet.of(
+                  ReplicationProtocolTransitionType.FILE_BASED_INCOMPLETE_TO_BLOB_BASED_BOOTSTRAP);
               logStateChange("FC.Incomplete -> R", partitionName);
             } else {
               // R.complete -> R or FC.complete -> R
@@ -135,6 +172,10 @@ public class BootstrapController {
               // We'll continue with blob based bootstrap protocol for this partition to catch up with its peers.
               // as part of Bootstrap->Standby state transition.
               listenerToInvoke = storageManagerListener;
+
+              replicationProtocolTransitionType = EnumSet.of(
+                  ReplicationProtocolTransitionType.BLOB_BASED_COMPLETE_TO_BLOB_BASED_BOOTSTRAP,
+                  ReplicationProtocolTransitionType.FILE_BASED_COMPLETE_TO_BLOB_BASED_BOOTSTRAP);
               logStateChange("R.complete -> R or FC.complete -> R", partitionName);
             }
           }
