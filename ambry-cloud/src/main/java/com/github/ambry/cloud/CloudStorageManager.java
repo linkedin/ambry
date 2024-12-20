@@ -58,9 +58,14 @@ public class CloudStorageManager implements StoreManager {
     return createAndStartBlobStoreIfAbsent(replica.getPartitionId()) != null;
   }
 
+  /**
+   * Returning false because this will not be used as part of CloudStorageManager Implementation.
+   * Implementation will be added if needed.
+   */
   @Override
   public boolean addFileStore(ReplicaId replicaId) {
     return false;
+
   }
 
   @Override
@@ -77,6 +82,10 @@ public class CloudStorageManager implements StoreManager {
     return false;
   }
 
+  /**
+   * Returning null because this will not be used as part of CloudStorageManager Implementation.
+   * Implementation will be added if needed.
+   */
   @Override
   public Store getStore(PartitionId id) {
     try {
