@@ -24,17 +24,15 @@ import java.util.List;
 
 public class FileCopyGetMetaDataResponse extends Response {
   private final int numberOfLogfiles;
-  private final String hostName;
   private final List<LogInfo> logInfos;
   private static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
-  private static final int HostName_Field_Size_In_Bytes = 4;
 
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
       List<LogInfo> logInfos, ServerErrorCode errorCode, String hostName) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
+    validateVersion(versionId);
     this.numberOfLogfiles = numberOfLogfiles;
     this.logInfos = logInfos;
-    this.hostName = hostName;
   }
 
   public static FileCopyGetMetaDataResponse readFrom(DataInputStream stream) throws IOException {
@@ -53,26 +51,22 @@ public class FileCopyGetMetaDataResponse extends Response {
 
     String hostName = Utils.readIntString(stream);
     int numberOfLogfiles = stream.readInt();
-    int logInfosSize = stream.readInt();
     List<LogInfo> logInfos = new ArrayList<>();
-    for (int i = 0; i < logInfosSize; i++) {
+    for (int i = 0; i < numberOfLogfiles; i++) {
       logInfos.add(LogInfo.readFrom(stream));
     }
     return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode, hostName);
   }
   protected void prepareBuffer() {
     super.prepareBuffer();
-    Utils.serializeString(bufferToSend, hostName, Charset.defaultCharset());
     bufferToSend.writeInt(numberOfLogfiles);
-    bufferToSend.writeInt(logInfos.size());
     for (LogInfo logInfo : logInfos) {
       logInfo.writeTo(bufferToSend);
     }
   }
 
   public long sizeInBytes() {
-    return super.sizeInBytes() + Integer.BYTES + HostName_Field_Size_In_Bytes + hostName.length() + Integer.BYTES +
-        logInfos.stream().mapToLong(LogInfo::sizeInBytes).sum();
+    return super.sizeInBytes() + Integer.BYTES + logInfos.stream().mapToLong(LogInfo::sizeInBytes).sum();
   }
 
   public String toString() {
