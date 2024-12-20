@@ -29,8 +29,11 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse{
   public FileCopyGetMetaDataRequest(short versionId, int correlationId, String clientId,
       PartitionId partitionId, String hostName) {
     super(RequestOrResponseType.FileCopyGetMetaDataRequest, versionId, correlationId, clientId);
-    if (partitionId == null || hostName.isEmpty()) {
-      throw new IllegalArgumentException("Partition and Host Name cannot be null");
+    if (partitionId == null) {
+      throw new IllegalArgumentException("Partition cannot be null");
+    }
+    if (hostName.isEmpty()){
+      throw new IllegalArgumentException("Host Name cannot be null");
     }
     this.partitionId = partitionId;
     this.hostName = hostName;

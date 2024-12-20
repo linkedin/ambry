@@ -38,7 +38,8 @@ public class FileCopyGetMetaDataResponse extends Response {
   public static FileCopyGetMetaDataResponse readFrom(DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.FileCopyGetMetaDataResponse) {
-      throw new IllegalArgumentException("The type of request response is not compatible");
+      throw new IllegalArgumentException("The type of request response is not compatible. Expected : {}, Actual : {}" +
+          RequestOrResponseType.FileCopyGetMetaDataResponse + type);
     }
     short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -46,7 +47,8 @@ public class FileCopyGetMetaDataResponse extends Response {
     ServerErrorCode errorCode = ServerErrorCode.values()[stream.readShort()];
 
     if(errorCode != ServerErrorCode.No_Error) {
-      return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, -1, new ArrayList<>(), errorCode);
+      //Setting the number of logfiles to 0 as there are no logfiles to be read.
+      return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, 0, new ArrayList<>(), errorCode);
     }
 
     int numberOfLogfiles = stream.readInt();

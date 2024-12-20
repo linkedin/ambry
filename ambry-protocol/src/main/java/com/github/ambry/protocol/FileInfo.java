@@ -19,6 +19,11 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 
+
+/**
+ * Contains the fileName and fileSizeInBytes for a local partition. This is used
+ * by LogInfo as part of filecopy metadata request.
+ */
 public class FileInfo {
   private String fileName;
   private long fileSizeInBytes;

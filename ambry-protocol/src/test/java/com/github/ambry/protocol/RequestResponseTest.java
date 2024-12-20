@@ -65,6 +65,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mock;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -687,6 +688,22 @@ public class RequestResponseTest {
     Assert.assertEquals(fileMetadataRequestFromBytes.getPartitionId().toPathString(), "0");
 
     request.release();
+
+    try{
+      new FileCopyGetMetaDataRequest(requestVersionToUse, 111, "id1",
+          null, "host3");
+      Assert.fail("Should have thrown exception");
+    }catch (IllegalArgumentException e) {
+      //expected
+    }
+
+    try{
+      new FileCopyGetMetaDataRequest(requestVersionToUse, 111, "id1",
+          new MockPartitionId(), "");
+      Assert.fail("Should have thrown exception");
+    }catch (IllegalArgumentException e) {
+      //expected
+    }
   }
 
   @Test
@@ -755,6 +772,16 @@ public class RequestResponseTest {
     Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfos().get(1).getBloomFilters().get(0).getFileName(), "1_1_bloom");
     Assert.assertEquals(fileCopyProtocolMetaDataResponseTranformed.getLogInfos().get(1).getBloomFilters().get(0).getFileSizeInBytes(), 1040);
     response.release();
+
+
+    response =
+        new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2 ,
+            logInfoList, ServerErrorCode.IO_Error);
+    DataInputStream requestStream1 = serAndPrepForRead(response, -1, false);
+    FileCopyGetMetaDataResponse fileCopyProtocolGetChunkResponse =
+        FileCopyGetMetaDataResponse.readFrom(requestStream1);
+    Assert.assertEquals(fileCopyProtocolGetChunkResponse.getError(), ServerErrorCode.IO_Error);
+    response.release();
   }
 
   @Test
@@ -773,6 +800,39 @@ public class RequestResponseTest {
     Assert.assertEquals(request.getStartOffset(), 1000);
     Assert.assertEquals(request.getVersionId(), requestVersionToUse);
     request.release();
+
+    try{
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
+          null, "file1", 1000, 0);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+
+    try{
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
+          new MockPartitionId(), "", 1000, 0);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+
+    try{
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
+          new MockPartitionId(), "file1", -1, 0);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+
+    try{
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
+          new MockPartitionId(), "file1", 1000, -1);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+
   }
 
   private void doReplicaMetadataRequestTest(short responseVersionToUse, short requestVersionToUse,

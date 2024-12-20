@@ -21,6 +21,11 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
+
+/**
+ * Contains the fileName, fileSizeInBytes, indexFiles and bloomFilters for a local partition. This is used
+ * by filecopy metadata request.
+ */
 public class LogInfo {
   private String fileName;
   private long fileSizeInBytes;
