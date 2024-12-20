@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * This class is responsible for interactions with Disk as Part Of File Copy Protocol.
  * It is responsible for reading and writing chunks and metadata to disk.
  */
-public class FileStore {
+class FileStore {
   private boolean isRunning = false;
   private ConcurrentHashMap<String, FileChannel> fileNameToFileChannelMap;
 
