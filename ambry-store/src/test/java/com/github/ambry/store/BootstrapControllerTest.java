@@ -25,9 +25,11 @@ import com.github.ambry.config.ServerReplicationMode;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.StoreManager;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Pattern;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -68,12 +70,13 @@ public class BootstrapControllerTest {
   }
 
   @Test
-  public void test__ReplicationProtocolTransitionType__NEW_PARTITION_TO_FILE_BASED_BOOTSTRAP() {
+  public void test__ReplicationProtocolTransitionType__NEW_PARTITION_TO_FILE_BASED_HYDRATION() {
     // Arrange
     final BootstrapController.BootstrapControllerImpl bootstrapControllerImpl =
         getBootstrapControllerImpl(ServerReplicationMode.FILE_BASED);
 
-    when(storeManager.getReplica(partitionName1)).thenReturn(null);
+    when(storeManager.getReplica(partitionName1))
+        .thenReturn(null);
 
     // Act
     bootstrapControllerImpl.onPartitionBecomeBootstrapFromOffline(partitionName1);
@@ -86,16 +89,17 @@ public class BootstrapControllerTest {
 
     assert bootstrapControllerImpl.replicationProtocolTransitionType.size() == 1;
     assert bootstrapControllerImpl.replicationProtocolTransitionType.contains(
-        ReplicationProtocolTransitionType.NEW_PARTITION_TO_FILE_BASED_BOOTSTRAP);
+        ReplicationProtocolTransitionType.NEW_PARTITION_TO_FILE_BASED_HYDRATION);
   }
 
   @Test
-  public void test__ReplicationProtocolTransitionType__NEW_PARTITION_TO_BLOB_BASED_BOOTSTRAP() {
+  public void test__ReplicationProtocolTransitionType__NEW_PARTITION_TO_BLOB_BASED_HYDRATION() {
     // Arrange
     final BootstrapController.BootstrapControllerImpl bootstrapControllerImpl =
         getBootstrapControllerImpl(ServerReplicationMode.BLOB_BASED);
 
-    when(storeManager.getReplica(partitionName1)).thenReturn(null);
+    when(storeManager.getReplica(partitionName1))
+        .thenReturn(null);
 
     // Act
     bootstrapControllerImpl.onPartitionBecomeBootstrapFromOffline(partitionName1);
@@ -108,20 +112,22 @@ public class BootstrapControllerTest {
 
     assert bootstrapControllerImpl.replicationProtocolTransitionType.size() == 1;
     assert bootstrapControllerImpl.replicationProtocolTransitionType.contains(
-        ReplicationProtocolTransitionType.NEW_PARTITION_TO_BLOB_BASED_BOOTSTRAP);
+        ReplicationProtocolTransitionType.NEW_PARTITION_TO_BLOB_BASED_HYDRATION);
   }
 
   @Test
-  public void test__ReplicationProtocolTransitionType__BLOB_BASED_COMPLETE_TO_FILE_BASED_BOOTSTRAP() {
+  public void test__ReplicationProtocolTransitionType__BLOB_BASED_HYDRATION_COMPLETE_TO_FILE_BASED_HYDRATION() {
     // Arrange
     final BootstrapController.BootstrapControllerImpl bootstrapControllerImpl =
         getBootstrapControllerImpl(ServerReplicationMode.FILE_BASED);
 
     TestReplica testReplica = mock(TestReplica.class);
     PartitionId partitionId = mock(PartitionId.class);
-    when(testReplica.getPartitionId()).thenReturn(partitionId);
-    when(storeManager.getReplica(partitionName1)).thenReturn(testReplica);
-    when(storeManager.isFileExists(partitionId, storeConfig.storeBootstrapInProgressFile))
+    when(testReplica.getPartitionId())
+        .thenReturn(partitionId);
+    when(storeManager.getReplica(partitionName1))
+        .thenReturn(testReplica);
+    when(bootstrapControllerImpl.isFileExists(partitionId, storeConfig.storeBootstrapInProgressFile))
         .thenReturn(true);
 
     // Act
@@ -135,7 +141,56 @@ public class BootstrapControllerTest {
 
     assert bootstrapControllerImpl.replicationProtocolTransitionType.size() == 1;
     assert bootstrapControllerImpl.replicationProtocolTransitionType.contains(
-        ReplicationProtocolTransitionType.BLOB_BASED_INCOMPLETE_TO_FILE_BASED_BOOTSTRAP);
+        ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_INCOMPLETE_TO_FILE_BASED_HYDRATION);
+  }
+
+  /**
+   * Test for {@link BootstrapController.BootstrapControllerImpl#onPartitionBecomeBootstrapFromOffline(String)}
+   * when :-
+   * 1. The server replication mode is {@link ServerReplicationMode#BLOB_BASED}
+   * 2. Replica is not null
+   * 3. Bootstrap_in_progress file does not exist
+   * 4. Filecopy_in_progress file exists
+   * 5. Atleast one LogSegment File exists for the partition
+   * Bootstrap Controller is expected to instantiate storageManagerListener
+   * ReplicationProtocolTransitionType is either of
+   * a. {@link ReplicationProtocolTransitionType#FILE_BASED_HYDRATION_COMPLETE_TO_BLOB_BASED_HYDRATION} state
+   * b. {@link ReplicationProtocolTransitionType#BLOB_BASED_HYDRATION_COMPLETE_TO_BLOB_BASED_HYDRATION} state
+   * @throws IOException
+   */
+  @Test
+  public void test__ReplicationProtocolTransitionType__COMPLETED_BOOTSTRAP_TO_BLOB_BASED_HYDRATION() {
+    // Arrange
+    final BootstrapController.BootstrapControllerImpl bootstrapControllerImpl =
+        getBootstrapControllerImpl(ServerReplicationMode.BLOB_BASED);
+
+    TestReplica testReplica = mock(TestReplica.class);
+    PartitionId partitionId = mock(PartitionId.class);
+    when(testReplica.getPartitionId())
+        .thenReturn(partitionId);
+    when(storeManager.getReplica(partitionName1))
+        .thenReturn(testReplica);
+    when(storeManager.isFileExists(partitionId, storeConfig.storeBootstrapInProgressFile))
+        .thenReturn(false);
+    when(bootstrapControllerImpl.isFileExists(partitionId, storeConfig.storeFileCopyInProgressFileName))
+        .thenReturn(false);
+    when(bootstrapControllerImpl.isAnyLogSegmentExists(partitionId))
+        .thenReturn(true);
+
+    // Act
+    bootstrapControllerImpl.onPartitionBecomeBootstrapFromOffline(partitionName1);
+
+    // Assert
+    verify(fileCopyManagerListener, never())
+        .onPartitionBecomeBootstrapFromOffline(partitionName1);
+    verify(storageManagerListener, times(1))
+        .onPartitionBecomeBootstrapFromOffline(partitionName1);
+
+    assert bootstrapControllerImpl.replicationProtocolTransitionType.size() == 2;
+    assert bootstrapControllerImpl.replicationProtocolTransitionType.contains(
+        ReplicationProtocolTransitionType.FILE_BASED_HYDRATION_COMPLETE_TO_BLOB_BASED_HYDRATION);
+    assert bootstrapControllerImpl.replicationProtocolTransitionType.contains(
+        ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_COMPLETE_TO_BLOB_BASED_HYDRATION);
   }
 
   private static BootstrapController.BootstrapControllerImpl getBootstrapControllerImpl(

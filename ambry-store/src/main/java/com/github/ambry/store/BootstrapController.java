@@ -34,8 +34,12 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
 
+/**
+ * BootstrapController is responsible for managing the hydration protocol
+ * for Offline -> Bootstrap state transition of partitions.
+ */
 public class BootstrapController {
-
+  private boolean isRunning = false;
   private final String BOOTSTRAP_IN_PROGRESS_FILE_NAME;
   private final String FILECOPY_IN_PROGRESS_FILE_NAME;
   private final Pattern allLogSegmentFilesPattern = Pattern.compile(".*_log.*");
@@ -70,12 +74,29 @@ public class BootstrapController {
         partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
   }
 
-  public void start() {
+  void start() {
+    if(!isRunning) {
+      //Start the FileStore
+      isRunning = true;
+    }
+  }
+
+  void shutdown() {
+    //Implement shutdown Hook.
+    isRunning = false;
+  }
+
+  boolean isRunning() {
+    return isRunning;
   }
 
   class BootstrapControllerImpl implements PartitionStateChangeListener {
     EnumSet<ReplicationProtocolTransitionType> replicationProtocolTransitionType;
 
+    /**
+     * TODO: Add context
+     * @param partitionName of the partition.
+     */
     @Override
     public void onPartitionBecomeBootstrapFromOffline(@Nonnull String partitionName) {
       logger.info("Bootstrap Controller's state change listener invoked for partition `{}`, state change `{}`",
@@ -85,16 +106,13 @@ public class BootstrapController {
       PartitionStateChangeListener listenerToInvoke = null;
 
       if (null == replica) {
-        // there can be two scenarios:
-        // 1. this is the first time to add new replica onto current node;
-        // 2. last replica addition failed at some point before updating InstanceConfig in Helix
         if (isFileCopyFeatureEnabled()) {
           // "New partition -> FC"
           // This is a new partition placement and FileCopy bootstrap protocol is enabled.
           listenerToInvoke = fileCopyManagerListener;
 
           replicationProtocolTransitionType = EnumSet.of(
-              ReplicationProtocolTransitionType.NEW_PARTITION_TO_FILE_BASED_BOOTSTRAP);
+              ReplicationProtocolTransitionType.NEW_PARTITION_TO_FILE_BASED_HYDRATION);
           logStateChange("New partition -> FC", partitionName);
         } else {
           // "New partition -> R"
@@ -102,7 +120,7 @@ public class BootstrapController {
           listenerToInvoke = storageManagerListener;
 
           replicationProtocolTransitionType = EnumSet.of(
-              ReplicationProtocolTransitionType.NEW_PARTITION_TO_BLOB_BASED_BOOTSTRAP);
+              ReplicationProtocolTransitionType.NEW_PARTITION_TO_BLOB_BASED_HYDRATION);
           logStateChange("New partition -> R", partitionName);
         }
       } else {
@@ -114,7 +132,7 @@ public class BootstrapController {
             listenerToInvoke = storageManagerListener;
 
             replicationProtocolTransitionType = EnumSet.of(
-                ReplicationProtocolTransitionType.BLOB_BASED_INCOMPLETE_TO_FILE_BASED_BOOTSTRAP);
+                ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_INCOMPLETE_TO_FILE_BASED_HYDRATION);
             logStateChange("R.Incomplete -> FC", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
             if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
@@ -124,7 +142,7 @@ public class BootstrapController {
               listenerToInvoke = fileCopyManagerListener;
 
               replicationProtocolTransitionType = EnumSet.of(
-                  ReplicationProtocolTransitionType.FILE_BASED_INCOMPLETE_TO_FILE_BASED_BOOTSTRAP);
+                  ReplicationProtocolTransitionType.FILE_BASED_HYDRATION_INCOMPLETE_TO_FILE_BASED_HYDRATION);
               logStateChange("FC.Incomplete -> FC", partitionName);
             } else {
               // R.complete -> FC or FC.complete -> FC
@@ -134,8 +152,8 @@ public class BootstrapController {
               listenerToInvoke = storageManagerListener;
 
               replicationProtocolTransitionType = EnumSet.of(
-                  ReplicationProtocolTransitionType.BLOB_BASED_COMPLETE_TO_FILE_BASED_BOOTSTRAP,
-                  ReplicationProtocolTransitionType.FILE_BASED_COMPLETE_TO_FILE_BASED_BOOTSTRAP);
+                  ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_COMPLETE_TO_FILE_BASED_HYDRATION,
+                  ReplicationProtocolTransitionType.FILE_BASED_HYDRATION_COMPLETE_TO_FILE_BASED_HYDRATION);
               logStateChange("R.complete -> FC or FC.complete -> FC", partitionName);
             }
           }
@@ -147,7 +165,7 @@ public class BootstrapController {
             listenerToInvoke = storageManagerListener;
 
             replicationProtocolTransitionType = EnumSet.of(
-                ReplicationProtocolTransitionType.BLOB_BASED_INCOMPLETE_TO_BLOB_BASED_BOOTSTRAP);
+                ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_INCOMPLETE_TO_BLOB_BASED_HYDRATION);
             logStateChange("R.Incomplete -> R", partitionName);
           } else if (isAnyLogSegmentExists(replica.getPartitionId())) {
             if (isFileExists(replica.getPartitionId(), FILECOPY_IN_PROGRESS_FILE_NAME)) {
@@ -164,7 +182,7 @@ public class BootstrapController {
               listenerToInvoke = storageManagerListener;
 
               replicationProtocolTransitionType = EnumSet.of(
-                  ReplicationProtocolTransitionType.FILE_BASED_INCOMPLETE_TO_BLOB_BASED_BOOTSTRAP);
+                  ReplicationProtocolTransitionType.FILE_BASED_HYDRATION_INCOMPLETE_TO_BLOB_BASED_HYDRATION);
               logStateChange("FC.Incomplete -> R", partitionName);
             } else {
               // R.complete -> R or FC.complete -> R
@@ -174,8 +192,8 @@ public class BootstrapController {
               listenerToInvoke = storageManagerListener;
 
               replicationProtocolTransitionType = EnumSet.of(
-                  ReplicationProtocolTransitionType.BLOB_BASED_COMPLETE_TO_BLOB_BASED_BOOTSTRAP,
-                  ReplicationProtocolTransitionType.FILE_BASED_COMPLETE_TO_BLOB_BASED_BOOTSTRAP);
+                  ReplicationProtocolTransitionType.BLOB_BASED_HYDRATION_COMPLETE_TO_BLOB_BASED_HYDRATION,
+                  ReplicationProtocolTransitionType.FILE_BASED_HYDRATION_COMPLETE_TO_BLOB_BASED_HYDRATION);
               logStateChange("R.complete -> R or FC.complete -> R", partitionName);
             }
           }
@@ -238,13 +256,13 @@ public class BootstrapController {
     }
 
     // Helper method to check if a file exists in the partition.
-    private boolean isFileExists(
+    boolean isFileExists(
         @Nonnull PartitionId partitionId, @Nonnull String fileName) {
       return storeManager.isFileExists(partitionId, fileName);
     }
 
     // Helper method to check if any log segment files exist in the partition.
-    private boolean isAnyLogSegmentExists(@Nonnull PartitionId partitionId) {
+    boolean isAnyLogSegmentExists(@Nonnull PartitionId partitionId) {
       try {
         return storeManager.isFilesExistForPattern(partitionId, allLogSegmentFilesPattern);
       } catch (IOException e) {
@@ -255,10 +273,12 @@ public class BootstrapController {
     }
 
     // Helper method to delete the file copy data.
-    private void deleteFileCopyData(@Nonnull PartitionId partitionId) throws IOException, StoreException {
+    void deleteFileCopyData(@Nonnull PartitionId partitionId) throws IOException, StoreException {
       // Currently we’ll delete all datasets by removing this partition's BlobStore
       // TODO: An optimisation could be explored to only delete incomplete datasets.
-      storeManager.removeBlobStore(partitionId);
+      // TODO: Write logic to cleanup the files inside the directory
+
+      throw new UnsupportedOperationException("Not implemented yet");
     }
   }
 }
