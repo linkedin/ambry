@@ -442,15 +442,14 @@ public class DiskManager {
         compactionManager.addBlobStore(store);
         // add new created store into in-memory data structures.
         stores.put(replica.getPartitionId(), store);
-        partitionToReplicaMap.put(replica.getPartitionId(), replica);
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
         createBootstrapFileIfAbsent(replica);
-        logger.info("New store is successfully added into DiskManager.");
+        logger.info("New store for partitionId {} is successfully added into DiskManager.", replica.getPartitionId());
         succeed = true;
       }
     } catch (Exception e) {
-      logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
+      logger.error("Failed to start new added store for partitionId {} for FileCopy based replication", replica.getPartitionId(),
           e);
     } finally {
       rwLock.writeLock().unlock();
@@ -498,7 +497,7 @@ public class DiskManager {
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
         createBootstrapFileIfAbsent(replica);
-        logger.info("New store is successfully added into DiskManager.");
+        logger.info("New store is successfully added into DiskManager for partitionId {}.", replica.getPartitionId());
         succeed = true;
       }
     } catch (Exception e) {

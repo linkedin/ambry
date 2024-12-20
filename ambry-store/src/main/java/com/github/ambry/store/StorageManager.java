@@ -543,17 +543,17 @@ public class StorageManager implements StoreManager {
    */
   @Override
   public boolean addBlobStoreForFileCopy(ReplicaId replica) {
-    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
-      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
+    if (!partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.info("PartitionId {} doesn't exist in storage manager during state build, rejecting adding store request", replica.getPartitionId());
       return false;
     }
-    DiskManager diskManager = addDisk(replica.getDiskId());
+    // We don't require addDisk since DiskManager is already started during initialization of StorageManager as part
+    // of prefilecopy steps. We will fetch it from partitionToDiskManager map.
+    DiskManager diskManager = partitionToDiskManager.get(replica.getPartitionId());
     if (diskManager == null || !diskManager.addBlobStoreForFileCopy(replica)) {
       logger.error("Failed to add new store into DiskManager");
       return false;
     }
-    partitionToDiskManager.put(replica.getPartitionId(), diskManager);
-    partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
     logger.info("New store is successfully added into StorageManager");
     return true;
   }
@@ -600,9 +600,14 @@ public class StorageManager implements StoreManager {
         throw new StateTransitionException("Failed to add store for replica " + partitionId.getId() + " into storage manager",
             ReplicaOperationFailure);
       } else {
-        logger.info("Failed to add store for replica {} at location {}. Retrying bootstrapping replica at different location",
+        logger.info("Failed to add store for replica {} at location {}. Cleanup and raise StateTransitionException",
             partitionId.getId(), replica.getReplicaPath());
+        // This will remove the reserved space from diskSpaceAllocator
         tryRemoveFailedBootstrapBlobStore(replica);
+        // Throwing StateTransitionException here since we cannot retry adding BlobStore since Filecopy has copied data
+        // into the selected disk itself. Hence, putting the replica into ERROR state via StateTransitionException
+        throw new StateTransitionException("Failed to add store for replica " + partitionId.getId() + " into storage manager",
+            ReplicaOperationFailure);
       }
     }
     Store store = getStore(replica.getPartitionId(), false);
