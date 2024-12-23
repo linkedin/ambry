@@ -55,8 +55,7 @@ public class FileCopyManager {
       if(storeManager.getReplica(partitionName) == null){
         storeManager.setUpReplica(partitionName);
       }
-      prioritisationManager.addReplica(partitionName);
-      // StateBuilding (storeManager.buildStateForFileCopy()) will be triggered at the end of FCM's async handler.
+      //prioritisationManager.addReplica(partitionName);
     }
 
     @Override
