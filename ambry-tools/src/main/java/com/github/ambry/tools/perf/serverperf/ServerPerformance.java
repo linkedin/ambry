@@ -193,7 +193,7 @@ public class ServerPerformance {
    * so any waiting thread can continue
    * @throws Exception
    */
-  void startGetLoadTest() throws Exception {
+  public void startGetLoadTest() throws Exception {
     Thread getLoadProducer = getGetLoadProducerThread();
     Thread getLoadConsumer = getGetLoadConsumerThread();
     Thread shutDownThread = getTimedShutDownThread();
