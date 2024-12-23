@@ -64,6 +64,7 @@ import static com.github.ambry.utils.Utils.*;
 public class DiskManager {
 
   private final ConcurrentHashMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, FileStore> fileStores = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final DiskId disk;
@@ -310,7 +311,9 @@ public class DiskManager {
       running = false;
       compactionManager.disable();
       diskIOScheduler.disable();
-      final AtomicInteger numFailures = new AtomicInteger(0);
+      final AtomicInteger numStoreFailures = new AtomicInteger(0);
+      final AtomicInteger numFileStoreFailures = new AtomicInteger(0);
+
       List<Thread> shutdownThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
         if (!partitionAndStore.getValue().isStarted()) {
@@ -320,7 +323,7 @@ public class DiskManager {
           try {
             partitionAndStore.getValue().shutdown();
           } catch (Exception e) {
-            numFailures.incrementAndGet();
+            numStoreFailures.incrementAndGet();
             metrics.totalStoreShutdownFailures.inc();
             logger.error("Exception while shutting down store {} on disk {}", partitionAndStore.getKey(), disk, e);
           }
@@ -328,11 +331,34 @@ public class DiskManager {
         thread.start();
         shutdownThreads.add(thread);
       }
+
+      for (final Map.Entry<PartitionId, FileStore> fileStore: fileStores.entrySet()) {
+        if(!fileStore.getValue().isRunning()){
+          continue;
+        }
+        Thread thread = Utils.newThread("file-store-shutdown-" + fileStore.getKey(), () -> {
+          try {
+            fileStore.getValue().shutdown();
+          } catch (Exception e) {
+            numFileStoreFailures.incrementAndGet();
+            metrics.totalFileStoreShutDownFailures.inc();
+            logger.error("Exception while shutting down File store {} on disk {}", fileStore.getKey(), disk, e);
+          }
+        }, false);
+        thread.start();
+        shutdownThreads.add(thread);
+      }
+
       for (Thread shutdownThread : shutdownThreads) {
         shutdownThread.join();
       }
-      if (numFailures.get() > 0) {
-        logger.error("Could not shutdown {} out of {} stores on the disk {}", numFailures.get(), stores.size(), disk);
+
+      if (numStoreFailures.get() > 0) {
+        logger.error("Could not shutdown {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
+      }
+
+      if (numFileStoreFailures.get() > 0) {
+        logger.error("Could not shutdown {} out of {} File stores on the disk {}", numFileStoreFailures.get(), fileStores.size(), disk);
       }
       compactionManager.awaitTermination();
       longLivedTaskScheduler.shutdown();
@@ -468,6 +494,44 @@ public class DiskManager {
     } finally {
       rwLock.writeLock().unlock();
     }
+    return succeed;
+  }
+
+
+  public FileStore getFileStore(PartitionId partitionId){
+    return fileStores.get(partitionId);
+  }
+
+  boolean addFileStore(ReplicaId replica){
+    rwLock.writeLock().lock();
+    boolean succeed = false;
+    try{
+      if(!running){
+        logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
+      }else{
+        File storeDir = new File(replica.getReplicaPath());
+        if (storeDir.exists()) {
+          logger.info("Deleting previous store directory associated with {}", replica);
+          try {
+            Utils.deleteFileOrDirectory(storeDir);
+          } catch (Exception e) {
+            throw new IOException("Couldn't delete store directory " + replica.getReplicaPath(), e);
+          }
+          logger.info("Old store directory is deleted for {}", replica);
+        }
+        FileStore fileStore = new FileStore("");
+        fileStore.start();
+        fileStores.put(replica.getPartitionId(), fileStore);
+        //createFileCopyProgressFileIfAbsent(replica);
+        logger.info("New File Store is successfully added into DiskManager.");
+        succeed = true;
+      }
+    } catch (Exception e) {
+    logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
+        e);
+  } finally {
+    rwLock.writeLock().unlock();
+  }
     return succeed;
   }
 

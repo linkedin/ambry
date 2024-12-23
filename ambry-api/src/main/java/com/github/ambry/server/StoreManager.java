@@ -20,6 +20,8 @@ import com.github.ambry.store.StoreException;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import com.github.ambry.store.FileStore;
+
 
 
 /**
@@ -33,6 +35,11 @@ public interface StoreManager {
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
   boolean addBlobStore(ReplicaId replica);
+
+  boolean addFileStore(ReplicaId replicaId);
+
+  void setUpReplica(String partitionName);
+
 
   /**
    * Build state after filecopy is completed
@@ -67,6 +74,8 @@ public interface StoreManager {
    *         that partition, or that store was not started.
    */
   Store getStore(PartitionId id);
+
+  FileStore getFileStore(PartitionId id);
 
   /**
    * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific

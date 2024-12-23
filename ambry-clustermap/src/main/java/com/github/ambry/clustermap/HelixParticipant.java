@@ -894,6 +894,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (statsManagerListener != null) {
         statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
+    } catch (InterruptedException e) {
+      //TODO: Handle the exception more gracefully.
+      logger.error("Bootstrap was interrupted on partition {}", partitionName);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+      throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
