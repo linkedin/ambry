@@ -627,6 +627,15 @@ class MockStorageManager extends StorageManager {
   }
 
   @Override
+  public void buildStateForFileCopy(ReplicaId replica) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+  @Override
+  public boolean addBlobStoreForFileCopy(ReplicaId replica) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public boolean addBlobStore(ReplicaId id) {
     updatePartitionToDiskManager(id);
     partitionNameToReplicaId.put(id.getPartitionId().toPathString(), id);
