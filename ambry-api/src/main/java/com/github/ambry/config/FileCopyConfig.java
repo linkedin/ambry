@@ -27,7 +27,6 @@ public class FileCopyConfig {
   @Default("sealed_logs_metadata_file")
   public final String fileCopyMetaDataFileName;
 
-
   public FileCopyConfig(VerifiableProperties verifiableProperties) {
     fileCopyMetaDataFileName = verifiableProperties.getString(File_COPY_META_DATA_FILE_NAME, "sealed_logs_metadata_file");
     parallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
