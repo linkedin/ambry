@@ -66,6 +66,7 @@ public class RestUtils {
   public static final String PATH_SEPARATOR_STRING = "/";
   public static final String STITCH = "STITCH";
   public static final String UPLOADS_QUERY_PARAM = "uploads";
+  public static final String BATCH_DELETE_QUERY_PARAM = "delete";
   public static final String UPLOAD_ID_QUERY_PARAM = "uploadId";
   public static final String CONTINUE = "100-continue";
   public static final String OBJECT_LOCK_PARAM = "object-lock";

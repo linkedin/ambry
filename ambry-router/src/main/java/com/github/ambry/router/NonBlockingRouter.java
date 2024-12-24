@@ -527,7 +527,7 @@ public class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     routerMetrics.deleteBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
-
+    // here **
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
