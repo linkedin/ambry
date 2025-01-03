@@ -67,7 +67,7 @@ public class ServerPerformance {
   private final ServerPerformanceConfig config;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationId = new AtomicInteger();
-  Http2ClientMetrics clientMetrics;
+  private final Http2ClientMetrics clientMetrics;
 
   private final CountDownLatch timedShutDownLatch;
 
@@ -81,77 +81,81 @@ public class ServerPerformance {
      * The path to the hardware layout file. Needed if using
      * {@link StaticClusterAgentsFactory}.
      */
-    @Config("hardware.layout.file.path")
+    @Config("server.performance.hardware.layout.file.path")
     @Default("")
-    final String hardwareLayoutFilePath;
+    final String serverPerformanceHardwareLayoutFilePath;
 
     /**
      * The path to the partition layout file. Needed if using
      * {@link StaticClusterAgentsFactory}.
      */
-    @Config("partition.layout.file.path")
+    @Config("server.performance.partition.layout.file.path")
     @Default("")
-    final String partitionLayoutFilePath;
+    final String serverPerformancePartitionLayoutFilePath;
 
     /**
      * maximum parallel network requests at a point of time
      */
-    @Config("max.parallel.requests")
+    @Config("server.performance.max.parallel.requests")
     @Default("20")
-    final int maxParallelRequests;
+    final int serverPerformanceMaxParallelRequests;
 
     /**
      * Total number of network clients
      */
-    @Config("network.clients.count")
+    @Config("server.performance.network.clients.count")
     @Default("2")
-    final int networkClientsCount;
+    final int serverPerformanceNetworkClientsCount;
 
     /**
      * Time after which to drop a request
      */
-    @Config("operations.time.out.sec")
+    @Config("server.performance.operations.time.out.sec")
     @Default("15")
-    final int operationsTimeOutSec;
+    final int serverPerformanceOperationsTimeOutSec;
 
     /**
      * Path to file from which to read the blob ids
      */
-    @Config("blob.id.file.path")
+    @Config("server.performance.blob.id.file.path")
     @Default("")
-    final String blobIdFilePath;
+    final String serverPerformanceBlobIdFilePath;
 
     /**
      * The hostname of the target server as it appears in the partition layout.
      */
-    @Config("hostname")
+    @Config("server.performance.hostname")
     @Default("localhost")
-    final String hostname;
+    final String serverPerformanceHostname;
 
     /**
      * The port of the target server in the partition layout (need not be the actual port to connect to).
      */
-    @Config("port")
+    @Config("server.performance.port")
     @Default("6667")
-    final int port;
+    final int serverPerformancePort;
 
     /**
      * Total time after which to stop the performance test
      */
-    @Config("time.out.seconds")
+    @Config("server.performance.time.out.seconds")
     @Default("30")
-    final int timeOutSeconds;
+    final int serverPerformanceTimeOutSeconds;
 
     ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
-      hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path", "");
-      partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path", "");
-      blobIdFilePath = verifiableProperties.getString("blob.id.file.path", "");
-      hostname = verifiableProperties.getString("hostname", "localhost");
-      port = verifiableProperties.getInt("port", 6667);
-      maxParallelRequests = verifiableProperties.getInt("max.parallel.requests", 20);
-      networkClientsCount = verifiableProperties.getInt("network.clients.count", 2);
-      timeOutSeconds = verifiableProperties.getInt("time.out.seconds", 30);
-      operationsTimeOutSec = verifiableProperties.getInt("operations.time.out.sec", 15);
+      serverPerformanceHardwareLayoutFilePath =
+          verifiableProperties.getString("server.performance.hardware.layout.file.path", "");
+      serverPerformancePartitionLayoutFilePath =
+          verifiableProperties.getString("server.performance.partition.layout.file.path", "");
+      serverPerformanceBlobIdFilePath = verifiableProperties.getString("server.performance.blob.id.file.path", "");
+      serverPerformanceHostname = verifiableProperties.getString("server.performance.hostname", "localhost");
+      serverPerformancePort = verifiableProperties.getInt("server.performance.port", 6667);
+      serverPerformanceMaxParallelRequests =
+          verifiableProperties.getInt("server.performance.max.parallel.requests", 20);
+      serverPerformanceNetworkClientsCount = verifiableProperties.getInt("server.performance.network.clients.count", 2);
+      serverPerformanceTimeOutSeconds = verifiableProperties.getInt("server.performance.time.out.seconds", 30);
+      serverPerformanceOperationsTimeOutSec =
+          verifiableProperties.getInt("server.performance.operations.time.out.sec", 15);
     }
   }
 
@@ -159,13 +163,14 @@ public class ServerPerformance {
     config = new ServerPerformanceConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     clusterMap = ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
-        config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
+        config.serverPerformanceHardwareLayoutFilePath,
+        config.serverPerformancePartitionLayoutFilePath)).getClusterMap();
     clientMetrics = new Http2ClientMetrics(new MetricRegistry());
     timedShutDownLatch = new CountDownLatch(1);
     shutDownLatch = new CountDownLatch(1);
-    networkQueue =
-        new ServerPerfNetworkQueue(verifiableProperties, clientMetrics, new SystemTime(), config.maxParallelRequests,
-            config.networkClientsCount, config.operationsTimeOutSec);
+    networkQueue = new ServerPerfNetworkQueue(verifiableProperties, clientMetrics, new SystemTime(),
+        config.serverPerformanceMaxParallelRequests, config.serverPerformanceNetworkClientsCount,
+        config.serverPerformanceOperationsTimeOutSec);
     networkQueue.start();
   }
 
@@ -216,14 +221,14 @@ public class ServerPerformance {
   }
 
   /**
-   * Waits until the {@link ServerPerformanceConfig#timeOutSeconds} to elapse
+   * Waits until the {@link ServerPerformanceConfig#serverPerformanceTimeOutSeconds} to elapse
    * or is forced out of wait and starts the shutdown
    * @return
    */
   Thread getTimedShutDownThread() {
     return new Thread(() -> {
       try {
-        timedShutDownLatch.await(config.timeOutSeconds, TimeUnit.SECONDS);
+        timedShutDownLatch.await(config.serverPerformanceTimeOutSeconds, TimeUnit.SECONDS);
         logger.info("Timed shutdown triggerred");
         shutDown();
       } catch (Exception e) {
@@ -252,13 +257,13 @@ public class ServerPerformance {
   }
 
   /**
-   * Iterates over {@link ServerPerformanceConfig#blobIdFilePath}
+   * Iterates over {@link ServerPerformanceConfig#serverPerformanceBlobIdFilePath}
    * and creates a {@link RequestInfo} for get requests and submits
    * to {@link #networkQueue}
    * @throws Exception exception
    */
   boolean loadProducerGETBlob() throws Exception {
-    final BufferedReader br = new BufferedReader(new FileReader(config.blobIdFilePath));
+    final BufferedReader br = new BufferedReader(new FileReader(config.serverPerformanceBlobIdFilePath));
     String line;
     boolean isShutDown = false;
     while ((line = br.readLine()) != null) {
@@ -269,7 +274,7 @@ public class ServerPerformance {
           new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
       GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, MessageFormatFlags.Blob,
           Collections.singletonList(partitionRequestInfo), GetOption.Include_All);
-      DataNodeId dataNodeId = clusterMap.getDataNodeId(config.hostname, config.port);
+      DataNodeId dataNodeId = clusterMap.getDataNodeId(config.serverPerformanceHostname, config.serverPerformancePort);
       ReplicaId replicaId =
           getReplicaFromNode(dataNodeId, getRequest.getPartitionInfoList().get(0).getPartition(), clusterMap);
       String hostname = dataNodeId.getHostname();
