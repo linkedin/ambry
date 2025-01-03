@@ -83,7 +83,7 @@ public class ServerPerformance {
      */
     @Config("server.performance.hardware.layout.file.path")
     @Default("")
-    final String serverPerformanceHardwareLayoutFilePath;
+    public final String serverPerformanceHardwareLayoutFilePath;
 
     /**
      * The path to the partition layout file. Needed if using
@@ -91,56 +91,56 @@ public class ServerPerformance {
      */
     @Config("server.performance.partition.layout.file.path")
     @Default("")
-    final String serverPerformancePartitionLayoutFilePath;
+    public final String serverPerformancePartitionLayoutFilePath;
 
     /**
      * maximum parallel network requests at a point of time
      */
     @Config("server.performance.max.parallel.requests")
     @Default("20")
-    final int serverPerformanceMaxParallelRequests;
+    public final int serverPerformanceMaxParallelRequests;
 
     /**
      * Total number of network clients
      */
     @Config("server.performance.network.clients.count")
     @Default("2")
-    final int serverPerformanceNetworkClientsCount;
+    public final int serverPerformanceNetworkClientsCount;
 
     /**
      * Time after which to drop a request
      */
     @Config("server.performance.operations.time.out.sec")
     @Default("15")
-    final int serverPerformanceOperationsTimeOutSec;
+    public final int serverPerformanceOperationsTimeOutSec;
 
     /**
      * Path to file from which to read the blob ids
      */
     @Config("server.performance.blob.id.file.path")
     @Default("")
-    final String serverPerformanceBlobIdFilePath;
+    public final String serverPerformanceBlobIdFilePath;
 
     /**
      * The hostname of the target server as it appears in the partition layout.
      */
     @Config("server.performance.hostname")
     @Default("localhost")
-    final String serverPerformanceHostname;
+    public final String serverPerformanceHostname;
 
     /**
      * The port of the target server in the partition layout (need not be the actual port to connect to).
      */
     @Config("server.performance.port")
     @Default("6667")
-    final int serverPerformancePort;
+    public final int serverPerformancePort;
 
     /**
      * Total time after which to stop the performance test
      */
     @Config("server.performance.time.out.seconds")
     @Default("30")
-    final int serverPerformanceTimeOutSeconds;
+    public final int serverPerformanceTimeOutSeconds;
 
     ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
       serverPerformanceHardwareLayoutFilePath =
