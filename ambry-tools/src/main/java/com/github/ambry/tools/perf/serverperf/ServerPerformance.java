@@ -210,7 +210,7 @@ public class ServerPerformance {
     shutDownLatch.countDown();
   }
 
-  void printMetrics() {
+  public void printMetrics() {
     logger.info("HTTP2 error count {}", clientMetrics.http2NetworkErrorCount.getCount());
     logger.info("HTTP2 dropped request count {}", clientMetrics.http2RequestsToDropCount.getCount());
     logger.info("HTTP2 send Mean rate {}", clientMetrics.http2ClientSendRate.getMeanRate());
