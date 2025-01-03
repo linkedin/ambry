@@ -58,7 +58,7 @@ public class BatchDeleteRequest extends RequestOrResponse {
     super(RequestOrResponseType.BatchDeleteRequest, version, correlationId, clientId);
     this.batchDeletePartitionRequestInfos = batchDeletePartitionRequestInfos;
     if (batchDeletePartitionRequestInfos == null) {
-      throw new IllegalArgumentException("No partition info specified in BatchDeleteRequest");
+      throw new IllegalArgumentException("No partition info specified in S3BatchDeleteRequest");
     }
     for (BatchDeletePartitionRequestInfo partitionRequestInfo : batchDeletePartitionRequestInfos) {
       totalPartitionRequestInfoListSizeInBytes += partitionRequestInfo.sizeInBytes();
@@ -127,7 +127,7 @@ public class BatchDeleteRequest extends RequestOrResponse {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("BatchDeleteRequest[");
+    sb.append("S3BatchDeleteRequest[");
     for (BatchDeletePartitionRequestInfo partitionRequestInfo : batchDeletePartitionRequestInfos) {
       sb.append(partitionRequestInfo.toString());
     }

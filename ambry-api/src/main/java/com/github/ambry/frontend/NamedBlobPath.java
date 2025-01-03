@@ -89,6 +89,10 @@ public class NamedBlobPath {
    * @return the {@link NamedBlobPath} that indicates the parsing result from blobUrl.
    * @throws RestServiceException on parsing errors.
    */
+
+
+  // alter this method since it expects key or prefix but we dont have either
+
   public static NamedBlobPath parseS3(String path, Map<String, Object> args) throws RestServiceException {
     path = path.startsWith("/") ? path.substring(1) : path;
     String[] splitPath = path.split("/", 4);

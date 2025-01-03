@@ -1,5 +1,7 @@
 package com.github.ambry.frontend.s3;
 
+import com.fasterxml.jackson.core.exc.StreamReadException;
+import com.fasterxml.jackson.databind.DatabindException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.DeleteBlobHandler;
@@ -14,6 +16,7 @@ import com.github.ambry.rest.WrappedRestRequest;
 import io.netty.buffer.ByteBuf;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import org.bouncycastle.cert.ocsp.Req;
 
@@ -43,13 +46,8 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback callback)
       throws RestServiceException {
 
-      // define the size ...
-
+      // TODO determine if we need to define max size of chanel
     RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
-
-    // confirm what post request are doing
-
-    // Read the request content into the channel
 
     // remove callback from func
     // give good name for callback ,, define in same class .. batchdeletecallback
@@ -62,36 +60,25 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
           // Get the retained content from the channel
           ByteBuf byteBuffer = channel.consumeContentAsByteBuf();
 
-          // Deserialize the XML content
+              // TODO unit test to verify the following
+              // create bytearray ... and read from bytebuffer from line 63 into array
+              // cause an error potentially if bytebuffer.array
+
           XmlMapper xmlMapper = new XmlMapper();
-          S3MessagePayload.ListBucketResultV2 listBucketResultV2 = xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.ListBucketResultV2.class);
-          List<S3MessagePayload.Contents> contents = listBucketResultV2.getContents();
+          S3MessagePayload.S3BatchDeleteObjects deleteRequest = xmlMapper.readValue(byteBuffer.array(),
+              S3MessagePayload.S3BatchDeleteObjects.class);
 
-          for (int i = 0; i < contents.size(); i++) {
-            S3MessagePayload.Contents content = contents.get(i);
-            String key = content.getKey();
-            String requestPath = (String) restRequest.getArgs().get(REQUEST_PATH);
-            String[] pathParts = requestPath.split("/");
-            pathParts[pathParts.length - 1] = key;
-            String newRequestPath = String.join("/", pathParts);
-
-            // S3 path is "/s3/my-account/my-container/key
-
+          for (S3MessagePayload.S3BatchDeleteKeys object : deleteRequest.getObjects()) {
+            RequestPath requestPath =  (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+            // TODO: confirm that getPathAfterPrefixes is indeed "/named/application/container"
+            String singleDeletePath = requestPath.getPathAfterPrefixes() + "/" + object.getKey();
+            List<String> emptyList = new ArrayList<>();
+            RequestPath newRequestPath = RequestPath.parse(singleDeletePath, restRequest.getArgs(), emptyList, requestPath.getClusterName());
             WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
             singleDeleteRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
-
-
+            // TODO: fill in the null values
             deleteBlobHandler.handle(singleDeleteRequest, null, null);
-
-
-
-
-            // do operations
           }
-
-
-
-        // Add logs ?
 
         } catch (IOException e) {
           // Handle exceptions during deserialization
@@ -104,13 +91,13 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
       }
     });
   }
-
-
-
 }
 
 
+// finish one key, do next key
+// futures
+// fake response to collect .. construct overall callback
+// 404
 
-   // Implement the loop for deleting keys using the s3DeleteHandler.doHandle method
 
 

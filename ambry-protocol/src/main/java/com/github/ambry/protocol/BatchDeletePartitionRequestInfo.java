@@ -40,7 +40,7 @@ public class BatchDeletePartitionRequestInfo {
     for (BlobId id : blobIds) {
       totalBlobIdsSizeInBytes += id.sizeInBytes();
       if (!partitionId.toPathString().equals(id.getPartition().toPathString())) {
-        throw new IllegalArgumentException("Not all blob IDs in BatchDeleteRequest are from the same partition.");
+        throw new IllegalArgumentException("Not all blob IDs in S3BatchDeleteRequest are from the same partition.");
       }
     }
   }
