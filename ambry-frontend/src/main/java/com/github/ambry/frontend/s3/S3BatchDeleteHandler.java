@@ -10,6 +10,7 @@ import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.WrappedRestRequest;
@@ -35,6 +36,75 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
   }
 
   /**
+   * Callback for processing batch delete requests.
+   */
+  private static class BatchDeleteCallback implements Callback<Long> {
+    private final RetainingAsyncWritableChannel channel;
+    private final RestRequest restRequest;
+    private final DeleteBlobHandler deleteBlobHandler;
+
+    public BatchDeleteCallback(RetainingAsyncWritableChannel channel, RestRequest restRequest, DeleteBlobHandler deleteBlobHandler) {
+      this.channel = channel;
+      this.restRequest = restRequest;
+      this.deleteBlobHandler = deleteBlobHandler;
+    }
+
+    // TODO: determine if we need oncompletion or just a method like in other code examples
+    @Override
+    public void onCompletion(Long respLong, Exception exception) {
+      if (exception == null) {
+        // Data read successfully
+        try {
+          // Get the retained content from the channel
+          ByteBuf byteBuffer = channel.consumeContentAsByteBuf();
+
+          // Convert ByteBuf to byte array
+          byte[] byteArray = new byte[byteBuffer.readableBytes()];
+          byteBuffer.readBytes(byteArray);
+
+          // Deserialize into S3BatchDeleteObjects
+          XmlMapper xmlMapper = new XmlMapper();
+          S3MessagePayload.S3BatchDeleteObjects deleteRequest = xmlMapper.readValue(byteArray, S3MessagePayload.S3BatchDeleteObjects.class);
+
+          // Process each delete key in the batch
+          for (S3MessagePayload.S3BatchDeleteKeys object : deleteRequest.getObjects()) {
+            RequestPath requestPath = (RequestPath) restRequest.getArgs().get(RestUtils.InternalKeys.REQUEST_PATH);
+
+            // Construct the delete path
+            // TODO: confirm that getPathAfterPrefixes is indeed "/named/application/container"
+            String singleDeletePath = requestPath.getPathAfterPrefixes() + "/" + object.getKey();
+
+            // Create a new RequestPath for the delete operation
+            List<String> emptyList = new ArrayList<>();
+            RequestPath newRequestPath = RequestPath.parse(singleDeletePath, restRequest.getArgs(), emptyList, requestPath.getClusterName());
+            WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
+            singleDeleteRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
+
+            // Invoke the delete handler for each object
+            deleteBlobHandler.handle(singleDeleteRequest, null, null);
+          }
+        } catch (IOException e) {
+          // Handle exceptions during deserialization
+          // TODO: address error in all the throws
+          throw new RestServiceException("Error reading batch delete request", e, null);
+        } catch (RestServiceException e) {
+          // Handle service-specific exceptions
+          throw new RuntimeException("Error handling batch delete", e);
+        }
+      } else {
+        // Handle the exception that occurred during the read operation
+        throw new RestServiceException("Error reading data from channel", exception, null);
+      }
+    }
+  }
+
+
+//   throw new RestServiceException(String.format(
+//      "Path must have format '/named/<account_name>/<container_name>%s.  Received path='%s', arg='%s'",
+//      isListRequest || isGetObjectLockRequest ? "" : "/<blob_name>'", path, args), RestServiceErrorCode.BadRequest);
+//}
+
+  /**
    * Handles the S3 request and construct the response.
    *
    * @param restRequest         the {@link RestRequest} that contains the request headers and body.
@@ -46,50 +116,13 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback callback)
       throws RestServiceException {
 
-      // TODO determine if we need to define max size of chanel
-    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
+          // TODO determine if we need to define max size of chanel
+        // Create the channel to read the request body
+        RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
 
-    // remove callback from func
-    // give good name for callback ,, define in same class .. batchdeletecallback
+        // Create and pass the BatchDeleteCallback to handle the response
+        restRequest.readInto(channel, new BatchDeleteCallback(channel, restRequest, deleteBlobHandler));
 
-    restRequest.readInto(channel, (respLong, exception) -> {
-      if (exception == null) {
-        // Data read successfully
-        try {
-
-          // Get the retained content from the channel
-          ByteBuf byteBuffer = channel.consumeContentAsByteBuf();
-
-              // TODO unit test to verify the following
-              // create bytearray ... and read from bytebuffer from line 63 into array
-              // cause an error potentially if bytebuffer.array
-
-          XmlMapper xmlMapper = new XmlMapper();
-          S3MessagePayload.S3BatchDeleteObjects deleteRequest = xmlMapper.readValue(byteBuffer.array(),
-              S3MessagePayload.S3BatchDeleteObjects.class);
-
-          for (S3MessagePayload.S3BatchDeleteKeys object : deleteRequest.getObjects()) {
-            RequestPath requestPath =  (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
-            // TODO: confirm that getPathAfterPrefixes is indeed "/named/application/container"
-            String singleDeletePath = requestPath.getPathAfterPrefixes() + "/" + object.getKey();
-            List<String> emptyList = new ArrayList<>();
-            RequestPath newRequestPath = RequestPath.parse(singleDeletePath, restRequest.getArgs(), emptyList, requestPath.getClusterName());
-            WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
-            singleDeleteRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
-            // TODO: fill in the null values
-            deleteBlobHandler.handle(singleDeleteRequest, null, null);
-          }
-
-        } catch (IOException e) {
-          // Handle exceptions during deserialization
-        } catch (RestServiceException e) {
-          throw new RuntimeException(e);
-        }
-      } else {
-        // Handle the exception
-
-      }
-    });
   }
 }
 
