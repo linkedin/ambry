@@ -142,7 +142,7 @@ public class ServerPerformance {
     @Default("30")
     public final int serverPerformanceTimeOutSeconds;
 
-    ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
+    public ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
       serverPerformanceHardwareLayoutFilePath =
           verifiableProperties.getString("server.performance.hardware.layout.file.path", "");
       serverPerformancePartitionLayoutFilePath =
