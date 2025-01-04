@@ -1124,7 +1124,9 @@ public class IndexTest {
       temp.renameTo(indexFile);
     }
 
-    state.recovery = (read, startOffset, eoffset, factory) -> activeSegmentInfos;
+    state.recovery =
+        (read, startOffset, eoffset, factory) -> new MessageStoreRecovery.RecoveryResult(activeSegmentInfos, null,
+            eoffset);
     state.reloadIndex(false, false);
     IndexSegment recoveredIndexSegment = state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset());
     assertEquals("LastModifedTime doesn't match", lastModifiedTimeForLastIndexSegment,
@@ -1340,8 +1342,10 @@ public class IndexTest {
         new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
             operationTimeMs, accountId, containerId);
     state.allKeys.computeIfAbsent(newId, k -> new TreeSet<>()).add(putValue);
-    state.recovery = (read, startOffset, endOffset, factory) -> Collections.singletonList(
-        new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, operationTimeMs));
+    state.recovery = (read, startOffset, endOffset, factory) -> new MessageStoreRecovery.RecoveryResult(
+        Collections.singletonList(
+            new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, operationTimeMs)),
+        null, endOffset);
     state.reloadIndex(true, true);
 
     // If there is no incarnationId in the incoming token, for backwards compatibility purposes we consider it as valid
@@ -1990,8 +1994,10 @@ public class IndexTest {
         new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
             operationTimeMs, accountId, containerId);
     state.allKeys.computeIfAbsent(newId, k -> new TreeSet<>()).add(putValue);
-    state.recovery = (read, startOffset, endOffset, factory) -> Collections.singletonList(
-        new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, operationTimeMs));
+    state.recovery = (read, startOffset, endOffset, factory) -> new MessageStoreRecovery.RecoveryResult(
+        Collections.singletonList(
+            new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, operationTimeMs)),
+        null, endOffset);
     // change in incarnationId
     state.incarnationId = UUID.randomUUID();
     state.reloadIndex(true, true);
@@ -2852,7 +2858,7 @@ public class IndexTest {
     state.recovery = (read, startOffset, endOffset, factory) -> {
       switch (returnTracker.getAndIncrement()) {
         case 0:
-          return infos;
+          return new MessageStoreRecovery.RecoveryResult(infos, null, endOffset);
         default:
           throw new IllegalStateException("This function should not have been called more than once");
       }
@@ -2932,9 +2938,9 @@ public class IndexTest {
     state.recovery = (read, startOffset, endOffset, factory) -> {
       switch (returnTracker.getAndIncrement()) {
         case 0:
-          return activeSegmentInfos;
+          return new MessageStoreRecovery.RecoveryResult(activeSegmentInfos, null, endOffset);
         case 1:
-          return nextSegmentInfos;
+          return new MessageStoreRecovery.RecoveryResult(nextSegmentInfos, null, endOffset);
         default:
           throw new IllegalStateException("This function should not have been called more than two times");
       }
@@ -3154,10 +3160,12 @@ public class IndexTest {
     state.recovery = (read, startOffset, endOffset, factory) -> {
       switch (returnTracker.getAndIncrement()) {
         case 0:
-          return Collections.singletonList(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
-              Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
+          return new MessageStoreRecovery.RecoveryResult(Collections.singletonList(
+              new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
+                  Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time)),
+              null, endOffset);
         default:
-          return Collections.emptyList();
+          return new MessageStoreRecovery.RecoveryResult(Collections.emptyList(), null, endOffset);
       }
     };
     state.reloadIndex(true, false);
@@ -3177,7 +3185,8 @@ public class IndexTest {
    * @param expectedErrorCode the {@link StoreErrorCodes} expected for the failure.
    */
   private void doRecoveryFailureTest(final MessageInfo info, StoreErrorCodes expectedErrorCode) {
-    state.recovery = (read, startOffset, endOffset, factory) -> Collections.singletonList(info);
+    state.recovery = (read, startOffset, endOffset, factory) -> new MessageStoreRecovery.RecoveryResult(
+        Collections.singletonList(info), null, endOffset);
     try {
       state.reloadIndex(true, false);
       fail("Loading index should have failed because recovery contains invalid info");

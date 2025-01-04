@@ -214,6 +214,23 @@ class LogSegment implements Read, Write {
     return new DirectIOBufferedExecutor(bufferSize);
   }
 
+  void truncateTo(long offset) throws IOException {
+    long currentFileSize = sizeInBytes();
+    if (currentFileSize < offset) {
+      throw new IllegalArgumentException(
+          "Illegal offset to truncate to, current file size is " + currentFileSize + " new offset is " + offset);
+    }
+    if (currentFileSize == offset) {
+      return;
+    }
+    long endOffset = getEndOffset();
+    if (endOffset != 0 && endOffset != HEADER_SIZE) {
+      throw new IllegalStateException("Truncate Log segment can only happen before end offset is set");
+    }
+    fileChannel.truncate(offset);
+    fileChannel.force(true);
+  }
+
   /**
    * {@inheritDoc}
    * <p/>

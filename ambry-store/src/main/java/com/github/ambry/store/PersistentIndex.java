@@ -402,8 +402,10 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       long endOffset = logSegmentToRecover.sizeInBytes();
       logger.info("Index : {} performing recovery on index with start offset {} and end offset {}", dataDir,
           recoveryStartOffset, endOffset);
-      List<MessageInfo> messagesRecovered =
+      MessageStoreRecovery.RecoveryResult recoveryResult =
           recovery.recover(logSegmentToRecover, recoveryStartOffset.getOffset(), endOffset, factory);
+      maybePerformaPartialRecovery(logSegmentToRecover, recoveryResult);
+      List<MessageInfo> messagesRecovered = recoveryResult.recovered;
       recoveryOccurred = recoveryOccurred || messagesRecovered.size() > 0;
       Offset runningOffset = recoveryStartOffset;
       // Iterate through the recovered messages and update the index
@@ -495,6 +497,26 @@ public class PersistentIndex implements LogSegmentSizeProvider {
         logSegment.setEndOffset(indexSegment.getEndOffset().getOffset());
       }
     }
+  }
+
+  private void maybePerformaPartialRecovery(LogSegment logSegmentToRecover,
+      MessageStoreRecovery.RecoveryResult recoveryResult) throws StoreException, IOException {
+    // There is no exception, then partial recovery is not necessary
+    if (recoveryResult.recoveryException == null) {
+      return;
+    }
+    if (!config.storeEnablePartialLogSegmentRecovery || logSegmentToRecover != log.getLastSegment()) {
+      // Partial log segment recovery is not enabled, or the log segment is not the last one
+      throw recoveryResult.recoveryException;
+    }
+    // If we are here, then this is the last log segment.
+    long startOffsetForBrokenMessage = recoveryResult.currentStartOffset;
+    long endOffset = logSegmentToRecover.sizeInBytes();
+    long remainingDataSize = endOffset - startOffsetForBrokenMessage;
+    if (remainingDataSize > config.storePartialLogSegmentRecoveryRemainingDataSizeThreshold) {
+      throw recoveryResult.recoveryException;
+    }
+    logSegmentToRecover.truncateTo(startOffsetForBrokenMessage);
   }
 
   /**

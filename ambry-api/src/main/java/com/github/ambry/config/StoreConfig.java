@@ -636,6 +636,15 @@ public class StoreConfig {
   public static final String storeRemoveDirectoryAndRestartBlobStoreName =
       "store.remove.directory.and.restart.blob.store";
 
+  @Config(storeEnablePartialLogSegmentRecoveryName)
+  public final boolean storeEnablePartialLogSegmentRecovery;
+  public static final String storeEnablePartialLogSegmentRecoveryName = "store.enable.partial.log.segment.recovery";
+
+  @Config(storePartialLogSegmentRecoveryRemainingDataSizeThresholdName)
+  public final long storePartialLogSegmentRecoveryRemainingDataSizeThreshold;
+  public static final String storePartialLogSegmentRecoveryRemainingDataSizeThresholdName =
+      "store.partial.log.segment.recovery.remaining.data.size.threshold";
+
   /**
    * True to restore disk's availability on data node config when an unavailable disk is fixed in FULL AUTO mode.
    */
@@ -877,6 +886,11 @@ public class StoreConfig {
         verifiableProperties.getBoolean(storeRemoveUnexpectedDirsInFullAutoName, false);
     storeRemoveDirectoryAndRestartBlobStore =
         verifiableProperties.getBoolean(storeRemoveDirectoryAndRestartBlobStoreName, false);
+    storeEnablePartialLogSegmentRecovery =
+        verifiableProperties.getBoolean(storeEnablePartialLogSegmentRecoveryName, false);
+    storePartialLogSegmentRecoveryRemainingDataSizeThreshold =
+        verifiableProperties.getIntInRange(storePartialLogSegmentRecoveryRemainingDataSizeThresholdName,
+            5 * 1024 * 1024, 0, 1024 * 1024 * 1024);
     storeRestoreUnavailableDiskInFullAuto =
         verifiableProperties.getBoolean(storeRestoreUnavailableDiskInFullAutoName, false);
     storeProactivelyTestStorageAvailability =
