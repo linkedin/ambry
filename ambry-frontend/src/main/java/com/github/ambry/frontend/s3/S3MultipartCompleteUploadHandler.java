@@ -221,7 +221,7 @@ public class S3MultipartCompleteUploadHandler<R> {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics, bytesRead -> {
         PutBlobOptions options = new PutBlobOptionsBuilder().restRequest(restRequest).build();
         BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
-        router.stitchBlob(propertiesForRouterUpload, blobInfo.getUserMetadata(),
+        router.stitchBlob(null, propertiesForRouterUpload, blobInfo.getUserMetadata(),
             getChunksToStitch(parseCompleteMultipartUploadBody(channel)), options,
             routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));

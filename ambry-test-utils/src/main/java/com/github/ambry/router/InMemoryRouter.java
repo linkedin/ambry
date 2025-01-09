@@ -292,18 +292,43 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
+    Callback<String> wrappedCallback =
+        restRequest != null && idConverter != null ? createIdConverterCallbackForStitch(restRequest, blobProperties, futureResult, callback) : callback;
     PostData postData =
-        new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, callback,
+        new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, wrappedCallback,
             futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
+  }
+
+  private Callback<String> createIdConverterCallbackForStitch(RestRequest restRequest, BlobProperties blobProperties,
+      FutureResult<String> futureResult, Callback<String> callback) {
+    return (blobId, exception) -> {
+      if (exception != null) {
+        // If putBlob fails, complete the future and callback with an error
+        futureResult.done(null, exception);
+        if (callback != null) {
+          callback.onCompletion(null, exception);
+        }
+      } else {
+        blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
+        // Call idConverter.convert after putBlob succeeds
+        try {
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
+      }
+    };
   }
 
   @Override
@@ -344,6 +369,10 @@ public class InMemoryRouter implements Router {
   @Override
   public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+    //if put before update ttl, this will help avoid go through id converter
+    if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+      blobId = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
+    }
     FutureResult<Void> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
@@ -355,15 +384,54 @@ public class InMemoryRouter implements Router {
     Callback<Void> wrappedCallback =
         restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
             : callback;
+    if (restRequest == null) {
+      proceedWithTtlUpdate(blobId, serviceId, expiresAtMs, wrappedCallback, futureResult);
+    } else {
+      try {
+        idConverter.convert(restRequest, blobId, null, new Callback<String>() {
+          @Override
+          public void onCompletion(String convertedBlobId, Exception exception) {
+            if (exception != null) {
+              wrappedCallback.onCompletion(null, exception);
+            } else {
+              proceedWithTtlUpdate(convertedBlobId, serviceId, expiresAtMs, wrappedCallback, futureResult);
+            }
+          }
+        });
+      } catch (Exception e) {
+        // Handle synchronous errors during header extraction
+        callback.onCompletion(null, e);
+        return futureResult;
+      }
+    }
+    return futureResult;
+  }
+
+  /**
+   * Helper method to perform TTL update once blobId is available
+   */
+  /**
+   * Helper method to perform TTL update once blobId is available
+   */
+  private void proceedWithTtlUpdate(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+      FutureResult<Void> futureResult) {
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
     Exception exception = null;
+
     try {
-      // to make sure Blob ID is ok
+      // Check blobId before performing the update
       checkBlobId(blobId);
+
+      // Perform TTL update if blob is not deleted and exists
       if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
         InMemoryBlob blob = blobs.get(blobId);
         BlobProperties currentProps = blob.blobProperties;
         long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
         blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
+
+        // Notify the notification system if applicable
         if (notificationSystem != null) {
           notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs, null, null);
         }
@@ -377,10 +445,11 @@ public class InMemoryRouter implements Router {
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      completeOperation(futureResult, wrappedCallback, null, exception);
+      // Complete the operation by calling the callback
+      completeOperation(futureResult, callback, null, exception);
     }
-    return futureResult;
   }
+
 
   @Override
   public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
@@ -518,9 +587,15 @@ public class InMemoryRouter implements Router {
           callback.onCompletion(null, exception);
         }
       } else {
+        // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, blobProperties, callback);
+        try {
+          idConverter.convert(restRequest, blobId, blobProperties, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }
@@ -542,7 +617,11 @@ public class InMemoryRouter implements Router {
         }
       } else {
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, null, callback);
+        try {
+          idConverter.convert(restRequest, blobId, null, callback);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
       }
     };
   }
