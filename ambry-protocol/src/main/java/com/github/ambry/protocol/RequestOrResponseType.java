@@ -41,5 +41,7 @@ public enum RequestOrResponseType {
   FileCopyGetChunkRequest,
   FileCopyGetChunkResponse,
   FileCopyGetMetaDataRequest,
-  FileCopyGetMetaDataResponse
+  FileCopyGetMetaDataResponse,
+  FileMetaDataRequest,
+  FileChunkRequest
 }

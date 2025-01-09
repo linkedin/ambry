@@ -40,6 +40,7 @@ import java.io.SequenceInputStream;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -56,6 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -252,6 +254,31 @@ public class BlobStore implements Store {
 
   @Override
   public void start() throws StoreException {
+    List<SealedFileInfo> sealedLogsAndMetaDataFiles = getSealedLogSegmentFiles();
+    if (null != sealedLogsAndMetaDataFiles) {
+      for (SealedFileInfo E : sealedLogsAndMetaDataFiles) {
+        System.out.println(E.getFileName() + ", size: " +  E.getFileSize());
+        logger.info("LS file: {} size: {}", E.getFileName(), E.getFileSize());
+
+        System.out.print("");
+        List<SealedFileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(dataDir, LogSegmentName.fromFilename(E.getFileName()));
+        if (null != allIndexSegmentsForLogSegment) {
+          for (SealedFileInfo is : allIndexSegmentsForLogSegment) {
+            System.out.println(is.getFileName() + ", size: " +  is.getFileSize());
+            logger.info("IS file: {} size: {}", is.getFileName(), is.getFileSize());
+          }
+        }
+        System.out.print("");
+        List<SealedFileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(dataDir, LogSegmentName.fromFilename(E.getFileName()));
+        if (null != bloomFiltersForLogSegment) {
+          for (SealedFileInfo bf : bloomFiltersForLogSegment) {
+            System.out.println(bf.getFileName() + ", size: " +  bf.getFileSize());
+            logger.info("BF file: {} size: {}", bf.getFileName(), bf.getFileSize());
+          }
+        }
+      }
+    }
+
     synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
@@ -1315,6 +1342,26 @@ public class BlobStore implements Store {
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);
+  }
+
+  List<SealedFileInfo> getSealedLogSegmentFiles(){
+    return log.getAllLogSegmentNames().stream()
+        .filter(segment -> log.getActiveSegment().getName() != segment)
+        .map(segment -> log.getSegment(segment))
+        .map(segment -> new SealedFileInfo(segment.getName().toString(), segment.getView().getFirst().length()))
+        .collect(Collectors.toList());
+  }
+
+  List<SealedFileInfo> getAllIndexSegmentsForLogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
+        .map(file -> new SealedFileInfo(file.getName(), file.length()))
+        .collect(Collectors.toList());
+  }
+
+  List<SealedFileInfo> getAllBloomFiltersForLogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getBloomFilterFiles(dataDir, logSegmentName))
+        .map(file -> new SealedFileInfo(file.getName(), file.length()))
+        .collect(Collectors.toList());
   }
 
   /**
