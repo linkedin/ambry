@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.HelixManager;
+import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.HelixManagerProperty;
 import org.apache.helix.InstanceType;
 import org.apache.helix.constants.InstanceConstants;
@@ -100,9 +101,14 @@ public class HelixFactory {
    * @return a new instance of {@link HelixManager}.
    */
   HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
-    return new ZKHelixManager(clusterName, instanceName, instanceType, zkAddr, null,
-        instanceType == InstanceType.PARTICIPANT ? new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(
-        new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN).setPort(INSTANCE_CONFIG_HELIX_PORT)).build() : null);
+    HelixManagerProperty participantHelixProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(
+        new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN).setPort(INSTANCE_CONFIG_HELIX_PORT)).build();
+
+    HelixManager helixManager = new ZKHelixManager(clusterName, instanceName, instanceType, zkAddr, null,
+        instanceType == InstanceType.PARTICIPANT ?  participantHelixProperty :
+            new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(new InstanceConfig.Builder()).build());
+    LOGGER.info("Created HelixManager for cluster {} with instanceName {} and instanceType {}", clusterName, instanceName, instanceType);
+    return helixManager;
   }
 
   /**
