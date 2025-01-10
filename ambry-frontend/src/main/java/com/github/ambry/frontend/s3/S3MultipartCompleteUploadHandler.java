@@ -60,6 +60,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -382,12 +383,27 @@ public class S3MultipartCompleteUploadHandler<R> {
     List<ChunkInfo> getChunksToStitch(CompleteMultipartUpload completeMultipartUpload) throws RestServiceException {
       // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
       List<ChunkInfo> chunkInfos = new ArrayList<>();
+      Set<String> eTags = new HashSet<>();
       try {
         // sort the list in order
         List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
         Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
         String reservedMetadataId = null;
         for (Part part : sortedParts) {
+          // Validate part number: must be a non-negative integer and within the range 0-10,000
+          if (part.getPartNumber() < 0 || part.getPartNumber() > 10000 || part.getPartNumber() != Math.floor(part.getPartNumber())) {
+            String error = "Invalid part number: " + part.getPartNumber() + ". Must be a non-negative integer between 0 and 10,000.";
+            LOGGER.error(error);
+            throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+          }
+
+          // Check for duplicate ETags
+          if (!eTags.add(part.geteTag())) {
+            String error = "Duplicate ETag detected: " + part.geteTag() + " in completeMultipartUpload request.";
+            LOGGER.error(error);
+            throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+          }
+
           S3MultipartETag eTag = S3MultipartETag.deserialize(part.geteTag());
           // TODO [S3]: decide the life cycle of S3.
           long expirationTimeInMs = -1;
