@@ -64,7 +64,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
-import org.apache.commons.math3.analysis.function.Min;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -388,18 +387,13 @@ public class S3MultipartCompleteUploadHandler<R> {
       // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
       List<ChunkInfo> chunkInfos = new ArrayList<>();
       try {
+        // check the parts array size
+        validatePartsSize(completeMultipartUpload.getPart());
         // sort the list in order
-        if (completeMultipartUpload.getPart() == null || completeMultipartUpload.getPart().length == 0) {
-          throw new RestServiceException("Xml request body cannot be empty.", RestServiceErrorCode.BadRequest);
-        }
         List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
-        // Validate parts list and part number
+        // Validate part number and etags
         // https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
-        String badRequest = validateParts(sortedParts);
-        if (badRequest != null) {
-          LOGGER.error(badRequest);
-          throw new RestServiceException(badRequest, RestServiceErrorCode.BadRequest);
-        }
+        validateParts(sortedParts);
         Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
         String reservedMetadataId = null;
         for (Part part : sortedParts) {
@@ -440,11 +434,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @param parts sorted parts list
    * @return the bad request error
    */
-  private static String validateParts(List<Part> parts) {
-    if (parts.size() > MAX_LIST_SIZE) {
-      return String.format("Parts list size cannot exceed {}.", MAX_LIST_SIZE);
-    }
-
+  private static void validateParts(List<Part> parts) throws RestServiceException {
     Set<Integer> partNumbers = new HashSet<>();
     Set<String> etags = new HashSet<>();
 
@@ -453,19 +443,40 @@ public class S3MultipartCompleteUploadHandler<R> {
       String etag = part.geteTag();
 
       if (partNumber < MIN_PART_NUM || partNumber > MAX_PART_NUM) {
-        return String.format(
+        String error = String.format(
             "Invalid part number: " + part.getPartNumber() + ". Part number must be an integer between {} and {}.",
             MIN_PART_NUM, MAX_PART_NUM);
+        LOGGER.error(error);
+        throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
 
       if (!partNumbers.add(partNumber)) {
-        return "Duplicate part number found: " + partNumber;
+        String error = "Duplicate part number found: " + partNumber;
+        LOGGER.error(error);
+        throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
 
       if (!etags.add(etag)) {
-        return "Duplicate eTag found: " + etag;
+        String error = "Duplicate eTag found: " + etag;
+        LOGGER.error(error);
+        throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
     }
-    return null;
+  }
+
+  /**
+   * Check the parts array size is not empty or exceeds the limit
+   * @param parts the part array from Complete Multipart upload request
+   * @throws RestServiceException
+   */
+  private static void validatePartsSize(Part[] parts) throws RestServiceException {
+    if (parts == null || parts.length == 0) {
+      throw new RestServiceException("Xml request body cannot be empty.", RestServiceErrorCode.BadRequest);
+    }
+
+    if (parts.length > MAX_LIST_SIZE) {
+      String error = String.format("Parts list size cannot exceed {}.", MAX_LIST_SIZE);
+      throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+    }
   }
 }
