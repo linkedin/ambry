@@ -64,6 +64,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import org.apache.commons.math3.analysis.function.Min;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,6 +84,9 @@ import static com.github.ambry.router.RouterErrorCode.*;
 public class S3MultipartCompleteUploadHandler<R> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartCompleteUploadHandler.class);
   private static final ObjectMapper objectMapper = new XmlMapper();
+  private static final int MIN_PART_NUM = 1;
+  private static final int MAX_PART_NUM = 10000;
+  private static final int MAX_LIST_SIZE = 10000;
   private final SecurityService securityService;
   private final FrontendMetrics frontendMetrics;
   private final AccountAndContainerInjector accountAndContainerInjector;
@@ -383,27 +387,22 @@ public class S3MultipartCompleteUploadHandler<R> {
     List<ChunkInfo> getChunksToStitch(CompleteMultipartUpload completeMultipartUpload) throws RestServiceException {
       // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
       List<ChunkInfo> chunkInfos = new ArrayList<>();
-      Set<String> eTags = new HashSet<>();
       try {
         // sort the list in order
+        if (completeMultipartUpload.getPart() == null || completeMultipartUpload.getPart().length == 0) {
+          throw new RestServiceException("Xml request body cannot be empty.", RestServiceErrorCode.BadRequest);
+        }
         List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
+        // Validate parts list and part number
+        // https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
+        String badRequest = validateParts(sortedParts);
+        if (badRequest != null) {
+          LOGGER.error(badRequest);
+          throw new RestServiceException(badRequest, RestServiceErrorCode.BadRequest);
+        }
         Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
         String reservedMetadataId = null;
         for (Part part : sortedParts) {
-          // Validate part number: must be a non-negative integer and within the range 0-10,000
-          if (part.getPartNumber() < 0 || part.getPartNumber() > 10000 || part.getPartNumber() != Math.floor(part.getPartNumber())) {
-            String error = "Invalid part number: " + part.getPartNumber() + ". Must be a non-negative integer between 0 and 10,000.";
-            LOGGER.error(error);
-            throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
-          }
-
-          // Check for duplicate ETags
-          if (!eTags.add(part.geteTag())) {
-            String error = "Duplicate ETag detected: " + part.geteTag() + " in completeMultipartUpload request.";
-            LOGGER.error(error);
-            throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
-          }
-
           S3MultipartETag eTag = S3MultipartETag.deserialize(part.geteTag());
           // TODO [S3]: decide the life cycle of S3.
           long expirationTimeInMs = -1;
@@ -430,5 +429,43 @@ public class S3MultipartCompleteUploadHandler<R> {
       }
       return chunkInfos;
     }
+  }
+
+  /**
+   * Check the list size and part number before processing request
+   * 1. Disallow duplicate part numbers
+   * 2. Disallow duplicate etags
+   * 3. Check for list size 10000
+   * 4. Check for part numbers integer 1-10000
+   * @param parts sorted parts list
+   * @return the bad request error
+   */
+  private static String validateParts(List<Part> parts) {
+    if (parts.size() > MAX_LIST_SIZE) {
+      return String.format("Parts list size cannot exceed {}.", MAX_LIST_SIZE);
+    }
+
+    Set<Integer> partNumbers = new HashSet<>();
+    Set<String> etags = new HashSet<>();
+
+    for (Part part : parts) {
+      int partNumber = part.getPartNumber();
+      String etag = part.geteTag();
+
+      if (partNumber < MIN_PART_NUM || partNumber > MAX_PART_NUM) {
+        return String.format(
+            "Invalid part number: " + part.getPartNumber() + ". Part number must be an integer between {} and {}.",
+            MIN_PART_NUM, MAX_PART_NUM);
+      }
+
+      if (!partNumbers.add(partNumber)) {
+        return "Duplicate part number found: " + partNumber;
+      }
+
+      if (!etags.add(etag)) {
+        return "Duplicate eTag found: " + etag;
+      }
+    }
+    return null;
   }
 }

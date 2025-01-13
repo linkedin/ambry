@@ -45,6 +45,7 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
@@ -53,11 +54,15 @@ import com.github.ambry.router.Router;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -244,6 +249,86 @@ public class S3MultipartUploadTest {
     s3DeleteHandler.handle(request, restResponseChannel, deleteResult::done);
     assertEquals("Mismatch on status", ResponseStatus.NoContent, restResponseChannel.getStatus());
   }
+
+  @Test
+  public void testDuplicatePartNumbers() throws Exception {
+    Part part1 = new Part("1", "etag1");
+    Part part2 = new Part("1", "etag2");
+    Part[] parts = {part2, part1};
+    testMultipartUploadWithInvalidParts(parts, "Duplicate part number found: ");
+  }
+
+  @Test
+  public void testDuplicateEtags() throws Exception {
+    Part part1 = new Part("1", "etag1");
+    Part part2 = new Part("2", "etag1");
+    Part[] parts = {part2, part1};
+    testMultipartUploadWithInvalidParts(parts, "Duplicate eTag found: ");
+  }
+
+  @Test
+  public void testInvalidPartNumLessThanMin() throws Exception {
+    Part part1 = new Part("0", "etag1");
+    Part part2 = new Part("1", "etag2");
+    Part[] parts = {part2, part1};
+    testMultipartUploadWithInvalidParts(parts, "Invalid part number: ");
+  }
+
+  @Test
+  public void testPartNumberInvalidExceedsMax() throws Exception {
+    Part part1 = new Part("2", "etag1");
+    Part part2 = new Part("10001", "etag2");
+    Part[] parts = {part2, part1};
+    testMultipartUploadWithInvalidParts(parts, "Invalid part number: ");
+  }
+
+  @Test
+  public void testExceedMaxParts() throws Exception {
+    Part[] parts = new Part[10001];
+    for (int i = 1; i <= 10001; i++) {
+      parts[i - 1] = new Part(String.valueOf(i), "eTag" + i);
+    }
+    testMultipartUploadWithInvalidParts(parts, "Parts list size cannot exceed");
+  }
+
+  @Test
+  public void testEmptyPartList() throws Exception {
+    Part[] parts = {};
+    testMultipartUploadWithInvalidParts(parts, "Xml request body cannot be empty.");
+  }
+
+  private void testMultipartUploadWithInvalidParts(Part[] parts, String expectedErrorMessage) throws Exception {
+    String accountName = account.getName();
+    String containerName = container.getName();
+    String blobName = "MyDirectory/MyKey";
+    String uploadId = "uploadId";
+    String uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
+    JSONObject headers = new JSONObject();
+
+    CompleteMultipartUpload completeMultipartUpload = new CompleteMultipartUpload(parts);
+    XmlMapper xmlMapper = new XmlMapper();
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    xmlMapper.writeValue(byteArrayOutputStream, completeMultipartUpload);
+    String completeMultipartStr = byteArrayOutputStream.toString();
+    byte[] content = completeMultipartStr.getBytes(StandardCharsets.UTF_8);
+    int size = content.length;
+
+    headers.put(Headers.CONTENT_TYPE, OCTET_STREAM_CONTENT_TYPE);
+    headers.put(Headers.CONTENT_LENGTH, size);
+
+    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    s3PostHandler.handle(request, restResponseChannel, (r, e) -> {
+      assertNotNull("Expected an exception, but none was thrown.", e);
+      assertTrue("Unexpected error message: " + e.getMessage(), e.getMessage().contains(expectedErrorMessage));
+    });
+  }
+
+
 
   /**
    * Initiates a {@link S3PutHandler}
