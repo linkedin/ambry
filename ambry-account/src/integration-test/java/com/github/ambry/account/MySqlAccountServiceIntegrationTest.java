@@ -959,6 +959,17 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME_RENAME, sourceVersion);
     assertNull("Rename from should be null", datasetVersionRecord.getRenameFrom());
+
+    //rename a deleted version should return not found
+    mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_RENAME, sourceVersion);
+    targetVersion = "5.5.5.5";
+    try {
+      mySqlAccountStore.renameDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_RENAME, renamedSourceVersion, targetVersion);
+      fail();
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
+    }
   }
 
   @Test
