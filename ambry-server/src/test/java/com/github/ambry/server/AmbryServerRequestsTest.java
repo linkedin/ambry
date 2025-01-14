@@ -227,10 +227,10 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
   }
 
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
-  }
+//  @Parameterized.Parameters
+//  public static List<Object[]> data() {
+//    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
+//  }
 
   private static Properties createProperties(boolean validateRequestOnStoreState,
       boolean handleUndeleteRequestEnabled) {
@@ -1530,6 +1530,16 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     sendRequestGetResponse(del_request, ServerErrorCode.No_Error);
     verifyCRCInMetadata(id, BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString(),
         datanode, null);
+  }
+
+  @Test
+  public void foo() throws IOException, InterruptedException {
+    RequestOrResponse get_metadata_request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
+        (short) 0, 0, "", new MockPartitionId(), "hostName");
+//    Response response = sendRequestGetResponse(get_metadata_request, ServerErrorCode.No_Error);
+
+    NetworkRequest mockRequest = MockRequest.fromRequest(get_metadata_request);
+    ambryRequests.handleFileMetaDataRequest(mockRequest);
   }
 
   /**

@@ -60,9 +60,11 @@ import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.LogInfo;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.PurgeRequest;
@@ -92,6 +94,7 @@ import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageErrorInfo;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
@@ -236,9 +239,6 @@ public class AmbryRequests implements RequestAPI {
           break;
         case FileMetaDataRequest:
           handleFileMetaDataRequest(networkRequest);
-          break;
-        case FileChunkRequest:
-          handleFileChunkRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -1680,17 +1680,60 @@ public class AmbryRequests implements RequestAPI {
 
   /**
    *
-   * @param networkRequest
+   * @param request
    */
-  void handleFileChunkRequest(NetworkRequest networkRequest) {
+  void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
+//    FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest =
+//        FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+
+    List<com.github.ambry.store.LogInfo> logSegments = ((StorageManager)storeManager).getLogSegmentMetadataFiles();
+    List<LogInfo> logInfos = convertStoreToProtocolLogInfo(logSegments);
+
+    FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse((short)0, 0, "",
+        logSegments.size(), logInfos, ServerErrorCode.No_Error);
+//    Histogram dummyHistogram = new Histogram(new Reservoir() {
+//      @Override
+//      public int size() {
+//        return 0;
+//      }
+//
+//      @Override
+//      public void update(long value) {
+//      }
+//
+//      @Override
+//      public Snapshot getSnapshot() {
+//        return null;
+//      }
+//    });
+
+    logger.info("[Dw] Api response - " + response);
+    System.out.println("[Dw] Api response - " + response);
+
+//    requestResponseChannel.sendResponse(
+//        response, request,
+//        new ServerNetworkResponseMetrics(dummyHistogram, dummyHistogram, dummyHistogram,
+//            null, null, 0));
   }
 
-  /**
-   *
-   * @param networkRequest
-   */
-  void handleFileMetaDataRequest(NetworkRequest networkRequest) {
-    throw new UnsupportedOperationException("Not implemented yet");
+  private List<LogInfo> convertStoreToProtocolLogInfo(List<com.github.ambry.store.LogInfo> logSegments) {
+    List<LogInfo> logInfos = new ArrayList<>();
+    for (com.github.ambry.store.LogInfo logSegment : logSegments) {
+      List<com.github.ambry.protocol.FileInfo> indexSegments = new ArrayList<>();
+      logSegment.getIndexSegments().forEach(indexSegment -> {
+        indexSegments.add(new com.github.ambry.protocol.FileInfo(indexSegment.getFileName(), indexSegment.getFileSize()));
+      });
+
+      List<com.github.ambry.protocol.FileInfo> bloomFilters = new ArrayList<>();
+      logSegment.getBloomFilters().forEach(bloomFilter -> {
+        bloomFilters.add(new com.github.ambry.protocol.FileInfo(bloomFilter.getFileName(), bloomFilter.getFileSize()));
+      });
+
+      logInfos.add(new LogInfo(
+        logSegment.getLogSegment().getFileName(), logSegment.getLogSegment().getFileSize(),
+        indexSegments, bloomFilters));
+    }
+    return logInfos;
   }
 
   /**

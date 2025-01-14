@@ -19,7 +19,9 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import javax.annotation.Nonnull;
 
 
 /**
@@ -27,16 +29,25 @@ import java.util.List;
  * by filecopy metadata request.
  */
 public class LogInfo {
-  private String fileName;
-  private long fileSizeInBytes;
-  List<FileInfo> indexFiles;
-  List<FileInfo> bloomFilters;
+  // TODO: Replace these fields with FileInfo
+  // private FileInfo fileInfo;
+  private final String fileName;
+  private final long fileSizeInBytes;
+  private final List<FileInfo> indexFiles;
+  private final List<FileInfo> bloomFilters;
+
+  // TODO: Add isSealed prop
+  // private final boolean isSealed;
 
   private static final int FileName_Field_Size_In_Bytes = 4;
   private static final int FileSize_Field_Size_In_Bytes = 8;
-
   private static final int ListSize_In_Bytes = 4;
-  public LogInfo(String fileName, long fileSizeInBytes, List<FileInfo> indexFiles, List<FileInfo> bloomFilters) {
+
+  public LogInfo(
+      @Nonnull String fileName,
+      long fileSizeInBytes,
+      @Nonnull List<FileInfo> indexFiles,
+      @Nonnull List<FileInfo> bloomFilters) {
     this.fileName = fileName;
     this.fileSizeInBytes = fileSizeInBytes;
     this.indexFiles = indexFiles;
@@ -52,11 +63,11 @@ public class LogInfo {
   }
 
   public List<FileInfo> getBloomFilters() {
-    return bloomFilters;
+    return Collections.unmodifiableList(bloomFilters);
   }
 
   public List<FileInfo> getIndexFiles() {
-    return indexFiles;
+    return Collections.unmodifiableList(indexFiles);
   }
 
   public long sizeInBytes() {
@@ -71,7 +82,7 @@ public class LogInfo {
     return size;
   }
 
-  public static LogInfo readFrom(DataInputStream stream) throws IOException {
+  public static LogInfo readFrom(@Nonnull DataInputStream stream) throws IOException {
     String fileName = Utils.readIntString(stream );
     long fileSize = stream.readLong();
     List<FileInfo> listOfIndexFiles = new ArrayList<>();
@@ -89,7 +100,7 @@ public class LogInfo {
     return new LogInfo(fileName, fileSize, listOfIndexFiles, listOfBloomFilters);
   }
 
-  public void writeTo(ByteBuf buf){
+  public void writeTo(@Nonnull ByteBuf buf){
     Utils.serializeString(buf, fileName, Charset.defaultCharset());
     buf.writeLong(fileSizeInBytes);
     buf.writeInt(indexFiles.size());
@@ -115,5 +126,4 @@ public class LogInfo {
     sb.append("]");
     return sb.toString();
   }
-
 }

@@ -254,31 +254,6 @@ public class BlobStore implements Store {
 
   @Override
   public void start() throws StoreException {
-    List<SealedFileInfo> sealedLogsAndMetaDataFiles = getSealedLogSegmentFiles();
-    if (null != sealedLogsAndMetaDataFiles) {
-      for (SealedFileInfo E : sealedLogsAndMetaDataFiles) {
-        System.out.println(E.getFileName() + ", size: " +  E.getFileSize());
-        logger.info("LS file: {} size: {}", E.getFileName(), E.getFileSize());
-
-        System.out.print("");
-        List<SealedFileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(dataDir, LogSegmentName.fromFilename(E.getFileName()));
-        if (null != allIndexSegmentsForLogSegment) {
-          for (SealedFileInfo is : allIndexSegmentsForLogSegment) {
-            System.out.println(is.getFileName() + ", size: " +  is.getFileSize());
-            logger.info("IS file: {} size: {}", is.getFileName(), is.getFileSize());
-          }
-        }
-        System.out.print("");
-        List<SealedFileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(dataDir, LogSegmentName.fromFilename(E.getFileName()));
-        if (null != bloomFiltersForLogSegment) {
-          for (SealedFileInfo bf : bloomFiltersForLogSegment) {
-            System.out.println(bf.getFileName() + ", size: " +  bf.getFileSize());
-            logger.info("BF file: {} size: {}", bf.getFileName(), bf.getFileSize());
-          }
-        }
-      }
-    }
-
     synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
@@ -353,7 +328,8 @@ public class BlobStore implements Store {
         }
         metrics.storeStartFailure.inc();
         String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
-        throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
+        // [Dw-remove]
+        //  throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
       } finally {
         context.stop();
       }
@@ -1344,23 +1320,51 @@ public class BlobStore implements Store {
     shutdown(false);
   }
 
-  List<SealedFileInfo> getSealedLogSegmentFiles(){
+  List<LogInfo> printAndReturnFiles() {
+    List<LogInfo> result = new ArrayList<>();
+
+    List<FileInfo> sealedLogsAndMetaDataFiles = getLogSegments(true);
+    if (null != sealedLogsAndMetaDataFiles) {
+      for (FileInfo E : sealedLogsAndMetaDataFiles) {
+        logger.info("[Dw] LS file: {} size: {}", E.getFileName(), E.getFileSize());
+
+        List<FileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(
+            dataDir, LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX));
+        if (null != allIndexSegmentsForLogSegment) {
+          for (FileInfo is : allIndexSegmentsForLogSegment) {
+            logger.info("[Dw] IS file: {} size: {}", is.getFileName(), is.getFileSize());
+          }
+        }
+        List<FileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(
+            dataDir, LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX));
+        if (null != bloomFiltersForLogSegment) {
+          for (FileInfo bf : bloomFiltersForLogSegment) {
+            logger.info("[Dw] BF file: {} size: {}", bf.getFileName(), bf.getFileSize());
+          }
+        }
+        result.add(new LogInfo(E, allIndexSegmentsForLogSegment, bloomFiltersForLogSegment));
+      }
+    }
+    return result;
+  }
+
+  List<FileInfo> getLogSegments(boolean includeActiveLogSegment){
     return log.getAllLogSegmentNames().stream()
-        .filter(segment -> log.getActiveSegment().getName() != segment)
+        .filter(segment -> includeActiveLogSegment || !segment.equals(log.getActiveSegment().getName()))
         .map(segment -> log.getSegment(segment))
-        .map(segment -> new SealedFileInfo(segment.getName().toString(), segment.getView().getFirst().length()))
+        .map(segment -> new FileInfo(segment.getName().toString(), segment.getView().getFirst().length()))
         .collect(Collectors.toList());
   }
 
-  List<SealedFileInfo> getAllIndexSegmentsForLogSegment(String dataDir, LogSegmentName logSegmentName){
+  List<FileInfo> getAllIndexSegmentsForLogSegment(String dataDir, LogSegmentName logSegmentName){
     return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
-        .map(file -> new SealedFileInfo(file.getName(), file.length()))
+        .map(file -> new FileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
   }
 
-  List<SealedFileInfo> getAllBloomFiltersForLogSegment(String dataDir, LogSegmentName logSegmentName){
+  List<FileInfo> getAllBloomFiltersForLogSegment(String dataDir, LogSegmentName logSegmentName){
     return Arrays.stream(PersistentIndex.getBloomFilterFiles(dataDir, logSegmentName))
-        .map(file -> new SealedFileInfo(file.getName(), file.length()))
+        .map(file -> new FileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
   }
 

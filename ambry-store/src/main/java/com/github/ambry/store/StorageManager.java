@@ -174,6 +174,17 @@ public class StorageManager implements StoreManager {
   }
 
   /**
+   * Gets the log segment metadata files from in-memory data structures
+   * This method returns List of LogSegment File along with its IndexFiles, BloomFilterFiles
+   */
+  public List<LogInfo> getLogSegmentMetadataFiles() {
+    return partitionToDiskManager.values().stream()
+        .map(DiskManager::getLogSegmentMetadataFiles)
+        .flatMap(List::stream)
+        .collect(Collectors.toList());
+  }
+
+  /**
    * Checks whether the replicas are placed on the correct disks. If not, reshuffle the disks, write
    * the new state to Helix and exit. We assume that this ambry-server instance will then be restarted with the
    * new disk order that we saved to Helix.

@@ -19,19 +19,23 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import javax.annotation.Nonnull;
+
 
 public class FileCopyGetMetaDataRequest extends RequestOrResponse{
-  private PartitionId partitionId;
-  private String hostName;
+  private final PartitionId partitionId;
+  private final String hostName;
   private static final short File_Metadata_Request_Version_V1 = 1;
   private static final int HostName_Field_Size_In_Bytes = 4;
 
-  public FileCopyGetMetaDataRequest(short versionId, int correlationId, String clientId,
-      PartitionId partitionId, String hostName) {
+  public FileCopyGetMetaDataRequest(
+      short versionId,
+      int correlationId,
+      String clientId,
+      @Nonnull PartitionId partitionId,
+      @Nonnull String hostName) {
     super(RequestOrResponseType.FileCopyGetMetaDataRequest, versionId, correlationId, clientId);
-    if (partitionId == null) {
-      throw new IllegalArgumentException("Partition cannot be null");
-    }
+
     if (hostName.isEmpty()){
       throw new IllegalArgumentException("Host Name cannot be null");
     }
@@ -47,7 +51,9 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse{
     return partitionId;
   }
 
-  protected static FileCopyGetMetaDataRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
+  public static FileCopyGetMetaDataRequest readFrom(
+      @Nonnull DataInputStream stream,
+      @Nonnull ClusterMap clusterMap) throws IOException {
     Short versionId = stream.readShort();
     validateVersion(versionId);
     int correlationId = stream.readInt();

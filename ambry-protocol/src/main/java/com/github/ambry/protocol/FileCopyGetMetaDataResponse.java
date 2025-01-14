@@ -19,7 +19,9 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import javax.annotation.Nonnull;
 
 
 public class FileCopyGetMetaDataResponse extends Response {
@@ -35,7 +37,8 @@ public class FileCopyGetMetaDataResponse extends Response {
     this.logInfos = logInfos;
   }
 
-  public static FileCopyGetMetaDataResponse readFrom(DataInputStream stream) throws IOException {
+  public static FileCopyGetMetaDataResponse readFrom(
+      @Nonnull DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.FileCopyGetMetaDataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible. Expected : {}, Actual : {}" +
@@ -82,7 +85,7 @@ public class FileCopyGetMetaDataResponse extends Response {
   }
 
   public List<LogInfo> getLogInfos() {
-    return logInfos;
+    return Collections.unmodifiableList(logInfos);
   }
 
   static void validateVersion(short version) {

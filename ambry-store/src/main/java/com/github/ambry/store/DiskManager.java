@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -195,6 +196,9 @@ public class DiskManager {
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
             partitionAndStore.getValue().start();
+              // [Dw remove]
+//              logger.info("[Dw] PrintUtil for PartitionId: " + partitionAndStore.getKey().getId());
+//              partitionAndStore.getValue().printAndReturnFiles();
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
             logger.error("Exception while starting store for the {}", partitionAndStore.getKey(), e);
@@ -813,13 +817,32 @@ public class DiskManager {
     return diskHealthStatus;
   }
 
+  /**
+   * Checks if the file exists on the disk
+   * @param fileName
+   * @return
+   */
   public boolean isFileExists(String fileName) {
     String filePath = this.disk.getMountPath() + File.separator + fileName;
     return new File(filePath).exists();
   }
 
+  /**
+   * Gets the files for the given pattern from the disk
+   */
   public List<File> getFilesForPattern(Pattern pattern) throws IOException {
     return Utils.getFilesForPattern(this.disk.getMountPath(), pattern);
+  }
+
+  /**
+   * Gets the log segment metadata files from in-memory data structures
+   * This method returns List of LogSegment File along with its IndexFiles, BloomFilterFiles
+   */
+  public List<LogInfo> getLogSegmentMetadataFiles() {
+    return stores.values().stream()
+        .map(BlobStore::printAndReturnFiles)
+        .flatMap(List::stream)
+        .collect(Collectors.toList());
   }
 
   /**

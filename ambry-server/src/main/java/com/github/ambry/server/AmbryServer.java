@@ -23,7 +23,6 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.cloud.BackupIntegrityMonitor;
 import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.cloud.RecoveryNetworkClientFactory;
-import com.github.ambry.clustermap.AmbryDataNode;
 import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -39,7 +38,6 @@ import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -104,7 +102,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import org.apache.logging.log4j.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -466,6 +463,13 @@ public class AmbryServer {
         for (ClusterParticipant participant : clusterParticipants) {
           participant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
         }
+
+//        RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
+//            (short) 0, 0, "",
+//            new com.github.ambry.clustermap.Partition((long)0, "", PartitionState.READ_WRITE, 1073741824),
+//            "hostName");
+        requests.handleFileMetaDataRequest(EmptyRequest.getInstance());
+
       } else {
         throw new IllegalArgumentException("Unknown server execution mode");
       }
