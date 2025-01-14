@@ -227,10 +227,11 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
   }
 
-//  @Parameterized.Parameters
-//  public static List<Object[]> data() {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
 //    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
-//  }
+        return Arrays.asList(new Object[][]{{false, false}});
+  }
 
   private static Properties createProperties(boolean validateRequestOnStoreState,
       boolean handleUndeleteRequestEnabled) {
@@ -1532,16 +1533,6 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         datanode, null);
   }
 
-  @Test
-  public void foo() throws IOException, InterruptedException {
-    RequestOrResponse get_metadata_request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
-        (short) 0, 0, "", new MockPartitionId(), "hostName");
-//    Response response = sendRequestGetResponse(get_metadata_request, ServerErrorCode.No_Error);
-
-    NetworkRequest mockRequest = MockRequest.fromRequest(get_metadata_request);
-    ambryRequests.handleFileMetaDataRequest(mockRequest);
-  }
-
   /**
    * Performs the AdminRequest and Response as well as checking if the content is a json and expected
    * @param partitionId necessary to fulfill the {@link AdminRequest}
@@ -1653,6 +1644,16 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     //Restores the environment from no longer using disk healthchecks
     currentProperties = createProperties(validateRequestOnStoreState, true);
     setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.enabled", "false");
+  }
+
+  @Test
+  public void foo() throws IOException, InterruptedException {
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+
+    RequestOrResponse get_metadata_request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
+        (short) 1, 0, "", partitionIds.get(0), "hostName");
+
+    sendRequestGetResponse(get_metadata_request, ServerErrorCode.No_Error);
   }
 
   // helpers

@@ -54,7 +54,7 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse{
   public static FileCopyGetMetaDataRequest readFrom(
       @Nonnull DataInputStream stream,
       @Nonnull ClusterMap clusterMap) throws IOException {
-    Short versionId = stream.readShort();
+    short versionId = stream.readShort();
     validateVersion(versionId);
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);

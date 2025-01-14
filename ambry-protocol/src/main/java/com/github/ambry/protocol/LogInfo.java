@@ -117,11 +117,23 @@ public class LogInfo {
     StringBuilder sb = new StringBuilder();
     sb.append("LogInfo[");
     sb.append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes).append(",");
-    for(FileInfo fileInfo : indexFiles) {
-      sb.append(fileInfo.toString());
+
+    if(!indexFiles.isEmpty()) {
+      sb.append(" IndexFiles=[");
+      for (FileInfo fileInfo : indexFiles) {
+        sb.append(fileInfo.toString());
+      }
+      sb.append("]");
+      if(!bloomFilters.isEmpty()) {
+        sb.append(", ");
+      }
     }
-    for(FileInfo fileInfo: bloomFilters){
-      sb.append(fileInfo.toString());
+    if(!bloomFilters.isEmpty()){
+      sb.append(" BloomFilters=[");
+      for(FileInfo fileInfo: bloomFilters){
+        sb.append(fileInfo.toString());
+      }
+      sb.append("]");
     }
     sb.append("]");
     return sb.toString();

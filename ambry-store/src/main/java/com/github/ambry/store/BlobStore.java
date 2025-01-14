@@ -1320,23 +1320,27 @@ public class BlobStore implements Store {
     shutdown(false);
   }
 
-  List<LogInfo> printAndReturnFiles() {
+  /**
+   * Gets the log segment metadata files from in-memory data structures
+   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
+   */
+  List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
     List<LogInfo> result = new ArrayList<>();
 
-    List<FileInfo> sealedLogsAndMetaDataFiles = getLogSegments(true);
+    List<FileInfo> sealedLogsAndMetaDataFiles = getLogSegments(includeActiveLogSegment);
     if (null != sealedLogsAndMetaDataFiles) {
       for (FileInfo E : sealedLogsAndMetaDataFiles) {
         logger.info("[Dw] LS file: {} size: {}", E.getFileName(), E.getFileSize());
 
-        List<FileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(
-            dataDir, LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX));
+        LogSegmentName logSegmentName = LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX);
+
+        List<FileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(dataDir, logSegmentName);
         if (null != allIndexSegmentsForLogSegment) {
           for (FileInfo is : allIndexSegmentsForLogSegment) {
             logger.info("[Dw] IS file: {} size: {}", is.getFileName(), is.getFileSize());
           }
         }
-        List<FileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(
-            dataDir, LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX));
+        List<FileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(dataDir, logSegmentName);
         if (null != bloomFiltersForLogSegment) {
           for (FileInfo bf : bloomFiltersForLogSegment) {
             logger.info("[Dw] BF file: {} size: {}", bf.getFileName(), bf.getFileSize());
@@ -1348,20 +1352,31 @@ public class BlobStore implements Store {
     return result;
   }
 
+  /**
+   * Get all log segments in the store.
+   * Param includeActiveLogSegment is used to determine if the active log segment should be included in the result.
+   */
   List<FileInfo> getLogSegments(boolean includeActiveLogSegment){
     return log.getAllLogSegmentNames().stream()
         .filter(segment -> includeActiveLogSegment || !segment.equals(log.getActiveSegment().getName()))
+        .filter(segment -> !segment.isSingleSegment())
         .map(segment -> log.getSegment(segment))
         .map(segment -> new FileInfo(segment.getName().toString(), segment.getView().getFirst().length()))
         .collect(Collectors.toList());
   }
 
+  /**
+   * Get all index segments for a log segment.
+   */
   List<FileInfo> getAllIndexSegmentsForLogSegment(String dataDir, LogSegmentName logSegmentName){
     return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
         .map(file -> new FileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
   }
 
+  /**
+   * Get all bloom filter files for a log segment.
+   */
   List<FileInfo> getAllBloomFiltersForLogSegment(String dataDir, LogSegmentName logSegmentName){
     return Arrays.stream(PersistentIndex.getBloomFilterFiles(dataDir, logSegmentName))
         .map(file -> new FileInfo(file.getName(), file.length()))

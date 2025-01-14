@@ -836,13 +836,13 @@ public class DiskManager {
 
   /**
    * Gets the log segment metadata files from in-memory data structures
-   * This method returns List of LogSegment File along with its IndexFiles, BloomFilterFiles
+   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
    */
-  public List<LogInfo> getLogSegmentMetadataFiles() {
-    return stores.values().stream()
-        .map(BlobStore::printAndReturnFiles)
-        .flatMap(List::stream)
-        .collect(Collectors.toList());
+  List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
+    if (!stores.containsKey(partitionId)) {
+      throw new IllegalArgumentException("BlobStore for partition " + partitionId + " is not found on disk " + disk);
+    }
+    return stores.get(partitionId).getLogSegmentMetadataFiles(includeActiveLogSegment);
   }
 
   /**

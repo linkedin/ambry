@@ -15,6 +15,8 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Reservoir;
+import com.codahale.metrics.Snapshot;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
@@ -60,6 +62,7 @@ import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
@@ -237,7 +240,7 @@ public class AmbryRequests implements RequestAPI {
         case ReplicateBlobRequest:
           handleReplicateBlobRequest(networkRequest);
           break;
-        case FileMetaDataRequest:
+        case FileCopyGetMetaDataRequest:
           handleFileMetaDataRequest(networkRequest);
           break;
         default:
@@ -1679,33 +1682,34 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   *
-   * @param request
+   * Handler for FileMetadataRequest
    */
   void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
-//    FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest =
-//        FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest =
+        FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
 
-    List<com.github.ambry.store.LogInfo> logSegments = ((StorageManager)storeManager).getLogSegmentMetadataFiles();
+    List<com.github.ambry.store.LogInfo> logSegments = ((StorageManager)storeManager)
+        .getLogSegmentMetadataFiles(fileCopyGetMetaDataRequest.getPartitionId(), true);
+
     List<LogInfo> logInfos = convertStoreToProtocolLogInfo(logSegments);
 
-    FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse((short)0, 0, "",
+    FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse((short)1, 0, "",
         logSegments.size(), logInfos, ServerErrorCode.No_Error);
-//    Histogram dummyHistogram = new Histogram(new Reservoir() {
-//      @Override
-//      public int size() {
-//        return 0;
-//      }
-//
-//      @Override
-//      public void update(long value) {
-//      }
-//
-//      @Override
-//      public Snapshot getSnapshot() {
-//        return null;
-//      }
-//    });
+    Histogram dummyHistogram = new Histogram(new Reservoir() {
+      @Override
+      public int size() {
+        return 0;
+      }
+
+      @Override
+      public void update(long value) {
+      }
+
+      @Override
+      public Snapshot getSnapshot() {
+        return null;
+      }
+    });
 
     logger.info("[Dw] Api response - " + response);
     System.out.println("[Dw] Api response - " + response);

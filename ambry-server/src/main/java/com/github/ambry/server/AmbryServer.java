@@ -30,6 +30,8 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -60,9 +62,11 @@ import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ServerRequestResponseHelper;
 import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.SocketServer;
@@ -72,6 +76,7 @@ import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.replication.FindTokenHelper;
@@ -88,10 +93,14 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -463,13 +472,7 @@ public class AmbryServer {
         for (ClusterParticipant participant : clusterParticipants) {
           participant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
         }
-
-//        RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
-//            (short) 0, 0, "",
-//            new com.github.ambry.clustermap.Partition((long)0, "", PartitionState.READ_WRITE, 1073741824),
-//            "hostName");
-        requests.handleFileMetaDataRequest(EmptyRequest.getInstance());
-
+        invokeGetMetadataApi();
       } else {
         throw new IllegalArgumentException("Unknown server execution mode");
       }
@@ -485,6 +488,66 @@ public class AmbryServer {
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
+    }
+  }
+
+  private void invokeGetMetadataApi() {
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+
+    partitionIds.forEach(partitionId -> {
+      RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
+          (short) 1, 0, "", partitionId, "hostName");
+
+      NetworkRequest mockRequest = null;
+      try {
+        mockRequest = MockRequest.fromRequest(request);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      try {
+        requests.handleRequests(mockRequest);
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+    });
+  }
+
+  private static class MockRequest implements NetworkRequest {
+
+    private final InputStream stream;
+
+    /**
+     * Constructs a {@link MockRequest}.
+     * @param stream the {@link InputStream} that will be returned on a call to {@link #getInputStream()}.
+     */
+    private MockRequest(InputStream stream) {
+      this.stream = stream;
+    }
+
+    /**
+     * Constructs a {@link MockRequest} from {@code request}.
+     * @param request the {@link RequestOrResponse} to construct the {@link MockRequest} for.
+     * @return an instance of {@link MockRequest} that represents {@code request}.
+     * @throws IOException
+     */
+    static MockRequest fromRequest(RequestOrResponse request) throws IOException {
+      ByteBuffer buffer = ByteBuffer.allocate((int) request.sizeInBytes());
+      request.writeTo(new ByteBufferChannel(buffer));
+      request.release();
+      buffer.flip();
+      // read length (to bring it to a state where AmbryRequests can handle it).
+      buffer.getLong();
+      return new MockRequest(new ByteBufferDataInputStream(buffer));
+    }
+
+    @Override
+    public InputStream getInputStream() {
+      return stream;
+    }
+
+    @Override
+    public long getStartTimeInMs() {
+      return 0;
     }
   }
 

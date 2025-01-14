@@ -175,13 +175,13 @@ public class StorageManager implements StoreManager {
 
   /**
    * Gets the log segment metadata files from in-memory data structures
-   * This method returns List of LogSegment File along with its IndexFiles, BloomFilterFiles
+   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
    */
-  public List<LogInfo> getLogSegmentMetadataFiles() {
-    return partitionToDiskManager.values().stream()
-        .map(DiskManager::getLogSegmentMetadataFiles)
-        .flatMap(List::stream)
-        .collect(Collectors.toList());
+  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
+    if (!partitionToDiskManager.containsKey(partitionId)) {
+      throw new IllegalArgumentException("DiskManager not found for partition " + partitionId);
+    }
+    return partitionToDiskManager.get(partitionId).getLogSegmentMetadataFiles(partitionId, includeActiveLogSegment);
   }
 
   /**
