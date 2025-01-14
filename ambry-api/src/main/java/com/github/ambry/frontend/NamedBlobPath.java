@@ -90,7 +90,10 @@ public class NamedBlobPath {
    * @throws RestServiceException on parsing errors.
    */
 
-
+  // account/container/key
+  // ->
+  // account/container/? delete
+  // namedblobb requires key and prefix
   // alter this method since it expects key or prefix but we dont have either
 
   public static NamedBlobPath parseS3(String path, Map<String, Object> args) throws RestServiceException {

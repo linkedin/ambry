@@ -377,4 +377,29 @@ public class S3MessagePayload {
 
   }
 
+  public static class S3BatchDeleteResponse {
+    @JacksonXmlProperty(localName = "deleted")
+    private List<String> deleted;
+
+    @JacksonXmlProperty(localName = "errors")
+    private List<String> success;
+
+    // Getters and Setters
+    public List<String> getDeleted() {
+      return deleted;
+    }
+
+    public void setDeleted(List<String> deleted) {
+      this.deleted = deleted;
+    }
+
+    public List<String> getErrors() {
+      return success;
+    }
+
+    public void setErrors(List<String> success) {
+      this.success = success;
+    }
+  }
+
 }

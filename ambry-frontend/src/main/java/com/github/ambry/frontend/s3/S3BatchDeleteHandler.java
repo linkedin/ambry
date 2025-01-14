@@ -1,12 +1,13 @@
 package com.github.ambry.frontend.s3;
 
-import com.fasterxml.jackson.core.exc.StreamReadException;
-import com.fasterxml.jackson.databind.DatabindException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.DeleteBlobHandler;
 import com.github.ambry.frontend.FrontendMetrics;
+import com.github.ambry.rest.NoOpResponseChannel;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
@@ -14,25 +15,29 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.WrappedRestRequest;
+import com.github.ambry.router.ReadableStreamChannel;
 import io.netty.buffer.ByteBuf;
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.util.concurrent.CountDownLatch;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import org.bouncycastle.cert.ocsp.Req;
 
-import static com.github.ambry.frontend.FrontendUtils.*;
-import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+import static com.github.ambry.rest.RestUtils.*;
 
 
-public class S3BatchDeleteHandler extends S3BaseHandler {
-  //private static final ObjectMapper xmlMapper = new XmlMapper();
+public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static DeleteBlobHandler deleteBlobHandler;
-
+  private static ArrayList<String> deleted = new ArrayList<>();
+  private static ArrayList<String> errors = new ArrayList<>();
+  private static boolean failedRequest;
 
   // S3PostHandler -> S3BatchDeleteHandler -> S3DeleteHandler -> S3DeleteObjectHandler -> DeleteBlobHandler
   public S3BatchDeleteHandler(DeleteBlobHandler deleteBlobHandler, S3BatchDeleteHandler s3DeleteHandler, FrontendMetrics frontendMetrics) {
     this.deleteBlobHandler = deleteBlobHandler;
+    this.failedRequest = false;
   }
 
   /**
@@ -49,7 +54,15 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
       this.deleteBlobHandler = deleteBlobHandler;
     }
 
-    // TODO: determine if we need oncompletion or just a method like in other code examples
+    public void onDeleteCompletion(boolean success, String key) {
+      if (success) {
+        deleted.add(key);
+      }
+      else {
+        errors.add(key);
+      }
+    }
+
     @Override
     public void onCompletion(Long respLong, Exception exception) {
       if (exception == null) {
@@ -57,7 +70,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
         try {
           // Get the retained content from the channel
           ByteBuf byteBuffer = channel.consumeContentAsByteBuf();
-
+          // TODO byte array?
           // Convert ByteBuf to byte array
           byte[] byteArray = new byte[byteBuffer.readableBytes()];
           byteBuffer.readBytes(byteArray);
@@ -80,29 +93,38 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
             WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
             singleDeleteRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
 
-            // Invoke the delete handler for each object
-            deleteBlobHandler.handle(singleDeleteRequest, null, null);
+            CountDownLatch latch = new CountDownLatch(1);
+            NoOpResponseChannel noOpResponseChannel = new NoOpResponseChannel();
+
+            deleteBlobHandler.handle(singleDeleteRequest, noOpResponseChannel, new Callback<Void>() {
+              @Override
+              public void onCompletion(Void result, Exception exception) {
+                  // Call our custom onDeleteCompletion to track success/failure
+                  boolean success = exception == null;
+                  onDeleteCompletion(success, object.getKey());
+                  latch.countDown();
+                }
+              });
+
+            try {
+              latch.await();  // This will block until latch count reaches zero
+            } catch (InterruptedException e) {
+              // TODO: what to do here
+              Thread.currentThread().interrupt();
+            }
           }
         } catch (IOException e) {
           // Handle exceptions during deserialization
-          // TODO: address error in all the throws
-          throw new RestServiceException("Error reading batch delete request", e, null);
+          failedRequest = true;
         } catch (RestServiceException e) {
-          // Handle service-specific exceptions
-          throw new RuntimeException("Error handling batch delete", e);
+          failedRequest = true;
         }
       } else {
-        // Handle the exception that occurred during the read operation
-        throw new RestServiceException("Error reading data from channel", exception, null);
+        // failed to read data
+        failedRequest = true;
       }
     }
   }
-
-
-//   throw new RestServiceException(String.format(
-//      "Path must have format '/named/<account_name>/<container_name>%s.  Received path='%s', arg='%s'",
-//      isListRequest || isGetObjectLockRequest ? "" : "/<blob_name>'", path, args), RestServiceErrorCode.BadRequest);
-//}
 
   /**
    * Handles the S3 request and construct the response.
@@ -113,7 +135,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
    * @throws RestServiceException exception when the processing fails
    */
   @Override
-  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback callback)
+  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<ReadableStreamChannel> callback)
       throws RestServiceException {
 
           // TODO determine if we need to define max size of chanel
@@ -123,14 +145,30 @@ public class S3BatchDeleteHandler extends S3BaseHandler {
         // Create and pass the BatchDeleteCallback to handle the response
         restRequest.readInto(channel, new BatchDeleteCallback(channel, restRequest, deleteBlobHandler));
 
+        if (failedRequest) {
+          restResponseChannel.setStatus(ResponseStatus.BadRequest);
+          throw new RestServiceException("Failed to execute S3BatchDelete", RestServiceErrorCode.BadRequest);
+        } else {
+          restResponseChannel.setStatus(ResponseStatus.Ok);
+          try {
+            XmlMapper xmlMapper = new XmlMapper();
+            S3MessagePayload.S3BatchDeleteResponse resp = new S3MessagePayload.S3BatchDeleteResponse();
+            resp.setDeleted(deleted);
+            resp.setErrors(errors);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            xmlMapper.writeValue(outputStream, resp);
+            ReadableStreamChannel readableStreamChannel =
+                new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+            restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+            restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
+            callback.onCompletion(readableStreamChannel, null);
+
+          } catch (IOException e) {
+            throw new RestServiceException("Failed to serialize response", RestServiceErrorCode.InternalServerError);
+          }
+        }
   }
 }
-
-
-// finish one key, do next key
-// futures
-// fake response to collect .. construct overall callback
-// 404
 
 
 
