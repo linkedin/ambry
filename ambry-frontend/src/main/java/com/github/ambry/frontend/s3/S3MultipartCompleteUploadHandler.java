@@ -423,6 +423,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * 2. Disallow duplicate etags
    * 3. Check for list size 10000
    * 4. Check for part numbers integer 1-10000
+   * @param request the {@link CompleteMultipartUpload} request
    * @return the bad request error
    */
   List<Part> validatePartsOrThrow(CompleteMultipartUpload request) throws RestServiceException {
@@ -448,6 +449,12 @@ public class S3MultipartCompleteUploadHandler<R> {
     return parts;
   }
 
+  /**
+   * Get the part number from the part object
+   * @param part
+   * @return
+   * @throws RestServiceException
+   */
   int getPartNumber(Part part) throws RestServiceException {
     int partNumber;
     try {
@@ -463,6 +470,12 @@ public class S3MultipartCompleteUploadHandler<R> {
     return partNumber;
   }
 
+  /**
+   * Get the list of parts from the request
+   * @param request
+   * @return
+   * @throws RestServiceException
+   */
   List<Part> getParts(CompleteMultipartUpload request) throws RestServiceException {
     if (request.getPart() == null) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
