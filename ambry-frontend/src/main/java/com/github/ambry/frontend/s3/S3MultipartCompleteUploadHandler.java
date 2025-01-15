@@ -432,7 +432,6 @@ public class S3MultipartCompleteUploadHandler<R> {
     Set<String> etags = new HashSet<>();
     for (Part part : parts) {
       int partNumber = getPartNumber(part);
-      String etag = part.geteTag();
       if (partNumber < S3Constants.MIN_PART_NUM || partNumber > S3Constants.MAX_PART_NUM) {
         String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, partNumber);
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
@@ -441,6 +440,7 @@ public class S3MultipartCompleteUploadHandler<R> {
         String error = String.format(S3Constants.ERR_DUPLICATE_PART_NUMBER, partNumber);
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
+      String etag = part.geteTag();
       if (!etags.add(etag)) {
         String error = String.format(S3Constants.ERR_DUPLICATE_ETAG, etag);
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
