@@ -50,7 +50,6 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
-import com.sun.istack.internal.NotNull;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -427,7 +426,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @param request the {@link CompleteMultipartUpload} request
    * @return the bad request error
    */
-  @NotNull List<Part> validatePartsOrThrow(@NotNull CompleteMultipartUpload request) throws RestServiceException {
+  List<Part> validatePartsOrThrow(CompleteMultipartUpload request) throws RestServiceException {
     List<Part> parts = getParts(request);
     Set<Integer> partNumbers = new HashSet<>();
     Set<String> etags = new HashSet<>();
@@ -456,7 +455,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @return
    * @throws RestServiceException
    */
-  @NotNull int getPartNumber(@NotNull Part part) throws RestServiceException {
+  int getPartNumber(Part part) throws RestServiceException {
     try {
       return part.getPartNumber();
     } catch (NumberFormatException e) {
@@ -475,7 +474,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @return
    * @throws RestServiceException
    */
-  @NotNull List<Part> getParts(@NotNull CompleteMultipartUpload request) throws RestServiceException {
+  List<Part> getParts(CompleteMultipartUpload request) throws RestServiceException {
     Part[] part = request.getPart();
     if (part == null) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
