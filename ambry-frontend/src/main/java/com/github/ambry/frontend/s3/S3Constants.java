@@ -26,5 +26,4 @@ public class S3Constants {
   public static final String ERR_DUPLICATE_ETAG = "Duplicate eTag found: %s.";
   public static final String ERR_EMPTY_REQUEST_BODY = "Xml request body cannot be empty.";
   public static final String ERR_PART_LIST_TOO_LONG = String.format("Parts list size cannot exceed %d.", MAX_LIST_SIZE);
-  public static final String ERR_INVALID_PART_LIST = "Failed to parse xml request body due error %s";
 }

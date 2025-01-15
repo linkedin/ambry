@@ -301,7 +301,7 @@ public class S3MultipartUploadTest {
   @Test
   public void testEmptyPartList() throws Exception {
     Part[] parts = {};
-    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_LIST, "null");
+    String expectedMessage = S3Constants.ERR_EMPTY_REQUEST_BODY;
     testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 

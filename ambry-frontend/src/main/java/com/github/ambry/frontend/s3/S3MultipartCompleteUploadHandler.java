@@ -459,8 +459,7 @@ public class S3MultipartCompleteUploadHandler<R> {
     try {
       parts = Arrays.asList(request.getPart());
     } catch (Throwable e) {
-      String error = String.format(S3Constants.ERR_INVALID_PART_LIST, e.getMessage());
-      throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
     }
     if (parts == null || parts.isEmpty()) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
