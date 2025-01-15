@@ -435,6 +435,15 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @return the bad request error
    */
   private static void validateParts(List<Part> parts) throws RestServiceException {
+    if (parts == null || parts.isEmpty()) {
+      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
+    }
+
+    if (parts.size() > S3Constants.MAX_LIST_SIZE) {
+      String error = S3Constants.ERR_PART_LIST_TOO_LONG;
+      throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+    }
+
     Set<Integer> partNumbers = new HashSet<>();
     Set<String> etags = new HashSet<>();
 
@@ -442,23 +451,19 @@ public class S3MultipartCompleteUploadHandler<R> {
       int partNumber = part.getPartNumber();
       String etag = part.geteTag();
 
-      if (partNumber < MIN_PART_NUM || partNumber > MAX_PART_NUM) {
-        String error = String.format(
-            "Invalid part number: " + part.getPartNumber() + ". Part number must be an integer between {} and {}.",
-            MIN_PART_NUM, MAX_PART_NUM);
-        LOGGER.error(error);
+      if (partNumber < S3Constants.MIN_PART_NUM || partNumber > S3Constants.MAX_PART_NUM) {
+        String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, partNumber, S3Constants.MIN_PART_NUM,
+            S3Constants.MAX_PART_NUM);
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
 
       if (!partNumbers.add(partNumber)) {
-        String error = "Duplicate part number found: " + partNumber;
-        LOGGER.error(error);
+        String error = String.format(S3Constants.ERR_DUPLICATE_PART_NUMBER, partNumber);
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
 
       if (!etags.add(etag)) {
-        String error = "Duplicate eTag found: " + etag;
-        LOGGER.error(error);
+        String error = String.format(S3Constants.ERR_DUPLICATE_ETAG, etag);
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
     }
@@ -471,11 +476,11 @@ public class S3MultipartCompleteUploadHandler<R> {
    */
   private static void validatePartsSize(Part[] parts) throws RestServiceException {
     if (parts == null || parts.length == 0) {
-      throw new RestServiceException("Xml request body cannot be empty.", RestServiceErrorCode.BadRequest);
+      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
     }
 
-    if (parts.length > MAX_LIST_SIZE) {
-      String error = String.format("Parts list size cannot exceed {}.", MAX_LIST_SIZE);
+    if (parts.length > S3Constants.MAX_LIST_SIZE) {
+      String error = String.format(S3Constants.ERR_PART_LIST_TOO_LONG, S3Constants.MAX_LIST_SIZE);
       throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
     }
   }

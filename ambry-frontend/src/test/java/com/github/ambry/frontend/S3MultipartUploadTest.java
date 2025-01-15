@@ -29,6 +29,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.s3.S3Constants;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
@@ -255,7 +256,8 @@ public class S3MultipartUploadTest {
     Part part1 = new Part("1", "etag1");
     Part part2 = new Part("1", "etag2");
     Part[] parts = {part2, part1};
-    testMultipartUploadWithInvalidParts(parts, "Duplicate part number found: ");
+    String expectedMessage = String.format(S3Constants.ERR_DUPLICATE_PART_NUMBER, 1);
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
   @Test
@@ -263,7 +265,8 @@ public class S3MultipartUploadTest {
     Part part1 = new Part("1", "etag1");
     Part part2 = new Part("2", "etag1");
     Part[] parts = {part2, part1};
-    testMultipartUploadWithInvalidParts(parts, "Duplicate eTag found: ");
+    String expectedMessage = String.format(S3Constants.ERR_DUPLICATE_ETAG, "etag1");
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
   @Test
@@ -271,30 +274,35 @@ public class S3MultipartUploadTest {
     Part part1 = new Part("0", "etag1");
     Part part2 = new Part("1", "etag2");
     Part[] parts = {part2, part1};
-    testMultipartUploadWithInvalidParts(parts, "Invalid part number: ");
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, 0, S3Constants.MIN_PART_NUM, S3Constants.MAX_PART_NUM);
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
   @Test
   public void testPartNumberInvalidExceedsMax() throws Exception {
+    int invalidPartNumber = S3Constants.MAX_PART_NUM + 1;
     Part part1 = new Part("2", "etag1");
-    Part part2 = new Part("10001", "etag2");
+    Part part2 = new Part(String.valueOf(invalidPartNumber), "etag2");
     Part[] parts = {part2, part1};
-    testMultipartUploadWithInvalidParts(parts, "Invalid part number: ");
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, invalidPartNumber, S3Constants.MIN_PART_NUM, S3Constants.MAX_PART_NUM);
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
   @Test
   public void testExceedMaxParts() throws Exception {
-    Part[] parts = new Part[10001];
-    for (int i = 1; i <= 10001; i++) {
+    Part[] parts = new Part[S3Constants.MAX_LIST_SIZE + 1];
+    for (int i = 1; i <= S3Constants.MAX_LIST_SIZE + 1; i++) {
       parts[i - 1] = new Part(String.valueOf(i), "eTag" + i);
     }
-    testMultipartUploadWithInvalidParts(parts, "Parts list size cannot exceed");
+    String expectedMessage = S3Constants.ERR_PART_LIST_TOO_LONG;
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
   @Test
   public void testEmptyPartList() throws Exception {
     Part[] parts = {};
-    testMultipartUploadWithInvalidParts(parts, "Xml request body cannot be empty.");
+    String expectedMessage = S3Constants.ERR_EMPTY_REQUEST_BODY;
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
   private void testMultipartUploadWithInvalidParts(Part[] parts, String expectedErrorMessage) throws Exception {
