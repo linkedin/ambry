@@ -430,15 +430,7 @@ public class S3MultipartCompleteUploadHandler<R> {
     Set<Integer> partNumbers = new HashSet<>();
     Set<String> etags = new HashSet<>();
     for (Part part : parts) {
-      int partNumber;
-      try {
-        partNumber = part.getPartNumber();
-      } catch (NumberFormatException e) {
-        String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, part.getPartNumber());
-        throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
-      } catch (Throwable e) {
-        throw new RestServiceException(S3Constants.ERR_INVALID_MULTIPART_UPLOAD, RestServiceErrorCode.BadRequest);
-      }
+      int partNumber = getPartNumber(part);
       String etag = part.geteTag();
       if (partNumber < S3Constants.MIN_PART_NUM || partNumber > S3Constants.MAX_PART_NUM) {
         String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, partNumber);
@@ -456,13 +448,26 @@ public class S3MultipartCompleteUploadHandler<R> {
     return parts;
   }
 
-  List<Part> getParts(CompleteMultipartUpload request) throws RestServiceException {
-    List<Part> parts;
+  int getPartNumber(Part part) throws RestServiceException {
+    int partNumber;
     try {
-      parts = Arrays.asList(request.getPart());
+      partNumber = part.getPartNumber();
+    } catch (NumberFormatException e) {
+      // cannot use getPartNumber() here as it would cause another exception
+      String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, part);
+      throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
     } catch (Throwable e) {
+      // any other exception is invalid
       throw new RestServiceException(S3Constants.ERR_INVALID_MULTIPART_UPLOAD, RestServiceErrorCode.BadRequest);
     }
+    return partNumber;
+  }
+
+  List<Part> getParts(CompleteMultipartUpload request) throws RestServiceException {
+    if (request.getPart() == null) {
+      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
+    }
+    List<Part> parts = Arrays.asList(request.getPart());
     if (parts.isEmpty()) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
     }
