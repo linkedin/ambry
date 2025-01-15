@@ -20,6 +20,7 @@ public class S3Constants {
   public static final int MAX_LIST_SIZE = 10000;
 
   // Error Messages
+  public static final String ERR_INVALID_MULTIPART_UPLOAD = "Invalid multipart upload.";
   public static final String ERR_INVALID_PART_NUMBER =
       "Invalid part number: %d. " + String.format("Part number must be an integer between %d and %d.", MIN_PART_NUM, MAX_PART_NUM);
   public static final String ERR_DUPLICATE_PART_NUMBER = "Duplicate part number found: %d.";

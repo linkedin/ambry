@@ -436,6 +436,8 @@ public class S3MultipartCompleteUploadHandler<R> {
       } catch (NumberFormatException e) {
         String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, part.getPartNumber());
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+      } catch (Throwable e) {
+        throw new RestServiceException(S3Constants.ERR_INVALID_MULTIPART_UPLOAD, RestServiceErrorCode.BadRequest);
       }
       String etag = part.geteTag();
       if (partNumber < S3Constants.MIN_PART_NUM || partNumber > S3Constants.MAX_PART_NUM) {
@@ -459,9 +461,9 @@ public class S3MultipartCompleteUploadHandler<R> {
     try {
       parts = Arrays.asList(request.getPart());
     } catch (Throwable e) {
-      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
+      throw new RestServiceException(S3Constants.ERR_INVALID_MULTIPART_UPLOAD, RestServiceErrorCode.BadRequest);
     }
-    if (parts == null || parts.isEmpty()) {
+    if (parts.isEmpty()) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
     }
     if (parts.size() > S3Constants.MAX_LIST_SIZE) {
