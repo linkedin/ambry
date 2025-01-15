@@ -19,7 +19,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
@@ -46,24 +45,18 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.router.Router;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -274,7 +267,7 @@ public class S3MultipartUploadTest {
     Part part1 = new Part("0", "etag1");
     Part part2 = new Part("1", "etag2");
     Part[] parts = {part2, part1};
-    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, 0, S3Constants.MIN_PART_NUM, S3Constants.MAX_PART_NUM);
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, 0);
     testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
@@ -284,7 +277,7 @@ public class S3MultipartUploadTest {
     Part part1 = new Part("2", "etag1");
     Part part2 = new Part(String.valueOf(invalidPartNumber), "etag2");
     Part[] parts = {part2, part1};
-    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, invalidPartNumber, S3Constants.MIN_PART_NUM, S3Constants.MAX_PART_NUM);
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, invalidPartNumber);
     testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
