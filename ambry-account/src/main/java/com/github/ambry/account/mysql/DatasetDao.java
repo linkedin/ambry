@@ -158,8 +158,10 @@ public class DatasetDao {
     //copy a dataset version from a source version.
     //We need to update the modify time so counter based purge policy won't delete it.
     copyToNewDatasetVersionSql = String.format(
-        "INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s, %10$s) SELECT %2$s, %3$s, %4$s, ?, "
-            + "%6$s, NOW(3), %8$s, %9$s, ? FROM %1$s WHERE %2$s = ? AND %3$s = ? AND %4$s = ? AND %5$s = ? AND %9$s = ?",
+        "INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s, %10$s) "
+            + "SELECT %2$s, %3$s, %4$s, ?, %6$s, NOW(3), %8$s, %9$s, ? "
+            + "FROM %1$s WHERE %2$s = ? AND %3$s = ? AND %4$s = ? AND %5$s = ? AND %9$s = ? "
+            + "AND (%8$s IS NULL OR %8$s > NOW(3))",
         DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, CREATION_TIME, LAST_MODIFIED_TIME,
         DELETED_TS, DATASET_VERSION_STATE, RENAME_FROM);
     //dataset version has in_progress and ready states.
