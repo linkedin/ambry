@@ -387,16 +387,12 @@ public class S3MultipartCompleteUploadHandler<R> {
       // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
       List<ChunkInfo> chunkInfos = new ArrayList<>();
       try {
-        // check the parts array size
-        validatePartsSize(completeMultipartUpload.getPart());
         // sort the list in order
-        List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
-        // Validate part number and etags
-        // https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
-        validateParts(sortedParts);
-        Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
+        List<Part> parts = Arrays.asList(completeMultipartUpload.getPart());
+        validatePartsOrThrow(parts);
+        Collections.sort(parts, Comparator.comparingInt(Part::getPartNumber));
         String reservedMetadataId = null;
-        for (Part part : sortedParts) {
+        for (Part part : parts) {
           S3MultipartETag eTag = S3MultipartETag.deserialize(part.geteTag());
           // TODO [S3]: decide the life cycle of S3.
           long expirationTimeInMs = -1;
@@ -434,7 +430,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @param parts sorted parts list
    * @return the bad request error
    */
-  private static void validateParts(List<Part> parts) throws RestServiceException {
+  private static void validatePartsOrThrow(List<Part> parts) throws RestServiceException {
     if (parts == null || parts.isEmpty()) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
     }
@@ -466,22 +462,6 @@ public class S3MultipartCompleteUploadHandler<R> {
         String error = String.format(S3Constants.ERR_DUPLICATE_ETAG, etag);
         throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
       }
-    }
-  }
-
-  /**
-   * Check the parts array size is not empty or exceeds the limit
-   * @param parts the part array from Complete Multipart upload request
-   * @throws RestServiceException
-   */
-  private static void validatePartsSize(Part[] parts) throws RestServiceException {
-    if (parts == null || parts.length == 0) {
-      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
-    }
-
-    if (parts.length > S3Constants.MAX_LIST_SIZE) {
-      String error = String.format(S3Constants.ERR_PART_LIST_TOO_LONG, S3Constants.MAX_LIST_SIZE);
-      throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
     }
   }
 }
