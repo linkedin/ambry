@@ -482,7 +482,7 @@ public class NonBlockingRouter implements Router {
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
   @Override
-  public Future<Void> zdeleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback,
+  public Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
     if (restRequest == null) {

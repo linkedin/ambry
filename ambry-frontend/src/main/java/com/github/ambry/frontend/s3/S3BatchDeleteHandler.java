@@ -30,9 +30,9 @@ import static com.github.ambry.rest.RestUtils.*;
 
 public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static DeleteBlobHandler deleteBlobHandler;
-  private static ArrayList<String> deleted = new ArrayList<>();
-  private static ArrayList<String> errors = new ArrayList<>();
-  private static boolean failedRequest;
+  private ArrayList<String> deleted = new ArrayList<>();
+  private ArrayList<String> errors = new ArrayList<>();
+  private boolean failedRequest;
 
   // S3PostHandler -> S3BatchDeleteHandler -> S3DeleteHandler -> S3DeleteObjectHandler -> DeleteBlobHandler
   public S3BatchDeleteHandler(DeleteBlobHandler deleteBlobHandler, S3BatchDeleteHandler s3DeleteHandler, FrontendMetrics frontendMetrics) {
@@ -43,7 +43,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   /**
    * Callback for processing batch delete requests.
    */
-  private static class BatchDeleteCallback implements Callback<Long> {
+  private class BatchDeleteCallback implements Callback<Long> {
     private final RetainingAsyncWritableChannel channel;
     private final RestRequest restRequest;
     private final DeleteBlobHandler deleteBlobHandler;

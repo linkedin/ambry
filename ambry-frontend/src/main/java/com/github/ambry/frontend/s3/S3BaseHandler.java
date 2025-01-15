@@ -77,7 +77,7 @@ abstract public class S3BaseHandler<R> {
       LOGGER.debug("{} {}", restRequest.getRestMethod(), path);
 
       doHandle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (r) -> {
-        removeAmbryHeaders(restResponseChannel);
+        removeAmbryHeaders    (restResponseChannel);
         callback.onCompletion(r, null);
       }));
     } catch (Throwable t) {
