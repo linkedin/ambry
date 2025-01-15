@@ -274,7 +274,7 @@ public class S3MultipartUploadTest {
     Part part1 = new Part("0", "etag1");
     Part part2 = new Part("1", "etag2");
     Part[] parts = {part2, part1};
-    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, 0, S3Constants.MIN_PART_NUM, S3Constants.MAX_PART_NUM);
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, 0);
     testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
@@ -284,7 +284,7 @@ public class S3MultipartUploadTest {
     Part part1 = new Part("2", "etag1");
     Part part2 = new Part(String.valueOf(invalidPartNumber), "etag2");
     Part[] parts = {part2, part1};
-    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, invalidPartNumber, S3Constants.MIN_PART_NUM, S3Constants.MAX_PART_NUM);
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, invalidPartNumber);
     testMultipartUploadWithInvalidParts(parts, expectedMessage);
   }
 
