@@ -22,9 +22,9 @@ public class S3Constants {
   // Error Messages
   public static final String ERR_INVALID_MULTIPART_UPLOAD = "Invalid multipart upload.";
   public static final String ERR_INVALID_PART_NUMBER =
-      "Invalid part number: %s. " + String.format("Part number must be an integer between %d and %d.", MIN_PART_NUM, MAX_PART_NUM);
-  public static final String ERR_DUPLICATE_PART_NUMBER = "Duplicate part number found: %d.";
+      "Invalid part number: %s. " + String.format("Part number must be an integer between %s and %s.", MIN_PART_NUM, MAX_PART_NUM);
+  public static final String ERR_DUPLICATE_PART_NUMBER = "Duplicate part number found: %s.";
   public static final String ERR_DUPLICATE_ETAG = "Duplicate eTag found: %s.";
   public static final String ERR_EMPTY_REQUEST_BODY = "Xml request body cannot be empty.";
-  public static final String ERR_PART_LIST_TOO_LONG = String.format("Parts list size cannot exceed %d.", MAX_LIST_SIZE);
+  public static final String ERR_PART_LIST_TOO_LONG = String.format("Parts list size cannot exceed %s.", MAX_LIST_SIZE);
 }
