@@ -480,10 +480,9 @@ public class S3MultipartCompleteUploadHandler<R> {
     if (request.getPart() == null) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
     }
+    // Arrays.asList() can return an empty list, but only if it is called with no arguments.
+    // Therefore, the list will always have at least one element.
     List<Part> parts = Arrays.asList(request.getPart());
-    if (parts.isEmpty()) {
-      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
-    }
     if (parts.size() > S3Constants.MAX_LIST_SIZE) {
       throw new RestServiceException(S3Constants.ERR_PART_LIST_TOO_LONG, RestServiceErrorCode.BadRequest);
     }
