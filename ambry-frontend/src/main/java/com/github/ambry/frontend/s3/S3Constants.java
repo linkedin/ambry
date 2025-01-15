@@ -17,7 +17,7 @@ package com.github.ambry.frontend.s3;
 public class S3Constants {
   public static final int MIN_PART_NUM = 1;
   public static final int MAX_PART_NUM = 10000;
-  public static final int MAX_LIST_SIZE = 10000;
+  public static final int MAX_LIST_SIZE = MAX_PART_NUM; // since parts are contiguous, the list size cannot exceed the max part number
 
   // Error Messages
   public static final String ERR_INVALID_MULTIPART_UPLOAD = "Invalid multipart upload.";
