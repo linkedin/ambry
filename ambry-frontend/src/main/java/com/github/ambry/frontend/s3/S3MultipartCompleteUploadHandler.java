@@ -457,9 +457,8 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @throws RestServiceException
    */
   @NotNull int getPartNumber(@NotNull Part part) throws RestServiceException {
-    int partNumber;
     try {
-      partNumber = part.getPartNumber();
+      return part.getPartNumber();
     } catch (NumberFormatException e) {
       // cannot use getPartNumber() here as it would cause another exception
       String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, part);
@@ -468,7 +467,6 @@ public class S3MultipartCompleteUploadHandler<R> {
       // any other exception is invalid
       throw new RestServiceException(S3Constants.ERR_INVALID_MULTIPART_UPLOAD, RestServiceErrorCode.BadRequest);
     }
-    return partNumber;
   }
 
   /**
@@ -478,12 +476,13 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @throws RestServiceException
    */
   @NotNull List<Part> getParts(@NotNull CompleteMultipartUpload request) throws RestServiceException {
-    if (request.getPart() == null) {
+    Part[] part = request.getPart();
+    if (part == null) {
       throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
     }
     // Arrays.asList() can return an empty list, but only if it is called with no arguments.
     // Therefore, the list below will always have at least one element as we are passing an argument.
-    List<Part> parts = Arrays.asList(request.getPart());
+    List<Part> parts = Arrays.asList(part);
     if (parts.size() > S3Constants.MAX_LIST_SIZE) {
       throw new RestServiceException(S3Constants.ERR_PART_LIST_TOO_LONG, RestServiceErrorCode.BadRequest);
     }
