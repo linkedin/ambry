@@ -382,8 +382,8 @@ public class S3MultipartCompleteUploadHandler<R> {
      */
     List<ChunkInfo> getChunksToStitch(CompleteMultipartUpload completeMultipartUpload) throws RestServiceException {
       // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
-      List<ChunkInfo> chunkInfos = new ArrayList<>();
       List<Part> parts = validatePartsOrThrow(completeMultipartUpload);
+      List<ChunkInfo> chunkInfos = new ArrayList<>();
       try {
         // sort the list in order
         Collections.sort(parts, Comparator.comparingInt(Part::getPartNumber));
