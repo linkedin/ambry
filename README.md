@@ -55,6 +55,27 @@ We are now ready to store and retrieve data from Ambry. Let us start by storing 
 The CUrl command creates a `POST` request that contains the binary data in demo.gif. Along with the file data, we provide headers that act as blob properties. These include the size of the blob, the service ID, the owner ID and the content type.  
 In addition to these properties, Ambry also has a provision for arbitrary user defined metadata. We provide `x-ambry-um-description` as user metadata. Ambry does not interpret this data and it is purely for user annotation.
 The `Location` header in the response is the blob ID of the blob we just uploaded.
+
+###### Named Blob Upload
+Similarly, for a named blob upload, we can provide name(key) for the blob as shown below. "named-blob-sandbox and container-a" are the Account and container names and "test-key/sample" is the blob name
+
+    $ curl -X PUT http://localhost:1174/named/named-blob-sandbox/container-a/test-key/sample \
+    -H x-li-ambry-client:Internal \
+    -H x-ambry-content-type:image/gif \
+    -H x-ambry-ttl:3600 \
+    -H x-ambry-service-id:CurlUpload \
+    --data-binary @demo.gif -i
+
+    HTTP/1.1 201 Created
+    x-ambry-blob-size: 15
+    Location: AmbryID
+    Date: Thu, 16 Jan 2025 18:13:45 GMT
+    Content-Length: 0
+    x-ambry-creation-time: Thu, 16 Jan 2025 18:13:45 GMT
+    x-ambry-request-cost: WRITE_CAPACITY_UNIT=1.0; STORAGE_IN_GB=1.3969838619232178E-8
+    x-ambry-datacenter: Datacenter
+    x-ambry-frontend: localhost
+
 ###### GET - Blob Info
 Now that we stored a blob, let us verify some properties of the blob we uploaded.
 
@@ -75,6 +96,13 @@ Now that we have verified that Ambry returns properties correctly, let us obtain
     $ diff demo.gif demo-downloaded.gif 
     $
 This confirms that the data that was sent in the `POST` request matches what we received in the `GET`. If you would like to see the image, simply point your browser to `http://localhost:1174/AmbryID` and you should see the image that was uploaded !
+
+###### GET - Named Blob
+For a named blob which allows to use name (key) for a blob, the download command is:
+
+    $ curl -X GET http://localhost:1174/named/named-blob-sandbox/container-a/s3-test-key/sample
+    This is a demo
+
 ###### DELETE
 Ambry is an immutable store and blobs cannot be updated but they can be deleted in order to make them irretrievable. Let us go ahead and delete the blob we just created.
 
