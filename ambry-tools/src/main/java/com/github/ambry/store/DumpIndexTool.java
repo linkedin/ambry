@@ -30,8 +30,12 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -40,6 +44,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -539,12 +544,22 @@ public class DumpIndexTool {
       throws IOException, StoreException {
     verifyPath(replicaDir, true);
     logger.info("Dumping indexes from {}", replicaDir);
+    try {
+      Thread.sleep(5000);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
     File[] segmentFiles = getSegmentFilesFromDir(replicaDir);
+    String destination = "/Users/nsachan/Workspace/ambry-perf-test/log2";
+    writer = new BufferedWriter(new FileWriter(destination));
     for (File segmentFile : segmentFiles) {
       dumpIndexSegment(dumpIndexTool, segmentFile, filterSet);
     }
+    writer.close();
+
   }
 
+  static BufferedWriter writer;
   private static void dumpIndexSegment(DumpIndexTool dumpIndexTool, File segmentFile, Set<StoreKey> filterSet)
       throws IOException, StoreException {
     verifyPath(segmentFile, false);
@@ -553,6 +568,8 @@ public class DumpIndexTool {
     for (IndexEntry entry : entries) {
       if (filterSet == null || filterSet.isEmpty() || filterSet.contains(entry.getKey())) {
         logger.info("Key: {}, Value: {}", entry.getKey(), entry.getValue());
+        writer.write(entry.getKey().getID());
+        writer.write("\n");
       }
     }
   }
@@ -820,7 +837,32 @@ public class DumpIndexTool {
   public static File[] getSegmentFilesFromDir(File dir) {
     File[] segmentFiles = dir.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
     Arrays.sort(segmentFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
-    return segmentFiles;
+
+    List<File> recuSeg = new ArrayList<>();
+    try {
+      Files.walk(Paths.get(dir.getPath())).forEach(path -> recuSeg.add(path.toFile()));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+
+    List<File> newRec = recuSeg.stream().filter(seg -> !seg.isDirectory()).collect(Collectors.toList());
+
+    File[] returne = new File[newRec.size()];
+    int size = newRec.size();
+
+    Random random = new Random();
+    for(int i=0; i<size; i++){
+      int rand = Math.abs(random.nextInt()) % newRec.size();
+     returne[i] = newRec.get(rand);
+     newRec.set(rand, newRec.get(newRec.size()-1));
+     newRec.remove(newRec.size()-1);
+    }
+
+    for(int i=0; i<newRec.size(); i++){
+      returne[i] = newRec.get(i);
+    }
+
+    return returne;
   }
 
   private static void verifyPath(File file, boolean shouldBeDir) {

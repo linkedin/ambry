@@ -1,0 +1,40 @@
+# in your properties file, there are several properties you need store.control.request.type=StartStore
+server.performance.hardware.layout.file.path=/export/home/nsachan/perftest/ambry-perf-test/HardWareLayoutPerf.json
+server.performance.partition.layout.file.path=/export/home/nsachan/perftest/ambry-perf-test/PartitionLayoutPerf.json
+server.performance.blob.id.file.path=/export/home/nsachan/perftest/ambry-perf-test/log2
+server.performance.max.parallel.requests=10
+
+clustermap.cluster.name=Ambry-Perf
+clustermap.datacenter.name=ei-ltx1
+clustermap.host.name=ltx1-app1454.stg.linkedin.com
+clustermap.enable.http2.replication=true
+
+server.performance.hostname=ltx1-app1454.stg.linkedin.com
+server.performance.port=15088
+
+server.performance.time.out.seconds=1800
+server.performance.operations.time.out.sec=15
+server.performance.network.clients.count=50
+
+
+ssl.context.protocol=TLS
+ssl.context.provider=SunJSSE
+ssl.enabled.protocols=TLSv1.2,TLSv1.3
+ssl.endpoint.identification.algorithm=HTTPS
+ssl.secure.random.algorithm=SHA1PRNG
+ssl.client.authentication=required
+ssl.keystore.type=PKCS12
+ssl.keystore.path=/export/home/nsachan/perftest/identity.p12
+ssl.keystore.password=work_around_jdk-6879539
+ssl.key.password=work_around_jdk-6879539
+ssl.truststore.path=/etc/riddler/cacerts
+ssl.truststore.password=changeit
+ssl.cipher.suites=TLS_RSA_WITH_AES_128_CBC_SHA
+ssl.http2.self.sign=false
+
+
+# type.of.operation: the type of your operation. This is a enum value in ServerAdminTool class
+# hardware layout file and partition layout file: These two files can be found in AmbryLI repository, under ambry-clustermapresource/resources directory. Make sure that you use the right layout file. The layout files are suffixed with clustername.
+# hostname and port are the server hostname and port to talk to. If you are connecting to a CORP or PROD server, you have to run this command on a CORP or PROD host.
+# clustermap parameters: make sure you put down the correct values here
+# blob.id: the blob id. Based on the type of operation, some time you don't need to put a blob id here.
