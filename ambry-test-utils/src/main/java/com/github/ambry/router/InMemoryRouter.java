@@ -29,7 +29,9 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -370,7 +372,7 @@ public class InMemoryRouter implements Router {
   public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     //if put before update ttl, this will help avoid go through id converter
-    if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+    if (restRequest != null && restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
       blobId = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
     }
     FutureResult<Void> futureResult = new FutureResult<>();
@@ -384,7 +386,7 @@ public class InMemoryRouter implements Router {
     Callback<Void> wrappedCallback =
         restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
             : callback;
-    if (restRequest == null) {
+    if (restRequest == null || restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
       proceedWithTtlUpdate(blobId, serviceId, expiresAtMs, wrappedCallback, futureResult);
     } else {
       try {
@@ -407,6 +409,12 @@ public class InMemoryRouter implements Router {
     return futureResult;
   }
 
+  public String stripPrefixAndExtension(String blobId) throws RestServiceException {
+    return RestUtils.stripSlashAndExtensionFromId(
+        RequestPath.parse(blobId, Collections.emptyMap(), getRouterConfig().pathPrefixesToRemove,
+            getRouterConfig().clusterName).getOperationOrBlobId(false));
+  }
+
   /**
    * Helper method to perform TTL update once blobId is available
    */
@@ -421,6 +429,8 @@ public class InMemoryRouter implements Router {
     Exception exception = null;
 
     try {
+      //make sure the blobId does not have the cluster prefix
+      blobId = stripPrefixAndExtension(blobId);
       // Check blobId before performing the update
       checkBlobId(blobId);
 

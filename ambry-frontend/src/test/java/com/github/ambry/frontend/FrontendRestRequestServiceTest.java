@@ -207,6 +207,7 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.enable.undelete", "true");
     configProps.setProperty(FrontendConfig.CONTAINER_METRICS_EXCLUDED_ACCOUNTS, "random-name," + excludedAccountName);
     CommonTestUtils.populateRequiredRouterProps(configProps);
+    configProps.put("clustermap.cluster.name", clusterName);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
@@ -4369,6 +4370,8 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if ((restRequest.getRestMethod() == RestMethod.PUT || restRequest.getRestMethod() == RestMethod.POST)
           && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
+      } else {
+        returnInputIfTranslationNull = true;
       }
       return completeOperation(input, blobProperties, callback);
     }

@@ -15,6 +15,7 @@ package com.github.ambry.quota;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -26,6 +27,8 @@ import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import static com.github.ambry.config.ClusterMapConfig.*;
 
 
 /**
@@ -64,6 +67,7 @@ public class QuotaTestUtils {
     Properties properties = new Properties();
     properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
     properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, "DEV");
+    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "ambry-test");
     return new RouterConfig(new VerifiableProperties(properties));
   }
 

@@ -33,7 +33,9 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
@@ -43,6 +45,7 @@ import com.google.common.cache.CacheBuilder;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -643,7 +646,7 @@ public class NonBlockingRouter implements Router {
   @Override
   public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
-    if (restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+    if (restRequest != null && restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
       blobId = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
     }
     FutureResult<Void> futureResult = new FutureResult<>();
@@ -664,6 +667,7 @@ public class NonBlockingRouter implements Router {
             if (exception != null) {
               wrappedCallback.onCompletion(null, exception);
             } else {
+              //make sure the blobId does not have the cluster prefix
               proceedWithTtlUpdate(convertedBlobId, serviceId, expiresAtMs, wrappedCallback, futureResult,
                   quotaChargeCallback);
             }
@@ -678,18 +682,34 @@ public class NonBlockingRouter implements Router {
     return futureResult;
   }
 
+  public String stripPrefixAndExtension(String blobId) throws RestServiceException {
+    return RestUtils.stripSlashAndExtensionFromId(
+        RequestPath.parse(blobId, Collections.emptyMap(), routerConfig.pathPrefixesToRemove, routerConfig.clusterName)
+            .getOperationOrBlobId(false));
+  }
+
   /**
    * Helper method to perform TTL update once blobId is available
    */
   private void proceedWithTtlUpdate(String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
     currentOperationsCount.incrementAndGet();
     routerMetrics.updateBlobTtlOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
 
-    if (blobId == null) {
-      throw new IllegalArgumentException("blobId must not be null");
+    //make sure the blobId does not have the cluster prefix
+    try {
+      blobId = stripPrefixAndExtension(blobId);
+    } catch (RestServiceException e) {
+      RouterException routerException =
+          new RouterException("TtlUpdateOperation failed because of blobId can't be stripped" + blobId,
+              RouterErrorCode.InvalidBlobId);
+      completeOperation(futureResult, callback, null, routerException);
     }
+
     if (isOpen.get()) {
       if (notFoundCache.getIfPresent(blobId) != null) {
         // If we know that the blob doesn't exist, complete the operation.
