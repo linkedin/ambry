@@ -100,7 +100,7 @@ This confirms that the data that was sent in the `POST` request matches what we 
 ###### GET - Named Blob
 For a named blob which allows to use name (key) for a blob, the download command is:
 
-    $ curl -X GET http://localhost:1174/named/named-blob-sandbox/container-a/s3-test-key/sample
+    $ curl -X GET http://localhost:1174/named/named-blob-sandbox/container-a/test-key/sample
     This is a demo
 
 ###### DELETE
