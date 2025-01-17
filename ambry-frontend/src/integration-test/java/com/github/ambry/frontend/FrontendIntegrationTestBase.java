@@ -64,6 +64,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -444,7 +445,7 @@ public class FrontendIntegrationTestBase {
     versionSchemas.add(MONOTONIC);
     versionSchemas.add(SEMANTIC_LONG);
     for (Dataset.VersionSchema versionSchema : versionSchemas) {
-      String datasetName = "zzzz" + TestUtils.getRandomString(10);
+      String datasetName = "datasetName" + TestUtils.getRandomString(100);
       Dataset dataset;
       if (ttl == null) {
         dataset = new DatasetBuilder(accountName, containerName, datasetName).setVersionSchema(versionSchema).build();
@@ -463,7 +464,7 @@ public class FrontendIntegrationTestBase {
       getDatasetAndVerify(dataset, getHeaders);
 
       //Update dataset
-      Dataset datasetToUpdate = new DatasetBuilder(dataset).setRetentionCount(10).build();
+      Dataset datasetToUpdate = new DatasetBuilder(dataset).setRetentionCount(50).build();
       putDatasetAndVerify(datasetToUpdate, headers, true);
       getDatasetAndVerify(datasetToUpdate, getHeaders);
       datasetList.add(datasetToUpdate);
@@ -505,13 +506,17 @@ public class FrontendIntegrationTestBase {
     String accountName = account.getName();
     List<Pair<String, String>> datasetVersions = new ArrayList<>();
     for (Dataset dataset : datasets) {
+      Set<String> datasetVersionSet = new HashSet<>();
       for (long ttl : new long[]{-1, TTL_SECS}) {
         //Test put dataset version with default dataset level ttl
         HttpHeaders headers = new DefaultHttpHeaders();
         setAmbryHeadersForPut(headers, ttl, false, accountName, contentType, ownerId, null, null);
         headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
         ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
-        String version = generateDatasetVersion(dataset);
+        String version;
+        do {
+          version = generateDatasetVersion(dataset);
+        } while (!datasetVersionSet.add(version));
         if (dataset.getRetentionTimeInSeconds() == null) {
           putDatasetVersionAndVerify(dataset, version, headers, content, contentSize, ttl);
           datasetVersions.add(new Pair<>(dataset.getDatasetName(), version));
@@ -526,7 +531,9 @@ public class FrontendIntegrationTestBase {
         setAmbryHeadersForPut(headers, ttl, false, accountName, contentType, ownerId, null, null);
         headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
         headers.add(RestUtils.Headers.DATASET_VERSION_TTL_ENABLED, true);
-        version = generateDatasetVersion(dataset);
+        do {
+          version = generateDatasetVersion(dataset);
+        } while (!datasetVersionSet.add(version));
         putDatasetVersionAndVerify(dataset, version, headers, content, contentSize, ttl);
         datasetVersions.add(new Pair<>(dataset.getDatasetName(), version));
       }
@@ -617,6 +624,7 @@ public class FrontendIntegrationTestBase {
     String containerName = container.getName();
     List<Pair<String, String>> datasetVersions = new ArrayList<>();
     for (Dataset dataset : datasets) {
+      Set<String> datasetVersionSet = new HashSet<>();
       for (long ttl : new long[]{-1, TTL_SECS}) {
         //Test put dataset version
         HttpHeaders headers = new DefaultHttpHeaders();
@@ -624,7 +632,10 @@ public class FrontendIntegrationTestBase {
         headers.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
         int contentSize = 100;
         ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
-        String version = generateDatasetVersion(dataset);
+        String version;
+        do {
+          version = generateDatasetVersion(dataset);
+        } while (!datasetVersionSet.add(version));
         String blobId = putDatasetVersionAndVerify(dataset, version, headers, content, contentSize, ttl);
 
         // This is the blob id for the given blob name, we should be able to do all get operations on this blob id.
@@ -657,6 +668,7 @@ public class FrontendIntegrationTestBase {
     String containerName = container.getName();
     List<Pair<String, String>> datasetVersions = new ArrayList<>();
     for (Dataset dataset : datasets) {
+      Set<String> datasetVersionSet = new HashSet<>();
       for (long ttl : new long[]{-1, TTL_SECS}) {
         //Test stitch
         HttpHeaders stitchHeaders = new DefaultHttpHeaders();
@@ -664,7 +676,10 @@ public class FrontendIntegrationTestBase {
             account.getName(), container.getName());
         stitchHeaders.add(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
         stitchHeaders.add(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, "STITCH");
-        String version = generateDatasetVersion(dataset);
+        String version;
+        do {
+          version = generateDatasetVersion(dataset);
+        } while (!datasetVersionSet.add(version));
         String stitchedBlobId =
             doDatasetStitchAndVerify(account, container, dataset, version, stitchHeaders, signedChunkIds,
                 stitchedBlobSize, ttl);
@@ -959,15 +974,15 @@ public class FrontendIntegrationTestBase {
     } else if (MONOTONIC.equals(datasetVersionSchema)) {
       version = String.valueOf(random.nextInt(10000));
     } else if (SEMANTIC.equals(datasetVersionSchema)) {
-      int major = random.nextInt(100);
-      int minor = random.nextInt(100);
-      int patch = random.nextInt(100);
+      int major = random.nextInt(1000);
+      int minor = random.nextInt(1000);
+      int patch = random.nextInt(1000);
       version = major + "." + minor + "." + patch;
     } else if (SEMANTIC_LONG.equals(datasetVersionSchema)) {
-      int major = random.nextInt(100);
-      int minor = random.nextInt(100);
-      int patch = random.nextInt(100);
-      int revision = random.nextInt(100);
+      int major = random.nextInt(1000);
+      int minor = random.nextInt(1000);
+      int patch = random.nextInt(1000);
+      int revision = random.nextInt(1000);
       version = major + "." + minor + "." + patch + "." + revision;
     } else {
       throw new IllegalArgumentException("This type of version schema is not compatible");
@@ -980,7 +995,7 @@ public class FrontendIntegrationTestBase {
    */
   private void sleep() {
     try {
-      Thread.sleep(1);
+      Thread.sleep(3);
     } catch (InterruptedException e) {
       throw new IllegalStateException("Sleep was interrupted", e);
     }
