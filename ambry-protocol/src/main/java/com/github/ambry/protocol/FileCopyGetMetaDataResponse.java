@@ -27,14 +27,21 @@ import javax.annotation.Nonnull;
 public class FileCopyGetMetaDataResponse extends Response {
   private final int numberOfLogfiles;
   private final List<LogInfo> logInfos;
-  private static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
+  public static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
+
+  static short CURRENT_VERSION = File_Copy_Protocol_Metadata_Response_Version_V1;
 
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
       List<LogInfo> logInfos, ServerErrorCode errorCode) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
+
     validateVersion(versionId);
     this.numberOfLogfiles = numberOfLogfiles;
     this.logInfos = logInfos;
+  }
+
+  public FileCopyGetMetaDataResponse(int correlationId, String clientId, ServerErrorCode serverErrorCode) {
+    this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), serverErrorCode);
   }
 
   public static FileCopyGetMetaDataResponse readFrom(

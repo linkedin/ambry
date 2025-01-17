@@ -116,10 +116,10 @@ public class LogInfo {
   public String toString(){
     StringBuilder sb = new StringBuilder();
     sb.append("LogInfo[");
-    sb.append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes).append(",");
+    sb.append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes);
 
     if(!indexFiles.isEmpty()) {
-      sb.append(" IndexFiles=[");
+      sb.append(", IndexFiles=[");
       for (FileInfo fileInfo : indexFiles) {
         sb.append(fileInfo.toString());
       }

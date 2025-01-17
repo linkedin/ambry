@@ -1650,10 +1650,10 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   public void foo() throws IOException, InterruptedException {
     List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
 
-    RequestOrResponse get_metadata_request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
+    RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
         (short) 1, 0, "", partitionIds.get(0), "hostName");
 
-    sendRequestGetResponse(get_metadata_request, ServerErrorCode.No_Error);
+    sendRequestGetResponse(request, ServerErrorCode.No_Error);
   }
 
   // helpers

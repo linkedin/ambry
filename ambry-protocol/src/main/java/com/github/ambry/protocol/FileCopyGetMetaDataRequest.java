@@ -25,7 +25,7 @@ import javax.annotation.Nonnull;
 public class FileCopyGetMetaDataRequest extends RequestOrResponse{
   private final PartitionId partitionId;
   private final String hostName;
-  private static final short File_Metadata_Request_Version_V1 = 1;
+  public static final short File_Metadata_Request_Version_V1 = 1;
   private static final int HostName_Field_Size_In_Bytes = 4;
 
   public FileCopyGetMetaDataRequest(
@@ -65,8 +65,11 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse{
 
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("FileMetaDataRequest[").append("PartitionId=").append(partitionId).append(", HostName=").append(hostName)
-        .append("]");
+    sb.append("FileCopyGetMetaDataRequest[")
+      .append("PartitionId=")
+      .append(partitionId.getId()).append(", HostName=")
+      .append(hostName)
+      .append("]");
     return sb.toString();
   }
 

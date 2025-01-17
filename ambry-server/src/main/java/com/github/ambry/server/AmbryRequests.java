@@ -1693,7 +1693,8 @@ public class AmbryRequests implements RequestAPI {
 
     List<LogInfo> logInfos = convertStoreToProtocolLogInfo(logSegments);
 
-    FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse((short)1, 0, "",
+    FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(
+        FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1, 0, "",
         logSegments.size(), logInfos, ServerErrorCode.No_Error);
     Histogram dummyHistogram = new Histogram(new Reservoir() {
       @Override
@@ -1711,13 +1712,13 @@ public class AmbryRequests implements RequestAPI {
       }
     });
 
-    logger.info("[Dw] Api response - " + response);
-    System.out.println("[Dw] Api response - " + response);
+    logger.info("Dw: Api response, partition-" + fileCopyGetMetaDataRequest.getPartitionId().getId() + " " + response);
+    System.out.println("Dw: Api response, partition-" + fileCopyGetMetaDataRequest.getPartitionId().getId() + " " + response);
 
-//    requestResponseChannel.sendResponse(
-//        response, request,
-//        new ServerNetworkResponseMetrics(dummyHistogram, dummyHistogram, dummyHistogram,
-//            null, null, 0));
+    requestResponseChannel.sendResponse(
+        response, request,
+        new ServerNetworkResponseMetrics(dummyHistogram, dummyHistogram, dummyHistogram,
+            null, null, 0));
   }
 
   private List<LogInfo> convertStoreToProtocolLogInfo(List<com.github.ambry.store.LogInfo> logSegments) {
