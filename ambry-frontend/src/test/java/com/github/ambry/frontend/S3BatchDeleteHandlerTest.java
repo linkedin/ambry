@@ -40,10 +40,13 @@ import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Properties;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -78,9 +81,34 @@ public class S3BatchDeleteHandlerTest {
   @Test
   public void deleteObjectTest() throws Exception {
     // 1. Delete the object
-    String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
+    String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
+//    JSONObject batchDeleteRequest = new JSONObject();
+//    JSONArray objectsArray = new JSONArray();
+//    objectsArray.put(new JSONObject().put("Key", "object1"));
+//    objectsArray.put(new JSONObject().put("Key", "object2"));
+//    objectsArray.put(new JSONObject().put("Key", "object3"));
+//    batchDeleteRequest.put("Objects", objectsArray);
+//    String jsonBody = batchDeleteRequest.toString();
+//    byte[] jsonBytes = jsonBody.getBytes("UTF-8");  // Convert to byte array using UTF-8 encoding
+//    // 3. Wrap the byte array in a ByteBuffer
+//    ByteBuffer byteBuffer = ByteBuffer.wrap(jsonBytes);
+//    List<ByteBuffer> byteBuffers = new ArrayList<>();
+//    byteBuffers.add(byteBuffer);
+    String xmlBody = "<S3BatchDeleteObjects>" +
+        "<Object>" +
+        "<Key>object1</Key>" +
+        "</Object>" +
+        "<Object>" +
+        "<Key>object2</Key>" +
+        "</Object>" +
+        "<Object>" +
+        "<Key>object3</Key>" +
+        "</Object>" +
+        "</S3BatchDeleteObjects>";
+
+    byte[] xmlBytes = xmlBody.getBytes("UTF-8");  // Convert to byte array using UTF-8 encoding
     RestRequest request =
-        FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, new JSONObject(), null);
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, new JSONObject(), new LinkedList<>(Arrays.asList(ByteBuffer.wrap(xmlBytes), null)));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
@@ -117,8 +145,7 @@ public class S3BatchDeleteHandlerTest {
     DeleteBlobHandler deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, ambryIdConverterFactory.getIdConverter(), injector, metrics,
             new MockClusterMap(), QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
-    // s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, null, metrics);
-    s3BatchDeleteHandler = new S3BatchDeleteHandler(deleteBlobHandler, null, metrics);
+    s3BatchDeleteHandler = new S3BatchDeleteHandler(deleteBlobHandler, metrics);
   }
 
   private void putABlob() throws Exception {

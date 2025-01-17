@@ -596,7 +596,7 @@ public class AmbryRequests implements RequestAPI {
   /**
    * Prepares infoList @link{List<MessageInfo>} for the blobs to be deleted in a partition and calls store.batchDelete.
    * Also, calls handler for notification on blob replica deleted.
-   * @param batchDeleteRequest the {@Link S3BatchDeleteRequest} is the input from frontend.
+   * @param batchDeleteRequest the {@Link BatchDeleteRequest} is the input from frontend.
    * @param batchDeletePartitionRequestInfo the {@Link BatchDeletePartitionRequestInfo} for the partition where Batch_Delete is to be performed.
    * @return the {@Link BatchDeletePartitionResponseInfo} having a list of {@Link BlobDeleteStatus} for the status of blobs requested to be deleted.
    */

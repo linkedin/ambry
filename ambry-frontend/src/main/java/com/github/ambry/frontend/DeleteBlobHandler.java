@@ -152,8 +152,6 @@ public class DeleteBlobHandler {
             restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
           }
         }
-        ////// HERE
-
         router.deleteBlob(restRequest, null, serviceId, routerCallback(),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);

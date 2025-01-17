@@ -44,7 +44,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  *            require a response body, otherwise it is {@link ReadableStreamChannel}.
  */
 abstract public class S3BaseHandler<R> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
+  protected static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
 
   /**
    * Handles the S3 request and construct the response.
@@ -77,7 +77,7 @@ abstract public class S3BaseHandler<R> {
       LOGGER.debug("{} {}", restRequest.getRestMethod(), path);
 
       doHandle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (r) -> {
-        removeAmbryHeaders    (restResponseChannel);
+        removeAmbryHeaders(restResponseChannel);
         callback.onCompletion(r, null);
       }));
     } catch (Throwable t) {
