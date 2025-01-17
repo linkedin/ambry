@@ -351,4 +351,59 @@ public class S3MessagePayload {
       return "Bucket=" + bucket + ", Key=" + key + ", UploadId=" + uploadId;
     }
   }
+
+  public static class S3BatchDeleteObjects {
+    @JacksonXmlProperty(localName = "Object")
+    private static List<S3BatchDeleteKeys> objects;
+
+    public static List<S3BatchDeleteKeys> getObjects() {
+      return objects;
+    }
+
+    @Override
+    public String toString() {
+      return "Objects=" + objects;
+    }
+  }
+
+  public static class S3BatchDeleteKeys {
+    @JacksonXmlProperty(localName = "Key")  // Maps to the <Key> element
+    private String key;
+
+    public String getKey() {
+      return key;
+    }
+
+    @Override
+    public String toString() {
+      return "Key=" + key;
+    }
+
+  }
+
+  public static class S3BatchDeleteResponse {
+    @JacksonXmlProperty(localName = "deleted")
+    private List<String> deleted;
+
+    @JacksonXmlProperty(localName = "errors")
+    private List<String> success;
+
+    // Getters and Setters
+    public List<String> getDeleted() {
+      return deleted;
+    }
+
+    public void setDeleted(List<String> deleted) {
+      this.deleted = deleted;
+    }
+
+    public List<String> getErrors() {
+      return success;
+    }
+
+    public void setErrors(List<String> success) {
+      this.success = success;
+    }
+  }
+
 }

@@ -107,7 +107,7 @@ public class DeleteBlobHandler {
     /**
      * Start the chain by calling {@link SecurityService#processRequest}.
      */
-    private void start() {
+    private void  start() {
       restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
       securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
