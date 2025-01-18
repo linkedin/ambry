@@ -76,6 +76,7 @@ public class Container {
   static final String ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE = "";
   static final Long CACHE_TTL_IN_SECOND_DEFAULT_VALUE = null;
   static final Set<String> USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE = Collections.emptySet();
+  static final boolean HIERARCHICAL_NAME_SPACE_DEFAULT_VALUE = false;
 
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -125,6 +126,12 @@ public class Container {
    * but are specified private. {@link #DEFAULT_PRIVATE_CONTAINER} is one of the containers that use it.
    */
   public static final String DEFAULT_PRIVATE_CONTAINER_NAME = "default-private-container";
+
+  /**
+   * Default name for the containers associated with S3 APIs. Since, S3 requests on client side only take Account
+   * (i.e. Bucket) name, we use a default name for containers.
+   */
+  public static final String DEFAULT_FS_CONTAINER_NAME = "container-a";
 
   /**
    * The status of {@link #UNKNOWN_CONTAINER}.
@@ -305,7 +312,7 @@ public class Container {
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID,
           UNKNOWN_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE,
           ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
-          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE, HIERARCHICAL_NAME_SPACE_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -324,7 +331,7 @@ public class Container {
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID,
           DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
           SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
-          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE, HIERARCHICAL_NAME_SPACE_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -343,7 +350,33 @@ public class Container {
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME,
           LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE,
-          CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
+          CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE,
+          HIERARCHICAL_NAME_SPACE_DEFAULT_VALUE);
+
+  // Create a container 'container-a' which will be used for s3 prototype tests
+  public static final Container DEFAULT_NAMED_BLOB_CONTAINER =
+      new Container((short) 8, "container-a", DEFAULT_PUBLIC_CONTAINER_STATUS,
+          DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
+          DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
+          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PUBLIC_CONTAINER_PARANOID_DURABILITY_SETTING,
+          null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
+          OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NamedBlobMode.OPTIONAL, (short) 101,
+          DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
+          SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE, HIERARCHICAL_NAME_SPACE_DEFAULT_VALUE);
+
+  public static final Container NAMED_BLOB_HNS_CONTAINER =
+      new Container((short) 9, "container-hns", DEFAULT_PUBLIC_CONTAINER_STATUS,
+          DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
+          DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
+          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PUBLIC_CONTAINER_PARANOID_DURABILITY_SETTING,
+          null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
+          OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NamedBlobMode.OPTIONAL, (short) 101,
+          DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
+          SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE, true);
 
   // container field variables
   @JsonProperty(CONTAINER_ID_KEY)
@@ -373,33 +406,44 @@ public class Container {
   private final int snapshotVersion;
   private final Long cacheTtlInSecond;
   private final Set<String> userMetadataKeysToNotPrefixInResponse;
+  private final boolean hierarchicalNameSpaceEnabled;
   @JsonProperty(JSON_VERSION_KEY)
   private final int version = JSON_VERSION_2; // the default version is 2
 
   /**
    * Constructor that takes individual arguments. Cannot be null.
-   * @param id The id of the container.
-   * @param name The name of the container. Cannot be null.
-   * @param status The status of the container. Cannot be null.
-   * @param description The description of the container. Can be null.
-   * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
-   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
-   *                            subset of blobs in it could still be encrypted.
-   * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
-   *                  this container.
-   * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
-   * @param paranoidDurabilityEnabled {@code true} if paranoid durability should be enabled for this container.
-   * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
-   * @param ttlRequired {@code true} if ttl is required on content created in this container.
-   * @param securePathRequired {@code true} if secure path validation is required in this container.
+   *
+   * @param id                                         The id of the container.
+   * @param name                                       The name of the container. Cannot be null.
+   * @param status                                     The status of the container. Cannot be null.
+   * @param description                                The description of the container. Can be null.
+   * @param encrypted                                  {@code true} if blobs in the {@link Container} should be
+   *                                                   encrypted, {@code false} otherwise.
+   * @param previouslyEncrypted                        {@code true} if this {@link Container} was encrypted in the past,
+   *                                                   or currently, and a subset of blobs in it could still be
+   *                                                   encrypted.
+   * @param cacheable                                  {@code true} if cache control headers should be set to allow CDNs
+   *                                                   and browsers to cache blobs in this container.
+   * @param mediaScanDisabled                          {@code true} if media scanning for content in this container
+   *                                                   should be disabled.
+   * @param paranoidDurabilityEnabled                  {@code true} if paranoid durability should be enabled for this
+   *                                                   container.
+   * @param replicationPolicy                          the replication policy to use. If {@code null}, the cluster's
+   *                                                   default will be used.
+   * @param ttlRequired                                {@code true} if ttl is required on content created in this
+   *                                                   container.
+   * @param securePathRequired                         {@code true} if secure path validation is required in this
+   *                                                   container.
    * @param contentTypeWhitelistForFilenamesOnDownload the set of content types for which the filename can be sent on
    *                                                   download.
-   * @param backupEnabled Whether backup is enabled for this container or not.
-   * @param overrideAccountAcl Whether to override account-level ACLs.
-   * @param namedBlobMode how named blob requests should be treated for this container.
-   * @param parentAccountId The id of the parent {@link Account} of this container.
-   * @param lastModifiedTime created/modified time of this container.
-   * @param accessControlAllowOrigin The Access-Control-Allow-Origin header field name of this container.
+   * @param backupEnabled                              Whether backup is enabled for this container or not.
+   * @param overrideAccountAcl                         Whether to override account-level ACLs.
+   * @param namedBlobMode                              how named blob requests should be treated for this container.
+   * @param parentAccountId                            The id of the parent {@link Account} of this container.
+   * @param lastModifiedTime                           created/modified time of this container.
+   * @param accessControlAllowOrigin                   The Access-Control-Allow-Origin header field name of this
+   *                                                   container.
+   * @param hierarchicalNameSpaceEnabled
    */
   public Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, boolean paranoidDurabilityEnabled,
@@ -407,7 +451,7 @@ public class Container {
       Set<String> contentTypeWhitelistForFilenamesOnDownload, boolean backupEnabled, boolean overrideAccountAcl,
       NamedBlobMode namedBlobMode, short parentAccountId, long deleteTriggerTime, long lastModifiedTime,
       int snapshotVersion, String accessControlAllowOrigin, Long cacheTtlInSecond,
-      Set<String> userMetadataKeysToNotPrefixInResponse) {
+      Set<String> userMetadataKeysToNotPrefixInResponse, boolean hierarchicalNameSpaceEnabled) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -435,6 +479,7 @@ public class Container {
         this.accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
         this.cacheTtlInSecond = CACHE_TTL_IN_SECOND_DEFAULT_VALUE;
         this.userMetadataKeysToNotPrefixInResponse = USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE;
+        this.hierarchicalNameSpaceEnabled = hierarchicalNameSpaceEnabled;
         break;
       case JSON_VERSION_2:
         this.backupEnabled = backupEnabled;
@@ -456,6 +501,7 @@ public class Container {
         this.userMetadataKeysToNotPrefixInResponse =
             userMetadataKeysToNotPrefixInResponse == null ? Collections.emptySet()
                 : userMetadataKeysToNotPrefixInResponse;
+        this.hierarchicalNameSpaceEnabled = hierarchicalNameSpaceEnabled;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -714,7 +760,8 @@ public class Container {
         && Objects.equals(accessControlAllowOrigin, container.accessControlAllowOrigin)
         && Objects.equals(contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload)
         && Objects.equals(cacheTtlInSecond, container.cacheTtlInSecond)
-        && Objects.equals(userMetadataKeysToNotPrefixInResponse, container.userMetadataKeysToNotPrefixInResponse);
+        && Objects.equals(userMetadataKeysToNotPrefixInResponse, container.userMetadataKeysToNotPrefixInResponse)
+        && Objects.equals(hierarchicalNameSpaceEnabled, container.hierarchicalNameSpaceEnabled);
     //@formatter:on
   }
 
@@ -738,6 +785,10 @@ public class Container {
     if (encrypted && !previouslyEncrypted) {
       throw new IllegalStateException("previouslyEncrypted should be true if the container is currently encrypted");
     }
+  }
+
+  public boolean isHierarchicalNameSpaceEnabled() {
+    return hierarchicalNameSpaceEnabled;
   }
 
   /**

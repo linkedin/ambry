@@ -42,10 +42,7 @@ import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import java.nio.ByteBuffer;
-import java.time.Instant;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -282,7 +279,7 @@ public class S3ListHandlerTest {
         ambryIdConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics,
         CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     NamedBlobListHandler namedBlobListHandler =
-        new NamedBlobListHandler(securityServiceFactory.getSecurityService(), namedBlobDb, injector, metrics);
+        new NamedBlobListHandler(securityServiceFactory.getSecurityService(), namedBlobDb, injector, metrics, null);
     s3ListHandler = new S3ListHandler(namedBlobListHandler, metrics);
   }
 }

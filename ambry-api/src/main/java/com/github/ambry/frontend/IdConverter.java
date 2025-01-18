@@ -84,4 +84,6 @@ public interface IdConverter extends Closeable {
    * @return {@link NamedBlobDb}
    */
   NamedBlobDb getNamedBlobDb() throws RestServiceException;
+
+  NamedBlobDb getNamedBlobFSDb() throws RestServiceException;
 }

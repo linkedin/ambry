@@ -36,6 +36,11 @@ public class TestNamedBlobDbFactory implements NamedBlobDbFactory {
     return namedBlobDb;
   }
 
+  @Override
+  public NamedBlobDb getNamedBlobFileSystemDb() throws Exception {
+    return null;
+  }
+
   class InternalConfig {
     public final int listMaxResults;
 

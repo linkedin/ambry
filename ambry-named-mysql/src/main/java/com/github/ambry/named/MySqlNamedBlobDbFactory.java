@@ -21,6 +21,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
+import com.github.ambry.named.filesystem.MySqlNamedBlobFileSystemDb;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.zaxxer.hikari.HikariConfig;
@@ -54,6 +55,11 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
         this.time);
   }
 
+  public MySqlNamedBlobFileSystemDb getNamedBlobFileSystemDb() {
+    return new MySqlNamedBlobFileSystemDb(accountService, config, this::buildDataSource, localDatacenter,
+        metricRegistry, this.time);
+  }
+
   /**
    * @param dbEndpoint struct containing JDBC connection information.
    * @return the {@link HikariDataSource} for the {@link DbEndpoint}.
@@ -64,7 +70,7 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
     hikariConfig.setMaximumPoolSize(
-        dbEndpoint.getDatacenter().equals(localDatacenter) ? config.localPoolSize : config.remotePoolSize);
+        dbEndpoint.getDatacenter().equals(localDatacenter) ? 20 : 5);
     // Recommended properties for automatic prepared statement caching
     // https://github.com/brettwooldridge/HikariCP/wiki/MySQL-Configuration
     hikariConfig.addDataSourceProperty("cachePrepStmts", "true");

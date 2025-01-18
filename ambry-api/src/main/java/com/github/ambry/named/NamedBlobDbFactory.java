@@ -24,4 +24,6 @@ public interface NamedBlobDbFactory {
    * @throws Exception if there is an error during instantiation.
    */
   NamedBlobDb getNamedBlobDb() throws Exception;
+
+  NamedBlobDb getNamedBlobFileSystemDb() throws Exception;
 }

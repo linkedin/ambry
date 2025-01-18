@@ -15,6 +15,7 @@
 
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.named.NamedBlobDb;
@@ -33,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.frontend.s3.S3ListHandler.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -45,19 +47,24 @@ public class NamedBlobListHandler {
   private final NamedBlobDb namedBlobDb;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics frontendMetrics;
+  private final NamedBlobDb namedBlobFSDb;
 
   /**
    * Constructs a handler for handling requests for listing blobs in named blob accounts.
+   *
    * @param securityService the {@link SecurityService} to use.
-   * @param namedBlobDb the {@link NamedBlobDb} to use.
+   * @param namedBlobDb     the {@link NamedBlobDb} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param namedBlobFSDb
    */
   NamedBlobListHandler(SecurityService securityService, NamedBlobDb namedBlobDb,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics frontendMetrics) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics frontendMetrics,
+      NamedBlobDb namedBlobFSDb) {
     this.securityService = securityService;
     this.namedBlobDb = namedBlobDb;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.frontendMetrics = frontendMetrics;
+    this.namedBlobFSDb = namedBlobFSDb;
   }
 
   /**
@@ -132,10 +139,22 @@ public class NamedBlobListHandler {
       return buildCallback(frontendMetrics.listSecurityPostProcessRequestMetrics, securityCheckResult -> {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
-        CallbackUtils.callCallbackAfter(
-            namedBlobDb.list(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(),
-                maxKeys == null ? null : Integer.parseInt(maxKeys)), listBlobsCallback());
+        Container container = (Container) restRequest.getArgs().get(TARGET_CONTAINER_KEY);
+        NamedBlobDb blobDb = namedBlobDb;
+        if(container.isHierarchicalNameSpaceEnabled()){
+          LOGGER.info("Using HNS DB for list operations");
+          blobDb = namedBlobFSDb;
+        }
+        if(restRequest.getArgs().get("is-directory") != null){
+          CallbackUtils.callCallbackAfter(
+              blobDb.listDirectory(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                  namedBlobPath.getBlobNamePrefix()), listBlobsCallback());
+        } else {
+          CallbackUtils.callCallbackAfter(
+              blobDb.list(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                  namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(),
+                  maxKeys == null ? null : Integer.parseInt(maxKeys)), listBlobsCallback());
+        }
       }, uri, LOGGER, finalCallback);
     }
 

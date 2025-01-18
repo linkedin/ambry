@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.config.FrontendConfig;
@@ -53,29 +54,39 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(AmbryIdConverterFactory.class);
   private final IdSigningService idSigningService;
   private final NamedBlobDb namedBlobDb;
+  private final NamedBlobDb namedBlobFSDb;
   private final FrontendMetrics frontendMetrics;
 
   public AmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       IdSigningService idSigningService, NamedBlobDb namedBlobDb) {
+    this(verifiableProperties, metricRegistry, idSigningService, namedBlobDb, null);
+  }
+
+  public AmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      IdSigningService idSigningService, NamedBlobDb namedBlobDb, NamedBlobDb namedBlobFSDb) {
     this.idSigningService = idSigningService;
     this.namedBlobDb = namedBlobDb;
+    this.namedBlobFSDb = namedBlobFSDb;
     frontendMetrics = new FrontendMetrics(metricRegistry, new FrontendConfig(verifiableProperties));
   }
 
   @Override
   public IdConverter getIdConverter() {
-    return new AmbryIdConverter(idSigningService, namedBlobDb, frontendMetrics);
+    return new AmbryIdConverter(idSigningService, namedBlobDb, namedBlobFSDb, frontendMetrics);
   }
 
   private static class AmbryIdConverter implements IdConverter {
     private boolean isOpen = true;
     private final IdSigningService idSigningService;
     private final NamedBlobDb namedBlobDb;
+    private final NamedBlobDb namedBlobFSDb;
     private final FrontendMetrics frontendMetrics;
 
-    AmbryIdConverter(IdSigningService idSigningService, NamedBlobDb namedBlobDb, FrontendMetrics frontendMetrics) {
+    AmbryIdConverter(IdSigningService idSigningService, NamedBlobDb namedBlobDb, NamedBlobDb namedBlobFSDb,
+        FrontendMetrics frontendMetrics) {
       this.idSigningService = idSigningService;
       this.namedBlobDb = namedBlobDb;
+      this.namedBlobFSDb = namedBlobFSDb;
       this.frontendMetrics = frontendMetrics;
     }
 
@@ -165,24 +176,27 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       CompletionStage<String> conversionFuture;
       LOGGER.debug("input for convertId : " + input);
       LOGGER.debug("restRequest for convertId : " + restRequest);
+      Container container = (Container) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
+      boolean hierarchicalNameSpaceEnabled = container.isHierarchicalNameSpaceEnabled();
+      NamedBlobDb blobDb = hierarchicalNameSpaceEnabled ? getNamedBlobFSDb() : getNamedBlobDb();
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
         if (restRequest.getRestMethod() == RestMethod.DELETE) {
           // on delete requests we can soft delete the record from NamedBlobDb and get the blob ID in one step.
-          conversionFuture = getNamedBlobDb().delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+          conversionFuture = blobDb.delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
         }  else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
             .matchesOperation(Operations.UPDATE_TTL)) {
           //If operation == UPDATE_TTL, we will get the version and blobId info from named blob first
           //and do update ttl in routerCallBack.
-          conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+          conversionFuture = blobDb.get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption).thenApply(result -> {
             restRequest.setArg(NAMED_BLOB_VERSION, result.getVersion());
             return result.getBlobId();
           });
         } else {
-          conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+          conversionFuture = blobDb.get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
@@ -193,7 +207,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
           NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
-          conversionFuture = namedBlobDb.updateBlobTtlAndStateToReady(record).thenApply(result -> {
+          conversionFuture = blobDb.updateBlobTtlAndStateToReady(record).thenApply(result -> {
             return result.getInsertedRecord().getBlobId();
           });
         } else {
@@ -210,7 +224,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
             state = NamedBlobState.IN_PROGRESS;
           }
-          conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(
+          conversionFuture = blobDb.put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(
               result -> {
                 restRequest.setArg(NAMED_BLOB_VERSION, result.getInsertedRecord().getVersion());
                 return result.getInsertedRecord().getBlobId();
@@ -283,6 +297,13 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         throw new RestServiceException("Named blob support not enabled", RestServiceErrorCode.BadRequest);
       }
       return namedBlobDb;
+    }
+
+    public NamedBlobDb getNamedBlobFSDb() throws RestServiceException {
+      if (namedBlobFSDb == null) {
+        throw new RestServiceException("Named blob hns support not enabled", RestServiceErrorCode.BadRequest);
+      }
+      return namedBlobFSDb;
     }
   }
 }
