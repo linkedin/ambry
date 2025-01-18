@@ -68,6 +68,11 @@ public interface NamedBlobDb extends Closeable {
   CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
       String pageToken, Integer maxKey);
 
+  default CompletableFuture<Page<NamedBlobRecord>> listDirectory(String accountName, String containerName,
+      String folderPath) {
+    return null;
+  }
+
   /**
    * Persist a {@link NamedBlobRecord} in the database.
    * @param record the {@link NamedBlobRecord}
@@ -77,6 +82,10 @@ public interface NamedBlobDb extends Closeable {
    *         occurred.
    */
   CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert);
+
+  default CompletableFuture<Void> renameDirectory(NamedBlobRecord record, String newName) {
+    return null;
+  }
 
   /**
    * Persist a {@link NamedBlobRecord} in the database.

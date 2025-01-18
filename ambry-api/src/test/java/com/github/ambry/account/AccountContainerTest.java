@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -994,7 +993,7 @@ public class AccountContainerTest {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, false, null, false,
           false, Collections.emptySet(), false, false, getRandomNamedBlobMode(), (short) 0, System.currentTimeMillis(),
-          System.currentTimeMillis(), 0, null, null, null);
+          System.currentTimeMillis(), 0, null, null, null, hierarchicalNameSpaceEnabled);
     }, null);
   }
 
@@ -1102,7 +1101,8 @@ public class AccountContainerTest {
           refContainerOverrideAccountAcls.get(i), refContainerNamedBlobModes.get(i), refAccountId,
           refContainerDeleteTriggerTime.get(i), refContainerLastModifiedTimes.get(i),
           refContainerSnapshotVersions.get(i), refAccessControlAllowOriginValues.get(i),
-          refContainerCacheTtlInSeconds.get(i), refContainerUserMetadataKeysToNotPrefixInResponses.get(i)));
+          refContainerCacheTtlInSeconds.get(i), refContainerUserMetadataKeysToNotPrefixInResponses.get(i),
+          hierarchicalNameSpaceEnabled));
     }
   }
 

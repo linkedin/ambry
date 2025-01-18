@@ -502,6 +502,11 @@ public class NonBlockingRouter implements Router {
               callback.onCompletion(null, exception);
             } else {
               // Call proceedWithTtlUpdate once blobId is available
+              if(convertedBlobId.isEmpty()){
+                futureResult.done(null, null);
+                callback.onCompletion(null, null);
+                return;
+              }
               proceedWithDelete(convertedBlobId, serviceId, callback, futureResult, quotaChargeCallback);
             }
           }

@@ -4379,6 +4379,11 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
     }
 
     @Override
+    public NamedBlobDb getNamedBlobFSDb() throws RestServiceException {
+      return null;
+    }
+
+    @Override
     public void close() {
       isOpen = false;
     }

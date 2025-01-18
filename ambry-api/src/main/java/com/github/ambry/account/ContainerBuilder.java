@@ -58,6 +58,7 @@ public class ContainerBuilder {
   private Long cacheTtlInSecond = CACHE_TTL_IN_SECOND_DEFAULT_VALUE;
   private Set<String> userMetadataKeysToNotPrefixInResponse =
       USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE;
+  private boolean hierarchicalNameSpaceEnabled = HIERARCHICAL_NAME_SPACE_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -92,6 +93,7 @@ public class ContainerBuilder {
     snapshotVersion = origin.getSnapshotVersion();
     cacheTtlInSecond = origin.getCacheTtlInSecond();
     userMetadataKeysToNotPrefixInResponse = origin.getUserMetadataKeysToNotPrefixInResponse();
+    hierarchicalNameSpaceEnabled = origin.isHierarchicalNameSpaceEnabled();
   }
 
   /**
@@ -338,6 +340,11 @@ public class ContainerBuilder {
     return this;
   }
 
+  public ContainerBuilder setHierarchicalNameSpaceEnabled(boolean hierarchicalNameSpaceEnabled){
+    this.hierarchicalNameSpaceEnabled = hierarchicalNameSpaceEnabled;
+    return this;
+  }
+
   /**
    * Sets the set of user metadata keys to not prefix in response of the {@link Container} to build.
    * @param userMetadataKeys The value to set
@@ -363,6 +370,6 @@ public class ContainerBuilder {
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
         parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime,
         lastModifiedTime, snapshotVersion, accessControlAllowOrigin, cacheTtlInSecond,
-        userMetadataKeysToNotPrefixInResponse);
+        userMetadataKeysToNotPrefixInResponse, hierarchicalNameSpaceEnabled);
   }
 }

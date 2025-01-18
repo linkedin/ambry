@@ -55,7 +55,6 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.frontend.DatasetVersionPath.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
@@ -85,6 +84,7 @@ class FrontendRestRequestService implements RestRequestService {
   private final String datacenterName;
   private final String hostname;
   private final String clusterName;
+  private final NamedBlobDb namedBlobFSDb;
   private NamedBlobsCleanupRunner namedBlobsCleanupRunner = null;
   private ScheduledExecutorService namedBlobsCleanupScheduler = null;
   private ScheduledFuture<?> namedBlobsCleanupTask = null;
@@ -95,6 +95,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetSignedUrlHandler getSignedUrlHandler;
   private NamedBlobListHandler namedBlobListHandler;
   private NamedBlobPutHandler namedBlobPutHandler;
+  private NamedBlobRenameHandler namedBlobRenameHandler;
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
@@ -165,6 +166,33 @@ class FrontendRestRequestService implements RestRequestService {
     this.quotaManager = quotaManager;
     this.clusterName = clusterName.toLowerCase();
     logger.trace("Instantiated FrontendRestRequestService");
+    namedBlobFSDb = null;
+  }
+
+  FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, Router router,
+      ClusterMap clusterMap, IdConverterFactory idConverterFactory, SecurityServiceFactory securityServiceFactory,
+      UrlSigningService urlSigningService, IdSigningService idSigningService, NamedBlobDb namedBlobDb,
+      AccountService accountService, AccountAndContainerInjector accountAndContainerInjector, String datacenterName,
+      String hostname, String clusterName, AccountStatsStore accountStatsStore, QuotaManager quotaManager,
+      NamedBlobDb namedBlobFSDb) {
+    this.frontendConfig = frontendConfig;
+    this.frontendMetrics = frontendMetrics;
+    this.router = router;
+    this.clusterMap = clusterMap;
+    this.idConverterFactory = idConverterFactory;
+    this.securityServiceFactory = securityServiceFactory;
+    this.urlSigningService = urlSigningService;
+    this.idSigningService = idSigningService;
+    this.namedBlobDb = namedBlobDb;
+    this.accountService = accountService;
+    this.accountAndContainerInjector = accountAndContainerInjector;
+    this.accountStatsStore = accountStatsStore;
+    this.datacenterName = datacenterName;
+    this.hostname = hostname;
+    this.quotaManager = quotaManager;
+    this.clusterName = clusterName.toLowerCase();
+    this.namedBlobFSDb = namedBlobFSDb;
+    logger.trace("Instantiated FrontendRestRequestService");
   }
 
   /**
@@ -174,6 +202,7 @@ class FrontendRestRequestService implements RestRequestService {
   public void setupResponseHandler(RestResponseHandler responseHandler) {
     this.responseHandler = responseHandler;
   }
+
   @Override
   public void start() throws InstantiationException {
     if (responseHandler == null) {
@@ -208,7 +237,8 @@ class FrontendRestRequestService implements RestRequestService {
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);
     deleteDatasetHandler =
-        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector, deleteBlobHandler);
+        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector,
+            deleteBlobHandler);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
@@ -217,10 +247,12 @@ class FrontendRestRequestService implements RestRequestService {
             clusterMap, quotaManager);
 
     namedBlobListHandler =
-        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
+        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics,
+            namedBlobFSDb);
     namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
         accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager, accountService,
         deleteBlobHandler);
+    namedBlobRenameHandler = new NamedBlobRenameHandler(accountAndContainerInjector, namedBlobFSDb, frontendMetrics);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getResourceInfoHandler = new GetResourceInfoHandler(securityService, frontendMetrics, clusterMap);
@@ -385,6 +417,9 @@ class FrontendRestRequestService implements RestRequestService {
         } else if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())
             && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getTargetVersion() != null) {
           copyDatasetVersionHandler.handle(restRequest, restResponseChannel,
+              (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
+        } else if (restRequest.getArgs().containsKey("rename")) {
+          namedBlobRenameHandler.handle(restRequest, restResponseChannel,
               (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
         } else {
           namedBlobPutHandler.handle(restRequest, restResponseChannel,

@@ -154,12 +154,17 @@ public class NonBlockingRouterFactory implements RouterFactory {
           IdSigningService idSigningService =
               Utils.<IdSigningServiceFactory>getObj(routerConfig.idSigningServiceFactory, verifiableProperties,
                   clusterMap.getMetricRegistry()).getIdSigningService();
-          NamedBlobDb namedBlobDb = Utils.isNullOrEmpty(routerConfig.namedBlobDbFactory) ? null
-              : Utils.<NamedBlobDbFactory>getObj(routerConfig.namedBlobDbFactory, verifiableProperties,
-                  clusterMap.getMetricRegistry(), accountService).getNamedBlobDb();
+          NamedBlobDb namedBlobDb = null;
+          NamedBlobDb namedBlobFSDb = null;
+          if(!Utils.isNullOrEmpty(routerConfig.namedBlobDbFactory)){
+            NamedBlobDbFactory namedBlobDbFactory = Utils.<NamedBlobDbFactory>getObj(routerConfig.namedBlobDbFactory, verifiableProperties,
+                clusterMap.getMetricRegistry(), accountService);
+            namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
+            namedBlobFSDb = namedBlobDbFactory.getNamedBlobFileSystemDb();
+          }
           idConverterFactory =
               Utils.getObj(routerConfig.idConverterFactory, verifiableProperties, clusterMap.getMetricRegistry(),
-                  idSigningService, namedBlobDb);
+                  idSigningService, namedBlobDb, namedBlobFSDb);
         } catch (Exception e) {
           logger.error("Failed to create idConverterFactory");
         }
