@@ -36,14 +36,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
 
   // Constructor
   public S3BatchDeleteHandler(DeleteBlobHandler deleteBlobHandler, FrontendMetrics frontendMetrics) {
-    if (frontendMetrics == null) {
-      throw new IllegalStateException("FrontendMetrics should not be null");
-    }
-
-    if (frontendMetrics.deleteBlobRouterMetrics == null) {
-      throw new IllegalStateException("deleteBlobRouterMetrics should not be null");
-    }
-
     this.deleteBlobHandler = deleteBlobHandler;
     this.failedRequest = false;
     this.frontendMetrics = frontendMetrics;

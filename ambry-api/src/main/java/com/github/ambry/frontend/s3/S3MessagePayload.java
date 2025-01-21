@@ -349,10 +349,11 @@ public class S3MessagePayload {
   }
 
   public static class S3BatchDeleteObjects {
+    @JacksonXmlElementWrapper(localName = "Objects")
     @JacksonXmlProperty(localName = "Object")
-    private static List<S3BatchDeleteKeys> objects;
+    private List<S3BatchDeleteKeys> objects;
 
-    public static List<S3BatchDeleteKeys> getObjects() {
+    public List<S3BatchDeleteKeys> getObjects() {
       return objects;
     }
 

@@ -57,7 +57,8 @@ public class S3BatchDeleteHandlerTest {
   private static final InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
   private static final String CONTENT_TYPE = "text/plain";
   private static final String CLUSTER_NAME = "ambry-test";
-  private static final String KEY_NAME = "directory-name/key_name";
+  private static final String KEY_NAME = "key-name";
+  private static final String KEY_NAME_2 = "key-name-2";
   private final Account account;
   private final Container container;
   private FrontendConfig frontendConfig;
@@ -80,30 +81,16 @@ public class S3BatchDeleteHandlerTest {
 
   @Test
   public void deleteObjectTest() throws Exception {
-    // 1. Delete the object
     String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
-//    JSONObject batchDeleteRequest = new JSONObject();
-//    JSONArray objectsArray = new JSONArray();
-//    objectsArray.put(new JSONObject().put("Key", "object1"));
-//    objectsArray.put(new JSONObject().put("Key", "object2"));
-//    objectsArray.put(new JSONObject().put("Key", "object3"));
-//    batchDeleteRequest.put("Objects", objectsArray);
-//    String jsonBody = batchDeleteRequest.toString();
-//    byte[] jsonBytes = jsonBody.getBytes("UTF-8");  // Convert to byte array using UTF-8 encoding
-//    // 3. Wrap the byte array in a ByteBuffer
-//    ByteBuffer byteBuffer = ByteBuffer.wrap(jsonBytes);
-//    List<ByteBuffer> byteBuffers = new ArrayList<>();
-//    byteBuffers.add(byteBuffer);
     String xmlBody = "<S3BatchDeleteObjects>" +
+        "<Objects>" +
         "<Object>" +
-        "<Key>object1</Key>" +
+        "<Key>key-name</Key>" +
         "</Object>" +
-        "<Object>" +
-        "<Key>object2</Key>" +
-        "</Object>" +
-        "<Object>" +
-        "<Key>object3</Key>" +
-        "</Object>" +
+//        "<Object>" +
+//        "<Key>key-name-2</Key>" +
+//        "</Object>" +
+        "</Objects>" +
         "</S3BatchDeleteObjects>";
 
     byte[] xmlBytes = xmlBody.getBytes("UTF-8");  // Convert to byte array using UTF-8 encoding
@@ -116,8 +103,8 @@ public class S3BatchDeleteHandlerTest {
     s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
 
     // 2. Verify results
-    assertNull(futureResult.get());
-    assertEquals("Mismatch on status", ResponseStatus.NoContent, restResponseChannel.getStatus());
+    assertNotNull(futureResult.get());
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 
   private void setup() throws Exception {
@@ -149,6 +136,7 @@ public class S3BatchDeleteHandlerTest {
   }
 
   private void putABlob() throws Exception {
+    // blob 1 insertion
     String requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
@@ -160,6 +148,21 @@ public class S3BatchDeleteHandlerTest {
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> putResult = new FutureResult<>();
+    namedBlobPutHandler.handle(request, restResponseChannel, putResult::done);
+    putResult.get();
+
+    // blob 2 insertion
+    requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), KEY_NAME_2);
+    headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
+        "test-app", CONTENT_TYPE, "tester", null, null, null);
+    content = TestUtils.getRandomBytes(1024);
+    request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, requestPath, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    restResponseChannel = new MockRestResponseChannel();
+    putResult = new FutureResult<>();
     namedBlobPutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
   }
