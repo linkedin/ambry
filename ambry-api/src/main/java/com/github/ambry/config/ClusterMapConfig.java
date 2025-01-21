@@ -398,9 +398,9 @@ public class ClusterMapConfig {
         verifiableProperties.getEnum(CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE, DataNodeConfigSourceType.class,
             DataNodeConfigSourceType.INSTANCE_CONFIG);
     clusterMapDcsZkConnectStrings = verifiableProperties.getString("clustermap.dcs.zk.connect.strings", "");
-    clusterMapClusterName = verifiableProperties.getString(CLUSTERMAP_CLUSTER_NAME, "");
-    clusterMapDatacenterName = verifiableProperties.getString(CLUSTERMAP_DATACENTER_NAME, "");
-    clusterMapHostName = verifiableProperties.getString(CLUSTERMAP_HOST_NAME, "");
+    clusterMapClusterName = verifiableProperties.getString(CLUSTERMAP_CLUSTER_NAME);
+    clusterMapDatacenterName = verifiableProperties.getString(CLUSTERMAP_DATACENTER_NAME);
+    clusterMapHostName = verifiableProperties.getString(CLUSTERMAP_HOST_NAME);
     clusterMapPort = verifiableProperties.getInteger(CLUSTERMAP_PORT, null);
     clusterMapResolveHostnames = verifiableProperties.getBoolean("clustermap.resolve.hostnames", true);
     clusterMapDefaultPartitionClass =

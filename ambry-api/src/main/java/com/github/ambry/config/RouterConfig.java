@@ -17,6 +17,7 @@ import com.github.ambry.router.OperationTrackerScope;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 import java.util.stream.Collectors;
 
 
@@ -799,7 +800,11 @@ public class RouterConfig {
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    Properties clusterMapProperty = new Properties();
+    clusterMapProperty.setProperty("clustermap.cluster.name", "test");
+    clusterMapProperty.setProperty("clustermap.datacenter.name", "dcName");
+    clusterMapProperty.setProperty("clustermap.host.name", "localhost");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(clusterMapProperty));
     idConverterFactory = frontendConfig.idConverterFactory;
     idSigningServiceFactory = frontendConfig.idSigningServiceFactory;
     namedBlobDbFactory = frontendConfig.namedBlobDbFactory;

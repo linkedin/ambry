@@ -152,7 +152,6 @@ class TtlUpdateHandler {
         } else {
           String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobIdStr);
           BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(blobIdClean, clusterMap);
-          //restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, convertedBlobId.getID());
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(convertedBlobId, restRequest,
               metrics.updateBlobTtlMetricsGroup);
         }
