@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;
@@ -153,4 +154,12 @@ public interface StoreManager {
    * @throws IOException
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
+
+  /**
+   * Get the list of log segment metadata files for a given partition.
+   * @param partitionId
+   * @param includeActiveLogSegment
+   * @return List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
+   */
+  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment);
 }

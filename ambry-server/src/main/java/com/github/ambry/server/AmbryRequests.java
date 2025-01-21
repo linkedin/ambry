@@ -97,7 +97,6 @@ import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageErrorInfo;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
@@ -241,7 +240,7 @@ public class AmbryRequests implements RequestAPI {
           handleReplicateBlobRequest(networkRequest);
           break;
         case FileCopyGetMetaDataRequest:
-          handleFileMetaDataRequest(networkRequest);
+          handleFileCopyGetMetaDataRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -1684,18 +1683,32 @@ public class AmbryRequests implements RequestAPI {
   /**
    * Handler for FileMetadataRequest
    */
-  void handleFileMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
+  void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
     FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest =
         FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
 
-    List<com.github.ambry.store.LogInfo> logSegments = ((StorageManager)storeManager)
-        .getLogSegmentMetadataFiles(fileCopyGetMetaDataRequest.getPartitionId(), true);
+    List<LogInfo> logInfos;
+    try {
+      List<com.github.ambry.store.LogInfo> logSegments =
+          storeManager.getLogSegmentMetadataFiles(fileCopyGetMetaDataRequest.getPartitionId(), true);
 
-    List<LogInfo> logInfos = convertStoreToProtocolLogInfo(logSegments);
-
+      logInfos = convertStoreToProtocolLogInfo(logSegments);
+    } catch (Exception e) {
+      logger.error("Error while getting log segment metadata for partition {}",
+          fileCopyGetMetaDataRequest.getPartitionId().getId(), e);
+      FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(
+          FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+          fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
+          0, null, ServerErrorCode.Unknown_Error);
+      requestResponseChannel.sendResponse(response, request, null);
+      return;
+    }
     FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(
-        FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1, 0, "",
-        logSegments.size(), logInfos, ServerErrorCode.No_Error);
+        FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+        fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
+        logInfos.size(), logInfos, ServerErrorCode.No_Error);
+
+    // TODO: Add metrics for this operation
     Histogram dummyHistogram = new Histogram(new Reservoir() {
       @Override
       public int size() {
@@ -1711,14 +1724,11 @@ public class AmbryRequests implements RequestAPI {
         return null;
       }
     });
+    ServerNetworkResponseMetrics serverNetworkResponseMetrics = new ServerNetworkResponseMetrics(dummyHistogram,
+        dummyHistogram, dummyHistogram, null, null, 0);
 
     logger.info("Dw: Api response, partition-" + fileCopyGetMetaDataRequest.getPartitionId().getId() + " " + response);
-    System.out.println("Dw: Api response, partition-" + fileCopyGetMetaDataRequest.getPartitionId().getId() + " " + response);
-
-    requestResponseChannel.sendResponse(
-        response, request,
-        new ServerNetworkResponseMetrics(dummyHistogram, dummyHistogram, dummyHistogram,
-            null, null, 0));
+    requestResponseChannel.sendResponse(response, request, serverNetworkResponseMetrics);
   }
 
   private List<LogInfo> convertStoreToProtocolLogInfo(List<com.github.ambry.store.LogInfo> logSegments) {

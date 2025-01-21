@@ -56,6 +56,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ChannelOutput;
+import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
@@ -75,6 +77,8 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
+import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.repair.RepairRequestsDb;
@@ -472,7 +476,6 @@ public class AmbryServer {
         for (ClusterParticipant participant : clusterParticipants) {
           participant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
         }
-        invokeGetMetadataApi();
       } else {
         throw new IllegalArgumentException("Unknown server execution mode");
       }
@@ -491,64 +494,28 @@ public class AmbryServer {
     }
   }
 
-  private void invokeGetMetadataApi() {
+  private void testGetMetadataApi() {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
+        FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "", partitionIds.get(0), "hostName");
 
-    partitionIds.forEach(partitionId -> {
-      RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
-          (short) 1, 0, "", partitionId, "hostName");
+    partitionIds.get(0).getReplicaIds().forEach(replicaId -> {
+      logger.info("Dw: partitionId: {}, replicaId: {}", partitionIds.get(0), replicaId);
 
-      NetworkRequest mockRequest = null;
-      try {
-        mockRequest = MockRequest.fromRequest(request);
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-      try {
-        requests.handleRequests(mockRequest);
-      } catch (InterruptedException e) {
-        throw new RuntimeException(e);
+      if (replicaId.getDataNodeId().getHostname().equals("ltx1-app3645.stg.linkedin.com")) {
+        DataNodeId targetDataNodeId = replicaId.getDataNodeId();
+        try {
+          logger.info("Dw: Request: {}", request);
+          ConnectedChannel connectedChannel =
+              connectionPool.checkOutConnection(targetDataNodeId.getHostname(), targetDataNodeId.getPortToConnectTo(), 40);
+          ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
+          FileCopyGetMetaDataResponse response = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
+          logger.info("Dw: Response: {}", response);
+        } catch (Exception e) {
+          logger.error("Dw: Error while sending request to " + targetDataNodeId, e);
+        }
       }
     });
-  }
-
-  private static class MockRequest implements NetworkRequest {
-
-    private final InputStream stream;
-
-    /**
-     * Constructs a {@link MockRequest}.
-     * @param stream the {@link InputStream} that will be returned on a call to {@link #getInputStream()}.
-     */
-    private MockRequest(InputStream stream) {
-      this.stream = stream;
-    }
-
-    /**
-     * Constructs a {@link MockRequest} from {@code request}.
-     * @param request the {@link RequestOrResponse} to construct the {@link MockRequest} for.
-     * @return an instance of {@link MockRequest} that represents {@code request}.
-     * @throws IOException
-     */
-    static MockRequest fromRequest(RequestOrResponse request) throws IOException {
-      ByteBuffer buffer = ByteBuffer.allocate((int) request.sizeInBytes());
-      request.writeTo(new ByteBufferChannel(buffer));
-      request.release();
-      buffer.flip();
-      // read length (to bring it to a state where AmbryRequests can handle it).
-      buffer.getLong();
-      return new MockRequest(new ByteBufferDataInputStream(buffer));
-    }
-
-    @Override
-    public InputStream getInputStream() {
-      return stream;
-    }
-
-    @Override
-    public long getStartTimeInMs() {
-      return 0;
-    }
   }
 
   /**

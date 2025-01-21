@@ -82,8 +82,12 @@ public class FileCopyGetMetaDataResponse extends Response {
 
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("FileMetaDataResponse[NumberOfLogfiles=").append(numberOfLogfiles).append(", logInfoList").append(
-        logInfos.toString()).append("]");
+    sb
+      .append("FileCopyGetMetaDataResponse[NumberOfLogfiles=")
+      .append(numberOfLogfiles)
+      .append(", logInfoList")
+      .append(logInfos.toString())
+      .append("]");
     return sb.toString();
   }
 
