@@ -516,6 +516,11 @@ public class RestUtils {
      * content-length header
      */
     public static final String CONTENT_RANGE_LENGTH = KEY_PREFIX + "content-range-length";
+
+    /**
+     * Used to determine if the ttlUpdate need to go through id convert to get blobId from blobName;
+     */
+    public static final String BLOB_ID = KEY_PREFIX + "blob-id";
   }
 
   /**
