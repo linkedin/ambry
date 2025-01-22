@@ -20,11 +20,13 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3BatchDeleteHandler;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
+import com.github.ambry.frontend.s3.S3MessagePayload;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -63,7 +65,6 @@ public class S3BatchDeleteHandlerTest {
   private final Container container;
   private FrontendConfig frontendConfig;
   private NamedBlobPutHandler namedBlobPutHandler;
-  private S3DeleteHandler s3DeleteHandler;
   private S3BatchDeleteHandler s3BatchDeleteHandler;
 
   public S3BatchDeleteHandlerTest() throws Exception {
@@ -76,24 +77,25 @@ public class S3BatchDeleteHandlerTest {
         .build();
     account.updateContainerMap(Collections.singletonList(container));
     setup();
-    putABlob();
+    performPutOperation(KEY_NAME, CONTENT_TYPE, container, account);
+    performPutOperation(KEY_NAME_2, CONTENT_TYPE, container, account);
   }
 
   @Test
   public void deleteObjectTest() throws Exception {
     String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
-    String xmlBody = "<S3BatchDeleteObjects>" +
-        "<Objects>" +
+    // tests one correct delete and one error
+    String xmlBody = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+        "<Delete>" +
         "<Object>" +
         "<Key>key-name</Key>" +
         "</Object>" +
-//        "<Object>" +
-//        "<Key>key-name-2</Key>" +
-//        "</Object>" +
-        "</Objects>" +
-        "</S3BatchDeleteObjects>";
+        "<Object>" +
+        "<Key>error-key</Key>" +
+        "</Object>" +
+        "</Delete>";
 
-    byte[] xmlBytes = xmlBody.getBytes("UTF-8");  // Convert to byte array using UTF-8 encoding
+    byte[] xmlBytes = xmlBody.getBytes("UTF-8");
     RestRequest request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, new JSONObject(), new LinkedList<>(Arrays.asList(ByteBuffer.wrap(xmlBytes), null)));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -101,9 +103,9 @@ public class S3BatchDeleteHandlerTest {
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
-
-    // 2. Verify results
-    assertNotNull(futureResult.get());
+    ReadableStreamChannel readableStreamChannel = futureResult.get();
+    ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
+    assertNotNull(byteBuffer);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 
@@ -135,34 +137,22 @@ public class S3BatchDeleteHandlerTest {
     s3BatchDeleteHandler = new S3BatchDeleteHandler(deleteBlobHandler, metrics);
   }
 
-  private void putABlob() throws Exception {
-    // blob 1 insertion
-    String requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
+  private void performPutOperation(String keyName, String contentType, Container container, Account account) throws Exception {
+    String requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), keyName);
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
-        "test-app", CONTENT_TYPE, "tester", null, null, null);
+        "test-app", contentType, "tester", null, null, null);
+
     byte[] content = TestUtils.getRandomBytes(1024);
+
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, requestPath, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
+
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> putResult = new FutureResult<>();
-    namedBlobPutHandler.handle(request, restResponseChannel, putResult::done);
-    putResult.get();
-
-    // blob 2 insertion
-    requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), KEY_NAME_2);
-    headers = new JSONObject();
-    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
-        "test-app", CONTENT_TYPE, "tester", null, null, null);
-    content = TestUtils.getRandomBytes(1024);
-    request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, requestPath, headers,
-        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
-        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
-    restResponseChannel = new MockRestResponseChannel();
-    putResult = new FutureResult<>();
     namedBlobPutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
   }

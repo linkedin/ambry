@@ -349,33 +349,48 @@ public class S3MessagePayload {
   }
 
   public static class S3BatchDeleteObjects {
-    @JacksonXmlElementWrapper(localName = "Objects")
-    @JacksonXmlProperty(localName = "Object")
+
+    // Ensure that the "Delete" wrapper element is mapped correctly to the list of "Object" elements
+    @JacksonXmlElementWrapper(useWrapping = false)  // Avoids wrapping the <Delete> element itself
+    @JacksonXmlProperty(localName = "Object")      // Specifies that each <Object> element maps to an instance of S3BatchDeleteKeys
     private List<S3BatchDeleteKeys> objects;
 
     public List<S3BatchDeleteKeys> getObjects() {
       return objects;
     }
 
+    public void setObjects(List<S3BatchDeleteKeys> objects) {
+      this.objects = objects;
+    }
+
     @Override
     public String toString() {
-      return "Objects=" + objects;
+      return "S3BatchDeleteObjects{" +
+          "objects=" + objects +
+          '}';
     }
   }
 
   public static class S3BatchDeleteKeys {
-    @JacksonXmlProperty(localName = "Key")  // Maps to the <Key> element
+
+    // Maps the <Key> element inside each <Object> to the 'key' property in S3BatchDeleteKeys
+    @JacksonXmlProperty(localName = "Key")
     private String key;
 
     public String getKey() {
       return key;
     }
 
-    @Override
-    public String toString() {
-      return "Key=" + key;
+    public void setKey(String key) {
+      this.key = key;
     }
 
+    @Override
+    public String toString() {
+      return "S3BatchDeleteKeys{" +
+          "key='" + key + '\'' +
+          '}';
+    }
   }
 
   public static class S3BatchDeleteResponse {

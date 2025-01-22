@@ -19,6 +19,8 @@ import com.github.ambry.router.ReadableStreamChannel;
 import io.netty.buffer.ByteBuf;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -74,7 +76,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       }
       // Deserialize the request body into a S3BatchDeleteObjects
       S3MessagePayload.S3BatchDeleteObjects deleteRequest = deserializeRequest(channel);
-      System.out.println("here at callback " + deleteRequest);
 
       if (deleteRequest != null) {
         // Extract request path
@@ -93,6 +94,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
           WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
           singleDeleteRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
 
+
           NoOpResponseChannel noOpResponseChannel = new NoOpResponseChannel();
           CountDownLatch latch = new CountDownLatch(1);
 
@@ -101,6 +103,10 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
             @Override
             public void onCompletion(Void result, Exception exception) {
               // Call our custom onDeleteCompletion to track success/failure
+              Map<String, Object> args = restRequest.getArgs();
+              restRequest.getArgs().remove("ambry-internal-key-target-account");
+              restRequest.getArgs().remove("ambry-internal-key-keep-alive-on-error-hint");
+              restRequest.getArgs().remove("ambry-internal-key-target-container");
               boolean success = exception == null;
               onDeleteCompletion(success, object.getKey());
 
@@ -125,7 +131,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
           // Successful response handling
           restResponseChannel.setStatus(ResponseStatus.Ok);
           try {
-            // TODO: move to separate method ?
             XmlMapper xmlMapper = new XmlMapper();
             S3MessagePayload.S3BatchDeleteResponse resp = new S3MessagePayload.S3BatchDeleteResponse();
             resp.setDeleted(deleted);

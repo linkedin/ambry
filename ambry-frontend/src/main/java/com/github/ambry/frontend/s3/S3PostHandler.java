@@ -27,12 +27,14 @@ import com.github.ambry.router.ReadableStreamChannel;
  */
 public class S3PostHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final S3MultipartUploadHandler multipartPostHandler;
+  private final S3BatchDeleteHandler s3BatchDeleteHandler;
 
   /**
    * Constructs a handler for uploading s3 POST requests.
    */
   public S3PostHandler(S3MultipartUploadHandler multipartPostHandler, S3BatchDeleteHandler s3BatchDeleteHandler) {
     this.multipartPostHandler = multipartPostHandler;
+    this.s3BatchDeleteHandler = s3BatchDeleteHandler;
   }
 
   /**
@@ -49,7 +51,7 @@ public class S3PostHandler extends S3BaseHandler<ReadableStreamChannel> {
         || S3MultipartUploadHandler.isMultipartCompleteUploadRequest(restRequest)) {
       multipartPostHandler.handle(restRequest, restResponseChannel, callback);
     } else if (isBatchDelete(restRequest)) {
-      // Placeholder for handling batch delete requests in the future.
+      s3BatchDeleteHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       // Placeholder for handling any non-multipart S3 POST requests in the future.
       throw new RestServiceException("Unsupported S3 POST request", RestServiceErrorCode.BadRequest);
