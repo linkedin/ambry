@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.FileStore;
 import java.util.Collection;
@@ -161,5 +162,15 @@ public interface StoreManager {
    * @param includeActiveLogSegment
    * @return List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
    */
-  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment);
+  List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment);
+
+  /**
+   * Get the chunk from the requested file (Log segment, Index File, Bloom Filter).
+   * @param partitionId
+   * @param fileName
+   * @param sizeInBytes
+   * @param startOffset
+   * @return FileInputStream containing the chunk of size {@code sizeInBytes} starting from {@code startOffset}.
+   */
+  FileInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset);
 }

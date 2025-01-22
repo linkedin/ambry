@@ -37,6 +37,7 @@ import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.FileStore;
 import java.util.ArrayList;
@@ -182,6 +183,21 @@ public class StorageManager implements StoreManager {
       throw new IllegalArgumentException("DiskManager not found for partition " + partitionId);
     }
     return partitionToDiskManager.get(partitionId).getLogSegmentMetadataFiles(partitionId, includeActiveLogSegment);
+  }
+
+  /**
+   * Get the chunk for the given {@link PartitionId}
+   * This method returns FileInputStream containing the
+   * chunk of size {@code sizeInBytes} starting from {@code startOffset}.
+   */
+  @Override
+  public FileInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
+    // TODO Change this to getFileStore
+    Store fileStore = getStore(partitionId);
+    if (null == fileStore) {
+      throw new IllegalArgumentException("FileStore not found for partition " + partitionId);
+    }
+    return fileStore.getChunk(fileName, sizeInBytes, startOffset);
   }
 
   /**

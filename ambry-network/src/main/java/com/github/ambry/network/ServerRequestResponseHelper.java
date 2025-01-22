@@ -19,6 +19,7 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetRequest;
@@ -160,6 +161,9 @@ public class ServerRequestResponseHelper {
         break;
       case FileCopyGetMetaDataRequest:
         response = new FileCopyGetMetaDataResponse(request.getCorrelationId(), request.getClientId(), serverErrorCode);
+        break;
+      case FileCopyGetChunkRequest:
+        response = new FileCopyGetChunkResponse(request.getCorrelationId(), request.getClientId(), serverErrorCode);
         break;
       default:
         throw new UnsupportedOperationException("Request type not supported");

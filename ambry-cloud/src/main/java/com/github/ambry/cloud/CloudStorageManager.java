@@ -24,6 +24,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
+import java.io.FileInputStream;
 import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.HashMap;
@@ -154,6 +155,11 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public FileInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
     throw new UnsupportedOperationException("Method not supported");
   }
 
