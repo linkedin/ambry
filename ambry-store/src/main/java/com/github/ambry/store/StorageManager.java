@@ -193,11 +193,14 @@ public class StorageManager implements StoreManager {
   @Override
   public FileInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
     // TODO Change this to getFileStore
-    Store fileStore = getStore(partitionId);
-    if (null == fileStore) {
-      throw new IllegalArgumentException("FileStore not found for partition " + partitionId);
+//  FileStore fileStore = getFileStore(partitionId);
+
+    com.github.ambry.store.FileStore fileStore = new com.github.ambry.store.FileStore("", null);
+    try {
+      return fileStore.getStreamForFileRead(null, fileName);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
-    return fileStore.getChunk(fileName, sizeInBytes, startOffset);
   }
 
   /**

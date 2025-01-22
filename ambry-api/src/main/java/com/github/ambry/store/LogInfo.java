@@ -18,9 +18,9 @@ import java.util.List;
 
 
 public class LogInfo {
-  private final FileInfo logSegment;
-  private final List<FileInfo> indexSegments;
-  private final List<FileInfo> bloomFilters;
+  private FileInfo logSegment;
+  private List<FileInfo> indexSegments;
+  private List<FileInfo> bloomFilters;
 
   public LogInfo(FileInfo logSegment, List<FileInfo> indexSegments, List<FileInfo> bloomFilters) {
     this.logSegment = logSegment;
@@ -28,18 +28,36 @@ public class LogInfo {
     this.bloomFilters = bloomFilters;
   }
 
-  // TODO: Add isSealed prop
-  // private final boolean isSealed;
-
   public FileInfo getLogSegment() {
     return logSegment;
+  }
+
+  public void setLogSegment(FileInfo logSegment) {
+    this.logSegment = logSegment;
   }
 
   public List<FileInfo> getIndexSegments() {
     return Collections.unmodifiableList(indexSegments);
   }
 
+  public void setIndexSegments(List<FileInfo> indexSegments) {
+    this.indexSegments = indexSegments;
+  }
+
   public List<FileInfo> getBloomFilters() {
     return Collections.unmodifiableList(bloomFilters);
+  }
+
+  public void setBloomFilters(List<FileInfo> bloomFilters) {
+    this.bloomFilters = bloomFilters;
+  }
+
+  @Override
+  public String toString() {
+    return "LogInfo{" +
+        "logSegment=" + logSegment +
+        ", indexSegments=" + indexSegments +
+        ", bloomFilters=" + bloomFilters +
+        '}';
   }
 }

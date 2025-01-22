@@ -28,6 +28,7 @@ public class FileCopyGetChunkResponse extends Response {
   }
 
   public FileCopyGetChunkResponse(int correlationId, String clientId, ServerErrorCode serverErrorCode) {
-    super(RequestOrResponseType.FileCopyGetChunkResponse, CURRENT_VERSION, correlationId, clientId, serverErrorCode);
+    this(CURRENT_VERSION, correlationId, clientId, null, "", (long)0, null,
+        serverErrorCode);
   }
 }

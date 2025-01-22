@@ -30,4 +30,12 @@ public class FileInfo {
   public Long getFileSize() {
     return fileSize;
   }
+
+  @Override
+  public String toString() {
+    return "FileInfo{" +
+        "fileName='" + fileName + '\'' +
+        ", fileSize=" + fileSize +
+        '}';
+  }
 }
