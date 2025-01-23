@@ -25,6 +25,8 @@ import java.util.concurrent.CountDownLatch;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
@@ -80,6 +82,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       if (deleteRequest != null) {
         // Extract request path
         RequestPath requestPath = (RequestPath) restRequest.getArgs().get(RestUtils.InternalKeys.REQUEST_PATH);
+        Map<String, CompletableFuture<Void>> deleteFutures = new HashMap<>();
 
         // Process each delete key in the batch
         for (S3MessagePayload.S3BatchDeleteKeys object : deleteRequest.getObjects()) {
@@ -96,7 +99,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
 
 
           NoOpResponseChannel noOpResponseChannel = new NoOpResponseChannel();
-          CountDownLatch latch = new CountDownLatch(1);
+          CompletableFuture<Void> future = new CompletableFuture<>();
 
           // Handle the delete operation using the deleteBlobHandler
           deleteBlobHandler.handle(singleDeleteRequest, noOpResponseChannel, new Callback<Void>() {
@@ -109,19 +112,23 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
               restRequest.getArgs().remove("ambry-internal-key-target-container");
               boolean success = exception == null;
               onDeleteCompletion(success, object.getKey());
-
-              // Decrement latch to signal that this delete operation has finished
-              latch.countDown();
+              future.complete(null);
             }
           });
-
-          // Wait until all deletes are completed
-          try {
-            latch.await();
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-          }
+          deleteFutures.put(object.getKey(), future);
         }
+
+        // Wait for all delete operations to complete
+        CompletableFuture<Void> allDeletes = CompletableFuture.allOf(deleteFutures.values().toArray(new CompletableFuture[0]));
+        try {
+          // Block until all futures complete
+          allDeletes.get();  // This will throw an exception if any future fails
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        } catch (ExecutionException e) {
+          throw new RuntimeException(e);
+        }
+      }
 
         // Check if any delete request failed
         if (failedRequest) {
@@ -146,7 +153,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
             callback.onCompletion(null, new RestServiceException("Failed to serialize response", RestServiceErrorCode.InternalServerError));
           }
         }
-      }
     }, restRequest.getUri(), LOGGER, callback);
   }
 

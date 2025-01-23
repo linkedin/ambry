@@ -15,6 +15,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
@@ -59,7 +60,7 @@ public class S3BatchDeleteHandlerTest {
   private static final InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
   private static final String CONTENT_TYPE = "text/plain";
   private static final String CLUSTER_NAME = "ambry-test";
-  private static final String KEY_NAME = "key-name";
+  private static final String KEY_NAME = "key-success";
   private static final String KEY_NAME_2 = "key-name-2";
   private final Account account;
   private final Container container;
@@ -86,12 +87,12 @@ public class S3BatchDeleteHandlerTest {
     String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
     // tests one correct delete and one error
     String xmlBody = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
-        "<Delete>" +
+        "<Delete xmlns=\"http://s3.amazonaws.com/doc/2006-03-01\">" +
         "<Object>" +
-        "<Key>key-name</Key>" +
+        "<Key>key-success</Key>" +
         "</Object>" +
         "<Object>" +
-        "<Key>error-key</Key>" +
+        "<Key>key-error</Key>" +
         "</Object>" +
         "</Delete>";
 
@@ -105,7 +106,11 @@ public class S3BatchDeleteHandlerTest {
     s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
     ReadableStreamChannel readableStreamChannel = futureResult.get();
     ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
-    assertNotNull(byteBuffer);
+    XmlMapper xmlMapper = new XmlMapper();
+    S3MessagePayload.S3BatchDeleteResponse response =
+        xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.S3BatchDeleteResponse.class);
+    assertEquals(response.getDeleted().get(0), KEY_NAME);
+    assertEquals(response.getErrors().get(0), "key-error");
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 
