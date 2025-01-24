@@ -571,10 +571,10 @@ public class StorageManager implements StoreManager {
           replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
 
           logger.info("Failed to add store {} at location {}. Retrying bootstrapping replica at different location",
-                partitionName, replicaToAdd.getReplicaPath());
-          tryRemoveFailedBootstrapBlobStore(replicaToAdd);
-          }
-        } else {
+              partitionName, replicaToAdd.getReplicaPath());
+        }
+      } while (true);
+    }
   }
 
   @Override

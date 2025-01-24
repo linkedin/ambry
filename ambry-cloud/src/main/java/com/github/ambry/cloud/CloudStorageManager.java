@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.FileStore;
 import com.github.ambry.store.Store;
 import java.util.Collection;
 import java.util.HashMap;
@@ -56,6 +57,17 @@ public class CloudStorageManager implements StoreManager {
   public boolean addBlobStore(ReplicaId replica) {
     return createAndStartBlobStoreIfAbsent(replica.getPartitionId()) != null;
   }
+
+  @Override
+  public boolean addFileStore(ReplicaId replicaId) {
+    return false;
+  }
+
+  @Override
+  public void setUpReplica(String partitionName) {
+
+  }
+
   @Override
   public void buildStateForFileCopy(String partitionName){
     // no-op
@@ -86,6 +98,11 @@ public class CloudStorageManager implements StoreManager {
       lock.readLock().unlock();
     }
     return createAndStartBlobStoreIfAbsent(id);
+  }
+
+  @Override
+  public FileStore getFileStore(PartitionId id) {
+    return null;
   }
 
   @Override
