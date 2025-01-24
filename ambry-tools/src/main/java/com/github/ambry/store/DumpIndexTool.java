@@ -17,6 +17,8 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -473,6 +475,8 @@ public class DumpIndexTool {
     this.storeKeyConverter = storeKeyConverter;
   }
 
+ static ClusterMap _clusterMap;
+
   public static void main(String args[]) throws Exception {
     final AtomicInteger exitCode = new AtomicInteger(0);
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
@@ -480,6 +484,7 @@ public class DumpIndexTool {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     try (ClusterMap clusterMap = ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory,
         clusterMapConfig, config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap()) {
+      _clusterMap = clusterMap;
       StoreConfig storeConfig = new StoreConfig(verifiableProperties);
       // this tool supports only blob IDs. It can become generic if StoreKeyFactory provides a deserFromString method.
       BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
@@ -550,22 +555,40 @@ public class DumpIndexTool {
       throw new RuntimeException(e);
     }
     File[] segmentFiles = getSegmentFilesFromDir(replicaDir);
-    String destination = "/Users/nsachan/Workspace/ambry-perf-test/log2";
+    String destination = "/Users/nsachan/Workspace/ambry-perf-test/log-non-nimbus";
+    String errorDest = "/Users/nsachan/Workspace/ambry-perf-test/log-non-nimbus-error";
     writer = new BufferedWriter(new FileWriter(destination));
+    errorWriter = new BufferedWriter(new FileWriter(errorDest));
+
     for (File segmentFile : segmentFiles) {
       dumpIndexSegment(dumpIndexTool, segmentFile, filterSet);
     }
     writer.close();
+    errorWriter.close();
 
   }
 
   static BufferedWriter writer;
+  static BufferedWriter errorWriter;
   private static void dumpIndexSegment(DumpIndexTool dumpIndexTool, File segmentFile, Set<StoreKey> filterSet)
       throws IOException, StoreException {
     verifyPath(segmentFile, false);
     List<IndexEntry> entries = dumpIndexTool.getAllEntriesFromIndexSegment(segmentFile);
     logger.info("Dumping {}", segmentFile);
+    DataNodeId dataNodeId = _clusterMap.getDataNodeId("ltx1-app3679.stg.linkedin.com", 15088);
+    List<? extends ReplicaId> replicaIds = _clusterMap.getReplicaIds(dataNodeId);
+    List<String> hostPartitions = replicaIds.stream().map(ReplicaId::getPartitionId).map(PartitionId::toString).collect(
+        Collectors.toList());
+
     for (IndexEntry entry : entries) {
+
+      String blobPartition = ((BlobId) entry.getKey()).getPartition().toString();
+      if(! hostPartitions.contains(blobPartition)) {
+        errorWriter.write(entry.getKey().getID());
+        errorWriter.write("\n");
+        continue;
+      }
+
       if (filterSet == null || filterSet.isEmpty() || filterSet.contains(entry.getKey())) {
         logger.info("Key: {}, Value: {}", entry.getKey(), entry.getValue());
         writer.write(entry.getKey().getID());
@@ -769,15 +792,20 @@ public class DumpIndexTool {
 
   public List<IndexEntry> getAllEntriesFromIndexSegment(File segmentFile) throws StoreException {
     verifyPath(segmentFile, false);
-    IndexSegment segment = new IndexSegment(segmentFile, false, storeKeyFactory, storeConfig, storeMetrics,
-        new Journal(segmentFile.getParent(), 0, 0), time);
     List<IndexEntry> entries = new ArrayList<>();
-    final Timer.Context context = metrics.findAllEntriesPerIndexTimeMs.time();
     try {
-      segment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), false,
-          false);
-    } finally {
-      context.stop();
+      IndexSegment segment = new IndexSegment(segmentFile, false, storeKeyFactory, storeConfig, storeMetrics,
+          new Journal(segmentFile.getParent(), 0, 0), time);
+
+      final Timer.Context context = metrics.findAllEntriesPerIndexTimeMs.time();
+      try {
+        segment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), false,
+            false);
+      } finally {
+        context.stop();
+      }
+    } catch (Exception e) {
+      logger.error("error in index segment", e);
     }
     return entries;
   }

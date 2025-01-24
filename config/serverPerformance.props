@@ -1,20 +1,20 @@
 # in your properties file, there are several properties you need store.control.request.type=StartStore
 server.performance.hardware.layout.file.path=/Users/nsachan/Workspace/ambry-perf-test/perf-map/HardwareLayoutPerf.json
 server.performance.partition.layout.file.path=/Users/nsachan/Workspace/ambry-perf-test/perf-map/PartitionLayoutPerf.json
-server.performance.blob.id.file.path=/Users/nsachan/Workspace/ambry-perf-test/log1
-server.performance.max.parallel.requests=50
+server.performance.blob.id.file.path=/Users/nsachan/Workspace/ambry-perf-test/log-non-nimbus
+server.performance.max.parallel.requests=1000
 
 clustermap.cluster.name=Ambry-Perf
 clustermap.datacenter.name=ei-ltx1
-clustermap.host.name=ltx1-app1454.stg.linkedin.com
+clustermap.host.name=ltx1-app3679.stg.linkedin.com
 clustermap.enable.http2.replication=true
 
-server.performance.hostname=ltx1-app1454.stg.linkedin.com
+server.performance.hostname=ltx1-app3679.stg.linkedin.com
 server.performance.port=15088
 
-server.performance.time.out.seconds=100
+server.performance.time.out.seconds=1000
 server.performance.operations.time.out.sec=15
-server.performance.network.clients.count=10
+server.performance.network.clients.count=50
 
 ssl.context.protocol=TLS
 ssl.context.provider=SunJSSE
