@@ -49,6 +49,7 @@ public class FileStore {
   }
 
 
+  // TODO Moved to BlobStore as the bootstrapping node wouldn't have FileStore instantiated.
   public FileInputStream getStreamForFileRead(String mountPath, String fileName)
       throws IOException {
     if(!isRunning){
@@ -83,7 +84,7 @@ public class FileStore {
     fileInputStream.read(content); // Read bytes into the array
     Files.write(Paths.get(outputFilePath), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 
-    System.out.println("Write successful for chunk to file: " + outputFilePath + " with contents: " + new String(content) );
+    System.out.println("Write successful for chunk to file: " + outputFilePath);
   }
 
   // New class in input: List<FileMetaData>

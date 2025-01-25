@@ -47,6 +47,7 @@ import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
+import com.github.ambry.network.ServerRequestResponseHelper;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.notification.UpdateType;
@@ -116,7 +117,9 @@ import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -1742,28 +1745,31 @@ public class AmbryRequests implements RequestAPI {
     FileCopyGetChunkRequest fileCopyGetChunkRequest =
         FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
 
-    FileInputStream chunkStream = null;
+    DataInputStream chunkStream;
+    FileCopyGetChunkResponse response;
     try {
       chunkStream = storeManager.getChunk(
           fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(),
-          fileCopyGetChunkRequest.sizeInBytes(), fileCopyGetChunkRequest.getStartOffset());
+          fileCopyGetChunkRequest.getChunkLengthInBytes(), fileCopyGetChunkRequest.getStartOffset());
     } catch (Exception e) {
       logger.error("Error while getting chunk for partition {}", fileCopyGetChunkRequest.getPartitionId().getId(), e);
 
-      FileCopyGetChunkResponse response = new FileCopyGetChunkResponse(
-          FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+      response = new FileCopyGetChunkResponse(
+          FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
           fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
-          fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(),
-          0, null, ServerErrorCode.Unknown_Error);
+          ServerErrorCode.Unknown_Error, fileCopyGetChunkRequest.getPartitionId(),
+          fileCopyGetChunkRequest.getFileName(), null,
+          fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.sizeInBytes(), false);
 
       requestResponseChannel.sendResponse(response, request, null);
       return;
     }
-    FileCopyGetChunkResponse response = new FileCopyGetChunkResponse(
-        FileCopyGetChunkResponse.File_Copy_Protocol_Chunk_Response_Version_V1,
+    response = new FileCopyGetChunkResponse(
+        FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
         fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
-        fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(),
-        fileCopyGetChunkRequest.sizeInBytes(), chunkStream, ServerErrorCode.No_Error);
+        ServerErrorCode.No_Error, fileCopyGetChunkRequest.getPartitionId(),
+        fileCopyGetChunkRequest.getFileName(), chunkStream,
+        fileCopyGetChunkRequest.getStartOffset(), chunkStream.available(), false);
 
     // TODO: Add metrics for this operation
     Histogram dummyHistogram = new Histogram(new Reservoir() {
@@ -1803,6 +1809,26 @@ public class AmbryRequests implements RequestAPI {
 
       logInfos.add(new LogInfo(
         logSegment.getLogSegment().getFileName(), logSegment.getLogSegment().getFileSize(),
+        indexSegments, bloomFilters));
+    }
+    return logInfos;
+  }
+
+  public static List<com.github.ambry.store.LogInfo> convertProtocolToStoreLogInfo(List<LogInfo> protocolLogInfos) {
+    List<com.github.ambry.store.LogInfo> logInfos = new ArrayList<>();
+    for (LogInfo protocolLogInfo : protocolLogInfos) {
+      List<com.github.ambry.store.FileInfo> indexSegments = new ArrayList<>();
+      protocolLogInfo.getIndexFiles().forEach(indexSegment -> {
+        indexSegments.add(new com.github.ambry.store.FileInfo(indexSegment.getFileName(), indexSegment.getFileSizeInBytes()));
+      });
+
+      List<com.github.ambry.store.FileInfo> bloomFilters = new ArrayList<>();
+      protocolLogInfo.getBloomFilters().forEach(bloomFilter -> {
+        bloomFilters.add(new com.github.ambry.store.FileInfo(bloomFilter.getFileName(), bloomFilter.getFileSizeInBytes()));
+      });
+
+      logInfos.add(new com.github.ambry.store.LogInfo(
+        new com.github.ambry.store.FileInfo(protocolLogInfo.getFileName(), protocolLogInfo.getFileSizeInBytes()),
         indexSegments, bloomFilters));
     }
     return logInfos;

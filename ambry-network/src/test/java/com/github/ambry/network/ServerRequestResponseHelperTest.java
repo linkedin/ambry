@@ -26,6 +26,7 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.PartitionRequestInfo;
@@ -40,14 +41,19 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Collections;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -233,6 +239,62 @@ public class ServerRequestResponseHelperTest {
       request.release();
       response.release();
     }
+  }
+
+//  @Test
+//  public void doFileCopyChunkDataResponseTest() throws IOException {
+//    short requestVersionToUse = 1;
+//    String str = "Hello, Netty ByteBuf!";
+//    ByteBuf byteBuf = Unpooled.copiedBuffer(str, StandardCharsets.UTF_8);
+//    FileCopyGetChunkResponse fileCopyGetChunkResponse = new FileCopyGetChunkResponse(requestVersionToUse, 111,
+//        "id1",ServerErrorCode.No_Error,  new MockPartitionId(), "file1", null,
+//        byteBuf, 1000, 22, false);
+//
+//    DataInputStream requestStream = serAndPrepForRead(fileCopyGetChunkResponse);
+//
+//    FileCopyGetChunkResponse fileCopyGetChunkResponseOnNetwork = FileCopyGetChunkResponse.readFrom(requestStream, new MockClusterMap());
+//    String chunkData = Utils.readIntString(fileCopyGetChunkResponseOnNetwork.getChunkDataOnReceiverNode());
+//
+//    Assert.assertEquals(chunkData, str);
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getCorrelationId(), 111);
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getFileName(), "file1");
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getChunkSizeInBytes(), 22);
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getStartOffset(), 1000);
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getError(), ServerErrorCode.No_Error);
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getPartitionId().getId(), 0);
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getPartitionId().toPathString(), "0");
+//    Assert.assertEquals(fileCopyGetChunkResponseOnNetwork.getVersionId(), requestVersionToUse);
+//    fileCopyGetChunkResponse.release();
+//  }
+
+  @Test
+  public void doFileCopyChunkDataResponseTest2() throws IOException {
+    File file = new File("/tmp/0/0_index");
+    DataInputStream chunkStreamWithSender = new DataInputStream(Files.newInputStream(file.toPath()));
+
+    FileCopyGetChunkResponse response = new FileCopyGetChunkResponse(
+        FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
+        0, "", ServerErrorCode.No_Error, new MockPartitionId(),
+        file.getName(), chunkStreamWithSender, 0, chunkStreamWithSender.available(), false);
+
+    DataInputStream chunkResponseStream = serAndPrepForRead(response);
+    FileCopyGetChunkResponse fileCopyGetChunkResponseWithReciever = FileCopyGetChunkResponse.readFrom(chunkResponseStream, new MockClusterMap());
+
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getCorrelationId(), 0);
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getFileName(), file.getName());
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getStartOffset(), 0);
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getPartitionId().getId(), 0);
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getPartitionId().toPathString(), "0");
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getVersionId(),
+        FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1);
+    Assert.assertEquals(fileCopyGetChunkResponseWithReciever.getChunkStream().available(), file.length());
+
+//    DataInputStream chunkStreamWithReceiver = fileCopyGetChunkResponseWithReciever.getChunkStream();
+//    byte[] buffer = new byte[chunkStreamWithReceiver.available()];
+//    chunkStreamWithReceiver.readFully(buffer);
+//
+//    System.out.println("Dw: " + new String(buffer));
   }
 
   private DataInputStream serAndPrepForRead(RequestOrResponse requestOrResponse) throws IOException {

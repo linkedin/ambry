@@ -31,7 +31,6 @@ import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -60,16 +59,15 @@ import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
-import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ServerRequestResponseHelper;
 import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.SocketServer;
@@ -78,10 +76,11 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.FileCopyGetChunkRequest;
+import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.RequestHandlerPool;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.replication.FindTokenHelper;
@@ -99,22 +98,23 @@ import com.github.ambry.store.FileStore;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -171,6 +171,9 @@ public class AmbryServer {
   private Thread repairThread = null;
   private RepairRequestsDb repairRequestsDb = null;
   private BackupIntegrityMonitor backupIntegrityMonitor = null;
+  private DataNodeId nodeId;
+  private FileStore fileStore;
+
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, vcrClusterAgentsFactory, new LoggingNotificationSystem(), time, null);
@@ -263,6 +266,7 @@ public class AmbryServer {
          */
         StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
         DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        this.nodeId = nodeId;
         if (nodeId == null) {
           throw new IllegalArgumentException(String.format("Node %s absent in cluster-map", networkConfig.hostName));
         }
@@ -496,30 +500,11 @@ public class AmbryServer {
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
 
-      // Testing FileStore utils
       FileCopyConfig fileCopyConfig = new FileCopyConfig(properties);
-      FileStore fileStore = new FileStore("test", fileCopyConfig);
+      this.fileStore = new FileStore("dataDir", fileCopyConfig);
       fileStore.start();
-      List<LogInfo> logInfoList = Collections.singletonList(new LogInfo(new FileInfo("0_log", 20000L),
-          Collections.singletonList(new FileInfo("0_index", 100L)),
-          Collections.singletonList(new FileInfo("0_bloom", 50L))));
-      System.out.println("Persisting metadata" + logInfoList + " to file");
-      fileStore.persistMetaDataToFile("/tmp/0/", logInfoList);
-      System.out.println("Reading metadata" + fileStore.readMetaDataFromFile("/tmp/0/") + " from file");
-      String chunkPath = "/tmp/0/test_chunk";
-      try (FileInputStream inputStream = new FileInputStream(chunkPath)) {
-        System.out.println("Trying putChunkToFile for chunk at " + chunkPath);
-        fileStore.putChunkToFile("/tmp/0/0_log", inputStream);
-      } catch (IOException e) {
-        System.err.println("An error occurred: " + e.getMessage());
-      }
 
-      FileInputStream inputStream = fileStore.getStreamForFileRead("/tmp/0/", "0_log");
-      long fileSize = inputStream.available();
-      byte[] content = new byte[(int) fileSize]; // Read the content of the source file into a byte array
-      inputStream.read(content); // Read bytes into the array
-      System.out.println("Parsed log file contents read: " + new String(content));
-
+      testGetMetadataApi();
 
     } catch (Exception e) {
       logger.error("Error during startup", e);
@@ -527,13 +512,47 @@ public class AmbryServer {
     }
   }
 
-  private void testGetMetadataApi() {
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
-    FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
-        FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "", partitionIds.get(0), "hostName");
+  private void testFileStoreUtils() throws StoreException, IOException {
+    // Testing FileStore utils
+    FileCopyConfig fileCopyConfig = new FileCopyConfig(properties);
+    FileStore fileStore = new FileStore("test", fileCopyConfig);
+    fileStore.start();
+    List<LogInfo> logInfoList = Collections.singletonList(new LogInfo(new FileInfo("0_log", 20000L),
+        Collections.singletonList(new FileInfo("0_index", 100L)),
+        Collections.singletonList(new FileInfo("0_bloom", 50L))));
+    System.out.println("Persisting metadata" + logInfoList + " to file");
+    fileStore.persistMetaDataToFile("/tmp/0/", logInfoList);
+    System.out.println("Reading metadata" + fileStore.readMetaDataFromFile("/tmp/0/") + " from file");
+    String chunkPath = "/tmp/0/test_chunk";
+    try (FileInputStream inputStream = new FileInputStream(chunkPath)) {
+      System.out.println("Trying putChunkToFile for chunk at " + chunkPath);
+      fileStore.putChunkToFile("/tmp/0/0_log", inputStream);
+    } catch (IOException e) {
+      System.err.println("An error occurred: " + e.getMessage());
+    }
 
-    partitionIds.get(0).getReplicaIds().forEach(replicaId -> {
-      logger.info("Dw: partitionId: {}, replicaId: {}", partitionIds.get(0), replicaId);
+    FileInputStream inputStream = fileStore.getStreamForFileRead("/tmp/0/", "0_log");
+    long fileSize = inputStream.available();
+    byte[] content = new byte[(int) fileSize]; // Read the content of the source file into a byte array
+    inputStream.read(content); // Read bytes into the array
+    System.out.println("Parsed log file contents read: " + new String(content));
+  }
+
+  private void testGetMetadataApi() {
+    Optional<PartitionId> optional = storageManager.getLocalPartitions().stream().filter(p -> p.getId() == 146).findFirst();
+    PartitionId partitionId;
+    if (optional.isPresent()) {
+      partitionId = optional.get();
+    } else {
+      logger.info("Dw: Partition not found");
+      return;
+    }
+    FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
+        FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "", partitionId, "hostName");
+
+    final FileCopyGetMetaDataResponse[] response = new FileCopyGetMetaDataResponse[1];
+    partitionId.getReplicaIds().forEach(replicaId -> {
+      logger.info("Dw: partitionId: {}, replicaId: {}", partitionId, replicaId);
 
       if (replicaId.getDataNodeId().getHostname().equals("ltx1-app3645.stg.linkedin.com")) {
         DataNodeId targetDataNodeId = replicaId.getDataNodeId();
@@ -542,13 +561,59 @@ public class AmbryServer {
           ConnectedChannel connectedChannel =
               connectionPool.checkOutConnection(targetDataNodeId.getHostname(), targetDataNodeId.getPortToConnectTo(), 40);
           ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
-          FileCopyGetMetaDataResponse response = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
-          logger.info("Dw: Response: {}", response);
+          response[0] = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
+          logger.info("Dw: Response: {}", response[0]);
+
+          List<com.github.ambry.store.LogInfo> logInfos = AmbryRequests.convertProtocolToStoreLogInfo(response[0].getLogInfos());
+
+          String partitionFilePath = replicaId.getMountPath() + File.separator + partitionId.getId();
+          fileStore.persistMetaDataToFile(partitionFilePath, logInfos);
+
+          DataInputStream isStream = testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getIndexSegments().get(0).getFileName());
+          DataInputStream bfStream = testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getBloomFilters().get(0).getFileName());
+//          testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getLogSegment().getFileName());
+
+//          DataInputStream testStream = testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getIndexSegments().get(0).getFileName());
+//          byte[] buffer = new byte[testStream.available()];
+//          testStream.readFully(buffer);
+//
+//          logger.info("Dw: Parsed file contents read: " + new String(buffer));
+
+          putChunkToFile(partitionFilePath, isStream);
+          putChunkToFile(partitionFilePath, bfStream);
         } catch (Exception e) {
           logger.error("Dw: Error while sending request to " + targetDataNodeId, e);
         }
       }
     });
+  }
+
+  private void putChunkToFile(String filePath, DataInputStream isStream) throws IOException {
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[isStream.available()];
+    int bytesRead;
+    while ((bytesRead = isStream.read(buffer)) != -1) {
+      byteArrayOutputStream.write(buffer, 0, bytesRead);
+    }
+    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
+    fileStore.putChunkToFile(filePath, new FileInputStream(String.valueOf(byteArrayInputStream)));
+  }
+
+  private DataInputStream testGetChunkDataApi(DataNodeId targetDataNodeId, PartitionId partitionId, String fileName)
+      throws ConnectionPoolTimeoutException, IOException, InterruptedException {
+
+    FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(
+        FileCopyGetChunkRequest.File_Chunk_Request_Version_V1, 0, "",
+        partitionId, fileName, 0L, 1000000000L);
+    logger.info("Dw: Request: {}", request);
+
+    ConnectedChannel connectedChannel =
+        connectionPool.checkOutConnection(targetDataNodeId.getHostname(), targetDataNodeId.getPortToConnectTo(), 40);
+    ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
+    FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(channelOutput.getInputStream(), clusterMap);
+    logger.info("Dw: Response: {}", response);
+
+    return response.getChunkStream();
   }
 
   /**

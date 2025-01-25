@@ -24,7 +24,9 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousFileChannel;
@@ -843,6 +845,14 @@ public class DiskManager {
       throw new IllegalArgumentException("BlobStore for partition " + partitionId + " is not found on disk " + disk);
     }
     return stores.get(partitionId).getLogSegmentMetadataFiles(includeActiveLogSegment);
+  }
+
+  public DataInputStream getStreamForFile(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+      throws IOException {
+    if (!stores.containsKey(partitionId)) {
+      throw new IllegalArgumentException("BlobStore for partition " + partitionId + " is not found on disk " + disk);
+    }
+    return stores.get(partitionId).getStreamForFile(fileName, sizeInBytes, startOffset);
   }
 
   /**

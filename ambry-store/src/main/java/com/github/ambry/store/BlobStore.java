@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.clustermap.FileStoreException;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaState;
@@ -33,10 +34,13 @@ import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -1381,6 +1385,15 @@ public class BlobStore implements Store {
     return Arrays.stream(PersistentIndex.getBloomFilterFiles(dataDir, logSegmentName))
         .map(file -> new FileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
+  }
+
+  public DataInputStream getStreamForFile(String fileName, long sizeInBytes, long startOffset) throws IOException {
+    String filePath = getDataDir() + File.separator + fileName;
+    File file = new File(filePath);
+    if (!file.exists() || !file.canRead()) {
+      throw new IOException("File doesn't exist or cannot be read: " + filePath);
+    }
+    return new DataInputStream(Files.newInputStream(file.toPath()));
   }
 
   /**

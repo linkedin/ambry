@@ -24,6 +24,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
+import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.nio.file.FileStore;
 import java.util.Collection;
@@ -159,7 +160,7 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public FileInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
+  public DataInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.FileStore;
@@ -172,5 +173,6 @@ public interface StoreManager {
    * @param startOffset
    * @return FileInputStream containing the chunk of size {@code sizeInBytes} starting from {@code startOffset}.
    */
-  FileInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset);
+  DataInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+      throws IOException;
 }

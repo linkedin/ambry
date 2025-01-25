@@ -22,12 +22,14 @@ import java.nio.charset.Charset;
 
 
 public class FileCopyGetChunkRequest extends RequestOrResponse{
-  private PartitionId partitionId;
-  private String fileName;
-  private long startOffset;
-  private long chunkLengthInBytes;
-  private static final short File_Chunk_Request_Version_V1 = 1;
+  private final PartitionId partitionId;
+  private final String fileName;
+  private final long startOffset;
+  private final long chunkLengthInBytes;
+  public static final short File_Chunk_Request_Version_V1 = 1;
   private static final int File_Name_Size_In_Bytes = 4;
+
+  static short CURRENT_VERSION = File_Chunk_Request_Version_V1;
 
 
   public FileCopyGetChunkRequest( short versionId, int correlationId,
@@ -81,18 +83,21 @@ public class FileCopyGetChunkRequest extends RequestOrResponse{
   public PartitionId getPartitionId() {
     return partitionId;
   }
+
   public String getFileName() {
     return fileName;
   }
+
   public long getStartOffset() {
     return startOffset;
   }
+
   public long getChunkLengthInBytes() {
     return chunkLengthInBytes;
   }
 
   static void validateVersion(short version){
-    if (version != File_Chunk_Request_Version_V1) {
+    if (version != CURRENT_VERSION) {
       throw new IllegalArgumentException("Unknown version for FileMetadataRequest: " + version);
     }
   }

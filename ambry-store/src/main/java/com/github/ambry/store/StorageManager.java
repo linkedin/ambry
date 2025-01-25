@@ -36,6 +36,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -191,16 +192,12 @@ public class StorageManager implements StoreManager {
    * chunk of size {@code sizeInBytes} starting from {@code startOffset}.
    */
   @Override
-  public FileInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
-    // TODO Change this to getFileStore
-//  FileStore fileStore = getFileStore(partitionId);
-
-    com.github.ambry.store.FileStore fileStore = new com.github.ambry.store.FileStore("", null);
-    try {
-      return fileStore.getStreamForFileRead(null, fileName);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+  public DataInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+      throws IOException {
+    if (!partitionToDiskManager.containsKey(partitionId)) {
+      throw new IllegalArgumentException("DiskManager not found for partition " + partitionId);
     }
+    return partitionToDiskManager.get(partitionId).getStreamForFile(partitionId, fileName, sizeInBytes, startOffset);
   }
 
   /**

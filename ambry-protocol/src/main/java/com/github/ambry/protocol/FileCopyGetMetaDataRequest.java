@@ -56,10 +56,12 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse{
       @Nonnull ClusterMap clusterMap) throws IOException {
     short versionId = stream.readShort();
     validateVersion(versionId);
+
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     String hostName = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
+
     return new FileCopyGetMetaDataRequest(versionId, correlationId, clientId, partitionId, hostName);
   }
 
