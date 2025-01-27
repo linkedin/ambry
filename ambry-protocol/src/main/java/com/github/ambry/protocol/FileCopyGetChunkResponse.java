@@ -57,6 +57,10 @@ public class FileCopyGetChunkResponse extends Response {
     return isLastChunk;
   }
 
+  public long getChunkSizeInBytes() {
+    return chunkSizeInBytes;
+  }
+
   public long sizeInBytes() {
     try {
       return super.sizeInBytes() + partitionId.getBytes().length + File_Name_Field_Size_In_Bytes +

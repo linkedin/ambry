@@ -56,10 +56,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
-import com.github.ambry.network.ChannelOutput;
-import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
@@ -76,10 +73,6 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.FileCopyGetChunkRequest;
-import com.github.ambry.protocol.FileCopyGetChunkResponse;
-import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
-import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
@@ -104,10 +97,6 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -504,12 +493,35 @@ public class AmbryServer {
       this.fileStore = new FileStore("dataDir", fileCopyConfig);
       fileStore.start();
 
-      testGetMetadataApi();
-
+      testE2EFlow();
+//      testFileStoreUtils();
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
     }
+  }
+
+  private void testE2EFlow() {
+    Optional<PartitionId> optional = storageManager.getLocalPartitions().stream().filter(p -> p.getId() == 146).findFirst();
+    PartitionId partitionId;
+    if (optional.isPresent()) {
+      partitionId = optional.get();
+    } else {
+      logger.info("Demo: Partition not found");
+      return;
+    }
+    partitionId.getReplicaIds().forEach(replicaId -> {
+      logger.info("Demo: partitionId: {}, replicaId: {}", partitionId, replicaId);
+
+      if (replicaId.getDataNodeId().getHostname().equals("ltx1-app3645.stg.linkedin.com")) {
+        try {
+          new FileCopyHandler(connectionPool, fileStore, clusterMap).copy(partitionId, replicaId);
+//          new FileCopyUtils(properties, clusterMap).copy(partitionId, replicaId);
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+    });
   }
 
   private void testFileStoreUtils() throws StoreException, IOException {
@@ -536,84 +548,6 @@ public class AmbryServer {
     byte[] content = new byte[(int) fileSize]; // Read the content of the source file into a byte array
     inputStream.read(content); // Read bytes into the array
     System.out.println("Parsed log file contents read: " + new String(content));
-  }
-
-  private void testGetMetadataApi() {
-    Optional<PartitionId> optional = storageManager.getLocalPartitions().stream().filter(p -> p.getId() == 146).findFirst();
-    PartitionId partitionId;
-    if (optional.isPresent()) {
-      partitionId = optional.get();
-    } else {
-      logger.info("Dw: Partition not found");
-      return;
-    }
-    FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
-        FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "", partitionId, "hostName");
-
-    final FileCopyGetMetaDataResponse[] response = new FileCopyGetMetaDataResponse[1];
-    partitionId.getReplicaIds().forEach(replicaId -> {
-      logger.info("Dw: partitionId: {}, replicaId: {}", partitionId, replicaId);
-
-      if (replicaId.getDataNodeId().getHostname().equals("ltx1-app3645.stg.linkedin.com")) {
-        DataNodeId targetDataNodeId = replicaId.getDataNodeId();
-        try {
-          logger.info("Dw: Request: {}", request);
-          ConnectedChannel connectedChannel =
-              connectionPool.checkOutConnection(targetDataNodeId.getHostname(), targetDataNodeId.getPortToConnectTo(), 40);
-          ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
-          response[0] = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
-          logger.info("Dw: Response: {}", response[0]);
-
-          List<com.github.ambry.store.LogInfo> logInfos = AmbryRequests.convertProtocolToStoreLogInfo(response[0].getLogInfos());
-
-          String partitionFilePath = replicaId.getMountPath() + File.separator + partitionId.getId();
-          fileStore.persistMetaDataToFile(partitionFilePath, logInfos);
-
-          DataInputStream isStream = testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getIndexSegments().get(0).getFileName());
-          DataInputStream bfStream = testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getBloomFilters().get(0).getFileName());
-//          testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getLogSegment().getFileName());
-
-//          DataInputStream testStream = testGetChunkDataApi(targetDataNodeId, partitionId, logInfos.get(0).getIndexSegments().get(0).getFileName());
-//          byte[] buffer = new byte[testStream.available()];
-//          testStream.readFully(buffer);
-//
-//          logger.info("Dw: Parsed file contents read: " + new String(buffer));
-
-          putChunkToFile(partitionFilePath, isStream);
-          putChunkToFile(partitionFilePath, bfStream);
-        } catch (Exception e) {
-          logger.error("Dw: Error while sending request to " + targetDataNodeId, e);
-        }
-      }
-    });
-  }
-
-  private void putChunkToFile(String filePath, DataInputStream isStream) throws IOException {
-    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-    byte[] buffer = new byte[isStream.available()];
-    int bytesRead;
-    while ((bytesRead = isStream.read(buffer)) != -1) {
-      byteArrayOutputStream.write(buffer, 0, bytesRead);
-    }
-    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
-    fileStore.putChunkToFile(filePath, new FileInputStream(String.valueOf(byteArrayInputStream)));
-  }
-
-  private DataInputStream testGetChunkDataApi(DataNodeId targetDataNodeId, PartitionId partitionId, String fileName)
-      throws ConnectionPoolTimeoutException, IOException, InterruptedException {
-
-    FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(
-        FileCopyGetChunkRequest.File_Chunk_Request_Version_V1, 0, "",
-        partitionId, fileName, 0L, 1000000000L);
-    logger.info("Dw: Request: {}", request);
-
-    ConnectedChannel connectedChannel =
-        connectionPool.checkOutConnection(targetDataNodeId.getHostname(), targetDataNodeId.getPortToConnectTo(), 40);
-    ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
-    FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(channelOutput.getInputStream(), clusterMap);
-    logger.info("Dw: Response: {}", response);
-
-    return response.getChunkStream();
   }
 
   /**

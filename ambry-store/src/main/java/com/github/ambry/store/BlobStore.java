@@ -1387,13 +1387,13 @@ public class BlobStore implements Store {
         .collect(Collectors.toList());
   }
 
-  public DataInputStream getStreamForFile(String fileName, long sizeInBytes, long startOffset) throws IOException {
+  public ChunkResponse getStreamForFile(String fileName, long sizeInBytes, long startOffset) throws IOException {
     String filePath = getDataDir() + File.separator + fileName;
     File file = new File(filePath);
     if (!file.exists() || !file.canRead()) {
       throw new IOException("File doesn't exist or cannot be read: " + filePath);
     }
-    return new DataInputStream(Files.newInputStream(file.toPath()));
+    return new ChunkResponse(new DataInputStream(Files.newInputStream(file.toPath())), file.length());
   }
 
   /**

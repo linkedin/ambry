@@ -84,7 +84,7 @@ public class FileStore {
     fileInputStream.read(content); // Read bytes into the array
     Files.write(Paths.get(outputFilePath), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 
-    System.out.println("Write successful for chunk to file: " + outputFilePath);
+    System.out.println("Demo: Write successful for chunk to file: " + outputFilePath);
   }
 
   // New class in input: List<FileMetaData>

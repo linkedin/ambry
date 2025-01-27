@@ -96,6 +96,7 @@ import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
+import com.github.ambry.store.ChunkResponse;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
@@ -1745,10 +1746,10 @@ public class AmbryRequests implements RequestAPI {
     FileCopyGetChunkRequest fileCopyGetChunkRequest =
         FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
 
-    DataInputStream chunkStream;
+    ChunkResponse chunkResponse;
     FileCopyGetChunkResponse response;
     try {
-      chunkStream = storeManager.getChunk(
+      chunkResponse = storeManager.getChunk(
           fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(),
           fileCopyGetChunkRequest.getChunkLengthInBytes(), fileCopyGetChunkRequest.getStartOffset());
     } catch (Exception e) {
@@ -1768,8 +1769,8 @@ public class AmbryRequests implements RequestAPI {
         FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
         fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
         ServerErrorCode.No_Error, fileCopyGetChunkRequest.getPartitionId(),
-        fileCopyGetChunkRequest.getFileName(), chunkStream,
-        fileCopyGetChunkRequest.getStartOffset(), chunkStream.available(), false);
+        fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
+        fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
 
     // TODO: Add metrics for this operation
     Histogram dummyHistogram = new Histogram(new Reservoir() {
@@ -1790,7 +1791,7 @@ public class AmbryRequests implements RequestAPI {
     ServerNetworkResponseMetrics serverNetworkResponseMetrics = new ServerNetworkResponseMetrics(dummyHistogram,
         dummyHistogram, dummyHistogram, null, null, 0);
 
-    logger.info("Dw: Api response, partition-" + fileCopyGetChunkRequest.getPartitionId().getId() + " " + response);
+    logger.info("Demo: Api response " + response);
     requestResponseChannel.sendResponse(response, request, serverNetworkResponseMetrics);
   }
 

@@ -192,7 +192,7 @@ public class StorageManager implements StoreManager {
    * chunk of size {@code sizeInBytes} starting from {@code startOffset}.
    */
   @Override
-  public DataInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+  public ChunkResponse getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
       throws IOException {
     if (!partitionToDiskManager.containsKey(partitionId)) {
       throw new IllegalArgumentException("DiskManager not found for partition " + partitionId);
