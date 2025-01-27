@@ -16,40 +16,17 @@ package com.github.ambry.tools.perf.serverperf;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StaticClusterAgentsFactory;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobData;
-import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.NetworkClientErrorCode;
-import com.github.ambry.network.Port;
-import com.github.ambry.network.RequestInfo;
-import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.http2.Http2ClientMetrics;
-import com.github.ambry.protocol.GetOption;
-import com.github.ambry.protocol.GetRequest;
-import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.io.BufferedReader;
-import java.io.DataInputStream;
-import java.io.FileReader;
-import java.io.InputStream;
-import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,18 +42,24 @@ import org.slf4j.LoggerFactory;
 public class ServerPerformance {
   private final ServerPerfNetworkQueue networkQueue;
   private final ServerPerformanceConfig config;
-  private final ClusterMap clusterMap;
-  private final AtomicInteger correlationId = new AtomicInteger();
   private final Http2ClientMetrics clientMetrics;
 
   private final CountDownLatch timedShutDownLatch;
-
   private final CountDownLatch shutDownLatch;
 
-  private static final String CLIENT_ID = "ServerReadPerformance";
+  LoadProducerConsumer producerConsumer;
+
   private static final Logger logger = LoggerFactory.getLogger(ServerPerformance.class);
 
+  public enum TestType {
+    GET_BLOB, PUT_BLOB
+  }
+
   public static class ServerPerformanceConfig {
+
+    @Config("server.performance.test.type")
+    public final TestType serverPerformanceTestType;
+
     /**
      * The path to the hardware layout file. Needed if using
      * {@link StaticClusterAgentsFactory}.
@@ -143,6 +126,7 @@ public class ServerPerformance {
     public final int serverPerformanceTimeOutSeconds;
 
     public ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
+      serverPerformanceTestType = TestType.valueOf(verifiableProperties.getString("server.performance.test.type"));
       serverPerformanceHardwareLayoutFilePath =
           verifiableProperties.getString("server.performance.hardware.layout.file.path", "");
       serverPerformancePartitionLayoutFilePath =
@@ -162,9 +146,10 @@ public class ServerPerformance {
   public ServerPerformance(VerifiableProperties verifiableProperties) throws Exception {
     config = new ServerPerformanceConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    clusterMap = ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
-        config.serverPerformanceHardwareLayoutFilePath,
-        config.serverPerformancePartitionLayoutFilePath)).getClusterMap();
+    ClusterMap clusterMap =
+        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+            config.serverPerformanceHardwareLayoutFilePath,
+            config.serverPerformancePartitionLayoutFilePath)).getClusterMap();
     clientMetrics = new Http2ClientMetrics(new MetricRegistry());
     timedShutDownLatch = new CountDownLatch(1);
     shutDownLatch = new CountDownLatch(1);
@@ -172,6 +157,16 @@ public class ServerPerformance {
         config.serverPerformanceMaxParallelRequests, config.serverPerformanceNetworkClientsCount,
         config.serverPerformanceOperationsTimeOutSec);
     networkQueue.start();
+
+   switch (config.serverPerformanceTestType) {
+     case GET_BLOB:
+       producerConsumer = new GetLoadProducerConsumer(networkQueue, config, clusterMap);
+       break;
+     case PUT_BLOB:
+       producerConsumer = new PutLoadProducerConsumer(networkQueue, config, clusterMap);
+     default:
+       throw new IllegalArgumentException("Unrecognized test type: "+ config.serverPerformanceTestType);
+   }
   }
 
   public static void main(String[] args) throws Exception {
@@ -186,28 +181,52 @@ public class ServerPerformance {
         logger.error("Caught error while shut down", e);
       }
     }));
-    serverPerformance.startGetLoadTest();
+    serverPerformance.startLoadTest();
     System.exit(0);
   }
 
-  /**
-   * starts a thread to produce get requests
-   * starts a thread to consume responses
-   * starts a thread to start the shutdown at given time
-   * When all threads are done, {@link #shutDownLatch} is lowered
-   * so any waiting thread can continue
-   * @throws Exception
-   */
-  public void startGetLoadTest() throws Exception {
-    Thread getLoadProducer = getGetLoadProducerThread();
-    Thread getLoadConsumer = getGetLoadConsumerThread();
+  public void startLoadTest() throws Exception {
+    Thread loadProducer = getLoadProducerThread();
+    Thread loadConsumer = getLoadConsumerThread();
     Thread shutDownThread = getTimedShutDownThread();
     shutDownThread.start();
-    getLoadProducer.start();
-    getLoadConsumer.start();
-    getLoadProducer.join();
-    getLoadConsumer.join();
+    loadProducer.start();
+    loadConsumer.start();
+    loadProducer.join();
+    loadConsumer.join();
     shutDownLatch.countDown();
+  }
+
+  Thread getLoadProducerThread() {
+    return new Thread(() -> {
+      while (true) {
+        try {
+          producerConsumer.produce();
+        } catch (ShutDownException e) {
+          logger.info("Load producer thread is shutting down");
+          break;
+        } catch (Exception e) {
+          logger.error("encountered error in loadProducer", e);
+        }
+      }
+      logger.info("Load producer thread is finished");
+    });
+  }
+
+  Thread getLoadConsumerThread() {
+    return new Thread(() -> {
+      while (true) {
+        try {
+          producerConsumer.consume();
+        } catch (ShutDownException e) {
+          logger.info("Network queue is shutdown. Exiting from thread");
+          break;
+        } catch (Exception e) {
+          logger.error("error in load consumer thread", e);
+        }
+      }
+      logger.info("Load consumer thread is finished");
+    });
   }
 
   public void printMetrics() {
@@ -235,128 +254,6 @@ public class ServerPerformance {
         logger.error("Caught exception in shutdown thread", e);
       }
     });
-  }
-
-  /**
-   * Creates a thread which will keep creating requests
-   * and submit to {@link #networkQueue}
-   * @return {@link Thread}
-   */
-  Thread getGetLoadProducerThread() {
-    return new Thread(() -> {
-      boolean isShutDown = false;
-      while (!isShutDown) {
-        try {
-          isShutDown = loadProducerGETBlob();
-        } catch (Exception e) {
-          logger.error("encountered error in loadProducer", e);
-        }
-      }
-      logger.info("Load producer thread is finished");
-    });
-  }
-
-  /**
-   * Iterates over {@link ServerPerformanceConfig#serverPerformanceBlobIdFilePath}
-   * and creates a {@link RequestInfo} for get requests and submits
-   * to {@link #networkQueue}
-   * @throws Exception exception
-   */
-  boolean loadProducerGETBlob() throws Exception {
-    final BufferedReader br = new BufferedReader(new FileReader(config.serverPerformanceBlobIdFilePath));
-    String line;
-    boolean isShutDown = false;
-    while ((line = br.readLine()) != null) {
-      String[] id = line.split("\n");
-      BlobId blobId = new BlobId(id[0], clusterMap);
-
-      PartitionRequestInfo partitionRequestInfo =
-          new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
-      GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, MessageFormatFlags.Blob,
-          Collections.singletonList(partitionRequestInfo), GetOption.Include_All);
-      DataNodeId dataNodeId = clusterMap.getDataNodeId(config.serverPerformanceHostname, config.serverPerformancePort);
-      ReplicaId replicaId =
-          getReplicaFromNode(dataNodeId, getRequest.getPartitionInfoList().get(0).getPartition(), clusterMap);
-      String hostname = dataNodeId.getHostname();
-      Port port = dataNodeId.getPortToConnectTo();
-      RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replicaId, null);
-      logger.info("submitting the blob id {} to network queue correlation id {}", blobId,
-          requestInfo.getRequest().getCorrelationId());
-      try {
-        networkQueue.submit(requestInfo);
-      } catch (ServerPerfNetworkQueue.ShutDownException e) {
-        isShutDown = true;
-        break;
-      }
-    }
-    br.close();
-    return isShutDown;
-  }
-
-  /**
-   * Creates a thread which will continuously try to
-   * always poll the {@link #networkQueue} and process response received
-   */
-  Thread getGetLoadConsumerThread() {
-    return new Thread(() -> {
-      while (true) {
-        try {
-          networkQueue.poll(this::processGetResponse);
-        } catch (ServerPerfNetworkQueue.ShutDownException e) {
-          logger.info("Network queue is shutdown. Exiting from thread");
-          break;
-        } catch (Exception e) {
-          logger.error("error in load consumer thread", e);
-        }
-      }
-      logger.info("Load consumer thread is finished");
-    });
-  }
-
-  /**
-   * Parses the response info into {@link GetResponse}
-   * gets the blob data from the response and puts it
-   * @param responseInfo response info to process
-   */
-  void processGetResponse(ResponseInfo responseInfo) {
-    try {
-      if (responseInfo.getError() == NetworkClientErrorCode.TimeoutError) {
-        logger.info("Timeout error for correlation id {}",
-            responseInfo.getRequestInfo().getRequest().getCorrelationId());
-        return;
-      }
-      InputStream serverResponseStream = new NettyByteBufDataInputStream(responseInfo.content());
-      GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
-      ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-      ServerErrorCode errorCode =
-          partitionErrorCode == ServerErrorCode.No_Error ? getResponse.getError() : partitionErrorCode;
-      InputStream stream = errorCode == ServerErrorCode.No_Error ? getResponse.getInputStream() : null;
-      BlobData blobData = stream != null ? MessageFormatRecord.deserializeBlob(stream) : null;
-      long blobDataSize = blobData != null ? blobData.getSize() : 0;
-      responseInfo.release();
-      getResponse.release();
-      logger.info("blob id {} blob size {}  correlation id {}",
-          getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getStoreKey(), blobDataSize,
-          responseInfo.getRequestInfo().getRequest().getCorrelationId());
-    } catch (Exception e) {
-      logger.error("error in processing get response", e);
-    }
-  }
-
-  private ReplicaId getReplicaFromNode(DataNodeId dataNodeId, PartitionId partitionId, ClusterMap clusterMap) {
-    ReplicaId replicaToReturn = null;
-    if (partitionId != null) {
-      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
-        if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())) {
-          replicaToReturn = replicaId;
-          break;
-        }
-      }
-    } else {
-      // pick any replica on this node
-      replicaToReturn = clusterMap.getReplicaIds(dataNodeId).get(0);
-    }
-    return replicaToReturn;
   }
 
   /**

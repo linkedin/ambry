@@ -51,9 +51,6 @@ import org.slf4j.LoggerFactory;
  */
 public class ServerPerfNetworkQueue extends Thread {
 
-  public static class ShutDownException extends Exception {
-  }
-
   private static class InflightNetworkClientRequest {
     private final long startTimeMs;
     private final RequestInfo requestInfo;
