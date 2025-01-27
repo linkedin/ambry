@@ -42,7 +42,7 @@ public class ReplicaOperationTracker {
 
   public ReplicaOperationTracker(ReplicaId replicaId, StoreManager storeManager, FileCopyMetrics fileCopyMetrics) {
     this.replicaId = replicaId;
-    requestsToSend = new RequestInfo();
+    //requestsToSend = new RequestInfo();
     fileToSegmentOperationTrackerMap = new HashMap<>();
     this.storeManager = storeManager;
   }
