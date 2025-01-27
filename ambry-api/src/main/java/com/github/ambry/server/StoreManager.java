@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.store.ChunkResponse;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -173,6 +174,6 @@ public interface StoreManager {
    * @param startOffset
    * @return FileInputStream containing the chunk of size {@code sizeInBytes} starting from {@code startOffset}.
    */
-  DataInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+  ChunkResponse getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
       throws IOException;
 }

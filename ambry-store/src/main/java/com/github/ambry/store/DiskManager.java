@@ -847,7 +847,7 @@ public class DiskManager {
     return stores.get(partitionId).getLogSegmentMetadataFiles(includeActiveLogSegment);
   }
 
-  public DataInputStream getStreamForFile(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+  public ChunkResponse getStreamForFile(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
       throws IOException {
     if (!stores.containsKey(partitionId)) {
       throw new IllegalArgumentException("BlobStore for partition " + partitionId + " is not found on disk " + disk);

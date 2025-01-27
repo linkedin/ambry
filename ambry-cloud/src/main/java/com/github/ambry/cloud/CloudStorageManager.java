@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.ChunkResponse;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import java.io.DataInputStream;
@@ -160,7 +161,7 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public DataInputStream getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
+  public ChunkResponse getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
     throw new UnsupportedOperationException("Method not supported");
   }
 
