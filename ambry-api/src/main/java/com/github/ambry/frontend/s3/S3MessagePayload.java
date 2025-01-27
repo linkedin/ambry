@@ -14,12 +14,10 @@
  */
 package com.github.ambry.frontend.s3;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.List;
 
 
 /**
@@ -157,6 +155,7 @@ public class S3MessagePayload {
     }
   }
 
+  @JsonInclude(JsonInclude.Include.NON_EMPTY)
   public static abstract class AbstractListBucketResult {
     @JacksonXmlProperty(localName = "Name")
     private String name;
@@ -175,13 +174,17 @@ public class S3MessagePayload {
     private String encodingType;
     @JacksonXmlProperty(localName = "IsTruncated")
     private Boolean isTruncated;
+    // New optional field for CommonPrefixes with wrapping and nested Prefix elements
+    @JacksonXmlProperty(localName = "CommonPrefixes")
+    @JacksonXmlElementWrapper(useWrapping = false)
+    private List<Prefix> commonPrefixes;
 
     private AbstractListBucketResult() {
 
     }
 
     public AbstractListBucketResult(String name, String prefix, int maxKeys, int keyCount, String delimiter,
-        List<Contents> contents, String encodingType, boolean isTruncated) {
+        List<Contents> contents, String encodingType, boolean isTruncated, List<Prefix> commonPrefixes) {
       this.name = name;
       this.prefix = prefix;
       this.maxKeys = maxKeys;
@@ -190,6 +193,7 @@ public class S3MessagePayload {
       this.contents = contents;
       this.encodingType = encodingType;
       this.isTruncated = isTruncated;
+      this.commonPrefixes = commonPrefixes;
     }
 
     public String getPrefix() {
@@ -227,13 +231,23 @@ public class S3MessagePayload {
     @Override
     public String toString() {
       return "Name=" + name + ", Prefix=" + prefix + ", MaxKeys=" + maxKeys + ", KeyCount=" + keyCount + ", Delimiter="
-          + delimiter + ", Contents=" + contents + ", Encoding type=" + encodingType + ", IsTruncated=" + isTruncated;
+          + delimiter + ", Contents=" + contents + ", Encoding type=" + encodingType + ", IsTruncated=" + isTruncated
+          + ", CommonPrefixes=" + commonPrefixes;
+    }
+
+    public List<Prefix> getCommonPrefixes() {
+      return commonPrefixes;
+    }
+
+    public void setCommonPrefixes(List<Prefix> commonPrefixes) {
+      this.commonPrefixes = commonPrefixes;
     }
   }
 
   /**
    * ListBucketResult for listObjects API.
    */
+  @JsonInclude(JsonInclude.Include.NON_EMPTY)
   public static class ListBucketResult extends AbstractListBucketResult {
     @JacksonXmlProperty(localName = "Marker")
     private String marker;
@@ -245,8 +259,9 @@ public class S3MessagePayload {
     }
 
     public ListBucketResult(String name, String prefix, int maxKeys, int keyCount, String delimiter,
-        List<Contents> contents, String encodingType, String marker, String nextMarker, boolean isTruncated) {
-      super(name, prefix, maxKeys, keyCount, delimiter, contents, encodingType, isTruncated);
+        List<Contents> contents, String encodingType, String marker, String nextMarker, boolean isTruncated,
+        List<Prefix> commonPrefixes) {
+      super(name, prefix, maxKeys, keyCount, delimiter, contents, encodingType, isTruncated, commonPrefixes);
       this.marker = marker;
       this.nextMarker = nextMarker;
     }
@@ -268,6 +283,7 @@ public class S3MessagePayload {
   /**
    * ListBucketResult for listObjectsV2 API.
    */
+  @JsonInclude(JsonInclude.Include.NON_EMPTY)
   public static class ListBucketResultV2 extends AbstractListBucketResult {
     @JacksonXmlProperty(localName = "ContinuationToken")
     private String continuationToken;
@@ -280,8 +296,8 @@ public class S3MessagePayload {
 
     public ListBucketResultV2(String name, String prefix, int maxKeys, int keyCount, String delimiter,
         List<Contents> contents, String encodingType, String continuationToken, String nextContinuationToken,
-        boolean isTruncated) {
-      super(name, prefix, maxKeys, keyCount, delimiter, contents, encodingType, isTruncated);
+        boolean isTruncated, List<Prefix> commonPrefixes) {
+      super(name, prefix, maxKeys, keyCount, delimiter, contents, encodingType, isTruncated, commonPrefixes);
       this.continuationToken = continuationToken;
       this.nextContinuationToken = nextContinuationToken;
     }
@@ -322,7 +338,9 @@ public class S3MessagePayload {
       return key;
     }
 
-    public long getSize() { return size; }
+    public long getSize() {
+      return size;
+    }
 
     public String getLastModified() {
       return lastModified;
@@ -359,11 +377,38 @@ public class S3MessagePayload {
     }
   }
 
+  // Inner class for wrapping each Prefix inside CommmomPrefixes
+  public static class Prefix {
+    @JacksonXmlProperty(localName = "Prefix")
+    private String prefix;
+
+    public Prefix() {
+    }
+
+    public Prefix(String prefix) {
+      this.prefix = prefix;
+    }
+
+    public String getPrefix() {
+      return prefix;
+    }
+
+    public void setPrefix(String prefix) {
+      this.prefix = prefix;
+    }
+
+    @Override
+    public String toString() {
+      return "Prefix=" + prefix;
+    }
+  }
+
   public static class S3BatchDeleteObjects {
 
     // Ensure that the "Delete" wrapper element is mapped correctly to the list of "Object" elements
     @JacksonXmlElementWrapper(useWrapping = false)  // Avoids wrapping the <Delete> element itself
-    @JacksonXmlProperty(localName = "Object")      // Specifies that each <Object> element maps to an instance of S3BatchDeleteKeys
+    @JacksonXmlProperty(localName = "Object")
+    // Specifies that each <Object> element maps to an instance of S3BatchDeleteKeys
     private List<S3BatchDeleteKey> objects;
 
     public List<S3BatchDeleteKey> getObjects() {

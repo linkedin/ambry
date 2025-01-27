@@ -132,6 +132,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import com.fasterxml.jackson.core.type.TypeReference;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -2704,7 +2705,7 @@ public class FrontendRestRequestServiceTest {
         new NamedBlobRecord(refAccount.getName(), refContainer.getName(), "blob1", "abc", Utils.Infinite_Time),
         new NamedBlobRecord(refAccount.getName(), refContainer.getName(), "blob2", "def", System.currentTimeMillis()),
         new NamedBlobRecord(refAccount.getName(), refContainer.getName(), "blob3", "ghi", Utils.Infinite_Time));
-    Page<NamedBlobRecord> page = new Page<>(blobs, "blob4");
+    Page<NamedBlobRecord> page = new Page<>(blobs, null);
     doListNamedBlobsTest("blob", null, page, null);
     doListNamedBlobsTest("blob", "blob1", page, null);
 
@@ -2736,7 +2737,8 @@ public class FrontendRestRequestServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, path, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     if (pageToReturn != null) {
-      when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(pageToReturn));
+      when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(
+          CompletableFuture.completedFuture(pageToReturn));
     } else {
       CompletableFuture<Page<NamedBlobRecord>> future = new CompletableFuture<>();
       future.completeExceptionally(new RestServiceException("NamedBlobDb error", expectedErrorCode));
@@ -2746,7 +2748,7 @@ public class FrontendRestRequestServiceTest {
     if (expectedErrorCode == null) {
       assertNotNull("pageToReturn should be set", pageToReturn);
       doOperation(restRequest, restResponseChannel);
-      verify(namedBlobDb).list(refAccount.getName(), refContainer.getName(), prefix, pageToken, null);
+      verify(namedBlobDb).list(refAccount.getName(), refContainer.getName(), prefix, pageToken, DEFAULT_MAX_KEY_VALUE);
       Page<NamedBlobListEntry> response =
           Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())), NamedBlobListEntry::new);
       assertEquals("Unexpected blobs returned",

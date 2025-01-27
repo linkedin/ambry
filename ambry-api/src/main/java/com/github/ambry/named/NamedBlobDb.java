@@ -60,8 +60,8 @@ public interface NamedBlobDb extends Closeable {
    * @param pageToken      if {@code null}, return the first page of {@link NamedBlobRecord}s that start with
    *                       {@code blobNamePrefix}. If set, use this as a token to resume reading additional pages of
    *                       records that start with the prefix.
-   * @param maxKey the maximum number of keys returned in the response. By default, the action returns up to listMaxResults
-   *               which can be tuned by config.
+   * @param maxKey         the maximum number of keys returned in the response. By default, the action returns up to
+   *                       listMaxResults which can be tuned by config.
    * @return a {@link CompletableFuture} that will eventually contain a {@link Page} of {@link NamedBlobRecord}s
    * starting with the specified prefix or an exception if an error occurred.
    */

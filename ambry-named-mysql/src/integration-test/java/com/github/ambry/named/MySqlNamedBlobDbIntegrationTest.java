@@ -380,12 +380,13 @@ public class MySqlNamedBlobDbIntegrationTest {
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
-        }
-    );
+        });
 
     // List named blob should only put out valid ones without empty entries.
-    Page<NamedBlobRecord> page =  namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null, null).get();
-    assertEquals("List named blob entries should match the valid records", validRecords, new HashSet<>(page.getEntries()));
+    Page<NamedBlobRecord> page =
+        namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null, null).get();
+    assertEquals("List named blob entries should match the valid records", validRecords,
+        new HashSet<>(page.getEntries()));
     assertNull("Next page token should be null", page.getNextPageToken());
   }
 
