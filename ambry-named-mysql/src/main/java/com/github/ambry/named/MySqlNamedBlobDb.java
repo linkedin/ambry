@@ -392,12 +392,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
-      String pageToken, Integer maxKeys) {
+      String pageToken, Integer maxKeys, boolean groupDirectories) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
       Page<NamedBlobRecord> recordPage =
           run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection,
-              maxKeys);
+              maxKeys, groupDirectories);
       metricsRecoder.namedBlobListTimeInMs.update(this.time.milliseconds() - startTime);
       return recordPage;
     }, null);
@@ -674,10 +674,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
-      String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
+      String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys,
+      boolean groupDirectories) throws Exception {
     String query = "";
     String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY_V2 : LIST_NAMED_BLOBS_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
+    // Set to store unique subfolder names
+    Set<String> directories = new HashSet<>();
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       if (blobNamePrefix == null) {
         // list-all no prefix
@@ -706,10 +709,27 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         int resultIndex = 0;
         while (resultSet.next()) {
           String blobName = resultSet.getString(1);
-          if (resultIndex++ == maxKeysValue) {
+          if (resultIndex == maxKeysValue) {
             nextContinuationToken = blobName;
             break;
           }
+
+          if (groupDirectories) {
+            // Extract the portion after the prefix and before the next '/'
+            String remainingPath = blobName.substring(blobNamePrefix == null ? 0 : blobNamePrefix.length());
+            remainingPath = remainingPath.startsWith("/") ? remainingPath.substring(1) : remainingPath;
+            int delimiterIndex = remainingPath.indexOf("/");
+            if (delimiterIndex != -1) {
+              boolean validEntry = directories.add(remainingPath.substring(0, delimiterIndex) + "/");
+              if (validEntry) {
+                resultIndex++;
+              }
+              // Since this file is part of a logical directory, continue to the next result
+              continue;
+            }
+          }
+
+          resultIndex++;
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
           long version = resultSet.getLong(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
@@ -718,8 +738,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
           entries.add(
               new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version,
-                  blobSize, timestampToMs(modifiedTime)));
+                  blobSize, timestampToMs(modifiedTime), false));
         }
+
+        if (groupDirectories) {
+          // Add the directories to the result
+          entries.addAll(directories.stream()
+              .map(directory -> new NamedBlobRecord(accountName, containerName, directory, null, Utils.Infinite_Time, 0,
+                  0, 0, true))
+              .collect(Collectors.toList()));
+        }
+
         return new Page<>(entries, nextContinuationToken);
       }
     } catch (SQLException e) {

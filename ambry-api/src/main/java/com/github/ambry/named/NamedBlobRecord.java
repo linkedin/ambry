@@ -30,6 +30,7 @@ public class NamedBlobRecord {
   private final String blobId;
   private final long blobSize;
   private long modifiedTimeMs;
+  private final boolean isDirectory;
 
   /**
    * @param accountName the account name.
@@ -67,7 +68,7 @@ public class NamedBlobRecord {
    */
   public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
       long expirationTimeMs, long version, long blobSize) {
-    this(accountName, containerName, blobName, blobId, expirationTimeMs, version, blobSize, 0);
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, version, blobSize, 0, false);
   }
 
   /**
@@ -79,9 +80,10 @@ public class NamedBlobRecord {
    * @param version          the version of this named blob.
    * @param blobSize         the size of the blob.
    * @param modifiedTimeMs   the modified time of the blob in milliseconds since epoch
+   * @param isDirectory      whether the blob is a directory (virtual folder name separated by '/')
    */
   public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
-      long expirationTimeMs, long version, long blobSize, long modifiedTimeMs) {
+      long expirationTimeMs, long version, long blobSize, long modifiedTimeMs, boolean isDirectory) {
     this.accountName = accountName;
     this.containerName = containerName;
     this.blobName = blobName;
@@ -90,6 +92,7 @@ public class NamedBlobRecord {
     this.version = version;
     this.blobSize = blobSize;
     this.modifiedTimeMs = modifiedTimeMs;
+    this.isDirectory = isDirectory;
   }
 
   /**
@@ -179,5 +182,12 @@ public class NamedBlobRecord {
    */
   public void setModifiedTimeMs(long modifiedTimeMs) {
     this.modifiedTimeMs = modifiedTimeMs;
+  }
+
+  /**
+   * @return whether the blob is a directory (virtual folder name separated by '/')
+   */
+  public boolean isDirectory() {
+    return isDirectory;
   }
 }

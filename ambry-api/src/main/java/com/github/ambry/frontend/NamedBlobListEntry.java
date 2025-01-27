@@ -29,11 +29,13 @@ public class NamedBlobListEntry {
   private static final String EXPIRATION_TIME_MS_KEY = "expirationTimeMs";
   private static final String BLOB_SIZE_KEY = "blobSize";
   private static final String MODIFIED_TIME_MS_KEY = "modifiedTimeMs";
+  private static final String IS_DIRECTORY_KEY = "isDirectory";
 
   private final String blobName;
   private final long expirationTimeMs;
   private final long blobSize;
   private final long modifiedTimeMs;
+  private final boolean isDirectory;
 
   /**
    * Read a {@link NamedBlobRecord} from JSON.
@@ -41,7 +43,8 @@ public class NamedBlobListEntry {
    */
   public NamedBlobListEntry(JSONObject jsonObject) {
     this(jsonObject.getString(BLOB_NAME_KEY), jsonObject.optLong(EXPIRATION_TIME_MS_KEY, Utils.Infinite_Time),
-        jsonObject.optLong(BLOB_SIZE_KEY, 0), jsonObject.optLong(MODIFIED_TIME_MS_KEY, Utils.Infinite_Time));
+        jsonObject.optLong(BLOB_SIZE_KEY, 0), jsonObject.optLong(MODIFIED_TIME_MS_KEY, Utils.Infinite_Time),
+        jsonObject.optBoolean(IS_DIRECTORY_KEY, false));
   }
 
   /**
@@ -49,20 +52,24 @@ public class NamedBlobListEntry {
    * @param record the {@link NamedBlobRecord}.
    */
   NamedBlobListEntry(NamedBlobRecord record) {
-    this(record.getBlobName(), record.getExpirationTimeMs(), record.getBlobSize(), record.getModifiedTimeMs());
+    this(record.getBlobName(), record.getExpirationTimeMs(), record.getBlobSize(), record.getModifiedTimeMs(),
+        record.isDirectory());
   }
 
   /**
-   * @param blobName the blob name within a container.
+   * @param blobName         the blob name within a container.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    * @param blobSize         the size of the blob
    * @param modifiedTimeMs   the modified time of the blob in milliseconds since epoch
+   * @param isDirectory      whether the blob is a directory (virtual folder name separated by '/')
    */
-  private NamedBlobListEntry(String blobName, long expirationTimeMs, long blobSize, long modifiedTimeMs) {
+  private NamedBlobListEntry(String blobName, long expirationTimeMs, long blobSize, long modifiedTimeMs,
+      boolean isDirectory) {
     this.blobName = blobName;
     this.expirationTimeMs = expirationTimeMs;
     this.blobSize = blobSize;
     this.modifiedTimeMs = modifiedTimeMs;
+    this.isDirectory = isDirectory;
   }
 
   /**
@@ -103,6 +110,7 @@ public class NamedBlobListEntry {
     }
     jsonObject.put(BLOB_SIZE_KEY, blobSize);
     jsonObject.put(MODIFIED_TIME_MS_KEY, modifiedTimeMs);
+    jsonObject.put(IS_DIRECTORY_KEY, isDirectory);
     return jsonObject;
   }
 
@@ -116,6 +124,10 @@ public class NamedBlobListEntry {
     }
     NamedBlobListEntry that = (NamedBlobListEntry) o;
     return expirationTimeMs == that.expirationTimeMs && Objects.equals(blobName, that.blobName)
-        && modifiedTimeMs == that.modifiedTimeMs && blobSize == that.blobSize;
+        && modifiedTimeMs == that.modifiedTimeMs && blobSize == that.blobSize && isDirectory == that.isDirectory;
+  }
+
+  public boolean isDirectory() {
+    return isDirectory;
   }
 }

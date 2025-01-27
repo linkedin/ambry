@@ -83,7 +83,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
-      String pageToken, Integer maxKey) {
+      String pageToken, Integer maxKey, boolean groupDirectories) {
     if (exception != null) {
       return FutureUtils.completedExceptionally(exception);
     }

@@ -529,7 +529,7 @@ public class NamedBlobMysqlDatabasePerf {
           int numberOfList = 0;
           for (NamedBlobRecord record : allRecords) {
             if (!record.getAccountName().equals(String.format(ACCOUNT_NAME_FORMAT, HUGE_LIST_ACCOUNT_ID))) {
-              namedBlobDb.list(record.getAccountName(), record.getContainerName(), "A", null, null).get();
+              namedBlobDb.list(record.getAccountName(), record.getContainerName(), "A", null, null, false).get();
               numberOfList++;
               if (numberOfList == 100) {
                 break;
@@ -542,8 +542,9 @@ public class NamedBlobMysqlDatabasePerf {
           String containerName = String.format(CONTAINER_NAME_FORMAT, HUGE_LIST_CONTAINER_ID);
           String token = null;
           for (int i = 0; i < 100; i++) {
-            token =
-                namedBlobDb.list(accountName, containerName, HUGE_LIST_COMMON_PREFIX, token, null).get().getNextPageToken();
+            token = namedBlobDb.list(accountName, containerName, HUGE_LIST_COMMON_PREFIX, token, null, false)
+                .get()
+                .getNextPageToken();
           }
           System.out.println("PerformanceTestWorker " + id + " finishes listing for huge records");
         }

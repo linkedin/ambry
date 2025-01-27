@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.NamedBlobListEntry;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
@@ -124,7 +125,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.setCurrentMilliseconds(System.currentTimeMillis());
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
-        Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), "name", null, null).get();
+        Page<NamedBlobRecord> page =
+            namedBlobDb.list(account.getName(), container.getName(), "name", null, null, false).get();
         assertNull("No continuation token expected", page.getNextPageToken());
         assertEquals("Unexpected number of blobs in container", blobsPerContainer, page.getEntries().size());
       }
@@ -135,17 +137,18 @@ public class MySqlNamedBlobDbIntegrationTest {
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
         //page with no token
-        Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), null, null, null).get();
+        Page<NamedBlobRecord> page =
+            namedBlobDb.list(account.getName(), container.getName(), null, null, null, false).get();
         assertNull("No continuation token expected", page.getNextPageToken());
         assertEquals("Unexpected number of blobs in container", blobsPerContainer, page.getEntries().size());
         //page with token
         Page<NamedBlobRecord> pageWithToken =
-            namedBlobDb.list(account.getName(), container.getName(), null, "name/4", null).get();
+            namedBlobDb.list(account.getName(), container.getName(), null, "name/4", null, false).get();
         assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5,
             pageWithToken.getEntries().size());
         //page with maxKeys
         Page<NamedBlobRecord> pageWithMaxKey =
-            namedBlobDb.list(account.getName(), container.getName(), null, null, 1).get();
+            namedBlobDb.list(account.getName(), container.getName(), null, null, 1, false).get();
         assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5,
             pageWithMaxKey.getEntries().size());
         // Verify that blob size and modified ts is returned for all blobs
@@ -300,7 +303,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
     NamedBlobRecord v1_other_get = namedBlobDb.get(a1.getName(), a1c1.getName(), blobName + "-other").get();
     assertEquals(v1_other, v1_other_get);
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null, false).get();
     assertEquals(2, page.getEntries().size());
     assertEquals(v1_get, page.getEntries().get(0));
     assertEquals(v1_other_get, page.getEntries().get(1));
@@ -310,7 +313,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     v2 = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName, getBlobId(a1, a1c1),
         Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null, false).get();
     assertEquals(2, page.getEntries().size());
     assertEquals(v1_get, page.getEntries().get(0));
     assertEquals(v1_other_get, page.getEntries().get(1));
@@ -323,7 +326,7 @@ public class MySqlNamedBlobDbIntegrationTest {
         Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(v2, NamedBlobState.READY, true).get();
     namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null, false).get();
     assertEquals(2, page.getEntries().size());
     assertEquals(v2, page.getEntries().get(0));
     assertEquals(v2_other, page.getEntries().get(1));
@@ -331,12 +334,12 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // delete blob and list should return empty
     namedBlobDb.delete(a1.getName(), a1c1.getName(), blobName).get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null, false).get();
     assertEquals(1, page.getEntries().size());
     assertEquals(v2_other, page.getEntries().get(0));
     time.sleep(100);
     namedBlobDb.delete(a1.getName(), a1c1.getName(), blobName + "-other").get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null, false).get();
     assertEquals(0, page.getEntries().size());
   }
 
@@ -384,7 +387,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     );
 
     // List named blob should only put out valid ones without empty entries.
-    Page<NamedBlobRecord> page =  namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null, null).get();
+    Page<NamedBlobRecord> page =  namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null, null, false).get();
     assertEquals("List named blob entries should match the valid records", validRecords, new HashSet<>(page.getEntries()));
     assertNull("Next page token should be null", page.getNextPageToken());
   }
@@ -720,6 +723,60 @@ public class MySqlNamedBlobDbIntegrationTest {
     assertEquals("Updated row's version should match with original put row", putResult.getInsertedRecord().getVersion(),
         updateResult.getInsertedRecord().getVersion());
     assertTrue("Good blob case 6 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
+  }
+
+  @Test
+  public void testListDirectories() throws ExecutionException, InterruptedException {
+    int numSubDirectories = 2;
+    int blobsPerSubDirectory = 5;
+
+    Account account = accountService.getAllAccounts().stream().iterator().next();
+    Container container = account.getAllContainers().stream().iterator().next();
+    List<List<String>> blobIdsPerSubDirectory = new ArrayList<>();
+
+    String dir = "dir";
+    String subdir = "subdir";
+    for (int i = 0; i < numSubDirectories; i++) {
+      List<String> blobs = new ArrayList<>();
+      for (int j = 0; j < blobsPerSubDirectory; j++) {
+        String blobId = getBlobId(account, container);
+        String blobName = dir + "/" + subdir + "-" + i + "/" + "file-" + j + ".txt";
+        long expirationTime = Utils.Infinite_Time;
+        long blobSize = 20;
+        NamedBlobRecord record =
+            new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime, 0, blobSize);
+        namedBlobDb.put(record).get();
+        blobs.add(blobId);
+      }
+      blobIdsPerSubDirectory.add(blobs);
+    }
+
+    // list directories container
+    Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), null, null, null, true).get();
+    assertEquals("Unexpected number of directories", 1, page.getEntries().size());
+    assertEquals("Mismatch in directory name", "dir/", page.getEntries().get(0).getBlobName());
+
+    // list sub-directories under the directory
+    page = namedBlobDb.list(account.getName(), container.getName(), dir, null, null, true).get();
+    assertEquals("Unexpected number of sub-directories", numSubDirectories, page.getEntries().size());
+    Set<String> subDirs = page.getEntries().stream().map(NamedBlobRecord::getBlobName).collect(Collectors.toSet());
+    System.out.println("Sub directories = " + subDirs);
+    for (int i = 0; i < numSubDirectories; i++) {
+      assertTrue("Should contain directory" + subdir + "-" + i + "/" + ", Received = " + subDirs,
+          subDirs.contains(subdir + "-" + i + "/"));
+    }
+
+    // list blobs under the sub-directory
+    for (int i = 0; i < numSubDirectories; i++) {
+      Page<NamedBlobRecord> subPage =
+          namedBlobDb.list(account.getName(), container.getName(), dir + "/" + subdir + "-" + i, null, null, false)
+              .get();
+      assertEquals("Unexpected number of blobs", blobsPerSubDirectory, subPage.getEntries().size());
+      Set<String> blobIds = subPage.getEntries().stream().map(NamedBlobRecord::getBlobId).collect(Collectors.toSet());
+      for (int j = 0; j < blobsPerSubDirectory; j++) {
+        assertTrue("Mismatch in blob ID", blobIds.contains(blobIdsPerSubDirectory.get(i).get(j)));
+      }
+    }
   }
 
   /**
