@@ -26,7 +26,6 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3BatchDeleteHandler;
-import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3MessagePayload;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
@@ -43,13 +42,10 @@ import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Properties;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -109,8 +105,8 @@ public class S3BatchDeleteHandlerTest {
     XmlMapper xmlMapper = new XmlMapper();
     S3MessagePayload.S3BatchDeleteResponse response =
         xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.S3BatchDeleteResponse.class);
-    assertEquals(response.getDeleted().get(0), KEY_NAME);
-    assertEquals(response.getErrors().get(0), "key-error");
+    assertEquals(response.getDeletedKeys().get(0), KEY_NAME);
+    assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3DeleteError("key-error","java.lang.NullPointerException").toString());
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 

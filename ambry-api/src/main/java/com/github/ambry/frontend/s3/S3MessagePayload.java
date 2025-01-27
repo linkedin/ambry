@@ -353,13 +353,13 @@ public class S3MessagePayload {
     // Ensure that the "Delete" wrapper element is mapped correctly to the list of "Object" elements
     @JacksonXmlElementWrapper(useWrapping = false)  // Avoids wrapping the <Delete> element itself
     @JacksonXmlProperty(localName = "Object")      // Specifies that each <Object> element maps to an instance of S3BatchDeleteKeys
-    private List<S3BatchDeleteKeys> objects;
+    private List<S3BatchDeleteKey> objects;
 
-    public List<S3BatchDeleteKeys> getObjects() {
+    public List<S3BatchDeleteKey> getObjects() {
       return objects;
     }
 
-    public void setObjects(List<S3BatchDeleteKeys> objects) {
+    public void setObjects(List<S3BatchDeleteKey> objects) {
       this.objects = objects;
     }
 
@@ -371,7 +371,7 @@ public class S3MessagePayload {
     }
   }
 
-  public static class S3BatchDeleteKeys {
+  public static class S3BatchDeleteKey {
 
     // Maps the <Key> element inside each <Object> to the 'key' property in S3BatchDeleteKeys
     @JacksonXmlProperty(localName = "Key")
@@ -394,28 +394,75 @@ public class S3MessagePayload {
   }
 
   public static class S3BatchDeleteResponse {
-    @JacksonXmlProperty(localName = "deleted")
-    private List<String> deleted;
 
-    @JacksonXmlProperty(localName = "errors")
-    private List<String> success;
+    @JacksonXmlElementWrapper(useWrapping = false) // Avoid wrapping the list in an extra element
+    @JacksonXmlProperty(localName = "errors") // Maps to the <errors> element in XML
+    private List<S3DeleteError> errors; // This should be a list of S3DeleteError objects
 
-    // Getters and Setters
-    public List<String> getDeleted() {
-      return deleted;
+    @JacksonXmlElementWrapper(useWrapping = false) // If you have a list of deleted keys
+    @JacksonXmlProperty(localName = "deleted") // Maps to the <deleted> element in XML
+    private List<String> deletedKeys;
+
+    // Getters and setters
+    public List<S3DeleteError> getErrors() {
+      return errors;
     }
 
-    public void setDeleted(List<String> deleted) {
-      this.deleted = deleted;
+    public void setErrors(List<S3DeleteError> errors) {
+      this.errors = errors;
     }
 
-    public List<String> getErrors() {
-      return success;
+    public List<String> getDeletedKeys() {
+      return deletedKeys;
     }
 
-    public void setErrors(List<String> success) {
-      this.success = success;
+    public void setDeletedKeys(List<String> deletedKeys) {
+      this.deletedKeys = deletedKeys;
+    }
+  }
+
+  public static class S3DeleteError {
+
+    @JacksonXmlProperty(localName = "key")
+    private String key;
+
+    @JacksonXmlProperty(localName = "message")
+    private String message;
+
+    // No-argument constructor for Jackson deserialization
+    public S3DeleteError() {
+      // This is required for deserialization
+    }
+
+    // Parameterized constructor (optional, if you want to create instances manually)
+    public S3DeleteError(String key, String message) {
+      this.key = key;
+      this.message = message;
+    }
+
+    // Getters and setters
+    public String getKey() {
+      return key;
+    }
+
+    public void setKey(String key) {
+      this.key = key;
+    }
+
+    public String getMessage() {
+      return message;
+    }
+
+    public void setMessage(String message) {
+      this.message = message;
+    }
+
+    @Override
+    public String toString() {
+      return "S3DeleteError{key='" + key + "', message='" + message + "'}";
     }
   }
 
 }
+
+
