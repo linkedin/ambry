@@ -98,10 +98,15 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -496,6 +501,7 @@ public class AmbryServer {
       fileStore.start();
 
       testE2EFlow();
+      testChunkAggregateWithStateBuildForFileCopy();
 //      testFileStoreUtils();
     } catch (Exception e) {
       logger.error("Error during startup", e);
@@ -549,6 +555,68 @@ public class AmbryServer {
     int size = 10;
     ByteBuffer byteBuffer = fileStore.readChunkForFileCopy("/tmp/0/", "0_log", offset, size);
     System.out.println("Parsed log file contents read for offset=" + offset + ", size=" + size + " is: " + StandardCharsets.UTF_8.decode(byteBuffer));
+  }
+
+  private void testChunkAggregateWithStateBuildForFileCopy() throws IOException {
+    String chunkPath = "/tmp/0/test_chunk";     // The path to the chunk file
+    String logFilePath = "/tmp/0/0_log";        // The path to the log file where chunks are written
+    String outputFilePath = "/tmp/0/output_log_copy"; // New file where the log data will be copied
+
+    int numChunksToWrite = 10;   // Number of times the chunk should be written to the log file
+    int chunkSize = (int)Files.size(Paths.get(chunkPath));  // Size of the chunk
+
+    Path path = Paths.get(logFilePath);
+    if (Files.exists(path)) {
+      // If the file exists, delete it
+      System.out.println("File exists. Deleting the file: " + logFilePath);
+      Files.delete(path);  // Delete the existing file
+    }
+    System.out.println("Creating a new file: " + logFilePath);
+    Files.createFile(path);  // Create a new file
+
+    // Step 1: Write the chunk to the logFilePath multiple times
+    for (int i = 0; i < numChunksToWrite; i++) {
+      try (FileInputStream inputStream = new FileInputStream(chunkPath)) {
+        System.out.println("Trying to put chunk to file for chunk at " + chunkPath);
+        // Assuming fileStore.putChunkToFile() writes data from the input stream to the log file
+        fileStore.putChunkToFile(logFilePath, inputStream);
+        System.out.println("Written chunk " + (i + 1) + " to " + logFilePath);
+      } catch (IOException e) {
+        System.err.println("An error occurred while reading or writing the chunk: " + e.getMessage());
+      }
+    }
+
+
+    // Step 2: Read from logFilePath chunk by chunk and write to a new file in the same directory
+    int offset = 0;
+    try (FileInputStream logInputStream = new FileInputStream(logFilePath);
+        FileOutputStream outputStream = new FileOutputStream(outputFilePath)) {
+
+      byte[] buffer = new byte[chunkSize];
+      int bytesRead;
+      while ((bytesRead = logInputStream.read(buffer)) != -1) {
+        // Write the chunk to the new file
+        outputStream.write(buffer, 0, bytesRead);
+        offset += bytesRead;
+
+        System.out.println("Writing chunk to new file at offset " + offset);
+      }
+
+      // Verify if contents of both files are same
+      byte[] content1 = Files.readAllBytes(Paths.get(logFilePath));
+      byte[] content2 = Files.readAllBytes(Paths.get(outputFilePath));
+      // Compare the byte arrays
+      if (Arrays.equals(content1, content2)) {
+        System.out.println("Input and output files are identical.");
+      } else {
+        System.out.println("Input and output files differ.");
+      }
+      System.out.println("File copy completed. Data written to " + outputFilePath);
+    } catch (IOException e) {
+      System.err.println("An error occurred while reading or writing the log file: " + e.getMessage());
+    }
+
+    // TODO: Run state build on the aggregated output file to see if the state is built correctly post filecopy
   }
 
   /**
