@@ -104,14 +104,6 @@ public class RequestPath {
    * @return a {@link RequestPath} object.
    */
 
-
-
-  // string path = /named/account/container/key
-  // getargs
-  // []
-  //
-
-
   public static RequestPath parse(String path, Map<String, Object> args, List<String> prefixesToRemove,
       String clusterName) throws RestServiceException {
     int offset = 0;
