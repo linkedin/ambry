@@ -151,7 +151,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
    * @param key the object key
    */
   public void onDeleteCompletion(Exception exception, String key) {
-    // TODO: add error reasoning
     if (exception == null) {
       deleted.add(key);
     }
