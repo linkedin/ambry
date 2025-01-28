@@ -22,10 +22,13 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -61,7 +64,7 @@ public class FileStore {
   }
 
 
-  public FileInputStream getStreamForFileRead(String mountPath, String fileName)
+  public ByteBuffer getStreamForFileRead(String mountPath, String fileName, int offset, int size)
       throws IOException {
     if(!isRunning){
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
@@ -69,11 +72,12 @@ public class FileStore {
     // TODO: Handle edge cases and validations
     String filePath = mountPath + "/" + fileName;
     File file = new File(filePath);
-    // Check if file exists and is readable
-    if (!file.exists() || !file.canRead()) {
-      throw new IOException("File doesn't exist or cannot be read: " + filePath);
-    }
-    return new FileInputStream(file);
+    RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
+    randomAccessFile.seek(offset);
+    ByteBuffer buf = ByteBuffer.allocate(size);
+    randomAccessFile.getChannel().read(buf);
+    buf.flip();
+    return buf;
   }
 
   public void putChunkToFile(String outputFilePath, FileInputStream fileInputStream)
@@ -95,7 +99,7 @@ public class FileStore {
     fileInputStream.read(content); // Read bytes into the array
     Files.write(Paths.get(outputFilePath), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 
-    System.out.println("Write successful for chunk to file: " + outputFilePath + " with contents: " + new String(content) );
+    logger.info("Write successful for chunk to file: {} with contents: {}", outputFilePath, new String(content) );
   }
 
   // New class in input: List<FileMetaData>
@@ -112,7 +116,7 @@ public class FileStore {
     try {
       FileOutputStream fileStream = new FileOutputStream(temp);
       fileMetadataSerde.persist(logInfoList, fileStream);
-      System.out.println("FileCopyMetadata file serialized and written to file: " + actual.getAbsolutePath());
+      logger.info("FileCopyMetadata file serialized and written to file: {}", actual.getAbsolutePath());
       // swap temp file with the original file
       temp.renameTo(actual);
       logger.debug("Completed writing filecopy metadata to file {}", actual.getAbsolutePath());
@@ -136,7 +140,7 @@ public class FileStore {
     }
     try {
       FileInputStream fileStream = new FileInputStream(fileCopyMetaDataFile);
-      System.out.println("Attempting reading from file: " + fileCopyMetaDataFile.getAbsolutePath());
+      logger.info("Attempting reading from file: {}", fileCopyMetaDataFile.getAbsolutePath());
       logInfoList = fileMetadataSerde.retrieve(fileStream);
       return logInfoList;
     } catch (IOException e) {
