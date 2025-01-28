@@ -22,10 +22,13 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -61,7 +64,7 @@ public class FileStore {
   }
 
 
-  public FileInputStream getStreamForFileRead(String mountPath, String fileName)
+  public ByteBuffer getStreamForFileRead(String mountPath, String fileName, int offset, int size)
       throws IOException {
     if(!isRunning){
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
@@ -69,11 +72,12 @@ public class FileStore {
     // TODO: Handle edge cases and validations
     String filePath = mountPath + "/" + fileName;
     File file = new File(filePath);
-    // Check if file exists and is readable
-    if (!file.exists() || !file.canRead()) {
-      throw new IOException("File doesn't exist or cannot be read: " + filePath);
-    }
-    return new FileInputStream(file);
+    RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
+    randomAccessFile.seek(offset);
+    ByteBuffer buf = ByteBuffer.allocate(size);
+    randomAccessFile.getChannel().read(buf);
+    buf.flip();
+    return buf;
   }
 
   public void putChunkToFile(String outputFilePath, FileInputStream fileInputStream)
