@@ -30,8 +30,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.io.RandomAccessFile;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import org.slf4j.Logger;
@@ -92,26 +94,26 @@ public class FileCopyHandler {
 
     response.getLogInfos().forEach(logInfo -> {
       logInfo.getIndexFiles().forEach(indexFile -> {
+        String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + indexFile.getFileName();
         try {
-          String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "_" + indexFile.getFileName();
-          fetchAndPersistChunks(partitionId, replicaId, clusterMap, indexFile, filePath);
+          fetchAndPersistChunks(partitionId, replicaId, clusterMap, indexFile, filePath, Long.MAX_VALUE, 0);
         } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
           throw new RuntimeException(e);
         }
       });
       logInfo.getBloomFilters().forEach(bloomFile -> {
+        String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + bloomFile.getFileName();
         try {
-          String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "_" + bloomFile.getFileName();
-          fetchAndPersistChunks(partitionId, replicaId, clusterMap, bloomFile, filePath);
+          fetchAndPersistChunks(partitionId, replicaId, clusterMap, bloomFile, filePath, Long.MAX_VALUE, 0);
         } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
           throw new RuntimeException(e);
         }
       });
       // TODO : Chunk the LS
+      FileInfo logFileInfo = new FileInfo(logInfo.getFileName(), logInfo.getFileSizeInBytes());
+      String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + logInfo.getFileName();
       try {
-        FileInfo logFileInfo = new FileInfo(logInfo.getFileName(), logInfo.getFileSizeInBytes());
-        String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "_" + logInfo.getFileName();
-        fetchAndPersistChunks(partitionId, replicaId, clusterMap, logFileInfo, filePath);
+        fetchAndPersistChunks(partitionId, replicaId, clusterMap, logFileInfo, filePath, logFileInfo.getFileSizeInBytes(), 0);
       } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
         throw new RuntimeException(e);
       }
@@ -119,19 +121,18 @@ public class FileCopyHandler {
   }
 
   private void fetchAndPersistChunks(PartitionId partitionId, ReplicaId replicaId, ClusterMap clusterMap,
-      FileInfo fileInfo, String partitionFilePath)
+      FileInfo fileInfo, String partitionFilePath, long sizeInBytes, long startOffset)
       throws IOException, ConnectionPoolTimeoutException, InterruptedException {
     FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(
         FileCopyGetChunkRequest.File_Chunk_Request_Version_V1, 0, "", partitionId,
-        fileInfo.getFileName(), 0, Long.MAX_VALUE);
+        fileInfo.getFileName(), startOffset, sizeInBytes);
 
     logger.info("Demo: Request: {}", request);
     ConnectedChannel connectedChannel =
-        connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPortToConnectTo(), 40);
+        connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPortToConnectTo(), 99999);
     ChannelOutput chunkChannelOutput = connectedChannel.sendAndReceive(request);
 
-    FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(
-        chunkChannelOutput.getInputStream(), clusterMap);
+    FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(chunkChannelOutput.getInputStream(), clusterMap);
     logger.info("Demo: Response: {}", response);
 
     putChunkToFile(partitionFilePath, response.getChunkStream(), response.getChunkSizeInBytes());

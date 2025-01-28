@@ -34,12 +34,15 @@ import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.io.SequenceInputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
@@ -1388,12 +1391,35 @@ public class BlobStore implements Store {
   }
 
   public ChunkResponse getStreamForFile(String fileName, long sizeInBytes, long startOffset) throws IOException {
+    if (startOffset == 0 && sizeInBytes == Long.MAX_VALUE) {
+      return getStreamForFile(fileName);
+    }
+    final File file = validateAndGetFile(fileName);
+
+    RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
+    randomAccessFile.seek(startOffset);
+    ByteBuffer buf = ByteBuffer.allocate((int)sizeInBytes);
+    randomAccessFile.getChannel().read(buf);
+
+    byte[] byteArray = new byte[buf.remaining()];
+    buf.get(byteArray);
+    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(byteArray);
+
+    return new ChunkResponse(new DataInputStream(byteArrayInputStream), file.length());
+  }
+
+  private ChunkResponse getStreamForFile(String fileName) throws IOException {
+    final File file = validateAndGetFile(fileName);
+    return new ChunkResponse(new DataInputStream(Files.newInputStream(file.toPath())), file.length());
+  }
+
+  private File validateAndGetFile(String fileName) throws IOException {
     String filePath = getDataDir() + File.separator + fileName;
     File file = new File(filePath);
     if (!file.exists() || !file.canRead()) {
       throw new IOException("File doesn't exist or cannot be read: " + filePath);
     }
-    return new ChunkResponse(new DataInputStream(Files.newInputStream(file.toPath())), file.length());
+    return file;
   }
 
   /**
