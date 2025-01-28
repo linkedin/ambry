@@ -14,6 +14,7 @@
  */
 package com.github.ambry.frontend.s3;
 
+import java.util.ArrayList;
 import java.util.List;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
@@ -397,18 +398,18 @@ public class S3MessagePayload {
 
     @JacksonXmlElementWrapper(useWrapping = false) // Avoid wrapping the list in an extra element
     @JacksonXmlProperty(localName = "errors") // Maps to the <errors> element in XML
-    private List<S3DeleteError> errors; // This should be a list of S3DeleteError objects
+    private ArrayList<S3DeleteError> errors; // This should be a list of S3DeleteError objects
 
     @JacksonXmlElementWrapper(useWrapping = false) // If you have a list of deleted keys
     @JacksonXmlProperty(localName = "deleted") // Maps to the <deleted> element in XML
     private List<String> deletedKeys;
 
     // Getters and setters
-    public List<S3DeleteError> getErrors() {
+    public ArrayList<S3DeleteError> getErrors() {
       return errors;
     }
 
-    public void setErrors(List<S3DeleteError> errors) {
+    public void setErrors(ArrayList<S3DeleteError> errors) {
       this.errors = errors;
     }
 
@@ -426,8 +427,8 @@ public class S3MessagePayload {
     @JacksonXmlProperty(localName = "key")
     private String key;
 
-    @JacksonXmlProperty(localName = "message")
-    private String message;
+    @JacksonXmlProperty(localName = "code")
+    private int code;
 
     // No-argument constructor for Jackson deserialization
     public S3DeleteError() {
@@ -435,9 +436,9 @@ public class S3MessagePayload {
     }
 
     // Parameterized constructor (optional, if you want to create instances manually)
-    public S3DeleteError(String key, String message) {
+    public S3DeleteError(String key, int code) {
       this.key = key;
-      this.message = message;
+      this.code = code;
     }
 
     // Getters and setters
@@ -449,17 +450,17 @@ public class S3MessagePayload {
       this.key = key;
     }
 
-    public String getMessage() {
-      return message;
+    public int getCode() {
+      return code;
     }
 
-    public void setMessage(String message) {
-      this.message = message;
+    public void setCode(int code) {
+      this.code = code;
     }
 
     @Override
     public String toString() {
-      return "S3DeleteError{key='" + key + "', message='" + message + "'}";
+      return "S3DeleteError{key='" + key + "', code='" + code + "'}";
     }
   }
 

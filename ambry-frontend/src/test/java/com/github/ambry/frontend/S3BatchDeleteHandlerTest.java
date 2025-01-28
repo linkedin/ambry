@@ -106,7 +106,7 @@ public class S3BatchDeleteHandlerTest {
     S3MessagePayload.S3BatchDeleteResponse response =
         xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.S3BatchDeleteResponse.class);
     assertEquals(response.getDeletedKeys().get(0), KEY_NAME);
-    assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3DeleteError("key-error","java.lang.NullPointerException").toString());
+    assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3DeleteError("key-error",500).toString());
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 

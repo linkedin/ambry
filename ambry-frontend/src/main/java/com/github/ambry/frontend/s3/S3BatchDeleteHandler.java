@@ -1,5 +1,6 @@
 package com.github.ambry.frontend.s3;
 
+import com.azure.core.models.ResponseError;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
@@ -9,6 +10,7 @@ import com.github.ambry.rest.NoOpResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -33,8 +35,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final XmlMapper xmlMapper;
   private ArrayList<String> deleted = new ArrayList<>();
   private ArrayList<S3MessagePayload.S3DeleteError> errors = new ArrayList<>();
-  private boolean failedRequest;
-  private FrontendMetrics frontendMetrics;
+  private FrontendMetrics metrics;
   private final int maxBatchSize = 1000;
   private S3MessagePayload.S3BatchDeleteObjects deleteRequest;
   private final Logger LOGGER = LoggerFactory.getLogger(S3BatchDeleteHandler.class);
@@ -42,8 +43,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   // Constructor
   public S3BatchDeleteHandler(DeleteBlobHandler deleteBlobHandler, FrontendMetrics frontendMetrics) {
     this.deleteBlobHandler = deleteBlobHandler;
-    this.failedRequest = false;
-    this.frontendMetrics = frontendMetrics;
+    this.metrics = frontendMetrics;
     this.xmlMapper = new XmlMapper();
   }
 
@@ -62,6 +62,11 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
     // Create the channel to read the request body
     RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
 
+    // inject metrics for batch delete
+    RestRequestMetrics requestMetrics =
+        metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+
     // Pass the callback to handle the response
     restRequest.readInto(channel,
         parseRequestBodyAndDeleteCallback(channel, restRequest, deleteBlobHandler, restResponseChannel, callback));
@@ -74,7 +79,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       RestRequest restRequest, DeleteBlobHandler deleteBlobHandler, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> finalCallback) {
 
-    return buildCallback(frontendMetrics.deleteBlobRouterMetrics, bytesRead -> {
+    return buildCallback(metrics.s3BatchDeleteHandleMetrics, bytesRead -> {
       if (bytesRead == 0) {
         LOGGER.error("failed to read request into channel");
         throw new RestServiceException("bytesRead is empty", RestServiceErrorCode.BadRequest);
@@ -114,9 +119,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
         // Handle the delete operation using the deleteBlobHandler
         deleteBlobHandler.handle(singleDeleteRequest, noOpResponseChannel, (result, exception) -> {
           // Call our custom onDeleteCompletion to track success/failure
-          restRequest.getArgs().remove("ambry-internal-key-target-account");
-          restRequest.getArgs().remove("ambry-internal-key-keep-alive-on-error-hint");
-          restRequest.getArgs().remove("ambry-internal-key-target-container");
           onDeleteCompletion(exception, object.getKey());
           future.complete(null);
         });
@@ -154,7 +156,12 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       deleted.add(key);
     }
     else {
-      errors.add(new S3MessagePayload.S3DeleteError(key, exception.toString()));
+      if (exception instanceof RestServiceException) {
+        RestServiceException restServiceException = (RestServiceException) exception;
+        errors.add((new S3MessagePayload.S3DeleteError(key, ResponseStatus.getResponseStatus(restServiceException.getErrorCode()).getStatusCode())));
+      } else {
+        errors.add((new S3MessagePayload.S3DeleteError(key, ResponseStatus.getResponseStatus(RestServiceErrorCode.InternalServerError).getStatusCode())));
+      }
     }
   }
 
@@ -163,14 +170,13 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
    */
   public S3MessagePayload.S3BatchDeleteObjects deserializeRequest(RetainingAsyncWritableChannel channel)
       throws RestServiceException {
-
     try {
       ByteBuf byteBuffer = channel.consumeContentAsByteBuf();
       byte[] byteArray = new byte[byteBuffer.readableBytes()];
       byteBuffer.readBytes(byteArray);
       return new XmlMapper().readValue(byteArray, S3MessagePayload.S3BatchDeleteObjects.class);
     } catch (Exception e) {
-      throw new RestServiceException("failed to deserialze",e, RestServiceErrorCode.BadRequest);
+      throw new RestServiceException("failed to deserialize",e, RestServiceErrorCode.BadRequest);
     }
   }
 }
