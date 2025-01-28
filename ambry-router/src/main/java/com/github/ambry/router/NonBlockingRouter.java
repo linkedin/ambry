@@ -486,7 +486,6 @@ public class NonBlockingRouter implements Router {
       QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
     if (restRequest == null) {
-
       if (blobId == null) {
         throw new IllegalArgumentException("blobId must not be null");
       }
@@ -528,6 +527,7 @@ public class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     routerMetrics.deleteBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
+
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
