@@ -99,6 +99,8 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -543,11 +545,10 @@ public class AmbryServer {
       System.err.println("An error occurred: " + e.getMessage());
     }
 
-    FileInputStream inputStream = fileStore.getStreamForFileRead("/tmp/0/", "0_log");
-    long fileSize = inputStream.available();
-    byte[] content = new byte[(int) fileSize]; // Read the content of the source file into a byte array
-    inputStream.read(content); // Read bytes into the array
-    System.out.println("Parsed log file contents read: " + new String(content));
+    int offset = 10;
+    int size = 10;
+    ByteBuffer byteBuffer = fileStore.readChunkForFileCopy("/tmp/0/", "0_log", offset, size);
+    System.out.println("Parsed log file contents read for offset=" + offset + ", size=" + size + " is: " + StandardCharsets.UTF_8.decode(byteBuffer));
   }
 
   /**
