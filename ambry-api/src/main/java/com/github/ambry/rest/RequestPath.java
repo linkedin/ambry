@@ -321,12 +321,6 @@ public class RequestPath {
     return nextPathSegmentOffset;
   }
 
-
-  // s3/account/container/key is for delete   (prior to conversion) ---> s3 to named
-  // /s3/[account_name]/[container_name]?  for batch delete
-
-
-
   /**
    * Get named blob path from S3 request path
    * @param path s3 request path
