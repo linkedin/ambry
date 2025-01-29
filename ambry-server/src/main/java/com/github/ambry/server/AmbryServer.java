@@ -595,6 +595,7 @@ public class AmbryServer {
   }
 
   private void testChunkAggregateWithStateBuildForFileCopy() throws IOException {
+    String partitionName = "0";
     String chunkPath = "/tmp/0/test_chunk";     // The path to the chunk file
     String logFilePath = "/tmp/0/0_log";        // The path to the log file where chunks are written
     String outputFilePath = "/tmp/0/output_log_copy"; // New file where the log data will be copied
@@ -654,6 +655,13 @@ public class AmbryServer {
     }
 
     // TODO: Run state build on the aggregated output file to see if the state is built correctly post filecopy
+    // delete the source file
+    Files.delete(Paths.get(logFilePath));
+    // rename the output file to act as the new base log file
+    Files.move(Paths.get(outputFilePath), Paths.get(logFilePath));
+
+    storageManager.buildStateForFileCopy(storageManager.getReplica(partitionName));
+
   }
 
   /**
