@@ -132,10 +132,12 @@ public class NamedBlobListHandler {
       return buildCallback(frontendMetrics.listSecurityPostProcessRequestMetrics, securityCheckResult -> {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
+        String delimiter = getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
         CallbackUtils.callCallbackAfter(
             namedBlobDb.list(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
                 namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(),
-                maxKeys == null ? null : Integer.parseInt(maxKeys)), listBlobsCallback());
+                maxKeys == null ? null : Integer.parseInt(maxKeys), delimiter != null && delimiter.equals("/")),
+            listBlobsCallback());
       }, uri, LOGGER, finalCallback);
     }
 

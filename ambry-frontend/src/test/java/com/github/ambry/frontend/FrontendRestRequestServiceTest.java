@@ -2735,17 +2735,17 @@ public class FrontendRestRequestServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, path, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     if (pageToReturn != null) {
-      when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(pageToReturn));
+      when(namedBlobDb.list(any(), any(), any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(pageToReturn));
     } else {
       CompletableFuture<Page<NamedBlobRecord>> future = new CompletableFuture<>();
       future.completeExceptionally(new RestServiceException("NamedBlobDb error", expectedErrorCode));
-      when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(future);
+      when(namedBlobDb.list(any(), any(), any(), any(), any(), any())).thenReturn(future);
     }
 
     if (expectedErrorCode == null) {
       assertNotNull("pageToReturn should be set", pageToReturn);
       doOperation(restRequest, restResponseChannel);
-      verify(namedBlobDb).list(refAccount.getName(), refContainer.getName(), prefix, pageToken, null);
+      verify(namedBlobDb).list(refAccount.getName(), refContainer.getName(), prefix, pageToken, null, any());
       Page<NamedBlobListEntry> response =
           Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())), NamedBlobListEntry::new);
       assertEquals("Unexpected blobs returned",
