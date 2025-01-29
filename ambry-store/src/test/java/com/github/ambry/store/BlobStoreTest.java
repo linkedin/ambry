@@ -86,7 +86,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
-import sun.nio.ch.FileChannelImpl;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.ReplicaState.*;
@@ -2977,7 +2976,7 @@ public class BlobStoreTest {
   // general
 
   FileDescriptor getFileDescriptorFromFileChannel(FileChannel fileChannel) throws Exception {
-    Field field = FileChannelImpl.class.getDeclaredField("fd");
+    Field field = fileChannel.getClass().getDeclaredField("fd");
     field.setAccessible(true);
     return (FileDescriptor) field.get(fileChannel);
   }
