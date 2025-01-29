@@ -501,7 +501,7 @@ public class AmbryServer {
       fileStore.start();
 
       testE2EFlow();
-      testChunkAggregateWithStateBuildForFileCopy();
+//      testChunkAggregateWithStateBuildForFileCopy();
 //      testFileStoreUtils();
     } catch (Exception e) {
       logger.error("Error during startup", e);
