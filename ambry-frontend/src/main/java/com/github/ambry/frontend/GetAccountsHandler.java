@@ -128,7 +128,13 @@ class GetAccountsHandler {
           serialized = AccountCollectionSerde.serializeContainersInJson(Collections.singletonList(container));
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID, container.getParentAccountId());
         } else {
-          serialized = AccountCollectionSerde.serializeAccountsInJson(getAccounts());
+          boolean ignoreContainers =
+              RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.IGNORE_CONTAINERS, false);
+          if (ignoreContainers) {
+            serialized = AccountCollectionSerde.serializeAccountsInJsonNoContainers(getAccounts());
+          } else {
+            serialized = AccountCollectionSerde.serializeAccountsInJson(getAccounts());
+          }
         }
         ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
