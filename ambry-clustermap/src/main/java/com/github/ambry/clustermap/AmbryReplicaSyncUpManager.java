@@ -49,6 +49,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ConcurrentHashMap<ReplicaId, LocalReplicaLagInfos> replicaToLagInfos = new ConcurrentHashMap<>();
   private final ClusterMapConfig clusterMapConfig;
   private final ReentrantLock updateLock = new ReentrantLock();
+  private final ConcurrentHashMap<String, CountDownLatch> partitionToFileCopyLatch = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Boolean> partitionToFileCopySuccessLatch = new ConcurrentHashMap<>();
 
   public AmbryReplicaSyncUpManager(ClusterMapConfig clusterMapConfig) {
     this.clusterMapConfig = clusterMapConfig;
@@ -65,7 +67,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void initiateFileCopy(ReplicaId replicaId) {
-    //To Be Added With File Copy Protocol
+    partitionToFileCopyLatch.put(replicaId.getPartitionId().toPathString(), new CountDownLatch(1));
+    partitionToFileCopySuccessLatch.put(replicaId.getPartitionId().toPathString(), false);
   }
 
   @Override
@@ -108,7 +111,18 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void waitForFileCopyCompleted(String partitionName) throws InterruptedException {
-    //To Be Added With File Copy Protocol
+    CountDownLatch latch = partitionToFileCopyLatch.get(partitionName);
+    if(latch == null) {
+      logger.info("Skipping file copy for existing partition {}", partitionName);
+    } else{
+      logger.info("Waiting for new partition to {} to comeplete FileCopy", partitionName);
+      latch.await();
+      partitionToFileCopyLatch.remove(partitionName);
+      if(!partitionToFileCopySuccessLatch.remove(partitionName)){
+        throw new StateTransitionException("Partition " + partitionName + " failed to copy files.", FileCopyProtocolFailure);
+      }
+      logger.info("File Copy is complete on partition {}", partitionName);
+    }
   }
 
   @Override
@@ -204,7 +218,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void onFileCopyComplete(ReplicaId replicaId) {
-    //To Be Added With File Copy Protocol
+    partitionToFileCopySuccessLatch.put(replicaId.getPartitionId().toPathString(), true);
+    countDownLatch(partitionToFileCopyLatch, replicaId.getPartitionId().toPathString());
   }
 
   @Override

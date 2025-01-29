@@ -824,8 +824,8 @@ public class DiskManager {
    * @param fileName
    * @return
    */
-  public boolean isFileExists(String fileName) {
-    String filePath = this.disk.getMountPath() + File.separator + fileName;
+  public boolean isFileExists(PartitionId partitionId, String fileName) {
+    String filePath = this.disk.getMountPath() + "/" + partitionId.toPathString() + File.separator + fileName;
     return new File(filePath).exists();
   }
 

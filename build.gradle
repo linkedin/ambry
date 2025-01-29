@@ -334,6 +334,7 @@ project (':ambry-prioritization') {
 project (':ambry-file-transfer') {
     dependencies{
         compile project(':ambry-api')
+        compile project(':ambry-protocol')
         compile project(':ambry-commons')
         compile project(':ambry-store')
         compile project(':ambry-prioritization')
