@@ -1417,8 +1417,11 @@ public class BlobStore implements Store {
   private File validateAndGetFile(String fileName) throws IOException {
     String filePath = getDataDir() + File.separator + fileName;
     File file = new File(filePath);
-    if (!file.exists() || !file.canRead()) {
-      throw new IOException("File doesn't exist or cannot be read: " + filePath);
+    if (!file.exists()) {
+      throw new IOException("File doesn't exist: " + filePath);
+    }
+    if (!file.canRead()) {
+      throw new IOException("File cannot be read: " + filePath);
     }
     return file;
   }

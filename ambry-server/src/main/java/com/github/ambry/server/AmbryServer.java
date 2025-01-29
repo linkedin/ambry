@@ -31,6 +31,7 @@ import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -331,6 +332,7 @@ public class AmbryServer {
         scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
         logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
         DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        this.nodeId = nodeId;
         if (nodeId == null) {
           throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
               + "is not present in the clustermap. Failing to start the datanode");
@@ -500,7 +502,10 @@ public class AmbryServer {
       this.fileStore = new FileStore("dataDir", fileCopyConfig);
       fileStore.start();
 
+      long startTimeMs = System.currentTimeMillis();
       testE2EFlow();
+      logger.info("Demo: E2E flow took {} ms", System.currentTimeMillis() - startTimeMs);
+
 //      testChunkAggregateWithStateBuildForFileCopy();
 //      testFileStoreUtils();
     } catch (Exception e) {
@@ -510,6 +515,10 @@ public class AmbryServer {
   }
 
   private void testE2EFlow() {
+    if (!nodeId.getHostname().equals("ltx1-app3602.stg.linkedin.com")) {
+      logger.info("Demo: demo not enabled on this host");
+      return;
+    }
     Optional<PartitionId> optional = storageManager.getLocalPartitions().stream().filter(p -> p.getId() == 146).findFirst();
     PartitionId partitionId;
     if (optional.isPresent()) {
@@ -518,18 +527,31 @@ public class AmbryServer {
       logger.info("Demo: Partition not found");
       return;
     }
-    partitionId.getReplicaIds().forEach(replicaId -> {
-      logger.info("Demo: partitionId: {}, replicaId: {}", partitionId, replicaId);
+    Optional<? extends ReplicaId> targetReplica = partitionId.getReplicaIds().stream().filter(replicaId ->
+        replicaId.getDataNodeId().getHostname().equals("ltx1-app3645.stg.linkedin.com")).findFirst();
+    ReplicaId targetReplicaId;
+    if (targetReplica.isPresent()) {
+      targetReplicaId = targetReplica.get();
+    } else {
+      logger.info("Demo: Target Replica not found");
+      return;
+    }
+    Optional<? extends ReplicaId> sourceReplica = partitionId.getReplicaIds().stream().filter(replicaId1 ->
+        replicaId1.getDataNodeId().getHostname().equals("ltx1-app3602.stg.linkedin.com")).findFirst();
+    ReplicaId sourceReplicaId;
+    if (sourceReplica.isPresent()) {
+      sourceReplicaId = sourceReplica.get();
+    } else {
+      logger.info("Demo: Source Replica not found");
+      return;
+    }
 
-      if (replicaId.getDataNodeId().getHostname().equals("ltx1-app3645.stg.linkedin.com")) {
-        try {
-          new FileCopyHandler(connectionPool, fileStore, clusterMap).copy(partitionId, replicaId);
-//          new FileCopyUtils(properties, clusterMap).copy(partitionId, replicaId);
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-    });
+    logger.info("Demo: Source replica path {}, target replica path {}", sourceReplicaId.getMountPath(), targetReplicaId.getMountPath());
+    try {
+      new FileCopyHandler(connectionPool, fileStore, clusterMap).copy(partitionId, sourceReplicaId, targetReplicaId);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private void testFileStoreUtils() throws StoreException, IOException {

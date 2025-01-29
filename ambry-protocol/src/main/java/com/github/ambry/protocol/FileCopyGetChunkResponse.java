@@ -64,7 +64,8 @@ public class FileCopyGetChunkResponse extends Response {
   public long sizeInBytes() {
     try {
       return super.sizeInBytes() + partitionId.getBytes().length + File_Name_Field_Size_In_Bytes +
-          fileName.length() + Long.BYTES + Long.BYTES + 1 + Integer.BYTES + chunkStream.available();
+          fileName.length() + Long.BYTES + Long.BYTES + 1 + Integer.BYTES +
+          (chunkStream != null ? chunkStream.available() : 0);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

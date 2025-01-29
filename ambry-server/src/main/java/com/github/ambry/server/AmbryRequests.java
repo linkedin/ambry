@@ -1697,15 +1697,15 @@ public class AmbryRequests implements RequestAPI {
   void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
     FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest =
         FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    logger.info("Demo: Received Request " + fileCopyGetMetaDataRequest);
 
     List<LogInfo> logInfos;
     try {
       List<com.github.ambry.store.LogInfo> logSegments =
-          storeManager.getLogSegmentMetadataFiles(fileCopyGetMetaDataRequest.getPartitionId(), true);
-
+          storeManager.getLogSegmentMetadataFiles(fileCopyGetMetaDataRequest.getPartitionId(), false);
       logInfos = convertStoreToProtocolLogInfo(logSegments);
     } catch (Exception e) {
-      logger.error("Error while getting log segment metadata for partition {}",
+      logger.error("Demo: Error while getting log segment metadata for partition {}",
           fileCopyGetMetaDataRequest.getPartitionId().getId(), e);
       FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(
           FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
@@ -1718,6 +1718,7 @@ public class AmbryRequests implements RequestAPI {
         FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
         fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
         logInfos.size(), logInfos, ServerErrorCode.No_Error);
+    logger.info("Demo: Sending Response " + response);
 
     // TODO: Add metrics for this operation
     Histogram dummyHistogram = new Histogram(new Reservoir() {
@@ -1744,6 +1745,7 @@ public class AmbryRequests implements RequestAPI {
   void handleFileCopyGetChunkRequest(NetworkRequest request) throws IOException, InterruptedException {
     FileCopyGetChunkRequest fileCopyGetChunkRequest =
         FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    logger.info("Demo: Received Request " + fileCopyGetChunkRequest);
 
     ChunkResponse chunkResponse;
     FileCopyGetChunkResponse response;
@@ -1752,7 +1754,7 @@ public class AmbryRequests implements RequestAPI {
           fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(),
           fileCopyGetChunkRequest.getChunkLengthInBytes(), fileCopyGetChunkRequest.getStartOffset());
     } catch (Exception e) {
-      logger.error("Error while getting chunk for partition {}", fileCopyGetChunkRequest.getPartitionId().getId(), e);
+      logger.error("Demo: Error while getting chunk for partition {}", fileCopyGetChunkRequest.getPartitionId().getId(), e);
 
       response = new FileCopyGetChunkResponse(
           FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
@@ -1770,6 +1772,7 @@ public class AmbryRequests implements RequestAPI {
         ServerErrorCode.No_Error, fileCopyGetChunkRequest.getPartitionId(),
         fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
         fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
+    logger.info("Demo: Sending Response " + response);
 
     // TODO: Add metrics for this operation
     Histogram dummyHistogram = new Histogram(new Reservoir() {

@@ -74,41 +74,41 @@ public class FileCopyHandler {
     fileStore.start();
   }
 
-  public void copy(PartitionId partitionId, ReplicaId replicaId)
+  public void copy(PartitionId partitionId, ReplicaId sourceReplicaId, ReplicaId targetReplicaId)
       throws IOException, ConnectionPoolTimeoutException, InterruptedException {
     FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
         FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "", partitionId, "hostName");
 
     logger.info("Demo: Request: {}", request);
     ConnectedChannel connectedChannel =
-        connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPortToConnectTo(), 40);
+        connectionPool.checkOutConnection(targetReplicaId.getDataNodeId().getHostname(), targetReplicaId.getDataNodeId().getPortToConnectTo(), 40);
     ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
     FileCopyGetMetaDataResponse response = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
     logger.info("Demo: Response: {}", response);
 
     List<LogInfo> logInfos = AmbryRequests.convertProtocolToStoreLogInfo(response.getLogInfos());
 
-    String partitionFilePath = replicaId.getMountPath() + File.separator + partitionId.getId();
+    String partitionFilePath = sourceReplicaId.getMountPath() + File.separator + partitionId.getId();
     fileStore.persistMetaDataToFile(partitionFilePath, logInfos);
 
     response.getLogInfos().forEach(logInfo -> {
       logInfo.getIndexFiles().forEach(indexFile -> {
-        String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + indexFile.getFileName();
+        String filePath = partitionFilePath + "/fc_" + indexFile.getFileName();
         try {
-          fetchAndPersistChunks(partitionId, replicaId, clusterMap, indexFile, filePath, Long.MAX_VALUE, 0);
+          fetchAndPersistChunks(partitionId, targetReplicaId, clusterMap, indexFile, filePath, Long.MAX_VALUE, 0);
         } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
           throw new RuntimeException(e);
         }
       });
-      logInfo.getBloomFilters().forEach(bloomFile -> {
-        String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + bloomFile.getFileName();
-        try {
-          fetchAndPersistChunks(partitionId, replicaId, clusterMap, bloomFile, filePath, Long.MAX_VALUE, 0);
-        } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
-          throw new RuntimeException(e);
-        }
-      });
-      String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + logInfo.getFileName() + "_log";
+//      logInfo.getBloomFilters().forEach(bloomFile -> {
+//        String filePath = partitionFilePath + "/fc_" + bloomFile.getFileName();
+//        try {
+//          fetchAndPersistChunks(partitionId, targetReplicaId, clusterMap, bloomFile, filePath, Long.MAX_VALUE, 0);
+//        } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
+//          throw new RuntimeException(e);
+//        }
+//      });
+      String filePath = partitionFilePath + "/fc_" + logInfo.getFileName() + "_log";
       FileInfo logFileInfo = new FileInfo(logInfo.getFileName() + "_log", logInfo.getFileSizeInBytes());
 
       int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSizeInBytes() / CHUNK_SIZE);
@@ -119,7 +119,7 @@ public class FileCopyHandler {
         long sizeInBytes = Math.min(CHUNK_SIZE, logFileInfo.getFileSizeInBytes() - startOffset);
         logger.info("Demo: Fetching chunk {} for log segment: {} startOffset: {} sizeInBytes: {}", i+1, filePath, startOffset, sizeInBytes);
         try {
-          fetchAndPersistChunks(partitionId, replicaId, clusterMap, logFileInfo, filePath, sizeInBytes, startOffset);
+          fetchAndPersistChunks(partitionId, targetReplicaId, clusterMap, logFileInfo, filePath, sizeInBytes, startOffset);
         } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
           throw new RuntimeException(e);
         }

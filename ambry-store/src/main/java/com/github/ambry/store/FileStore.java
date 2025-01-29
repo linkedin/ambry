@@ -89,7 +89,6 @@ public class FileStore {
     System.out.println("Demo: Write successful for chunk to file: " + outputFilePath);
   }
 
-  // New class in input: List<FileMetaData>
   public void persistMetaDataToFile(String mountPath, List<LogInfo> logInfoList) throws IOException {
     if(!isRunning){
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
