@@ -389,7 +389,7 @@ public class S3MessagePayload {
 
     @Override
     public String toString() {
-      return "S3BatchDeleteKeys{" +
+      return "S3BatchDeleteKey{" +
           "key='" + key + '\'' +
           '}';
     }
