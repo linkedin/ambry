@@ -83,6 +83,6 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If Bootstap Controller fails in pre-filecopy steps for specific replica.
      */
-    BootstrapControllerFailure
+    BootstrapControllerFailure,
   }
 }

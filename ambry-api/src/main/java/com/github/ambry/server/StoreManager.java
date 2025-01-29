@@ -17,13 +17,13 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.ChunkResponse;
+import com.github.ambry.store.FileStore;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -54,6 +54,8 @@ public interface StoreManager {
    * @return {@code true} if adding FileStore was successful. {@code false} if not.
    */
   boolean addFileStore(ReplicaId replicaId);
+
+  void setUpReplica(String partitionName);
 
   /**
    * Build state after filecopy is completed

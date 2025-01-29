@@ -858,24 +858,35 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     try {
-      // 1. take actions in storage manager (add new replica if necessary)
-      PartitionStateChangeListener storageManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-      if (storageManagerListener != null) {
-        storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      if(partitionName == "xyz"){
+        PartitionStateChangeListener partitionStateChangeListener =
+            partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
+        partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+      } else {
+        // 1. take actions in storage manager (add new replica if necessary)
+        PartitionStateChangeListener storageManagerListener =
+            partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+        if (storageManagerListener != null) {
+          storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+        }
+        // 2. take actions in replication manager (add new replica if necessary)
+        PartitionStateChangeListener replicationManagerListener =
+            partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+        if (replicationManagerListener != null) {
+          replicationManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+        }
+        // 3. take actions in stats manager (add new replica if necessary)
+        PartitionStateChangeListener statsManagerListener =
+            partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+        if (statsManagerListener != null) {
+          statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+        }
       }
-      // 2. take actions in replication manager (add new replica if necessary)
-      PartitionStateChangeListener replicationManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
-      if (replicationManagerListener != null) {
-        replicationManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
-      }
-      // 3. take actions in stats manager (add new replica if necessary)
-      PartitionStateChangeListener statsManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
-      if (statsManagerListener != null) {
-        statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
-      }
+    } catch (InterruptedException e){
+      logger.error("Bootstrap was interrupted on partition {}", partitionName);
+      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+      throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
