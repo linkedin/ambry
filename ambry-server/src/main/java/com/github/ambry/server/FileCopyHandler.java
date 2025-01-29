@@ -30,10 +30,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.io.RandomAccessFile;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import org.slf4j.Logger;
@@ -41,9 +39,10 @@ import org.slf4j.LoggerFactory;
 
 
 public class FileCopyHandler {
-  private ConnectionPool connectionPool;
-  private FileStore fileStore;
+  private final ConnectionPool connectionPool;
+  private final FileStore fileStore;
   private final ClusterMap clusterMap;
+  private final int CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
 
   private static final Logger logger = LoggerFactory.getLogger(FileCopyHandler.class);
 
@@ -109,19 +108,27 @@ public class FileCopyHandler {
           throw new RuntimeException(e);
         }
       });
-      // TODO : Chunk the LS
-      FileInfo logFileInfo = new FileInfo(logInfo.getFileName(), logInfo.getFileSizeInBytes());
-      String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + logInfo.getFileName();
-      try {
-        fetchAndPersistChunks(partitionId, replicaId, clusterMap, logFileInfo, filePath, logFileInfo.getFileSizeInBytes(), 0);
-      } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
-        throw new RuntimeException(e);
+      String filePath = replicaId.getMountPath() + File.separator + partitionId.getId() + "/fc_" + logInfo.getFileName() + "_log";
+      FileInfo logFileInfo = new FileInfo(logInfo.getFileName() + "_log", logInfo.getFileSizeInBytes());
+
+      int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSizeInBytes() / CHUNK_SIZE);
+      logger.info("Demo: Total chunks in log segment: {}", chunksInLogSegment);
+
+      for (int i = 0; i < chunksInLogSegment; i++) {
+        long startOffset = (long) i * CHUNK_SIZE;
+        long sizeInBytes = Math.min(CHUNK_SIZE, logFileInfo.getFileSizeInBytes() - startOffset);
+        logger.info("Demo: Fetching chunk {} for log segment: {} startOffset: {} sizeInBytes: {}", i+1, filePath, startOffset, sizeInBytes);
+        try {
+          fetchAndPersistChunks(partitionId, replicaId, clusterMap, logFileInfo, filePath, sizeInBytes, startOffset);
+        } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
+          throw new RuntimeException(e);
+        }
       }
     });
   }
 
   private void fetchAndPersistChunks(PartitionId partitionId, ReplicaId replicaId, ClusterMap clusterMap,
-      FileInfo fileInfo, String partitionFilePath, long sizeInBytes, long startOffset)
+      FileInfo fileInfo, String filePath, long sizeInBytes, long startOffset)
       throws IOException, ConnectionPoolTimeoutException, InterruptedException {
     FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(
         FileCopyGetChunkRequest.File_Chunk_Request_Version_V1, 0, "", partitionId,
@@ -135,7 +142,7 @@ public class FileCopyHandler {
     FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(chunkChannelOutput.getInputStream(), clusterMap);
     logger.info("Demo: Response: {}", response);
 
-    putChunkToFile(partitionFilePath, response.getChunkStream(), response.getChunkSizeInBytes());
+    putChunkToFile(filePath, response.getChunkStream(), response.getChunkSizeInBytes());
   }
 
   private void putChunkToFile(String filePath, DataInputStream stream, long chunkSizeInBytes) throws IOException {

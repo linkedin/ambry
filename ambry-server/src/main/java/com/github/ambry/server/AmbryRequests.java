@@ -1738,7 +1738,6 @@ public class AmbryRequests implements RequestAPI {
     ServerNetworkResponseMetrics serverNetworkResponseMetrics = new ServerNetworkResponseMetrics(dummyHistogram,
         dummyHistogram, dummyHistogram, null, null, 0);
 
-    logger.info("Dw: Api response, partition-" + fileCopyGetMetaDataRequest.getPartitionId().getId() + " " + response);
     requestResponseChannel.sendResponse(response, request, serverNetworkResponseMetrics);
   }
 
@@ -1791,7 +1790,6 @@ public class AmbryRequests implements RequestAPI {
     ServerNetworkResponseMetrics serverNetworkResponseMetrics = new ServerNetworkResponseMetrics(dummyHistogram,
         dummyHistogram, dummyHistogram, null, null, 0);
 
-    logger.info("Demo: Api response " + response);
     requestResponseChannel.sendResponse(response, request, serverNetworkResponseMetrics);
   }
 

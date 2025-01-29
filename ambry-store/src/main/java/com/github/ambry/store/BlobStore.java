@@ -1400,12 +1400,13 @@ public class BlobStore implements Store {
     randomAccessFile.seek(startOffset);
     ByteBuffer buf = ByteBuffer.allocate((int)sizeInBytes);
     randomAccessFile.getChannel().read(buf);
+    buf.flip();
 
     byte[] byteArray = new byte[buf.remaining()];
     buf.get(byteArray);
     ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(byteArray);
 
-    return new ChunkResponse(new DataInputStream(byteArrayInputStream), file.length());
+    return new ChunkResponse(new DataInputStream(byteArrayInputStream), byteArray.length);
   }
 
   private ChunkResponse getStreamForFile(String fileName) throws IOException {
