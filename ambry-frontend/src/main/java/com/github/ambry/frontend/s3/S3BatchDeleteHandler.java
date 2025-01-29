@@ -1,6 +1,19 @@
+/*
+ * Copyright 2025 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *
+ */
 package com.github.ambry.frontend.s3;
 
-import com.azure.core.models.ResponseError;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
@@ -24,20 +37,19 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.nio.charset.StandardCharsets;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.s3.S3Constants.*;
 import static com.github.ambry.rest.RestUtils.*;
 
 public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static DeleteBlobHandler deleteBlobHandler;
   private final XmlMapper xmlMapper;
-  private ArrayList<String> deleted = new ArrayList<>();
-  private ArrayList<S3MessagePayload.S3DeleteError> errors = new ArrayList<>();
   private FrontendMetrics metrics;
-  private final int maxBatchSize = 1000;
-  private S3MessagePayload.S3BatchDeleteObjects deleteRequest;
   private final Logger LOGGER = LoggerFactory.getLogger(S3BatchDeleteHandler.class);
 
   // Constructor
@@ -64,7 +76,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
 
     // inject metrics for batch delete
     RestRequestMetrics requestMetrics =
-        metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+        metrics.batchDeleteMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
 
     // Pass the callback to handle the response
@@ -85,41 +97,43 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
         throw new RestServiceException("bytesRead is empty", RestServiceErrorCode.BadRequest);
       }
 
-      S3MessagePayload.S3BatchDeleteResponse resp = new S3MessagePayload.S3BatchDeleteResponse();
+      S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
       ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
       ReadableStreamChannel readableStreamChannel =
           new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
-
-      // Deserialize the request body into a S3BatchDeleteObjects
-      deleteRequest = deserializeRequest(channel);
-
-      // Extract request path
+      S3MessagePayload.S3BatchDeleteObjects deleteRequest = deserializeRequest(channel);
+      ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> errors = new ConcurrentLinkedQueue<>();
+      ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> deleted = new ConcurrentLinkedQueue<>();
       RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH);
-      List<CompletableFuture<Void>> deleteFutures = new ArrayList<>();
-
-      if (deleteRequest.getObjects().size() > maxBatchSize) {
-        LOGGER.error("Exceeded batch size");
-        throw new RestServiceException("Batch Size Exceeded", RestServiceErrorCode.BadRequest);
+      if (deleteRequest.getObjects().size() > MAX_BATCH_DELETE_SIZE) {
+        String batchSizeErrorMessage = "Exceeded Maximum Batch Size of ";
+        LOGGER.error(batchSizeErrorMessage, MAX_BATCH_DELETE_SIZE);
+        throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
       }
+
+      List<CompletableFuture<Void>> deleteFutures = new ArrayList<>();
       for (S3MessagePayload.S3BatchDeleteKey object : deleteRequest.getObjects()) {
-
-        // Construct the delete path for each object
         String singleDeletePath = requestPath.getPathAfterPrefixes() + "/" + object.getKey();
-
-        // Create a new RequestPath for the delete operation
-        List<String> emptyList = new ArrayList<>();
         RequestPath newRequestPath =
-            RequestPath.parse(singleDeletePath, restRequest.getArgs(), emptyList, requestPath.getClusterName());
+            RequestPath.parse(singleDeletePath, restRequest.getArgs(), new ArrayList<>(), requestPath.getClusterName());
         WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
         singleDeleteRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-
         NoOpResponseChannel noOpResponseChannel = new NoOpResponseChannel();
         CompletableFuture<Void> future = new CompletableFuture<>();
 
         // Handle the delete operation using the deleteBlobHandler
         deleteBlobHandler.handle(singleDeleteRequest, noOpResponseChannel, (result, exception) -> {
           // Call our custom onDeleteCompletion to track success/failure
-          onDeleteCompletion(exception, object.getKey());
+          if (exception == null) {
+            deleted.add(new S3MessagePayload.S3DeletedObject(object.getKey()));
+          }
+          else if (exception instanceof RestServiceException) {
+            RestServiceException restServiceException = (RestServiceException) exception;
+            errors.add((new S3MessagePayload.S3ErrorObject(object.getKey(), restServiceException.getErrorCode().toString())));
+          }
+          else {
+            errors.add((new S3MessagePayload.S3ErrorObject(object.getKey(), RestServiceErrorCode.InternalServerError.toString())));
+          }
           future.complete(null);
         });
         deleteFutures.add(future);
@@ -128,9 +142,12 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0]))
           .whenComplete((result, exception) -> {
             try {
-              resp.setDeletedKeys(deleted);
-              resp.setErrors(errors);
-              xmlMapper.writeValue(outputStream, resp);
+              // Add XML declaration at the top
+              String xmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+              outputStream.write(xmlDeclaration.getBytes(StandardCharsets.UTF_8));
+              response.setDeleted(deleted);
+              response.setErrors(errors);
+              xmlMapper.writeValue(outputStream, response);
               ReadableStreamChannel finalreadableStreamChannel =
                   new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
               restResponseChannel.setHeader(Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
@@ -138,30 +155,11 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
               restResponseChannel.setStatus(ResponseStatus.Ok);
               finalCallback.onCompletion(finalreadableStreamChannel, null);
             } catch (IOException | RestServiceException e) {
-              LOGGER.error("Failed to complete", e);
+              LOGGER.error("Failed to complete ", e);
               finalCallback.onCompletion(null, e);
             }
           });
     }, restRequest.getUri(), LOGGER, finalCallback);
-  }
-
-  /**
-   * This method is used to update the lists of deleted and errored objects.
-   * @param exception whether the delete was successful or not
-   * @param key the object key
-   */
-  public void onDeleteCompletion(Exception exception, String key) {
-    if (exception == null) {
-      deleted.add(key);
-    }
-    else {
-      if (exception instanceof RestServiceException) {
-        RestServiceException restServiceException = (RestServiceException) exception;
-        errors.add((new S3MessagePayload.S3DeleteError(key, ResponseStatus.getResponseStatus(restServiceException.getErrorCode()).getStatusCode())));
-      } else {
-        errors.add((new S3MessagePayload.S3DeleteError(key, ResponseStatus.getResponseStatus(RestServiceErrorCode.InternalServerError).getStatusCode())));
-      }
-    }
   }
 
   /**
@@ -175,7 +173,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       byteBuffer.readBytes(byteArray);
       return new XmlMapper().readValue(byteArray, S3MessagePayload.S3BatchDeleteObjects.class);
     } catch (Exception e) {
-      throw new RestServiceException("failed to deserialize",e, RestServiceErrorCode.BadRequest);
+      throw new RestServiceException("failed to deserialize", e, RestServiceErrorCode.BadRequest);
     }
   }
 }

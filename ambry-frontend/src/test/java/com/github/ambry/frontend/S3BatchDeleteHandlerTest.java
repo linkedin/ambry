@@ -13,6 +13,7 @@
  *
  */
 package com.github.ambry.frontend;
+import java.nio.charset.StandardCharsets;
 
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
@@ -58,6 +59,7 @@ public class S3BatchDeleteHandlerTest {
   private static final String CLUSTER_NAME = "ambry-test";
   private static final String KEY_NAME = "key-success";
   private static final String KEY_NAME_2 = "key-name-2";
+  private static final String KEY_NAME_3 = "key-success-2";
   private final Account account;
   private final Container container;
   private FrontendConfig frontendConfig;
@@ -76,6 +78,7 @@ public class S3BatchDeleteHandlerTest {
     setup();
     performPutOperation(KEY_NAME, CONTENT_TYPE, container, account);
     performPutOperation(KEY_NAME_2, CONTENT_TYPE, container, account);
+    performPutOperation(KEY_NAME_3, KEY_NAME, container, account);
   }
 
   @Test
@@ -90,6 +93,12 @@ public class S3BatchDeleteHandlerTest {
         "<Object>" +
         "<Key>key-error</Key>" +
         "</Object>" +
+        "<Object>" +
+        "<Key>key-error2</Key>" +
+        "</Object>" +
+        "<Object>" +
+        "<Key>key-success-2</Key>" +
+        "</Object>" +
         "</Delete>";
 
     byte[] xmlBytes = xmlBody.getBytes("UTF-8");
@@ -102,11 +111,13 @@ public class S3BatchDeleteHandlerTest {
     s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
     ReadableStreamChannel readableStreamChannel = futureResult.get();
     ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
+    // verify correct XML via result value
+    String result = new String(byteBuffer.array(), StandardCharsets.UTF_8);
     XmlMapper xmlMapper = new XmlMapper();
-    S3MessagePayload.S3BatchDeleteResponse response =
-        xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.S3BatchDeleteResponse.class);
-    assertEquals(response.getDeletedKeys().get(0), KEY_NAME);
-    assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3DeleteError("key-error",500).toString());
+    S3MessagePayload.DeleteResult response =
+        xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.DeleteResult.class);
+    assertEquals(response.getDeleted().peek().getKey(), KEY_NAME);
+    assertEquals(response.getErrors().peek().toString(), new S3MessagePayload.S3ErrorObject("key-error","InternalServerError").toString());
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 

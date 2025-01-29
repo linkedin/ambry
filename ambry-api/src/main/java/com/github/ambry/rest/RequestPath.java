@@ -103,7 +103,6 @@ public class RequestPath {
    *                    this path segment.
    * @return a {@link RequestPath} object.
    */
-
   public static RequestPath parse(String path, Map<String, Object> args, List<String> prefixesToRemove,
       String clusterName) throws RestServiceException {
     int offset = 0;

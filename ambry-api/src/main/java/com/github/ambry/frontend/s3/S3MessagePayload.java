@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 
 /**
@@ -394,49 +395,46 @@ public class S3MessagePayload {
     }
   }
 
-  public static class S3BatchDeleteResponse {
+  // exact naming from S3BatchDelete response
+  public static class DeleteResult {
 
-    @JacksonXmlElementWrapper(useWrapping = false) // Avoid wrapping the list in an extra element
-    @JacksonXmlProperty(localName = "errors") // Maps to the <errors> element in XML
-    private ArrayList<S3DeleteError> errors; // This should be a list of S3DeleteError objects
+    @JacksonXmlElementWrapper(useWrapping = false)
+    @JacksonXmlProperty(localName = "Error") // Maps to <Error> in XML
+    private ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> errors;
 
-    @JacksonXmlElementWrapper(useWrapping = false) // If you have a list of deleted keys
-    @JacksonXmlProperty(localName = "deleted") // Maps to the <deleted> element in XML
-    private List<String> deletedKeys;
+    @JacksonXmlElementWrapper(useWrapping = false)
+    @JacksonXmlProperty(localName = "Deleted") // Maps to <Deleted> in XML
+    private ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> deleted;
 
     // Getters and setters
-    public ArrayList<S3DeleteError> getErrors() {
+    public ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> getErrors() {
       return errors;
     }
 
-    public void setErrors(ArrayList<S3DeleteError> errors) {
+    public void setErrors(ConcurrentLinkedQueue<S3ErrorObject> errors) {
       this.errors = errors;
     }
 
-    public List<String> getDeletedKeys() {
-      return deletedKeys;
+    public ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> getDeleted() {
+      return deleted;
     }
 
-    public void setDeletedKeys(List<String> deletedKeys) {
-      this.deletedKeys = deletedKeys;
+    public void setDeleted(ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> deleted) {
+      this.deleted = deleted;
     }
   }
 
-  public static class S3DeleteError {
+  public static class S3ErrorObject {
 
-    @JacksonXmlProperty(localName = "key")
+    @JacksonXmlProperty(localName = "Key")
     private String key;
 
-    @JacksonXmlProperty(localName = "code")
-    private int code;
+    @JacksonXmlProperty(localName = "Code")
+    private String code;
 
-    // No-argument constructor for Jackson deserialization
-    public S3DeleteError() {
-      // This is required for deserialization
-    }
+    public S3ErrorObject(){}
 
-    // Parameterized constructor (optional, if you want to create instances manually)
-    public S3DeleteError(String key, int code) {
+    public S3ErrorObject(String key, String code) {
       this.key = key;
       this.code = code;
     }
@@ -450,17 +448,43 @@ public class S3MessagePayload {
       this.key = key;
     }
 
-    public int getCode() {
+    public String getCode() {
       return code;
     }
 
-    public void setCode(int code) {
+    public void setCode(String code) {
       this.code = code;
     }
 
     @Override
     public String toString() {
-      return "S3DeleteError{key='" + key + "', code='" + code + "'}";
+      return "S3ErrorObject{key='" + key + "', code='" + code + "'}";
+    }
+  }
+
+  public static class S3DeletedObject {
+
+    @JacksonXmlProperty(localName = "Key")
+    private String key;
+
+    public S3DeletedObject() {}
+
+    public S3DeletedObject(String key) {
+      this.key = key;
+    }
+
+    // Getters and setters
+    public String getKey() {
+      return key;
+    }
+
+    public void setKey(String key) {
+      this.key = key;
+    }
+
+    @Override
+    public String toString() {
+      return "S3DeletedObject{key='" + key + "'}";
     }
   }
 
