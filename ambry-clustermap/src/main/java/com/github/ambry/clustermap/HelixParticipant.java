@@ -858,11 +858,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     try {
-      if(partitionName == "xyz"){
-        PartitionStateChangeListener partitionStateChangeListener =
-            partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
-        partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
-        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+      if(partitionName == "146"){
+        Thread.sleep(3600000);
       } else {
         // 1. take actions in storage manager (add new replica if necessary)
         PartitionStateChangeListener storageManagerListener =
@@ -883,13 +880,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
         }
       }
-    } catch (InterruptedException e){
-      logger.error("Bootstrap was interrupted on partition {}", partitionName);
-      localPartitionAndState.put(partitionName, ReplicaState.ERROR);
-      throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
-      throw e;
+      try {
+        throw e;
+      } catch (InterruptedException ex) {
+        throw new RuntimeException(ex);
+      }
     }
     logger.info("Before setting partition {} to bootstrap", partitionName);
     localPartitionAndState.put(partitionName, ReplicaState.BOOTSTRAP);
