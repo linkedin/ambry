@@ -98,6 +98,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -546,9 +547,23 @@ public class AmbryServer {
       return;
     }
 
+    File directory = new File(sourceReplicaId.getReplicaPath());
+    if (directory.exists() && directory.isDirectory()) {
+      for (File file : directory.listFiles()) {
+        if (file.isFile()) {
+          file.delete();
+        }
+      }
+      System.out.println("All files deleted.");
+    } else {
+      System.out.println("Directory does not exist.");
+    }
+
+
     logger.info("Demo: Source replica path {}, target replica path {}", sourceReplicaId.getMountPath(), targetReplicaId.getMountPath());
     try {
       new FileCopyHandler(connectionPool, fileStore, clusterMap).copy(partitionId, sourceReplicaId, targetReplicaId);
+      storageManager.buildStateForFileCopy(sourceReplicaId);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
