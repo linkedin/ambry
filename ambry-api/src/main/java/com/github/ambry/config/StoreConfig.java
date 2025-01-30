@@ -680,7 +680,32 @@ public class StoreConfig {
   @Config("store.reshuffle.disks.on.reorder")
   @Default("false")
   public final boolean storeReshuffleDisksOnReorder;
+
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
+
+  /**
+   * Name Of file to Store Sealed Segments Progress Status
+   */
+  public static final String STORE_FILE_COPY_IN_PROGRESS_FILE_NAME = "store.file.copy.in.progress.file.name";
+  @Config(STORE_FILE_COPY_IN_PROGRESS_FILE_NAME)
+  @Default("file_copy_in_progress")
+  public final String storeFileCopyInProgressFileName;
+
+  /**
+   * Name of file to Store Sealed Segments Completion Status
+   */
+  public static final String STORE_FILE_COPY_COMPLETED_FILE_NAME = "store.file.copy.completed.file.name";
+  @Config(STORE_FILE_COPY_COMPLETED_FILE_NAME)
+  @Default("file_copy_completed")
+  public final String storeFileCopyCompletedFileName;
+
+  /**
+   * Name Of file to Store Bootstrap Progress Status
+   */
+  public static final String STORE_BOOTSTRAP_IN_PROGRESS_FILE = "store.bootstrap.in.progress.file.name";
+  @Config(STORE_BOOTSTRAP_IN_PROGRESS_FILE)
+  @Default("bootstrap_in_progress")
+  public final String storeBootstrapInProgressFile;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -861,5 +886,9 @@ public class StoreConfig {
     storeStaleTimeInDays = verifiableProperties.getIntInRange(storeStaleTimeInDaysName, 7, 0, Integer.MAX_VALUE);
     storeBlockStaleBlobStoreToStart = verifiableProperties.getBoolean(storeBlockStaleBlobStoreToStartName, false);
     storeReshuffleDisksOnReorder = verifiableProperties.getBoolean(storeReshuffleDisksOnReorderName, false);
+
+    storeFileCopyInProgressFileName = verifiableProperties.getString(STORE_FILE_COPY_IN_PROGRESS_FILE_NAME, "file_copy_in_progress");
+    storeBootstrapInProgressFile = verifiableProperties.getString(STORE_BOOTSTRAP_IN_PROGRESS_FILE, "bootstrap_in_progress");
+    storeFileCopyCompletedFileName = verifiableProperties.getString(STORE_FILE_COPY_COMPLETED_FILE_NAME, "file_copy_completed");
   }
 }

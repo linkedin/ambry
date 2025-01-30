@@ -29,12 +29,26 @@ public interface ReplicaSyncUpManager {
   void initiateBootstrap(ReplicaId replicaId);
 
   /**
+   * Initiate File Copy process if the replica is newly added and needs to catch up with peer ones using File Copy Protocol.
+   * @param replicaId the replica to initiate File Copy Based Replication
+   */
+  void initiateFileCopy(ReplicaId replicaId);
+
+  /**
    * Wait until bootstrap on given replica is complete.
    * until given replica has caught up with enough peer replicas either in local DC or remote DCs
    * @param partitionName partition name of replica that in bootstrap state
    * @throws InterruptedException
    */
   void waitBootstrapCompleted(String partitionName) throws InterruptedException;
+
+  /**
+   * Wait until All Sealed Log, Index and Bloom Files are copied to the given replica from a remote replica.
+   * @param partitionName partition name of replica that in file copy state
+   * @throws InterruptedException
+   */
+  void waitForFileCopyCompleted(String partitionName) throws InterruptedException;
+
 
   /**
    * Update replica lag (in byte) between two replicas (local and peer replica) and check sync-up status.
@@ -63,6 +77,12 @@ public interface ReplicaSyncUpManager {
    * @param replicaId the replica which completes bootstrap.
    */
   void onBootstrapComplete(ReplicaId replicaId);
+
+  /**
+   * Called when file based replication of a replica is complete.
+   * @param replicaId The replica which completes file Copy
+   */
+  void onFileCopyComplete(ReplicaId replicaId);
 
   /**
    * Deactivation on given replica is complete.

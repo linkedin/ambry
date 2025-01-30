@@ -51,6 +51,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -419,6 +420,43 @@ public class DiskManager {
     return succeed;
   }
 
+
+  /**
+   * Add a new BlobStore with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStoreForFileCopy(ReplicaId replica) {
+    rwLock.writeLock().lock();
+    boolean succeed = false;
+    try {
+      if (!running) {
+        logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
+      } else {
+        // Directory is already created in prefilecopy steps. So no directory cleanup required.
+        BlobStore store = new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
+            diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
+            replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
+        store.start();
+        // add store into CompactionManager
+        compactionManager.addBlobStore(store);
+        // add new created store into in-memory data structures.
+        stores.put(replica.getPartitionId(), store);
+        // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
+        // BOOTSTRAP -> STANDBY transition)
+        createBootstrapFileIfAbsent(replica);
+        logger.info("New store for partitionId {} is successfully added into DiskManager.", replica.getPartitionId());
+        succeed = true;
+      }
+    } catch (Exception e) {
+      logger.error("Failed to start new added store for partitionId {} for FileCopy based replication", replica.getPartitionId(),
+          e);
+    } finally {
+      rwLock.writeLock().unlock();
+    }
+    return succeed;
+  }
+
   /**
    * Add a new BlobStore with given {@link ReplicaId}.
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
@@ -459,7 +497,7 @@ public class DiskManager {
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
         createBootstrapFileIfAbsent(replica);
-        logger.info("New store is successfully added into DiskManager.");
+        logger.info("New store is successfully added into DiskManager for partitionId {}.", replica.getPartitionId());
         succeed = true;
       }
     } catch (Exception e) {
@@ -773,6 +811,15 @@ public class DiskManager {
 
   public DiskHealthStatus getDiskHealthStatus() {
     return diskHealthStatus;
+  }
+
+  public boolean isFileExists(String fileName) {
+    String filePath = this.disk.getMountPath() + File.separator + fileName;
+    return new File(filePath).exists();
+  }
+
+  public List<File> getFilesForPattern(Pattern pattern) throws IOException {
+    return Utils.getFilesForPattern(this.disk.getMountPath(), pattern);
   }
 
   /**

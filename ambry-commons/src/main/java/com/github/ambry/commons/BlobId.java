@@ -212,9 +212,6 @@ public class BlobId extends StoreKey {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
-    if (uuidStr == null) {
-      throw new IllegalArgumentException("uuidStr cannot be null");
-    }
     switch (version) {
       case BLOB_ID_V1:
         this.type = BlobIdType.NATIVE;

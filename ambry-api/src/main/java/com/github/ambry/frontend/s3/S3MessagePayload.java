@@ -172,7 +172,7 @@ public class S3MessagePayload {
     private List<Contents> contents;
     @JacksonXmlProperty(localName = "EncodingType")
     private String encodingType;
-    @JacksonXmlProperty(localName = "isTruncated")
+    @JacksonXmlProperty(localName = "IsTruncated")
     private Boolean isTruncated;
 
     private AbstractListBucketResult() {
@@ -318,6 +318,10 @@ public class S3MessagePayload {
     }
 
     public long getSize() { return size; }
+
+    public String getLastModified() {
+      return lastModified;
+    }
 
     @Override
     public String toString() {

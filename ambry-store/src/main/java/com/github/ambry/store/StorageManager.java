@@ -38,6 +38,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileStore;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -50,6 +51,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,6 +89,8 @@ public class StorageManager implements StoreManager {
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
   private DiskFailureHandler diskFailureHandler;
+
+  private static String bootstrapInProgressFileName;
 
   /**
    * Constructs a {@link StorageManager}
@@ -130,6 +134,7 @@ public class StorageManager implements StoreManager {
     currentNode = dataNodeId;
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
+    this.bootstrapInProgressFileName = storeConfig.storeBootstrapInProgressFile;
     storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
     if (clusterParticipants != null && !clusterParticipants.isEmpty()) {
       replicaStatusDelegates = new ArrayList<>();
@@ -350,6 +355,12 @@ public class StorageManager implements StoreManager {
     return getStore(id, false);
   }
 
+  @Override
+  public FileStore getFileStore(PartitionId id) {
+    //TODO: Implementation To Be added.
+    return null;
+  }
+
   /**
    * @param id the {@link PartitionId} to find the store for.
    * @param skipStateCheck whether to skip checking state of the store. if true, it also returns store that is not started yet.
@@ -446,6 +457,17 @@ public class StorageManager implements StoreManager {
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
   }
 
+  @Override
+  public boolean isFileExists(PartitionId partitionId, String fileName) {
+    return this.getDiskManager(partitionId).isFileExists(fileName);
+  }
+
+  @Override
+  public boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException {
+    List<File> result =  this.getDiskManager(partitionId).getFilesForPattern(pattern);
+    return (null != result && !result.isEmpty());
+  }
+
   /**
    * Return the disk capacity for healthy disks. This capacity is the sum of all healthy disks. The unit
    * is GiB. This disk capacity is the value to report in instance config.
@@ -514,6 +536,28 @@ public class StorageManager implements StoreManager {
     });
   }
 
+  /**
+   * Add a new store to the storage manager for file copy based replication post filecopy is completed.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return
+   */
+  @Override
+  public boolean addBlobStoreForFileCopy(ReplicaId replica) {
+    if (!partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.info("PartitionId {} doesn't exist in storage manager during state build, rejecting adding store request", replica.getPartitionId());
+      return false;
+    }
+    // We don't require addDisk since DiskManager is already started during initialization of StorageManager as part
+    // of prefilecopy steps. We will fetch it from partitionToDiskManager map.
+    DiskManager diskManager = partitionToDiskManager.get(replica.getPartitionId());
+    if (diskManager == null || !diskManager.addBlobStoreForFileCopy(replica)) {
+      logger.error("Failed to add new store into DiskManager");
+      return false;
+    }
+    logger.info("New store is successfully added into StorageManager");
+    return true;
+  }
+
   @Override
   public boolean addBlobStore(ReplicaId replica) {
     if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
@@ -529,6 +573,52 @@ public class StorageManager implements StoreManager {
     partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
     logger.info("New store is successfully added into StorageManager");
     return true;
+  }
+
+  /**
+   * Build inmemory state for file copy based replication post filecopy is completed.
+   * @param replica the {@link ReplicaId} of the {@link Store} for which store needs to be built
+   */
+  @Override
+  public boolean addFileStore(ReplicaId replicaId) {
+    //TODO: Implementation To Be added.
+    return false;
+  }
+  public void buildStateForFileCopy(ReplicaId replica){
+    if (replica == null) {
+      logger.error("ReplicaId is null");
+      throw new StateTransitionException("ReplicaId null is not found in clustermap for " + currentNode, ReplicaNotFound);
+    }
+    PartitionId partitionId = replica.getPartitionId();
+
+    if (!addBlobStoreForFileCopy(replica)){
+      // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+      // back since addition of store failed.
+      replica.getDiskId().increaseAvailableSpaceInBytes(replica.getCapacityInBytes());
+      if (!clusterMap.isDataNodeInFullAutoMode(currentNode)) {
+        logger.error("Failed to add store for replica {} into storage manager", partitionId.getId());
+        throw new StateTransitionException("Failed to add store for replica " + partitionId.getId() + " into storage manager",
+            ReplicaOperationFailure);
+      } else {
+        logger.info("Failed to add store for replica {} at location {}. Cleanup and raise StateTransitionException",
+            partitionId.getId(), replica.getReplicaPath());
+        // This will remove the reserved space from diskSpaceAllocator
+        tryRemoveFailedBootstrapBlobStore(replica);
+        // Throwing StateTransitionException here since we cannot retry adding BlobStore since Filecopy has copied data
+        // into the selected disk itself. Hence, putting the replica into ERROR state via StateTransitionException
+        throw new StateTransitionException("Failed to add store for replica " + partitionId.getId() + " into storage manager",
+            ReplicaOperationFailure);
+      }
+    }
+    Store store = getStore(replica.getPartitionId(), false);
+    // Only update store state if this is a state transition for primary participant. Since replication Manager
+    // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
+    // stuck in BOOTSTRAP if this is updated by second participant listener too
+    ReplicaState currentState = store.getCurrentState();
+    if (currentState != ReplicaState.LEADER && currentState != ReplicaState.STANDBY) {
+      // Only set the current state to BOOTSTRAP when it's not LEADER or STANDBY
+      store.setCurrentState(ReplicaState.BOOTSTRAP);
+    }
   }
 
   /**
@@ -630,7 +720,7 @@ public class StorageManager implements StoreManager {
    * @throws IOException
    */
   static void createBootstrapFileIfAbsent(ReplicaId replica) throws IOException {
-    File bootstrapFile = new File(replica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
+    File bootstrapFile = new File(replica.getReplicaPath(), bootstrapInProgressFileName);
     if (!bootstrapFile.exists()) {
       bootstrapFile.createNewFile();
     }
