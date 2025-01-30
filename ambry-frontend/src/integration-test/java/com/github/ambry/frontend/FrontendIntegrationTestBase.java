@@ -1825,7 +1825,7 @@ public class FrontendIntegrationTestBase {
    * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
    */
   void updateAccountsAndVerify(AccountService accountService, Account... accounts) throws Exception {
-    byte[] accountUpdateJson = AccountCollectionSerde.serializeAccountsInJson(Arrays.asList(accounts));
+    byte[] accountUpdateJson = AccountCollectionSerde.serializeAccountsInJson(Arrays.asList(accounts), false);
     FullHttpRequest request =
         buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null, ByteBuffer.wrap(accountUpdateJson));
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();

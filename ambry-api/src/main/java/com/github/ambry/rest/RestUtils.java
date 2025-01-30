@@ -365,6 +365,11 @@ public class RestUtils {
      * Request header to carry hostname (with port);
      */
     public final static String HOSTNAME = "x-ambry-hostname";
+
+    /**
+     * Boolean field set to "true" for ignoring containers when fetching accounts information via GET /accounts API.
+     */
+    public static final String IGNORE_CONTAINERS = "x-ambry-ignore-containers";
   }
 
   public static final class TrackingHeaders {
