@@ -38,9 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.nio.charset.StandardCharsets;
 import com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
@@ -51,7 +48,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static DeleteBlobHandler deleteBlobHandler;
   private final XmlMapper xmlMapper;
   private FrontendMetrics metrics;
-  private final Logger LOGGER = LoggerFactory.getLogger(S3BatchDeleteHandler.class);
 
   // Constructor
   public S3BatchDeleteHandler(DeleteBlobHandler deleteBlobHandler, FrontendMetrics frontendMetrics) {
@@ -94,7 +90,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
 
     return buildCallback(metrics.s3BatchDeleteHandleMetrics, bytesRead -> {
       if (bytesRead == 0) {
-        LOGGER.error("failed to read request into channel");
         throw new RestServiceException("bytesRead is empty", RestServiceErrorCode.BadRequest);
       }
 
@@ -108,7 +103,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH);
       if (deleteRequest.getObjects().size() > MAX_BATCH_DELETE_SIZE) {
         String batchSizeErrorMessage = "Exceeded Maximum Batch Size of ";
-        LOGGER.error(batchSizeErrorMessage, MAX_BATCH_DELETE_SIZE);
         throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
       }
 
@@ -155,7 +149,6 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
               restResponseChannel.setStatus(ResponseStatus.Ok);
               finalCallback.onCompletion(finalreadableStreamChannel, null);
             } catch (IOException | RestServiceException e) {
-              LOGGER.error("Failed to complete ", e);
               finalCallback.onCompletion(null, e);
             }
           });
