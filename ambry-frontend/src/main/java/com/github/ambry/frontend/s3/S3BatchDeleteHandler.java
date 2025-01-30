@@ -93,20 +93,25 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
         throw new RestServiceException("bytesRead is empty", RestServiceErrorCode.BadRequest);
       }
 
-      S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
-      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-      ReadableStreamChannel readableStreamChannel =
-          new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+      // deserialize the xml as deleteRequest
       S3MessagePayload.S3BatchDeleteObjects deleteRequest = deserializeRequest(channel);
-      ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> errors = new ConcurrentLinkedQueue<>();
-      ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> deleted = new ConcurrentLinkedQueue<>();
-      RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH);
+;
+
+      // validate the request for size
       if (deleteRequest.getObjects().size() > MAX_BATCH_DELETE_SIZE) {
         String batchSizeErrorMessage = "Exceeded Maximum Batch Size of ";
         throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
+
       }
 
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH)
+
+      // create objects for processing the request
+      ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> errors = new ConcurrentLinkedQueue<>();
+      ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> deleted = new ConcurrentLinkedQueue<>();
       List<CompletableFuture<Void>> deleteFutures = new ArrayList<>();
+
       for (S3MessagePayload.S3BatchDeleteKey object : deleteRequest.getObjects()) {
         String singleDeletePath = requestPath.getPathAfterPrefixes() + "/" + object.getKey();
         RequestPath newRequestPath =
@@ -138,16 +143,17 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
           .whenComplete((result, exception) -> {
             try {
               // Add XML declaration at the top
+              S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
               xmlMapper.configure(ToXmlGenerator.Feature.WRITE_XML_DECLARATION, true);
               response.setDeleted(new ArrayList<>(deleted));
               response.setErrors(new ArrayList<>(errors));
               xmlMapper.writeValue(outputStream, response);
-              ReadableStreamChannel finalreadableStreamChannel =
+              ReadableStreamChannel readableStreamChannel =
                   new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
               restResponseChannel.setHeader(Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
               restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
               restResponseChannel.setStatus(ResponseStatus.Ok);
-              finalCallback.onCompletion(finalreadableStreamChannel, null);
+              finalCallback.onCompletion(readableStreamChannel, null);
             } catch (IOException | RestServiceException e) {
               finalCallback.onCompletion(null, e);
             }
