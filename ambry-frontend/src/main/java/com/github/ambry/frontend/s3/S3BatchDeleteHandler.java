@@ -54,6 +54,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
     this.deleteBlobHandler = deleteBlobHandler;
     this.metrics = frontendMetrics;
     this.xmlMapper = new XmlMapper();
+    this.xmlMapper.configure(ToXmlGenerator.Feature.WRITE_XML_DECLARATION, true);
   }
 
   /**
@@ -105,7 +106,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       }
 
       ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-      RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH)
+      RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH);
 
       // create objects for processing the request
       ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> errors = new ConcurrentLinkedQueue<>();
@@ -142,9 +143,8 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0]))
           .whenComplete((result, exception) -> {
             try {
-              // Add XML declaration at the top
+              // construct and serialize response
               S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
-              xmlMapper.configure(ToXmlGenerator.Feature.WRITE_XML_DECLARATION, true);
               response.setDeleted(new ArrayList<>(deleted));
               response.setErrors(new ArrayList<>(errors));
               xmlMapper.writeValue(outputStream, response);

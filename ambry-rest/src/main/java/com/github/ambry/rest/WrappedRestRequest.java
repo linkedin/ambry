@@ -71,7 +71,7 @@ public class WrappedRestRequest implements RestRequest {
   }
 
   @Override
-  public void removeArg(String key) { restRequest.removeArg(key); }
+  public void removeArg(String key) { map.remove(key); }
 
   @Override
   public SSLSession getSSLSession() {

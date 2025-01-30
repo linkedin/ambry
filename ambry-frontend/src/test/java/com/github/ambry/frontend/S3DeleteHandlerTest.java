@@ -77,7 +77,7 @@ public class S3DeleteHandlerTest {
   @Test
   public void deleteObjectTest() throws Exception {
     // 1. Delete the object
-    String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), "hello2");
+    String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
     RestRequest request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -120,7 +120,7 @@ public class S3DeleteHandlerTest {
   }
 
   private void putABlob() throws Exception {
-    String requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), "hello");
+    String requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
         "test-app", CONTENT_TYPE, "tester", null, null, null);
