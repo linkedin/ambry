@@ -102,11 +102,12 @@ public class HelixFactory {
    */
   HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
     HelixManagerProperty participantHelixProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(
-        new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN).setPort(INSTANCE_CONFIG_HELIX_PORT)).build();
+        new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN)).build();
+
+    HelixManagerProperty defaultHelixManagerProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(new InstanceConfig.Builder()).build();
 
     HelixManager helixManager = new ZKHelixManager(clusterName, instanceName, instanceType, zkAddr, null,
-        instanceType == InstanceType.PARTICIPANT ?  participantHelixProperty :
-            new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(new InstanceConfig.Builder()).build());
+        instanceType == InstanceType.PARTICIPANT ?  participantHelixProperty : defaultHelixManagerProperty);
     LOGGER.info("Created HelixManager for cluster {} with instanceName {} and instanceType {}", clusterName, instanceName, instanceType);
     return helixManager;
   }
