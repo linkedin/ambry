@@ -2349,7 +2349,8 @@ public class FrontendRestRequestServiceTest {
   public void postAccountsTest() throws Exception {
     Account accountToAdd = accountService.generateRandomAccount();
     List<ByteBuffer> body = new LinkedList<>();
-    body.add(ByteBuffer.wrap(AccountCollectionSerde.serializeAccountsInJson(Collections.singleton(accountToAdd))));
+    body.add(
+        ByteBuffer.wrap(AccountCollectionSerde.serializeAccountsInJson(Collections.singleton(accountToAdd), false)));
     body.add(null);
     RestRequest restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS, null, body);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();

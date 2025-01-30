@@ -44,25 +44,16 @@ public class AccountCollectionSerde {
 
   /**
    * Serialize a collection of accounts to json bytes that can be used in requests/responses.
-   * @param accounts the {@link Account}s to serialize.
+   * @param accounts         the {@link Account}s to serialize.
+   * @param ignoreContainers  {@code true} to ignore containers in the serialization, {@code false} otherwise.
    * @return the serialized bytes in json format.
    */
-  public static byte[] serializeAccountsInJson(Collection<Account> accounts) throws IOException {
+  public static byte[] serializeAccountsInJson(Collection<Account> accounts, boolean ignoreContainers)
+      throws IOException {
     Map<String, Collection<Account>> resultObj = new HashMap<>();
     resultObj.put(ACCOUNTS_KEY, accounts);
-    return objectMapper.writeValueAsBytes(resultObj);
-  }
-
-  /**
-   * Serialize a collection of accounts ignoring containers to json bytes that can be used in requests/responses.
-   * @param accounts the {@link Account}s to serialize.
-   * @return the serialized bytes in json format.
-   * @throws IOException
-   */
-  public static byte[] serializeAccountsInJsonNoContainers(Collection<Account> accounts) throws IOException {
-    Map<String, Collection<Account>> resultObj = new HashMap<>();
-    resultObj.put(ACCOUNTS_KEY, accounts);
-    return objectMapperWithoutContainer.writeValueAsBytes(resultObj);
+    return ignoreContainers ? objectMapperWithoutContainer.writeValueAsBytes(resultObj)
+        : objectMapper.writeValueAsBytes(resultObj);
   }
 
   /**

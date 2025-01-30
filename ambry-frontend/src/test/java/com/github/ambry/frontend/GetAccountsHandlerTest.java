@@ -179,7 +179,7 @@ public class GetAccountsHandlerTest {
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = sendRequestGetResponse(request, restResponseChannel);
       assertNotNull("There should be a response", channel);
-      Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+      assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
       assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       assertEquals("Content-length is not as expected", channel.getSize(),

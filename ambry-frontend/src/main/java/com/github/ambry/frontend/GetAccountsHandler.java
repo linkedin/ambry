@@ -19,7 +19,6 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
-import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
@@ -130,11 +129,7 @@ class GetAccountsHandler {
         } else {
           boolean ignoreContainers =
               RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.IGNORE_CONTAINERS, false);
-          if (ignoreContainers) {
-            serialized = AccountCollectionSerde.serializeAccountsInJsonNoContainers(getAccounts());
-          } else {
-            serialized = AccountCollectionSerde.serializeAccountsInJson(getAccounts());
-          }
+          serialized = AccountCollectionSerde.serializeAccountsInJson(getAccounts(), ignoreContainers);
         }
         ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
