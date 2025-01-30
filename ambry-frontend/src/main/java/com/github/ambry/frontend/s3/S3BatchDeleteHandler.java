@@ -97,15 +97,12 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       // deserialize the xml as deleteRequest
       S3MessagePayload.S3BatchDeleteObjects deleteRequest = deserializeRequest(channel);
 ;
-
       // validate the request for size
       if (deleteRequest.getObjects().size() > MAX_BATCH_DELETE_SIZE) {
         String batchSizeErrorMessage = "Exceeded Maximum Batch Size of ";
         throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
-
       }
 
-      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
       RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH);
 
       // create objects for processing the request
@@ -145,6 +142,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
             try {
               // construct and serialize response
               S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
+              ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
               response.setDeleted(new ArrayList<>(deleted));
               response.setErrors(new ArrayList<>(errors));
               xmlMapper.writeValue(outputStream, response);
