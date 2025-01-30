@@ -116,8 +116,8 @@ public class S3BatchDeleteHandlerTest {
     XmlMapper xmlMapper = new XmlMapper();
     S3MessagePayload.DeleteResult response =
         xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.DeleteResult.class);
-    assertEquals(response.getDeleted().peek().getKey(), KEY_NAME);
-    assertEquals(response.getErrors().peek().toString(), new S3MessagePayload.S3ErrorObject("key-error","InternalServerError").toString());
+    assertEquals(response.getDeleted().get(0).getKey(), KEY_NAME);
+    assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3ErrorObject("key-error","InternalServerError").toString());
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 

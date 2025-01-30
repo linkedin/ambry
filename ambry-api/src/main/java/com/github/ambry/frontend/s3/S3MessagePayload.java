@@ -17,6 +17,7 @@ package com.github.ambry.frontend.s3;
 import java.util.ArrayList;
 import java.util.List;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -404,26 +405,26 @@ public class S3MessagePayload {
 
     @JacksonXmlElementWrapper(useWrapping = false)
     @JacksonXmlProperty(localName = "Error") // Maps to <Error> in XML
-    private ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> errors;
+    private List<S3MessagePayload.S3ErrorObject> errors;
 
     @JacksonXmlElementWrapper(useWrapping = false)
     @JacksonXmlProperty(localName = "Deleted") // Maps to <Deleted> in XML
-    private ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> deleted;
+    private List<S3MessagePayload.S3DeletedObject> deleted;
 
     // Getters and setters
-    public ConcurrentLinkedQueue<S3MessagePayload.S3ErrorObject> getErrors() {
+    public List<S3MessagePayload.S3ErrorObject> getErrors() {
       return errors;
     }
 
-    public void setErrors(ConcurrentLinkedQueue<S3ErrorObject> errors) {
+    public void setErrors(List<S3MessagePayload.S3ErrorObject> errors) {
       this.errors = errors;
     }
 
-    public ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> getDeleted() {
+    public List<S3MessagePayload.S3DeletedObject> getDeleted() {
       return deleted;
     }
 
-    public void setDeleted(ConcurrentLinkedQueue<S3MessagePayload.S3DeletedObject> deleted) {
+    public void setDeleted(List<S3MessagePayload.S3DeletedObject> deleted) {
       this.deleted = deleted;
     }
   }
@@ -491,6 +492,5 @@ public class S3MessagePayload {
       return "S3DeletedObject{key='" + key + "'}";
     }
   }
-
 }
 

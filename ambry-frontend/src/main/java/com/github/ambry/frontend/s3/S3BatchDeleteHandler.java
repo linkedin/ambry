@@ -41,6 +41,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
+import com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.frontend.s3.S3Constants.*;
@@ -143,10 +144,9 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
           .whenComplete((result, exception) -> {
             try {
               // Add XML declaration at the top
-              String xmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-              outputStream.write(xmlDeclaration.getBytes(StandardCharsets.UTF_8));
-              response.setDeleted(deleted);
-              response.setErrors(errors);
+              xmlMapper.configure(ToXmlGenerator.Feature.WRITE_XML_DECLARATION, true);
+              response.setDeleted(new ArrayList<>(deleted));
+              response.setErrors(new ArrayList<>(errors));
               xmlMapper.writeValue(outputStream, response);
               ReadableStreamChannel finalreadableStreamChannel =
                   new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
