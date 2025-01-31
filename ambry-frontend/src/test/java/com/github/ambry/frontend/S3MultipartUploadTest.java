@@ -364,7 +364,7 @@ public class S3MultipartUploadTest {
     s3MultipartUploadHandler = new S3MultipartUploadHandler(securityService, metrics, injector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
 
-    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
+    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, null);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, metrics);
   }
