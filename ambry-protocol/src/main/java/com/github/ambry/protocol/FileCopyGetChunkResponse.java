@@ -104,7 +104,6 @@ public class FileCopyGetChunkResponse extends Response {
     bufferToSend.writeLong(chunkSizeInBytes);
     bufferToSend.writeBoolean(isLastChunk);
     try {
-      bufferToSend.writeInt(chunkStream.available());
       bufferToSend.writeBytes(chunkStream, chunkStream.available());
     } catch (IOException e) {
       throw new RuntimeException(e);

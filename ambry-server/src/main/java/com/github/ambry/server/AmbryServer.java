@@ -34,6 +34,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettyInternalMetrics;
@@ -56,8 +57,11 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
+import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
@@ -74,6 +78,10 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
@@ -98,6 +106,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -506,7 +515,8 @@ public class AmbryServer {
       testE2EFlow();
       logger.info("Demo: E2E flow took {} ms", System.currentTimeMillis() - startTimeMs);
 
-//      testChunkAggregateWithStateBuildForFileCopy();
+      testFileChunkAggregationForFileCopy();
+      testStateBuildPostFileCopy();
 //      testFileStoreUtils();
     } catch (Exception e) {
       logger.error("Error during startup", e);
@@ -546,9 +556,23 @@ public class AmbryServer {
       return;
     }
 
+    File directory = new File(sourceReplicaId.getReplicaPath());
+    if (directory.exists() && directory.isDirectory()) {
+      for (File file : directory.listFiles()) {
+        if (file.isFile()) {
+          file.delete();
+        }
+      }
+      System.out.println("All files deleted.");
+    } else {
+      System.out.println("Directory does not exist.");
+    }
+
+
     logger.info("Demo: Source replica path {}, target replica path {}", sourceReplicaId.getMountPath(), targetReplicaId.getMountPath());
     try {
       new FileCopyHandler(connectionPool, fileStore, clusterMap).copy(partitionId, sourceReplicaId, targetReplicaId);
+      storageManager.buildStateForFileCopy(sourceReplicaId);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -579,10 +603,12 @@ public class AmbryServer {
     System.out.println("Parsed log file contents read for offset=" + offset + ", size=" + size + " is: " + StandardCharsets.UTF_8.decode(byteBuffer));
   }
 
-  private void testChunkAggregateWithStateBuildForFileCopy() throws IOException {
+  private void testFileChunkAggregationForFileCopy() throws IOException {
     String chunkPath = "/tmp/0/test_chunk";     // The path to the chunk file
     String logFilePath = "/tmp/0/0_log";        // The path to the log file where chunks are written
     String outputFilePath = "/tmp/0/output_log_copy"; // New file where the log data will be copied
+
+    System.out.println("Testing file chunk aggregation for filecopy with Filestore");
 
     int numChunksToWrite = 10;   // Number of times the chunk should be written to the log file
     int chunkSize = (int)Files.size(Paths.get(chunkPath));  // Size of the chunk
@@ -637,8 +663,82 @@ public class AmbryServer {
     } catch (IOException e) {
       System.err.println("An error occurred while reading or writing the log file: " + e.getMessage());
     }
+  }
 
-    // TODO: Run state build on the aggregated output file to see if the state is built correctly post filecopy
+
+  private void testStateBuildPostFileCopy() throws IOException, ConnectionPoolTimeoutException, InterruptedException {
+    String partitionName = "803";
+    String logFilePath = "/tmp/803/14_0_log";        // The path to the log file where chunks are written
+    String outputFilePath = "/tmp/803/15_0_log"; // New file where the log data will be copied
+    int chunkSize = 100*1024*1024;  // Size of the chunk
+    System.out.println("Testing state build post filecopy for partitionId " + partitionName);
+
+    // Step 2: Read from logFilePath chunk by chunk and write to a new file in the same directory
+    int offset = 0;
+    try (FileInputStream logInputStream = new FileInputStream(logFilePath);
+        FileOutputStream outputStream = new FileOutputStream(outputFilePath)) {
+
+      byte[] buffer = new byte[chunkSize];
+      int bytesRead;
+      while ((bytesRead = logInputStream.read(buffer)) != -1) {
+        // Write the chunk to the new file
+        outputStream.write(buffer, 0, bytesRead);
+        offset += bytesRead;
+
+        System.out.println("Writing chunk to new file at offset " + offset);
+      }
+
+      // Verify if contents of both files are same
+      byte[] content1 = Files.readAllBytes(Paths.get(logFilePath));
+      byte[] content2 = Files.readAllBytes(Paths.get(outputFilePath));
+      // Compare the byte arrays
+      if (Arrays.equals(content1, content2)) {
+        System.out.println("Input and output files are identical.");
+      } else {
+        System.out.println("Input and output files differ.");
+      }
+      System.out.println("File copy completed. Data written to " + outputFilePath);
+    } catch (IOException e) {
+      System.err.println("An error occurred while reading or writing the log file: " + e.getMessage());
+    }
+
+    // Run state build on the aggregated output file by replacing original log file with copied file to see if the
+    // state is built correctly post filecopy
+    Files.delete(Paths.get(logFilePath));
+    Files.move(Paths.get(outputFilePath), Paths.get(logFilePath));
+
+    System.out.println("Renamed log file: " + outputFilePath + " to " + logFilePath );
+
+    storageManager.buildStateForFileCopy(storageManager.getReplica(partitionName));
+    System.out.println("State build successfully for partitionId: " + partitionName);
+
+    // Perform getBlob operations on few blobs to verify is state is built correctly.
+
+    List<BlobId> blobIdList = new ArrayList<>(2);
+    blobIdList.add(new BlobId("AAYQAgZEAAgAAQAAAAAAAAMja1b_H6RbSG2fzSHaZem-SA", clusterMap));
+    blobIdList.add(new BlobId("AAYQAgZEAAgAAQAAAAAAAAMj48QxOzSxRoKbgGiP59OZFw", clusterMap));
+    ConnectedChannel connectedChannel =
+        connectionPool.checkOutConnection("localhost", new Port(clusterMap.getDataNodeIds().get(0).getPort(), PortType.PLAINTEXT),
+            5000);
+    for (BlobId blobId : blobIdList) {
+      System.out.println("Trying getBlob operation for blobId: " + blobId.getID());
+      GetResponse getResponse = getBlob(blobId, connectedChannel);
+      System.out.println("BlobId: " + blobId.getID() + " found with GetResponse: " + getResponse);
+    }
+  }
+
+
+  /**
+   * Fetches a single blob from ambry server node
+   * @param blobId the {@link BlobId} that needs to be fetched
+   * @param connectedChannel the {@link ConnectedChannel} to use to send and receive data
+   * @throws IOException
+   */
+  GetResponse getBlob(BlobId blobId, ConnectedChannel connectedChannel) throws IOException {
+    List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+    partitionRequestInfoList.add(new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId)));
+    GetRequest getRequest = new GetRequest(1, "client1", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOption.None);
+    return GetResponse.readFrom(connectedChannel.sendAndReceive(getRequest).getInputStream(), clusterMap);
   }
 
   /**

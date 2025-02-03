@@ -191,6 +191,11 @@ public class DiskManager {
       ConcurrentHashMap<PartitionId, Exception> startExceptions = new ConcurrentHashMap<>();
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
+
+        if(Arrays.asList(146L, 803L).contains(partitionAndStore.getKey().getId())) {
+          logger.info("Skip the store {} because it is running file copy", partitionAndStore.getKey());
+          continue;
+        }
         if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
           logger.info("Skip the store {} because it is on the stopped list", partitionAndStore.getKey());
           continue;
