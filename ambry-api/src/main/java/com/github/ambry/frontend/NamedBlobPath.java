@@ -93,6 +93,7 @@ public class NamedBlobPath {
     path = path.startsWith("/") ? path.substring(1) : path;
     String[] splitPath = path.split("/", 4);
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
+    boolean isBatchDelete = args.containsKey(BATCH_DELETE_QUERY_PARAM);
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
     //There are two cases for S3 listing
     //1.has prefix (Ex:GET /?prefix=prefixName&delimiter=&encoding-type=url)
@@ -118,7 +119,7 @@ public class NamedBlobPath {
       }
       return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
     }
-    if (isGetObjectLockRequest) {
+    if (isGetObjectLockRequest || isBatchDelete) {
       return new NamedBlobPath(accountName, containerName, null, null, null);
     } else {
       String blobName = splitPath[3];
