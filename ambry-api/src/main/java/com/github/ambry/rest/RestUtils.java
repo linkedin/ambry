@@ -43,7 +43,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
@@ -67,9 +66,12 @@ public class RestUtils {
   public static final String PATH_SEPARATOR_STRING = "/";
   public static final String STITCH = "STITCH";
   public static final String UPLOADS_QUERY_PARAM = "uploads";
+  public static final String BATCH_DELETE_QUERY_PARAM = "delete";
   public static final String UPLOAD_ID_QUERY_PARAM = "uploadId";
   public static final String CONTINUE = "100-continue";
   public static final String OBJECT_LOCK_PARAM = "object-lock";
+  // Default number of keys that are returned in named blob or s3 api list response.
+  public static final int DEFAULT_MAX_KEY_VALUE = 1000;
 
   /**
    * prefix for all Ambry specific heaeders
@@ -198,6 +200,10 @@ public class RestUtils {
      * for put or get dataset request; long; version of dataset.
      */
     public final static String TARGET_DATASET_VERSION = "x-ambry-target-dataset-version";
+    /**
+     * The original named blob name for a certain dataset version.
+     */
+    public final static String TARGET_DATASET_ORIGINAL_VERSION = "x-ambry-dataset-original-version";
     /**
      * The dataset version expiration time.
      */
@@ -360,6 +366,11 @@ public class RestUtils {
      * Request header to carry hostname (with port);
      */
     public final static String HOSTNAME = "x-ambry-hostname";
+
+    /**
+     * Boolean field set to "true" for ignoring containers when fetching accounts information via GET /accounts API.
+     */
+    public static final String IGNORE_CONTAINERS = "x-ambry-ignore-containers";
   }
 
   public static final class TrackingHeaders {
@@ -479,6 +490,12 @@ public class RestUtils {
     public static final String REQUEST_PATH = KEY_PREFIX + "request-path";
 
     /**
+     * The internal header to determine if the delete request is coming from a dataset deletion.
+     */
+    public static final String DATASET_DELETE_ENABLED = KEY_PREFIX + "dataset-delete-enabled";
+
+
+    /**
      * To be set to {@code true} if failures reason should be attached to frontend responses.
      */
     public static final String SEND_FAILURE_REASON = KEY_PREFIX + "send-failure-reason";
@@ -587,7 +604,7 @@ public class RestUtils {
     // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
     boolean isPrivate = !container.isCacheable();
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
-        container.isEncrypted(), externalAssetTag, contentEncoding, filename, reservedMetadataBlobid, UUID.randomUUID().toString());
+        container.isEncrypted(), externalAssetTag, contentEncoding, filename, reservedMetadataBlobid);
   }
 
   /**

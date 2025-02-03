@@ -14,19 +14,24 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FileStore;
 import com.github.ambry.store.Store;
+import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,8 +59,27 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
+  public boolean addBlobStoreForFileCopy(ReplicaId replica) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public boolean addBlobStore(ReplicaId replica) {
     return createAndStartBlobStoreIfAbsent(replica.getPartitionId()) != null;
+  }
+  @Override
+  public void buildStateForFileCopy(ReplicaId replica){
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  /**
+   * Returning false because this will not be used as part of CloudStorageManager Implementation.
+   * Implementation will be added if needed.
+   */
+  @Override
+  public boolean addFileStore(ReplicaId replicaId) {
+    return false;
+
   }
 
   @Override
@@ -87,6 +111,10 @@ public class CloudStorageManager implements StoreManager {
     return false;
   }
 
+  /**
+   * Returning null because this will not be used as part of CloudStorageManager Implementation.
+   * Implementation will be added if needed.
+   */
   @Override
   public Store getStore(PartitionId id) {
     try {
@@ -126,6 +154,16 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean isFileExists(PartitionId partitionId, String fileName) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

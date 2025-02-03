@@ -13,12 +13,16 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -135,6 +139,19 @@ public class DeleteBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.deleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, false);
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+          String datasetVersionPathString = getRequestPath(restRequest).getOperationOrBlobId(false);
+          DatasetVersionRecord datasetVersionRecord =
+              getDatasetVersionHelper(restRequest, datasetVersionPathString, accountService, metrics);
+          if (datasetVersionRecord.getRenameFrom() != null) {
+            RequestPath requestPath = getRequestPath(restRequest);
+            RequestPath newRequestPath = reconstructRequestPath(datasetVersionRecord, requestPath,
+                ((Account) restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY)).getName(),
+                ((Container) restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY)).getName());
+            restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+          }
+        }
         router.deleteBlob(restRequest, null, serviceId, routerCallback(),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -149,7 +166,6 @@ public class DeleteBlobHandler {
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           try {
             metrics.deleteDatasetVersionRate.mark();
-            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
             deleteDatasetVersion(restRequest);
           } catch (RestServiceException e) {
             metrics.deleteDatasetVersionError.inc();
@@ -207,7 +223,11 @@ public class DeleteBlobHandler {
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
         version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
-        accountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
+        if (restRequest.getArgs().get(DATASET_DELETE_ENABLED) != null) {
+          accountService.deleteDatasetVersionForDatasetDelete(accountName, containerName, datasetName, version);
+        } else {
+          accountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
+        }
         LOGGER.debug(
             "Successfully deleteDataset version for accountName: " + accountName + " containerName: " + containerName
                 + " datasetName: " + datasetName + " version: " + version);

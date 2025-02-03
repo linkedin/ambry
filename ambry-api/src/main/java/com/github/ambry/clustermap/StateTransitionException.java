@@ -75,6 +75,14 @@ public class StateTransitionException extends RuntimeException {
      */
     InvalidResourceName,
 
-    FileCopyFailure
+    /**
+     * If File Based Replication Protocol fails at some point for specific replica.
+     */
+    FileCopyProtocolFailure,
+
+    /**
+     * If Bootstap Controller fails in pre-filecopy steps for specific replica.
+     */
+    BootstrapControllerFailure
   }
 }

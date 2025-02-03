@@ -28,6 +28,9 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.s3.S3Constants;
+import com.github.ambry.frontend.s3.S3DeleteHandler;
+import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.frontend.s3.S3PostHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
@@ -75,8 +78,11 @@ public class S3MultipartUploadTest {
   private S3PutHandler s3PutHandler;
   private NamedBlobDb namedBlobDb;
   private GetBlobHandler getBlobHandler;
+  private DeleteBlobHandler deleteBlobHandler;
   private S3MultipartUploadHandler s3MultipartUploadHandler;
+  private S3MultipartAbortUploadHandler s3MultipartAbortHandler;
   private S3PostHandler s3PostHandler;
+  private S3DeleteHandler s3DeleteHandler;
 
   private final ObjectMapper xmlMapper;
 
@@ -225,7 +231,105 @@ public class S3MultipartUploadTest {
     buffer.put(content2);
     assertArrayEquals("Mismatch in blob content", buffer.array(),
         ((ByteBufferRSC) readableStreamChannel).getBuffer().array());
+
+    // 6. Verify AbortMultipart will return no content after completion
+    headers = new JSONObject();
+    uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
+    request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, headers, null);
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> deleteResult = new FutureResult<>();
+    s3DeleteHandler.handle(request, restResponseChannel, deleteResult::done);
+    assertEquals("Mismatch on status", ResponseStatus.NoContent, restResponseChannel.getStatus());
   }
+
+  @Test
+  public void testDuplicatePartNumbers() throws Exception {
+    Part part1 = new Part("1", "etag1");
+    Part part2 = new Part("1", "etag2");
+    Part[] parts = {part2, part1};
+    String expectedMessage = String.format(S3Constants.ERR_DUPLICATE_PART_NUMBER, 1);
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
+  }
+
+  @Test
+  public void testDuplicateEtags() throws Exception {
+    Part part1 = new Part("1", "etag1");
+    Part part2 = new Part("2", "etag1");
+    Part[] parts = {part2, part1};
+    String expectedMessage = String.format(S3Constants.ERR_DUPLICATE_ETAG, "etag1");
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
+  }
+
+  @Test
+  public void testInvalidPartNumLessThanMin() throws Exception {
+    Part part1 = new Part("0", "etag1");
+    Part part2 = new Part("1", "etag2");
+    Part[] parts = {part2, part1};
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, 0);
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
+  }
+
+  @Test
+  public void testPartNumberInvalidExceedsMax() throws Exception {
+    int invalidPartNumber = S3Constants.MAX_PART_NUM + 1;
+    Part part1 = new Part("2", "etag1");
+    Part part2 = new Part(String.valueOf(invalidPartNumber), "etag2");
+    Part[] parts = {part2, part1};
+    String expectedMessage = String.format(S3Constants.ERR_INVALID_PART_NUMBER, invalidPartNumber);
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
+  }
+
+  @Test
+  public void testExceedMaxParts() throws Exception {
+    Part[] parts = new Part[S3Constants.MAX_LIST_SIZE + 1];
+    for (int i = 1; i <= S3Constants.MAX_LIST_SIZE + 1; i++) {
+      parts[i - 1] = new Part(String.valueOf(i), "eTag" + i);
+    }
+    String expectedMessage = S3Constants.ERR_PART_LIST_TOO_LONG;
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
+  }
+
+  @Test
+  public void testEmptyPartList() throws Exception {
+    Part[] parts = {};
+    String expectedMessage = S3Constants.ERR_EMPTY_REQUEST_BODY;
+    testMultipartUploadWithInvalidParts(parts, expectedMessage);
+  }
+
+  private void testMultipartUploadWithInvalidParts(Part[] parts, String expectedErrorMessage) throws Exception {
+    String accountName = account.getName();
+    String containerName = container.getName();
+    String blobName = "MyDirectory/MyKey";
+    String uploadId = "uploadId";
+    String uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
+    JSONObject headers = new JSONObject();
+
+    CompleteMultipartUpload completeMultipartUpload = new CompleteMultipartUpload(parts);
+    XmlMapper xmlMapper = new XmlMapper();
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    xmlMapper.writeValue(byteArrayOutputStream, completeMultipartUpload);
+    String completeMultipartStr = byteArrayOutputStream.toString();
+    byte[] content = completeMultipartStr.getBytes(StandardCharsets.UTF_8);
+    int size = content.length;
+
+    headers.put(Headers.CONTENT_TYPE, OCTET_STREAM_CONTENT_TYPE);
+    headers.put(Headers.CONTENT_LENGTH, size);
+
+    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    s3PostHandler.handle(request, restResponseChannel, (r, e) -> {
+      assertNotNull("Expected an exception, but none was thrown.", e);
+      assertTrue("Unexpected error message: " + e.getMessage(), e.getMessage().contains(expectedErrorMessage));
+    });
+  }
+
+
 
   /**
    * Initiates a {@link S3PutHandler}
@@ -255,9 +359,13 @@ public class S3MultipartUploadTest {
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
             quotaManager, ACCOUNT_SERVICE);
+    deleteBlobHandler =
+        new DeleteBlobHandler(router, securityService, idConverter, injector, metrics, clusterMap, quotaManager, ACCOUNT_SERVICE);
     s3MultipartUploadHandler = new S3MultipartUploadHandler(securityService, metrics, injector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
-    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
+
+    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, null);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, metrics);
   }
 }

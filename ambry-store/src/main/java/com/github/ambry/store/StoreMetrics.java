@@ -78,6 +78,7 @@ public class StoreMetrics {
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public final Counter bloomRebuildOnLoadFailureCount;
+  public final Counter bloomCRCValidationFailureCount;
   public final Counter bloomPersistFailureCount;
   public final Counter mappedSegmentIsLoadedDuringFindCount;
   public final Counter mappedSegmentIsNotLoadedDuringFindCount;
@@ -95,6 +96,7 @@ public class StoreMetrics {
   public final Counter undeleteAuthorizationFailureCount;
   public final Counter keyInFindEntriesAbsent;
   public final Counter duplicateKeysInBatch;
+  public final Counter blobPartitionUnmatchError;
   public final Counter storeIoErrorTriggeredShutdownCount;
   public final Counter blobStoreRecoverCompactionPolicySwitchInfoErrorCount;
   public final Counter handleDiskFailureCount;
@@ -207,6 +209,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomFalsePositiveCount"));
     bloomRebuildOnLoadFailureCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomRebuildOnLoadFailureCount"));
+    bloomCRCValidationFailureCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomCRCValidationFailureCount"));
     bloomPersistFailureCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPersistFailureCount"));
     mappedSegmentIsLoadedDuringFindCount =
@@ -236,6 +240,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStore.class, name + "UndeleteAuthorizationFailureCount"));
     keyInFindEntriesAbsent = registry.counter(MetricRegistry.name(BlobStore.class, name + "KeyInFindEntriesAbsent"));
     duplicateKeysInBatch = registry.counter(MetricRegistry.name(BlobStore.class, name + "DuplicateKeysInBatch"));
+    blobPartitionUnmatchError =
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "BlobPartitionUnmatchError"));
     storeIoErrorTriggeredShutdownCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "StoreIoErrorTriggeredShutdownCount"));
     Gauge<Integer> staleBlobStoreCount = BlobStore.staleBlobCount::get;

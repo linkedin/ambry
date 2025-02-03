@@ -60,6 +60,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -79,7 +80,7 @@ import static com.github.ambry.router.RouterErrorCode.*;
  * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html">...</a>
  * TODO [S3] Add support for Abort multipart uploads.
  */
-public class S3MultipartCompleteUploadHandler {
+public class S3MultipartCompleteUploadHandler<R> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartCompleteUploadHandler.class);
   private static final ObjectMapper objectMapper = new XmlMapper();
   private final SecurityService securityService;
@@ -125,7 +126,7 @@ public class S3MultipartCompleteUploadHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) {
+      Callback<R> callback) {
     new S3MultipartCompleteUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -381,13 +382,13 @@ public class S3MultipartCompleteUploadHandler {
      */
     List<ChunkInfo> getChunksToStitch(CompleteMultipartUpload completeMultipartUpload) throws RestServiceException {
       // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
+      List<Part> parts = validatePartsOrThrow(completeMultipartUpload);
       List<ChunkInfo> chunkInfos = new ArrayList<>();
       try {
         // sort the list in order
-        List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
-        Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
+        Collections.sort(parts, Comparator.comparingInt(Part::getPartNumber));
         String reservedMetadataId = null;
-        for (Part part : sortedParts) {
+        for (Part part : parts) {
           S3MultipartETag eTag = S3MultipartETag.deserialize(part.geteTag());
           // TODO [S3]: decide the life cycle of S3.
           long expirationTimeInMs = -1;
@@ -414,5 +415,76 @@ public class S3MultipartCompleteUploadHandler {
       }
       return chunkInfos;
     }
+  }
+
+  /**
+   * Check the list size and part number before processing request
+   * 1. Disallow duplicate part numbers
+   * 2. Disallow duplicate etags
+   * 3. Check for list size 10000
+   * 4. Check for part numbers integer 1-10000
+   * @param request the {@link CompleteMultipartUpload} request
+   * @return the bad request error
+   */
+  List<Part> validatePartsOrThrow(CompleteMultipartUpload request) throws RestServiceException {
+    List<Part> parts = getParts(request);
+    Set<Integer> partNumbers = new HashSet<>();
+    Set<String> etags = new HashSet<>();
+    for (Part part : parts) {
+      int partNumber = getPartNumber(part);
+      if (partNumber < S3Constants.MIN_PART_NUM || partNumber > S3Constants.MAX_PART_NUM) {
+        String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, partNumber);
+        throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+      }
+      if (!partNumbers.add(partNumber)) {
+        String error = String.format(S3Constants.ERR_DUPLICATE_PART_NUMBER, partNumber);
+        throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+      }
+      String etag = part.geteTag();
+      if (!etags.add(etag)) {
+        String error = String.format(S3Constants.ERR_DUPLICATE_ETAG, etag);
+        throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+      }
+    }
+    return parts;
+  }
+
+  /**
+   * Get the part number from the part object
+   * @param part
+   * @return
+   * @throws RestServiceException
+   */
+  int getPartNumber(Part part) throws RestServiceException {
+    try {
+      return part.getPartNumber();
+    } catch (NumberFormatException e) {
+      // cannot use getPartNumber() here as it would cause another exception
+      String error = String.format(S3Constants.ERR_INVALID_PART_NUMBER, part);
+      throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+    } catch (Throwable e) {
+      // any other exception is invalid
+      throw new RestServiceException(S3Constants.ERR_INVALID_MULTIPART_UPLOAD, RestServiceErrorCode.BadRequest);
+    }
+  }
+
+  /**
+   * Get the list of parts from the request
+   * @param request
+   * @return
+   * @throws RestServiceException
+   */
+  List<Part> getParts(CompleteMultipartUpload request) throws RestServiceException {
+    Part[] part = request.getPart();
+    if (part == null) {
+      throw new RestServiceException(S3Constants.ERR_EMPTY_REQUEST_BODY, RestServiceErrorCode.BadRequest);
+    }
+    // Arrays.asList() can return an empty list, but only if it is called with no arguments.
+    // Therefore, the list below will always have at least one element as we are passing an argument.
+    List<Part> parts = Arrays.asList(part);
+    if (parts.size() > S3Constants.MAX_LIST_SIZE) {
+      throw new RestServiceException(S3Constants.ERR_PART_LIST_TOO_LONG, RestServiceErrorCode.BadRequest);
+    }
+    return parts;
   }
 }

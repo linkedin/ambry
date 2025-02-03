@@ -170,6 +170,33 @@ public class GetAccountsHandlerTest {
         existingContainer);
   }
 
+  @Test
+  public void getAccountsWithoutContainersTest() throws Exception {
+    Account account = accountService.createAndAddRandomAccount();
+    ThrowingConsumer<RestRequest> testAction = (request) -> {
+      // Set the header to ignore containers
+      request.setArg(RestUtils.Headers.IGNORE_CONTAINERS, true);
+      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      ReadableStreamChannel channel = sendRequestGetResponse(request, restResponseChannel);
+      assertNotNull("There should be a response", channel);
+      assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+      assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+      assertEquals("Content-length is not as expected", channel.getSize(),
+          Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+      RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel((int) channel.getSize());
+      channel.readInto(asyncWritableChannel, null).get();
+      Account receivedAccount =
+          AccountCollectionSerde.accountsFromInputStreamInJson(asyncWritableChannel.consumeContentAsInputStream())
+              .iterator()
+              .next();
+      assertTrue("Accounts do not match", account.equalsWithoutContainers(receivedAccount));
+      assertTrue("Containers should not be present", receivedAccount.getAllContainers().isEmpty());
+    };
+    testAction.accept(createRestRequest(account.getName(), null, null, Operations.ACCOUNTS));
+    testAction.accept(createRestRequest(null, Short.toString(account.getId()), null, Operations.ACCOUNTS));
+  }
+
   /**
    * Test failure case of getting single container.
    * @throws Exception

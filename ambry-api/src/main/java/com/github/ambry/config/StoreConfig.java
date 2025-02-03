@@ -675,37 +675,39 @@ public class StoreConfig {
   public final static String storeBlockStaleBlobStoreToStartName = "store.block.stale.blob.store.to.start";
 
   /**
-   * Config to Decide Replication Protocol For Hydration Of Newly Added Replicas
-   */
-  public static final String SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION = "server.replication.protocol.for.hydration";
-  @Config(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION)
-  public final ServerReplicationMode serverReplicationProtocolForHydration;
-
-
-  /**
    * Whether to attempt reshuffling of reordered disks and subsequent process termination.
    */
   @Config("store.reshuffle.disks.on.reorder")
   @Default("false")
   public final boolean storeReshuffleDisksOnReorder;
 
-  public static final String FILE_COPY_IN_PROGRESS_FILE_NAME = "file.copy.in.progress.file.name";
-  @Config(FILE_COPY_IN_PROGRESS_FILE_NAME)
-  @Default("file_copy_in_progress")
-  public final String fileCopyInProgressFileName;
-
-  public static final String BOOTSTRAP_IN_PROGRESS_FILE = "bootstrap.in.progress.file.name";
-  @Config(BOOTSTRAP_IN_PROGRESS_FILE)
-  @Default("bootstrap_in_progress")
-  public final String bootstrapInProgressFile;
-
   public final static String storeReshuffleDisksOnReorderName = "store.reshuffle.disks.on.reorder";
 
+  /**
+   * Name Of file to Store Sealed Segments Progress Status
+   */
+  public static final String STORE_FILE_COPY_IN_PROGRESS_FILE_NAME = "store.file.copy.in.progress.file.name";
+  @Config(STORE_FILE_COPY_IN_PROGRESS_FILE_NAME)
+  @Default("file_copy_in_progress")
+  public final String storeFileCopyInProgressFileName;
+
+  /**
+   * Name of file to Store Sealed Segments Completion Status
+   */
+  public static final String STORE_FILE_COPY_COMPLETED_FILE_NAME = "store.file.copy.completed.file.name";
+  @Config(STORE_FILE_COPY_COMPLETED_FILE_NAME)
+  @Default("file_copy_completed")
+  public final String storeFileCopyCompletedFileName;
+
+  /**
+   * Name Of file to Store Bootstrap Progress Status
+   */
+  public static final String STORE_BOOTSTRAP_IN_PROGRESS_FILE = "store.bootstrap.in.progress.file.name";
+  @Config(STORE_BOOTSTRAP_IN_PROGRESS_FILE)
+  @Default("bootstrap_in_progress")
+  public final String storeBootstrapInProgressFile;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
-    bootstrapInProgressFile = verifiableProperties.getString(BOOTSTRAP_IN_PROGRESS_FILE, "bootstrap_in_progress");
-    fileCopyInProgressFileName = verifiableProperties.getString(FILE_COPY_IN_PROGRESS_FILE_NAME, "file_copy_in_progress");
-    serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION,
-        ServerReplicationMode.class, ServerReplicationMode.BLOB_BASED);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
@@ -884,5 +886,9 @@ public class StoreConfig {
     storeStaleTimeInDays = verifiableProperties.getIntInRange(storeStaleTimeInDaysName, 7, 0, Integer.MAX_VALUE);
     storeBlockStaleBlobStoreToStart = verifiableProperties.getBoolean(storeBlockStaleBlobStoreToStartName, false);
     storeReshuffleDisksOnReorder = verifiableProperties.getBoolean(storeReshuffleDisksOnReorderName, false);
+
+    storeFileCopyInProgressFileName = verifiableProperties.getString(STORE_FILE_COPY_IN_PROGRESS_FILE_NAME, "file_copy_in_progress");
+    storeBootstrapInProgressFile = verifiableProperties.getString(STORE_BOOTSTRAP_IN_PROGRESS_FILE, "bootstrap_in_progress");
+    storeFileCopyCompletedFileName = verifiableProperties.getString(STORE_FILE_COPY_COMPLETED_FILE_NAME, "file_copy_completed");
   }
 }

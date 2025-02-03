@@ -24,6 +24,8 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
+import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
+import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -114,7 +116,7 @@ public class S3DeleteHandlerTest {
     DeleteBlobHandler deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, ambryIdConverterFactory.getIdConverter(), injector, metrics,
             new MockClusterMap(), QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
-    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, metrics);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, null, metrics);
   }
 
   private void putABlob() throws Exception {

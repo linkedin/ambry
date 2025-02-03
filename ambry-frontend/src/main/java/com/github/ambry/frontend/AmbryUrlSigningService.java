@@ -168,7 +168,7 @@ public class AmbryUrlSigningService implements UrlSigningService {
         BlobId reservedMetadataBlobId = ClusterMapUtils.reserveMetadataBlobId(
             ClusterMapUtils.getPartitionClass(account, container, clusterMapConfig.clusterMapDefaultPartitionClass),
             null, ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(clusterMap.getMetricRegistry()), clusterMap,
-            account.getId(), container.getId(), container.isEncrypted(), routerConfig, null);
+            account.getId(), container.getId(), container.isEncrypted(), routerConfig);
         if (reservedMetadataBlobId == null) {
           ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
               clusterMap.getMetricRegistry()).reserveMetadataIdFailedForPostSignedUrlCount.inc();

@@ -44,7 +44,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  *            require a response body, otherwise it is {@link ReadableStreamChannel}.
  */
 abstract public class S3BaseHandler<R> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
+  protected static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
 
   /**
    * Handles the S3 request and construct the response.
@@ -124,6 +124,15 @@ abstract public class S3BaseHandler<R> {
 
   /**
    * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a request for batch delete.
+   */
+  public static boolean isBatchDelete(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(BATCH_DELETE_QUERY_PARAM);
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @return {@code True} if it is a completion/abortion of multipart uploads.
    */
   public static boolean isMultipartCompleteUploadRequest(RestRequest restRequest) {
@@ -146,6 +155,11 @@ abstract public class S3BaseHandler<R> {
    */
   public static boolean isMultipartListPartRequest(RestRequest restRequest) {
     return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  }
+
+  public static boolean isMultipartAbortUploadRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.DELETE && restRequest.getArgs().containsKey(S3_REQUEST)
         && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 

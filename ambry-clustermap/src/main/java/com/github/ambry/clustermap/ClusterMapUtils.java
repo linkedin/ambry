@@ -241,21 +241,19 @@ public class ClusterMapUtils {
   /**
    * Choose a random {@link PartitionId} for putting the metadata chunk and return a {@link BlobId} that belongs to the
    * chosen partition id.
-   *
-   * @param partitionClass            the partition class to choose partitions from.
-   * @param partitionIdsToExclude     the list of {@link PartitionId}s that should be excluded from consideration.
+   * @param partitionClass the partition class to choose partitions from.
+   * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
    * @param reservedMetadataIdMetrics the {@link ReservedMetadataIdMetrics} object.
-   * @param clusterMap                the {@link ClusterMap} object.
-   * @param accountId                 the account id to be encoded in the blob id.
-   * @param containerId               the container id to be encoded in the blob id.
-   * @param isEncrypted               {@code true} is the blob is encrypted. {@code false} otherwise.
-   * @param routerConfig              the {@link RouterConfig} object.
-   * @param reservedUuid
+   * @param clusterMap the {@link ClusterMap} object.
+   * @param accountId the account id to be encoded in the blob id.
+   * @param containerId the container id to be encoded in the blob id.
+   * @param isEncrypted {@code true} is the blob is encrypted. {@code false} otherwise.
+   * @param routerConfig the {@link RouterConfig} object.
    * @return the chosen {@link BlobId}.
    */
   public static BlobId reserveMetadataBlobId(String partitionClass, List<PartitionId> partitionIdsToExclude,
       ReservedMetadataIdMetrics reservedMetadataIdMetrics, ClusterMap clusterMap, short accountId, short containerId,
-      boolean isEncrypted, RouterConfig routerConfig, String reservedUuid) {
+      boolean isEncrypted, RouterConfig routerConfig) {
     PartitionId selected = clusterMap.getRandomFullyWritablePartition(partitionClass, partitionIdsToExclude);
     if (selected == null) {
       reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.inc();
@@ -266,11 +264,6 @@ public class ClusterMapUtils {
           "While reserving metadata chunk id, no partitions for partitionClass='{}' found, partitionClass='{}' used"
               + " instead for metadata chunk.", partitionClass, selected.getPartitionClass());
       reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.inc();
-    }
-    if (reservedUuid != null) {
-      return new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
-          clusterMap.getLocalDatacenterId(), accountId, containerId, selected, isEncrypted,
-          BlobId.BlobDataType.METADATA, reservedUuid);
     }
     return new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         clusterMap.getLocalDatacenterId(), accountId, containerId, selected, isEncrypted,

@@ -14,9 +14,12 @@
  */
 package com.github.ambry.frontend.s3;
 
+import java.util.ArrayList;
 import java.util.List;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 
 /**
@@ -170,7 +173,7 @@ public class S3MessagePayload {
     private List<Contents> contents;
     @JacksonXmlProperty(localName = "EncodingType")
     private String encodingType;
-    @JacksonXmlProperty(localName = "isTruncated")
+    @JacksonXmlProperty(localName = "IsTruncated")
     private Boolean isTruncated;
 
     private AbstractListBucketResult() {
@@ -317,6 +320,10 @@ public class S3MessagePayload {
 
     public long getSize() { return size; }
 
+    public String getLastModified() {
+      return lastModified;
+    }
+
     @Override
     public String toString() {
       return "Key=" + key + ", " + "LastModified=" + lastModified + ", " + "Size=" + size;
@@ -347,4 +354,143 @@ public class S3MessagePayload {
       return "Bucket=" + bucket + ", Key=" + key + ", UploadId=" + uploadId;
     }
   }
+
+  public static class S3BatchDeleteObjects {
+
+    // Ensure that the "Delete" wrapper element is mapped correctly to the list of "Object" elements
+    @JacksonXmlElementWrapper(useWrapping = false)  // Avoids wrapping the <Delete> element itself
+    @JacksonXmlProperty(localName = "Object")      // Specifies that each <Object> element maps to an instance of S3BatchDeleteKeys
+    private List<S3BatchDeleteKey> objects;
+
+    public List<S3BatchDeleteKey> getObjects() {
+      return objects;
+    }
+
+    public void setObjects(List<S3BatchDeleteKey> objects) {
+      this.objects = objects;
+    }
+
+    @Override
+    public String toString() {
+      return "S3BatchDeleteObjects{" +
+          "objects=" + objects +
+          '}';
+    }
+  }
+
+  public static class S3BatchDeleteKey {
+
+    // Maps the <Key> element inside each <Object> to the 'key' property in S3BatchDeleteKeys
+    @JacksonXmlProperty(localName = "Key")
+    private String key;
+
+    public String getKey() {
+      return key;
+    }
+
+    public void setKey(String key) {
+      this.key = key;
+    }
+
+    @Override
+    public String toString() {
+      return "S3BatchDeleteKey{" +
+          "key='" + key + '\'' +
+          '}';
+    }
+  }
+
+  // exact naming from S3BatchDelete response
+  public static class DeleteResult {
+
+    @JacksonXmlElementWrapper(useWrapping = false)
+    @JacksonXmlProperty(localName = "Error") // Maps to <Error> in XML
+    private List<S3MessagePayload.S3ErrorObject> errors;
+
+    @JacksonXmlElementWrapper(useWrapping = false)
+    @JacksonXmlProperty(localName = "Deleted") // Maps to <Deleted> in XML
+    private List<S3MessagePayload.S3DeletedObject> deleted;
+
+    // Getters and setters
+    public List<S3MessagePayload.S3ErrorObject> getErrors() {
+      return errors;
+    }
+
+    public void setErrors(List<S3MessagePayload.S3ErrorObject> errors) {
+      this.errors = errors;
+    }
+
+    public List<S3MessagePayload.S3DeletedObject> getDeleted() {
+      return deleted;
+    }
+
+    public void setDeleted(List<S3MessagePayload.S3DeletedObject> deleted) {
+      this.deleted = deleted;
+    }
+  }
+
+  public static class S3ErrorObject {
+
+    @JacksonXmlProperty(localName = "Key")
+    private String key;
+
+    @JacksonXmlProperty(localName = "Code")
+    private String code;
+
+    public S3ErrorObject(){}
+
+    public S3ErrorObject(String key, String code) {
+      this.key = key;
+      this.code = code;
+    }
+
+    // Getters and setters
+    public String getKey() {
+      return key;
+    }
+
+    public void setKey(String key) {
+      this.key = key;
+    }
+
+    public String getCode() {
+      return code;
+    }
+
+    public void setCode(String code) {
+      this.code = code;
+    }
+
+    @Override
+    public String toString() {
+      return "S3ErrorObject{key='" + key + "', code='" + code + "'}";
+    }
+  }
+
+  public static class S3DeletedObject {
+
+    @JacksonXmlProperty(localName = "Key")
+    private String key;
+
+    public S3DeletedObject() {}
+
+    public S3DeletedObject(String key) {
+      this.key = key;
+    }
+
+    // Getters and setters
+    public String getKey() {
+      return key;
+    }
+
+    public void setKey(String key) {
+      this.key = key;
+    }
+
+    @Override
+    public String toString() {
+      return "S3DeletedObject{key='" + key + "'}";
+    }
+  }
 }
+

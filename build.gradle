@@ -321,6 +321,25 @@ project(':ambry-network') {
     }
 }
 
+project (':ambry-prioritization') {
+    dependencies{
+        compile project(':ambry-api')
+        compile project(':ambry-commons')
+        compile project(':ambry-store')
+        compile project(':ambry-clustermap')
+
+    }
+}
+
+project (':ambry-file-transfer') {
+    dependencies{
+        compile project(':ambry-api')
+        compile project(':ambry-commons')
+        compile project(':ambry-store')
+        compile project(':ambry-prioritization')
+    }
+}
+
 project(':ambry-server') {
     dependencies {
         compile project(':ambry-cloud'),
@@ -335,7 +354,7 @@ project(':ambry-server') {
                 project(':ambry-account'),
                 project(':ambry-replication'),
                 project(':ambry-mysql'),
-                project(':ambry-prioritisation'),
+                project(':ambry-prioritization'),
                 project(':ambry-file-transfer')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
@@ -533,29 +552,6 @@ project(':ambry-vcr') {
         testCompile project(path: ':ambry-cloud', configuration: 'testArchives')
     }
 }
-
-project (':ambry-prioritisation') {
-    dependencies{
-        compile project(':ambry-api')
-        compile project(':ambry-mysql')
-        compile project(':ambry-commons')
-        compile project(':ambry-store')
-        compile project(':ambry-clustermap')
-
-    }
-}
-
-project (':ambry-file-transfer') {
-    dependencies{
-        compile project(':ambry-api')
-        compile project(':ambry-mysql')
-        compile project(':ambry-commons')
-        compile project(':ambry-store')
-        compile project(':ambry-prioritisation')
-        compile project(':ambry-protocol')
-    }
-}
-
 
 project(':ambry-named-mysql') {
     dependencies {

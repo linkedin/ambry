@@ -70,7 +70,6 @@ import static com.github.ambry.clustermap.VcrClusterParticipant.*;
 public class BlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(BlobStore.class);
   static final String SEPARATOR = "_";
-  static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
   static final String DECOMMISSION_FILE_NAME = "decommission_in_progress";
   final static String LockFile = ".lock";
 
@@ -1185,7 +1184,7 @@ public class BlobStore implements Store {
 
   @Override
   public boolean isBootstrapInProgress() {
-    return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
+    return (new File(dataDir, config.storeBootstrapInProgressFile)).exists();
   }
 
   @Override
@@ -1197,7 +1196,7 @@ public class BlobStore implements Store {
 
   @Override
   public void completeBootstrap() {
-    File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
+    File bootstrapFile = new File(dataDir, config.storeBootstrapInProgressFile);
     try {
       // the method will check if file exists or not
       Utils.deleteFileOrDirectory(bootstrapFile);
@@ -1663,6 +1662,7 @@ public class BlobStore implements Store {
       if (storeKey instanceof BlobId && replicaId != null) {
         BlobId blobId = (BlobId) storeKey;
         if (blobId.getPartition().getId() != replicaId.getPartitionId().getId()) {
+          metrics.blobPartitionUnmatchError.inc();
           throw new IllegalArgumentException(
               "WriteSet contains unexpected blob id : " + info.getStoreKey() + ", it belongs to partition "
                   + blobId.getPartition() + " but this blobstore's partition is " + replicaId.getPartitionId());

@@ -42,6 +42,10 @@ import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -226,6 +230,11 @@ public class S3ListHandlerTest {
     assertEquals("Mismatch in delimiter", "/", listBucketResultV2.getDelimiter());
     assertEquals("Mismatch in encoding type", "url", listBucketResultV2.getEncodingType());
     assertEquals("Mismatch in size", BLOB_SIZE, listBucketResultV2.getContents().get(0).getSize());
+    // Verify the modified timestamp is formatted correctly
+    String lastModified = listBucketResultV2.getContents().get(0).getLastModified();
+    assertNotEquals( "Last modified should not be -1", "-1", lastModified);
+    // Attempt to parse the string. This should throw DateTimeParseException if the format is incorrect.
+    ZonedDateTime.parse(lastModified, S3ListHandler.TIMESTAMP_FORMATTER);
 
     // 4. Get list of blobs with continuation-token
     s3_list_request_uri =

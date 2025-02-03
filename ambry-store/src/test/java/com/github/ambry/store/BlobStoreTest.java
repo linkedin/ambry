@@ -2411,8 +2411,9 @@ public class BlobStoreTest {
     StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
     BlobStore blobStore = createBlobStore(testReplica);
     blobStore.start();
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     // create a bootstrap file
-    File bootstrapFile = new File(testReplica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
+    File bootstrapFile = new File(testReplica.getReplicaPath(),  config.storeBootstrapInProgressFile);
     assertTrue("Couldn't create a bootstrap file", bootstrapFile.createNewFile());
     assertTrue("Store should be in bootstrap state", blobStore.isBootstrapInProgress());
     blobStore.completeBootstrap();

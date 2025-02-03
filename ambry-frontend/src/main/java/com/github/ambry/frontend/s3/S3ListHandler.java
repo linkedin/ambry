@@ -31,6 +31,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -56,11 +62,11 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static final ObjectMapper xmlMapper = new XmlMapper();
   public static final String PREFIX_PARAM_NAME = "prefix";
   public static final String MAXKEYS_PARAM_NAME = "max-keys";
-  public static final int DEFAULT_MAX_KEY_VALUE = 1000;
   public static final String DELIMITER_PARAM_NAME = "delimiter";
   public static final String ENCODING_TYPE_PARAM_NAME = "encoding-type";
   private final NamedBlobListHandler namedBlobListHandler;
   private final FrontendMetrics metrics;
+  public static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
@@ -104,7 +110,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
     String marker = getHeader(restRequest.getArgs(), MARKER, false);
     String continuationToken = getHeader(restRequest.getArgs(), CONTINUATION_TOKEN, false);
-        //By default S3 list returns up to 1000 key names.
+    //By default S3 list returns up to 1000 key names.
     int maxKeysValue = maxKeys == null ? DEFAULT_MAX_KEY_VALUE : Integer.parseInt(maxKeys);
     // Iterate through list of blob names.
     List<Contents> contentsList = new ArrayList<>();
@@ -113,9 +119,12 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
       String blobName = namedBlobRecord.getBlobName();
       long blobSize = namedBlobRecord.getBlobSize();
       long modifiedTimeMs = namedBlobRecord.getModifiedTimeMs();
-      Date modifiedDate = modifiedTimeMs != -1 ? new Date(modifiedTimeMs) : Calendar.getInstance().getTime();
-      String formattedModifiedDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(modifiedDate);
-      contentsList.add(new Contents(blobName, formattedModifiedDate, blobSize));
+      if (modifiedTimeMs == -1) {
+        modifiedTimeMs = System.currentTimeMillis();
+      }
+      ZonedDateTime zonedDateTime = Instant.ofEpochMilli(modifiedTimeMs).atZone(ZoneId.of("UTC"));
+      String formattedDate = zonedDateTime.format(TIMESTAMP_FORMATTER);
+      contentsList.add(new Contents(blobName, formattedDate, blobSize));
       if (++keyCount == maxKeysValue) {
         break;
       }

@@ -13,15 +13,16 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.store.FileStore;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;
+import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.List;
-
+import java.util.regex.Pattern;
 
 
 /**
@@ -30,22 +31,31 @@ import java.util.List;
 public interface StoreManager {
 
   /**
+   * Add a new BlobStore for FileCopy based replication with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStoreForFileCopy(ReplicaId replica);
+
+  /**
    * Add a new BlobStore with given {@link ReplicaId}.
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
   boolean addBlobStore(ReplicaId replica);
 
+  /**
+   * Add a new FileStore with given {@link ReplicaId}.
+   * @param replicaId the {@link ReplicaId} of the {@link FileStore} which would be added.
+   * @return {@code true} if adding FileStore was successful. {@code false} if not.
+   */
   boolean addFileStore(ReplicaId replicaId);
-
-  void setUpReplica(String partitionName);
-
 
   /**
    * Build state after filecopy is completed
-   * @param partitionName the partition id for which state is to be built..
+   * @param replica the {@link ReplicaId} of the {@link Store} for which store needs to be built
    */
-  void buildStateForFileCopy(String partitionName);
+  void buildStateForFileCopy(ReplicaId replica);
 
   /**
    * Remove store from storage manager.
@@ -75,6 +85,13 @@ public interface StoreManager {
    */
   Store getStore(PartitionId id);
 
+
+  /**
+   *
+   * @param id the {@link PartitionId} to find the store for.
+   * @return the {@link FileStore} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
+   *         that partition, or that store was not started.
+   */
   FileStore getFileStore(PartitionId id);
 
   /**
@@ -121,4 +138,19 @@ public interface StoreManager {
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
+
+  /**
+   * Check if a file exists in the store directory.
+   * @return {@code true} if the file exists, {@code false} otherwise.
+   */
+  boolean isFileExists(PartitionId partitionId, String fileName);
+
+  /**
+   * Check if files exist for a given pattern in the store directory.
+   * @param partitionId
+   * @param pattern
+   * @return {@code true} if the files exist, {@code false} otherwise.
+   * @throws IOException
+   */
+  boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
 }

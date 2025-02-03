@@ -1,3 +1,16 @@
+/**
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.protocol;
 
 import com.github.ambry.utils.Utils;
@@ -9,21 +22,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 
+/**
+ * Contains the fileName, fileSizeInBytes, indexFiles and bloomFilters for a local partition. This is used
+ * by filecopy metadata request.
+ */
 public class LogInfo {
   private String fileName;
   private long fileSizeInBytes;
-  List<FileInfo> listOfIndexFiles;
-  List<FileInfo> listOfBloomFilters;
+  List<FileInfo> indexFiles;
+  List<FileInfo> bloomFilters;
 
   private static final int FileName_Field_Size_In_Bytes = 4;
   private static final int FileSize_Field_Size_In_Bytes = 8;
 
   private static final int ListSize_In_Bytes = 4;
-  public LogInfo(String fileName, long fileSizeInBytes, List<FileInfo> listOfIndexFiles, List<FileInfo> listOfBloomFilters) {
+  public LogInfo(String fileName, long fileSizeInBytes, List<FileInfo> indexFiles, List<FileInfo> bloomFilters) {
     this.fileName = fileName;
     this.fileSizeInBytes = fileSizeInBytes;
-    this.listOfIndexFiles = listOfIndexFiles;
-    this.listOfBloomFilters = listOfBloomFilters;
+    this.indexFiles = indexFiles;
+    this.bloomFilters = bloomFilters;
   }
 
   public String getFileName() {
@@ -34,21 +51,21 @@ public class LogInfo {
     return fileSizeInBytes;
   }
 
-  public List<FileInfo> getListOfBloomFilters() {
-    return listOfBloomFilters;
+  public List<FileInfo> getBloomFilters() {
+    return bloomFilters;
   }
 
-  public List<FileInfo> getListOfIndexFiles() {
-    return listOfIndexFiles;
+  public List<FileInfo> getIndexFiles() {
+    return indexFiles;
   }
 
   public long sizeInBytes() {
     long size = FileName_Field_Size_In_Bytes + fileName.length() + FileSize_Field_Size_In_Bytes + ListSize_In_Bytes;
-    for (FileInfo fileInfo : listOfIndexFiles) {
+    for (FileInfo fileInfo : indexFiles) {
       size += fileInfo.sizeInBytes();
     }
     size += ListSize_In_Bytes;
-    for (FileInfo fileInfo : listOfBloomFilters) {
+    for (FileInfo fileInfo : bloomFilters) {
       size += fileInfo.sizeInBytes();
     }
     return size;
@@ -75,12 +92,12 @@ public class LogInfo {
   public void writeTo(ByteBuf buf){
     Utils.serializeString(buf, fileName, Charset.defaultCharset());
     buf.writeLong(fileSizeInBytes);
-    buf.writeInt(listOfIndexFiles.size());
-    for(FileInfo fileInfo : listOfIndexFiles){
+    buf.writeInt(indexFiles.size());
+    for(FileInfo fileInfo : indexFiles){
       fileInfo.writeTo(buf);
     }
-    buf.writeInt(listOfBloomFilters.size());
-    for(FileInfo fileInfo: listOfBloomFilters){
+    buf.writeInt(bloomFilters.size());
+    for(FileInfo fileInfo: bloomFilters){
       fileInfo.writeTo(buf);
     }
   }
@@ -89,15 +106,14 @@ public class LogInfo {
     StringBuilder sb = new StringBuilder();
     sb.append("LogInfo[");
     sb.append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes).append(",");
-    for(FileInfo fileInfo : listOfIndexFiles) {
+    for(FileInfo fileInfo : indexFiles) {
       sb.append(fileInfo.toString());
     }
-    for(FileInfo fileInfo: listOfBloomFilters){
+    for(FileInfo fileInfo: bloomFilters){
       sb.append(fileInfo.toString());
     }
     sb.append("]");
     return sb.toString();
   }
-
 
 }

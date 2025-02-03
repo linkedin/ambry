@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -264,6 +265,79 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.put(record).get();
     assertEquals("Record should have been replaced", record,
         namedBlobDb.get(account.getName(), container.getName(), blobName).get());
+  }
+
+  /**
+   * Test behavior with list named blob
+   */
+  @Test
+  public void testListNamedBlobsWithStaleRecords() throws Exception {
+    Iterator<Account> accountIter = accountService.getAllAccounts().iterator();
+    Account a1 = accountIter.next();
+    Iterator<Container> a1containerIter = a1.getAllContainers().iterator();
+    Container a1c1 = a1containerIter.next();
+    Container a1c2 = a1containerIter.next();
+    Account a2 = accountIter.next();
+    Iterator<Container> a2containerIter = a2.getAllContainers().iterator();
+    Container a2c1 = a2containerIter.next();
+    String blobName = "testListNamedBlobsWithStaleRecords";
+    NamedBlobRecord v1, v1_other, v2, v2_other;
+    Page<NamedBlobRecord> page;
+
+    // put blob Ready and list should return the blob
+    v1 = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName, getBlobId(a1, a1c1),
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    v1_other = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName + "-other", getBlobId(a1, a1c1),
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    // add some extra blobs in other accounts and containers for testing
+    NamedBlobRecord a1c2Blob = new NamedBlobRecord(a1.getName(), a1c2.getName(), blobName, getBlobId(a1, a1c2),
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    NamedBlobRecord a2c1Blob = new NamedBlobRecord(a2.getName(), a2c1.getName(), blobName, getBlobId(a2, a2c1),
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+    NamedBlobRecord v1_get = namedBlobDb.get(a1.getName(), a1c1.getName(), blobName).get();
+    assertEquals(v1, v1_get);
+    namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
+    NamedBlobRecord v1_other_get = namedBlobDb.get(a1.getName(), a1c1.getName(), blobName + "-other").get();
+    assertEquals(v1_other, v1_other_get);
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    assertEquals(2, page.getEntries().size());
+    assertEquals(v1_get, page.getEntries().get(0));
+    assertEquals(v1_other_get, page.getEntries().get(1));
+    time.sleep(100);
+
+    // put blob in-progress and list should return the Ready blob
+    v2 = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName, getBlobId(a1, a1c1),
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    assertEquals(2, page.getEntries().size());
+    assertEquals(v1_get, page.getEntries().get(0));
+    assertEquals(v1_other_get, page.getEntries().get(1));
+    time.sleep(100);
+
+    // update blob and list should return the new blob
+    v2 = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName, getBlobId(a1, a1c1),
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    v2_other = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName + "-other", getBlobId(a1, a1c1),
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v2, NamedBlobState.READY, true).get();
+    namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    assertEquals(2, page.getEntries().size());
+    assertEquals(v2, page.getEntries().get(0));
+    assertEquals(v2_other, page.getEntries().get(1));
+    time.sleep(100);
+
+    // delete blob and list should return empty
+    namedBlobDb.delete(a1.getName(), a1c1.getName(), blobName).get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    assertEquals(1, page.getEntries().size());
+    assertEquals(v2_other, page.getEntries().get(0));
+    time.sleep(100);
+    namedBlobDb.delete(a1.getName(), a1c1.getName(), blobName + "-other").get();
+    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
+    assertEquals(0, page.getEntries().size());
   }
 
   /**

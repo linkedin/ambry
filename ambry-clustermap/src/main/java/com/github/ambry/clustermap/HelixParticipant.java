@@ -145,8 +145,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
-    registerStatsReportAggregationTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
-    registerPropertyStoreCleanUpTask(stateMachineEngine);
+    registerTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
     try {
       // register server as a participant
       manager.connect();
@@ -799,15 +798,17 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Register aggregation tasks for appropriate {@link AmbryStatsReport}s.
+   * This method will register Helix Tasks
+   * Register aggregation tasks for appropriate {@link AmbryStatsReport}s and {@link PropertyStoreCleanUpTask}.
    * @param engine the {@link StateMachineEngine} to register the task state model.
    * @param statsReports the {@link List} of {@link AmbryStatsReport}s that may require the registration of
    * corresponding {@link MySqlReportAggregatorTask}s.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  private void registerStatsReportAggregationTasks(StateMachineEngine engine, List<AmbryStatsReport> statsReports,
+  private void registerTasks(StateMachineEngine engine, List<AmbryStatsReport> statsReports,
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
+    //Register MySqlReportAggregatorTask
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryStatsReport statsReport : statsReports) {
       taskFactoryMap.put(
@@ -815,25 +816,18 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           context -> new MySqlReportAggregatorTask(context.getManager(), statsReport.getAggregateIntervalInMinutes(),
               statsReport.getStatsReportType(), accountStatsStore, callback, clusterMapConfig, metricRegistry));
     }
-    if (!taskFactoryMap.isEmpty()) {
-      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
-          new TaskStateModelFactory(manager, taskFactoryMap));
-    }
-  }
 
-  /**
-   * Register Property Store Clean Up Task for cleaning up expired {@link DataNodeConfig} in Property Store.
-   * @param engine the {@link StateMachineEngine} to register the task state model.
-   */
-  private void registerPropertyStoreCleanUpTask(StateMachineEngine engine){
+    //Register PropertyStoreTask
     if(clusterMapConfig.clustermapEnablePropertyStoreCleanUpTask) {
       logger.info("Registering PropertyStoreCleanUpTask");
-      Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
       taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
           context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,
               metricRegistry));
+    }
+
+    if (!taskFactoryMap.isEmpty()) {
       engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
-          new TaskStateModelFactory(manager, taskFactoryMap), PropertyStoreCleanUpTask.COMMAND);
+          new TaskStateModelFactory(manager, taskFactoryMap));
     }
   }
 

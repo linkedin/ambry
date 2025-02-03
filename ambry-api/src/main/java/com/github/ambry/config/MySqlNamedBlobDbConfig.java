@@ -17,6 +17,8 @@ package com.github.ambry.config;
 
 import com.github.ambry.named.TransactionIsolationLevel;
 
+import static com.github.ambry.rest.RestUtils.*;
+
 
 public class MySqlNamedBlobDbConfig {
   private static final String PREFIX = "mysql.named.blob.";
@@ -29,6 +31,18 @@ public class MySqlNamedBlobDbConfig {
   public static final String  QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String  STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
+  public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
+
+  /**
+   * Option to pick the SQL query to use for listing named blobs.
+   * Check getListNamedBlobsSQL() for more details.
+   */
+  @Config(LIST_NAMED_BLOBS_SQL_OPTION)
+  public static final int DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION = 2;
+  public static final int MIN_LIST_NAMED_BLOBS_SQL_OPTION = 1;
+  public static final int MAX_LIST_NAMED_BLOBS_SQL_OPTION = 2;
+  public final int listNamedBlobsSQLOption;
+
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -93,10 +107,12 @@ public class MySqlNamedBlobDbConfig {
   public final TransactionIsolationLevel transactionIsolationLevel;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
+    this.listNamedBlobsSQLOption = verifiableProperties.getIntInRange(LIST_NAMED_BLOBS_SQL_OPTION,
+        DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION, MIN_LIST_NAMED_BLOBS_SQL_OPTION, MAX_LIST_NAMED_BLOBS_SQL_OPTION);
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
-    this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
+    this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
     this.queryStaleDataMaxResults = verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays = verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
     this.dbTransition = verifiableProperties.getBoolean(DB_TRANSITION, false);

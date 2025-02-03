@@ -44,10 +44,14 @@ public enum StateModelListenerType {
   CloudToStoreReplicationManagerListener,
 
   /**
-   * The partition state change listener owned by Helix participant. It takes actions when partition state transition
-   * occurs.
+   * The partition state change listener owned by file copy manager. It takes actions when new replica is added (OFFLINE ->
+   * BOOTSTRAP)
    */
-  FileCopyManagerListener
+  FileCopyManagerListener,
 
-
+  /**
+   * The partition state change listener owned by Bootstrap Controller.
+   * It takes actions when Offline -> Bootstrap state transition is called for a partition.
+   */
+  BootstrapControllerListener
 }
