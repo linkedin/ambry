@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
@@ -191,9 +192,9 @@ public class DiskManager {
       ConcurrentHashMap<PartitionId, Exception> startExceptions = new ConcurrentHashMap<>();
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
-
-        if(Arrays.asList(146L, 803L).contains(partitionAndStore.getKey().getId())) {
-          logger.info("Skip the store {} because it is running file copy", partitionAndStore.getKey());
+        if(Objects.equals(146L, partitionAndStore.getKey().getId()) &&
+            partitionToReplicaMap.get(partitionAndStore.getKey()).getDataNodeId().getHostname().equals("ltx1-app3602.stg.linkedin.com")) {
+          logger.info("Demo: Skip the store {} at bootstrapping node", partitionAndStore.getKey());
           continue;
         }
         if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
@@ -203,9 +204,6 @@ public class DiskManager {
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
             partitionAndStore.getValue().start();
-              // [Dw remove]
-//              logger.info("[Dw] PrintUtil for PartitionId: " + partitionAndStore.getKey().getId());
-//              partitionAndStore.getValue().printAndReturnFiles();
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
             logger.error("Exception while starting store for the {}", partitionAndStore.getKey(), e);

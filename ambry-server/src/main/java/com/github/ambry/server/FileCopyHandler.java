@@ -42,7 +42,7 @@ public class FileCopyHandler {
   private final ConnectionPool connectionPool;
   private final FileStore fileStore;
   private final ClusterMap clusterMap;
-  private final int CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
+  private final int CHUNK_SIZE = 20 * 1024 * 1024; // 20MB
 
   private static final Logger logger = LoggerFactory.getLogger(FileCopyHandler.class);
 
@@ -80,10 +80,12 @@ public class FileCopyHandler {
         FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "", partitionId, "hostName");
 
     logger.info("Demo: Request: {}", request);
+    long startTimeMs = System.currentTimeMillis();
     ConnectedChannel connectedChannel =
         connectionPool.checkOutConnection(targetReplicaId.getDataNodeId().getHostname(), targetReplicaId.getDataNodeId().getPortToConnectTo(), 40);
     ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
     FileCopyGetMetaDataResponse response = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
+    logger.info("Demo: FileCopyGetMetaDataRequest Api took {} ms", System.currentTimeMillis() - startTimeMs);
     logger.info("Demo: Response: {}", response);
 
     List<LogInfo> logInfos = AmbryRequests.convertProtocolToStoreLogInfo(response.getLogInfos());
@@ -93,7 +95,7 @@ public class FileCopyHandler {
 
     response.getLogInfos().forEach(logInfo -> {
       logInfo.getIndexFiles().forEach(indexFile -> {
-        String filePath = partitionFilePath + "/fc_" + indexFile.getFileName();
+        String filePath = partitionFilePath + "/" + indexFile.getFileName();
         try {
           fetchAndPersistChunks(partitionId, targetReplicaId, clusterMap, indexFile, filePath, Long.MAX_VALUE, 0);
         } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
@@ -101,14 +103,14 @@ public class FileCopyHandler {
         }
       });
 //      logInfo.getBloomFilters().forEach(bloomFile -> {
-//        String filePath = partitionFilePath + "/fc_" + bloomFile.getFileName();
+//        String filePath = partitionFilePath + "/" + bloomFile.getFileName();
 //        try {
 //          fetchAndPersistChunks(partitionId, targetReplicaId, clusterMap, bloomFile, filePath, Long.MAX_VALUE, 0);
 //        } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
 //          throw new RuntimeException(e);
 //        }
 //      });
-      String filePath = partitionFilePath + "/fc_" + logInfo.getFileName() + "_log";
+      String filePath = partitionFilePath + "/" + logInfo.getFileName() + "_log";
       FileInfo logFileInfo = new FileInfo(logInfo.getFileName() + "_log", logInfo.getFileSizeInBytes());
 
       int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSizeInBytes() / CHUNK_SIZE);
@@ -135,17 +137,19 @@ public class FileCopyHandler {
         fileInfo.getFileName(), startOffset, sizeInBytes);
 
     logger.info("Demo: Request: {}", request);
+    long startTimeMs = System.currentTimeMillis();
     ConnectedChannel connectedChannel =
         connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPortToConnectTo(), 99999);
     ChannelOutput chunkChannelOutput = connectedChannel.sendAndReceive(request);
-
     FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(chunkChannelOutput.getInputStream(), clusterMap);
+    logger.info("Demo: FileCopyGetChunkRequest Api took {} ms", System.currentTimeMillis() - startTimeMs);
     logger.info("Demo: Response: {}", response);
 
     putChunkToFile(filePath, response.getChunkStream(), response.getChunkSizeInBytes());
   }
 
   private void putChunkToFile(String filePath, DataInputStream stream, long chunkSizeInBytes) throws IOException {
+    long startTimeMs = System.currentTimeMillis();
     if(!new File(filePath).exists()) {
       Files.createFile(new File(filePath).toPath());
     }
@@ -156,6 +160,7 @@ public class FileCopyHandler {
       byteArrayOutputStream.write(buffer, 0, bytesRead);
     }
     Files.write(Paths.get(filePath), buffer, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    logger.info("Demo: putChunkToFile took {} ms", System.currentTimeMillis() - startTimeMs);
     logger.info("Demo: Write successful for chunk to file: " + filePath);
 
 //    FileInputStream fileInputStream = new FileInputStream(String.valueOf(new ByteArrayInputStream(byteArrayOutputStream.toByteArray())));

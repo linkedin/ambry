@@ -1702,7 +1702,7 @@ public class AmbryRequests implements RequestAPI {
     List<LogInfo> logInfos;
     try {
       List<com.github.ambry.store.LogInfo> logSegments =
-          storeManager.getLogSegmentMetadataFiles(fileCopyGetMetaDataRequest.getPartitionId(), false);
+          storeManager.getLogSegmentMetadataFiles(fileCopyGetMetaDataRequest.getPartitionId(), true);
       logInfos = convertStoreToProtocolLogInfo(logSegments);
     } catch (Exception e) {
       logger.error("Demo: Error while getting log segment metadata for partition {}",
@@ -1710,7 +1710,7 @@ public class AmbryRequests implements RequestAPI {
       FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(
           FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
           fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
-          0, null, ServerErrorCode.Unknown_Error);
+          0, new ArrayList<>(), ServerErrorCode.Unknown_Error);
       requestResponseChannel.sendResponse(response, request, null);
       return;
     }

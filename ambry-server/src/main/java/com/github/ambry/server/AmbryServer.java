@@ -515,8 +515,8 @@ public class AmbryServer {
       testE2EFlow();
       logger.info("Demo: E2E flow took {} ms", System.currentTimeMillis() - startTimeMs);
 
-      testFileChunkAggregationForFileCopy();
-      testStateBuildPostFileCopy();
+//      testFileChunkAggregationForFileCopy();
+//      testStateBuildPostFileCopy();
 //      testFileStoreUtils();
     } catch (Exception e) {
       logger.error("Error during startup", e);
@@ -525,10 +525,6 @@ public class AmbryServer {
   }
 
   private void testE2EFlow() {
-    if (!nodeId.getHostname().equals("ltx1-app3602.stg.linkedin.com")) {
-      logger.info("Demo: demo not enabled on this host");
-      return;
-    }
     Optional<PartitionId> optional = storageManager.getLocalPartitions().stream().filter(p -> p.getId() == 146).findFirst();
     PartitionId partitionId;
     if (optional.isPresent()) {
@@ -556,25 +552,59 @@ public class AmbryServer {
       return;
     }
 
-    File directory = new File(sourceReplicaId.getReplicaPath());
-    if (directory.exists() && directory.isDirectory()) {
-      for (File file : directory.listFiles()) {
-        if (file.isFile()) {
-          file.delete();
+    if (nodeId.getHostname().equals("ltx1-app3602.stg.linkedin.com")) {
+      logger.info("Demo: Source host. Initiating file copy based bootstrap...");
+
+      File directory = new File(sourceReplicaId.getReplicaPath());
+      if (directory.exists() && directory.isDirectory()) {
+        for (File file : directory.listFiles()) {
+          if (file.isFile()) {
+            file.delete();
+          }
+        }
+        logger.info("Demo: All files deleted.");
+      } else {
+        logger.info("Demo: Directory does not exist.");
+      }
+      try {
+        long startTimeMs = System.currentTimeMillis();
+        new FileCopyHandler(connectionPool, fileStore, clusterMap).copy(partitionId, sourceReplicaId, targetReplicaId);
+        logger.info("Demo: FileCopyHandler took {} ms", System.currentTimeMillis() - startTimeMs);
+
+        startTimeMs = System.currentTimeMillis();
+        storageManager.buildStateForFileCopy(sourceReplicaId);
+        logger.info("Demo: buildStateForFileCopy took {} ms", System.currentTimeMillis() - startTimeMs);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    } else if (nodeId.getHostname().equals("ltx1-app3679.stg.linkedin.com")) {
+      logger.info("Demo: Tester host. Making GetBlob request...");
+      while (true) {
+        try {
+          ConnectedChannel connectedChannel =
+              connectionPool.checkOutConnection(sourceReplicaId.getDataNodeId().getHostname(), sourceReplicaId.getDataNodeId().getPortToConnectTo(), 99999);
+
+          long startTimeMs = System.currentTimeMillis();
+          GetResponse response = getBlob(new BlobId("AAYAAgBoAAMAAQAAAAAAAACSsveRrYTJQfW46D8DJ6T0Pw", clusterMap), connectedChannel);
+          logger.info("Demo: TestGetBlob took {} ms", System.currentTimeMillis() - startTimeMs);
+
+          logger.info("Demo: TestGetBlob response: {}", response);
+          response.getPartitionResponseInfoList().forEach(partitionResponseInfo -> {
+            partitionResponseInfo.getMessageInfoList().forEach(messageInfo -> {
+              logger.info("Demo: TestGetBlob message: {}", messageInfo);
+            });
+          });
+          if (response.getError().equals(ServerErrorCode.No_Error)) {
+            break;
+          }
+        } catch (Exception e) {
+          logger.error("Demo: TestGetBlob: Exception occurred", e);
+        } finally {
+          try {
+            Thread.sleep(5000);
+          } catch (InterruptedException e) {}
         }
       }
-      System.out.println("All files deleted.");
-    } else {
-      System.out.println("Directory does not exist.");
-    }
-
-
-    logger.info("Demo: Source replica path {}, target replica path {}", sourceReplicaId.getMountPath(), targetReplicaId.getMountPath());
-    try {
-      new FileCopyHandler(connectionPool, fileStore, clusterMap).copy(partitionId, sourceReplicaId, targetReplicaId);
-      storageManager.buildStateForFileCopy(sourceReplicaId);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
     }
   }
 
@@ -737,7 +767,7 @@ public class AmbryServer {
   GetResponse getBlob(BlobId blobId, ConnectedChannel connectedChannel) throws IOException {
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
     partitionRequestInfoList.add(new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId)));
-    GetRequest getRequest = new GetRequest(1, "client1", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOption.None);
+    GetRequest getRequest = new GetRequest(1, "client1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.Include_All);
     return GetResponse.readFrom(connectedChannel.sendAndReceive(getRequest).getInputStream(), clusterMap);
   }
 

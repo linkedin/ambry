@@ -335,8 +335,7 @@ public class BlobStore implements Store {
         }
         metrics.storeStartFailure.inc();
         String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
-        // [Dw-remove]
-        //  throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
+        throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
       } finally {
         context.stop();
       }
