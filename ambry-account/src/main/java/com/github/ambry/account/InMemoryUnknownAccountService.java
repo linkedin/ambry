@@ -26,19 +26,30 @@ import java.util.function.Consumer;
  * account service is in memory, and does not talk to any persistent storage service.
  */
 class InMemoryUnknownAccountService implements AccountService {
+  public static final short NAMED_BLOB_ACCOUNT_ID = 101;
+  public static final String NAMED_BLOB_ACCOUNT_NAME = "named-blob-sandbox";
   static final Account UNKNOWN_ACCOUNT =
       new Account(Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE,
           Account.ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER), Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
+  // Create a hardcoded Account "named-blob-account" which will be used for s3 prototype tests
+  static final Account NAMED_BLOB_ACCOUNT = new Account(NAMED_BLOB_ACCOUNT_ID, NAMED_BLOB_ACCOUNT_NAME, Account.AccountStatus.ACTIVE,
+      Account.ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
+      Collections.singletonList(Container.NAMED_BLOB_CONTAINER), Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
   private static final Collection<Account> accounts =
-      Collections.unmodifiableCollection(Collections.singletonList(UNKNOWN_ACCOUNT));
+      Collections.unmodifiableCollection(Arrays.asList(UNKNOWN_ACCOUNT, NAMED_BLOB_ACCOUNT));
   private volatile boolean isOpen = true;
 
   @Override
   public Account getAccountById(short accountId) {
     checkOpen();
-    return accountId == Account.UNKNOWN_ACCOUNT_ID ? UNKNOWN_ACCOUNT : null;
+    if(accountId == Account.UNKNOWN_ACCOUNT_ID){
+      return UNKNOWN_ACCOUNT;
+    } else if(accountId == NAMED_BLOB_ACCOUNT_ID){
+      return NAMED_BLOB_ACCOUNT;
+    }
+    return null;
   }
 
   @Override
@@ -59,7 +70,11 @@ class InMemoryUnknownAccountService implements AccountService {
   public Account getAccountByName(String accountName) {
     checkOpen();
     Objects.requireNonNull(accountName, "accountName cannot be null.");
-    return UNKNOWN_ACCOUNT;
+    if(accountName.equals(NAMED_BLOB_ACCOUNT_NAME)){
+      return NAMED_BLOB_ACCOUNT;
+    } else {
+      return UNKNOWN_ACCOUNT;
+    }
   }
 
   @Override
