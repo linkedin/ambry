@@ -2275,7 +2275,7 @@ public class ReplicaThread implements Runnable {
           .max(Comparator.naturalOrder())
           .orElse(0);
       if (maxIterationsDoneByAnyGroup >= continuousReplicationGroupIterationLimit) {
-        logger.info("Thread name: {} not creating new groups as iteration limit {} reached", threadName,
+        logger.trace("Thread name: {} not creating new groups as iteration limit {} reached", threadName,
             maxIterationsDoneByAnyGroup);
         return false;
       }
