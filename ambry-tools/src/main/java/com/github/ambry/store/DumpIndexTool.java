@@ -555,8 +555,8 @@ public class DumpIndexTool {
       throw new RuntimeException(e);
     }
     File[] segmentFiles = getSegmentFilesFromDir(replicaDir);
-    String destination = "/Users/nsachan/Workspace/ambry-perf-test/log-non-nimbus";
-    String errorDest = "/Users/nsachan/Workspace/ambry-perf-test/log-non-nimbus-error";
+    String destination = "/Users/nsachan/Workspace/ambry-perf-test/log-non-nimbus-latest";
+    String errorDest = "/Users/nsachan/Workspace/ambry-perf-test/log-non-nimbus-latest-error";
     writer = new BufferedWriter(new FileWriter(destination));
     errorWriter = new BufferedWriter(new FileWriter(errorDest));
 
