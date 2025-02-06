@@ -15,13 +15,11 @@ package com.github.ambry.tools.perf.serverperf;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -31,9 +29,9 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.tools.perf.serverperf.ServerPerformance.ServerPerformanceConfig;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.tools.util.ToolRequestResponseUtil;
+import com.github.ambry.utils.Pair;
 import java.io.BufferedReader;
-import java.io.DataInputStream;
 import java.io.FileReader;
 import java.io.InputStream;
 import java.util.Collections;
@@ -89,8 +87,8 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
             new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
         GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, MessageFormatFlags.Blob,
             Collections.singletonList(partitionRequestInfo), GetOption.Include_All);
-        ReplicaId replicaId =
-            getReplicaFromNode(dataNodeId, getRequest.getPartitionInfoList().get(0).getPartition(), clusterMap);
+        ReplicaId replicaId = ToolRequestResponseUtil.getReplicaFromNode(dataNodeId,
+            getRequest.getPartitionInfoList().get(0).getPartition(), clusterMap);
         String hostname = dataNodeId.getHostname();
         Port port = dataNodeId.getPortToConnectTo();
         RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replicaId, null);
@@ -107,30 +105,6 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
     if (isShutDown) {
       throw new ShutDownException();
     }
-  }
-
-  /**
-   * Returns the replica of the datanode which has passed partition id
-   * If not returns a random replica
-   * @param dataNodeId datanode id
-   * @param partitionId partition id
-   * @param clusterMap cluster map
-   * @return replica id
-   */
-  private ReplicaId getReplicaFromNode(DataNodeId dataNodeId, PartitionId partitionId, ClusterMap clusterMap) {
-    ReplicaId replicaToReturn = null;
-    if (partitionId != null) {
-      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
-        if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())) {
-          replicaToReturn = replicaId;
-          break;
-        }
-      }
-    } else {
-      // pick any replica on this node
-      replicaToReturn = clusterMap.getReplicaIds(dataNodeId).get(0);
-    }
-    return replicaToReturn;
   }
 
   /**
@@ -160,12 +134,10 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
             responseInfo.getError());
         return;
       }
-      InputStream serverResponseStream = new NettyByteBufDataInputStream(responseInfo.content());
-      GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
-      ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-      ServerErrorCode errorCode =
-          partitionErrorCode == ServerErrorCode.No_Error ? getResponse.getError() : partitionErrorCode;
-      InputStream stream = errorCode == ServerErrorCode.No_Error ? getResponse.getInputStream() : null;
+      Pair<Pair<ServerErrorCode, InputStream>, GetResponse> errorStreamResponse =
+          ToolRequestResponseUtil.decodeGetResponse(responseInfo, clusterMap);
+      InputStream stream = errorStreamResponse.getFirst().getSecond();
+      GetResponse getResponse = errorStreamResponse.getSecond();
       BlobData blobData = stream != null ? MessageFormatRecord.deserializeBlob(stream) : null;
       long blobDataSize = blobData != null ? blobData.getSize() : 0;
       responseInfo.release();
