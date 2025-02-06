@@ -246,3 +246,13 @@ We will be able to see logs
 ```
 
 We can also exit the process using CTRL+C command for both the tests
+
+Final output for the both tests is network client related metrics
+
+```
+[2025-02-06 21:11:43,235] INFO HTTP2 error count 0 (com.github.ambry.tools.perf.serverperf.ServerPerformance)
+[2025-02-06 21:11:43,236] INFO HTTP2 dropped request count 0 (com.github.ambry.tools.perf.serverperf.ServerPerformance)
+[2025-02-06 21:11:43,236] INFO HTTP2 send Mean rate 8.958314373706395 (com.github.ambry.tools.perf.serverperf.ServerPerformance)
+[2025-02-06 21:11:43,251] INFO HTTP2 stream median read time 383.0 (com.github.ambry.tools.perf.serverperf.ServerPerformance)
+[2025-02-06 21:11:43,251] INFO HTTP2 stream median acquire time, 171.0 (com.github.ambry.tools.perf.serverperf.ServerPerformance)
+```
