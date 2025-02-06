@@ -43,6 +43,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Contains the logic for producing PUT requests by selecting one replica per disk {@link #replicaIdsSelected}
+ * in the given datanode {@link #dataNodeId} and submitting to the {@link #networkQueue}, until shutdown is triggered in
+ * {@link #networkQueue} or bytes sent reaches limit {@link ServerPerformanceConfig#serverPerformancePutTestDataLimitBytes}.
+ * <p>
+ * Contains the consuming logic which will decode the responses received and prints these to logs.
+ */
 public class PutLoadProducerConsumer implements LoadProducerConsumer {
   private final ServerPerfNetworkQueue networkQueue;
   private final ServerPerformanceConfig config;
@@ -72,6 +79,10 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
     totalDataSentBytes = 0;
   }
 
+  /**
+   * Selects one unsealed replica randomly for each disk in the {@link #dataNodeId}.
+   * and stores these in {@link #replicaIdsSelected}
+   */
   void selectReplica() {
     Random random = new Random();
     List<? extends ReplicaId> allReplicaIds = clusterMap.getReplicaIds(dataNodeId);
@@ -90,18 +101,33 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
     });
   }
 
+  /**
+   * Creates the PUT requests with blob size {@link ServerPerformanceConfig#serverPerformancePutTestBlobSizeBytes}
+   * for rach replicas in {@link #replicaIdsSelected} in round-robin format and submits
+   * requests to {@link #networkQueue}
+   *
+   * This will throw {@link ShutDownException} if total bytes sent exceeds
+   * {@link ServerPerformanceConfig#serverPerformancePutTestBlobSizeBytes}
+   * or it encounters {@link ShutDownException} from {@link #networkQueue}.
+   *
+   * @throws ShutDownException shutdown exception
+   * @throws Exception exception
+   */
   @Override
   public void produce() throws Exception {
     while (true) {
       for (ReplicaId replicaId : replicaIdsSelected) {
         int blobSize = config.serverPerformancePutTestBlobSizeBytes;
         totalDataSentBytes = totalDataSentBytes + blobSize;
+
         if (totalDataSentBytes > config.serverPerformancePutTestDataLimitBytes) {
-          throw new ShutDownException("Shut down producer as size limit for bytes reached");
+          logger.info("Shutting down producer as total limit for bytes reached {}",
+              config.serverPerformancePutTestDataLimitBytes);
+          throw new ShutDownException();
         }
 
         byte[] blob = new byte[blobSize];
-        byte[] usermetadata = new byte[new Random().nextInt(1024)];
+        byte[] userMetaData = new byte[new Random().nextInt(1024)];
         BlobProperties props =
             new BlobProperties(blobSize, CLIENT_ID, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
         props.setTimeToLiveInSeconds(config.serverPerformancePutTestBlobExpirySeconds);
@@ -110,7 +136,7 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
             false, BlobId.BlobDataType.DATACHUNK);
 
         PutRequest putRequest =
-            new PutRequest(correlationId.incrementAndGet(), CLIENT_ID, blobId, props, ByteBuffer.wrap(usermetadata),
+            new PutRequest(correlationId.incrementAndGet(), CLIENT_ID, blobId, props, ByteBuffer.wrap(userMetaData),
                 Unpooled.wrappedBuffer(blob), props.getBlobSize(), BlobType.DataBlob, null);
 
         String hostname = dataNodeId.getHostname();
@@ -119,9 +145,11 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
         RequestInfo requestInfo = new RequestInfo(hostname, port, putRequest, replicaId, null);
 
         try {
-          logger.info("Submitting put request {} , blob size {}", requestInfo.getRequest().getCorrelationId(), 4);
+          logger.info("Submitting put request correlationId {}, blob id {} , blob size {}",
+              requestInfo.getRequest().getCorrelationId(), blobId, blobSize);
           networkQueue.submit(requestInfo);
         } catch (ShutDownException e) {
+          logger.info("Shutting down producer as Shutdown exception received");
           throw e;
         } catch (Exception e) {
           logger.error("Error while sending request", e);
@@ -130,20 +158,35 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
     }
   }
 
+  /**
+   * Polls {@link #networkQueue} and passes the function which decodes response
+   * @throws ShutDownException if it encounters {@link ShutDownException}
+   */
   @Override
   public void consume() throws Exception {
     try {
       networkQueue.poll(responseInfo -> {
+        PutRequest putRequest = (PutRequest) responseInfo.getRequestInfo().getRequest();
+        BlobId blobId = putRequest.getBlobId();
+        int correlationId = putRequest.getCorrelationId();
+
         try {
+          if (responseInfo.getError() != null) {
+            logger.info("Error for correlation id {} blob id {} {} ", correlationId, blobId, responseInfo.getError());
+            return;
+          }
           InputStream serverResponseStream = new NettyByteBufDataInputStream(responseInfo.content());
           PutResponse putResponse = PutResponse.readFrom(new DataInputStream(serverResponseStream));
-          logger.info("received success response for correlation id {}",
-              responseInfo.getRequestInfo().getRequest().getCorrelationId());
+          responseInfo.release();
+          putResponse.release();
+          logger.info("received success response and decoded response successfully for correlation id {} {}",
+              correlationId, blobId);
         } catch (Exception e) {
           logger.error("Error while processing response", e);
         }
       });
     } catch (ShutDownException e) {
+      logger.info("Shutting down consumer as shutdown exception received");
       throw e;
     } catch (Exception e) {
       logger.error("Error while consuming", e);

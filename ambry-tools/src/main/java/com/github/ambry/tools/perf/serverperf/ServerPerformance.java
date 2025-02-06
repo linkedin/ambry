@@ -120,21 +120,29 @@ public class ServerPerformance {
     public final int serverPerformanceTimeOutSeconds;
 
     /**
-     * Path to file from which to read the blob ids
+     * Path to file from which to read the blob ids for GET blob test
      */
     @Config("server.performance.get.test.blob.id.file.path")
     @Default("")
     public final String serverPerformanceGetTestBlobIdFilePath;
 
-
+    /**
+     * Blob size for which will be sent in PUT request in PUT test
+     */
     @Config("server.performance.put.test.blob.size.bytes")
     @Default("4096")
     public final int serverPerformancePutTestBlobSizeBytes;
 
+    /**
+     * Blob TTL time in seconds for PUT test
+     */
     @Config("server.performance.put.test.blob.expiry.seconds")
     @Default("10")
     public final int serverPerformancePutTestBlobExpirySeconds;
 
+    /**
+     * Maximum amount of bytes which will be written for PUT test
+     */
     @Config("server.performance.put.test.data.limit.bytes")
     @Default("204800")
     public final int serverPerformancePutTestDataLimitBytes;
@@ -208,6 +216,12 @@ public class ServerPerformance {
     System.exit(0);
   }
 
+  /**
+   * Creates loadProducer, loadConsumer and shutdownThread
+   * waits until loadProducer is shutdown then forces shutdown to happen
+   * if not already shutdown. Then waits for consumer thread to shut down.
+   * @throws Exception exception
+   */
   public void startLoadTest() throws Exception {
     Thread loadProducer = getLoadProducerThread();
     Thread loadConsumer = getLoadConsumerThread();
@@ -221,6 +235,12 @@ public class ServerPerformance {
     shutDownLatch.countDown();
   }
 
+  /**
+   * Creates a thread for producing Load
+   * Thread keeps calling {@link LoadProducerConsumer#produce()} for {@link #producerConsumer}
+   * until it catches {@link ShutDownException}
+   * @return {@link Thread}
+   */
   Thread getLoadProducerThread() {
     return new Thread(() -> {
       while (true) {
@@ -237,13 +257,19 @@ public class ServerPerformance {
     });
   }
 
+  /**
+   * Creates a thread for consuming Load
+   * Thread keeps calling {@link LoadProducerConsumer#consume()} for {@link #producerConsumer}
+   * until it catches {@link ShutDownException}
+   * @return {@link Thread}
+   */
   Thread getLoadConsumerThread() {
     return new Thread(() -> {
       while (true) {
         try {
           producerConsumer.consume();
         } catch (ShutDownException e) {
-          logger.info("Network queue is shutdown. Exiting from thread");
+          logger.info("Consumer is shutdown. Exiting from thread");
           break;
         } catch (Exception e) {
           logger.error("error in load consumer thread", e);
@@ -266,7 +292,7 @@ public class ServerPerformance {
   /**
    * Waits until the {@link ServerPerformanceConfig#serverPerformanceTimeOutSeconds} to elapse
    * or is forced out of wait and starts the shutdown
-   * @return
+   * @return {@link Thread}
    */
   Thread getTimedShutDownThread() {
     return new Thread(() -> {

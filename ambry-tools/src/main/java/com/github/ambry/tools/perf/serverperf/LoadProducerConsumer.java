@@ -13,8 +13,22 @@
  */
 package com.github.ambry.tools.perf.serverperf;
 
+/**
+ * Interface which needs to implemented for Load producer and consumer for
+ * Server performance test
+ */
 public interface LoadProducerConsumer {
+  /**
+   * This will be called continuously until {@link ShutDownException} is thrown.
+   * @throws ShutDownException shutdown exception
+   * @throws Exception exception
+   */
   void produce() throws Exception;
 
+  /**
+   * This will be called continuously until {@link ShutDownException} is thrown.
+   * @throws ShutDownException shutdown exception
+   * @throws Exception exception
+   */
   void consume() throws Exception;
 }

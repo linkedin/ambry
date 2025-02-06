@@ -42,6 +42,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Contains the logic for producing get requests by iterating over a file which
+ * contains blob ids separated by new line and contains consuming logic which
+ * decodes the data received and prints appropriate logs
+ */
 public class GetLoadProducerConsumer implements LoadProducerConsumer {
 
   private final ServerPerfNetworkQueue networkQueue;
@@ -62,6 +67,13 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
     correlationId = new AtomicInteger();
   }
 
+  /**
+   * Iterates over {@link ServerPerformanceConfig#serverPerformanceGetTestBlobIdFilePath}
+   * and creates {@link GetRequest} and {@link RequestInfo} for each blob id and submits
+   * to {@link #networkQueue}
+   * @throws ShutDownException when catches {@link ShutDownException} from {@link #networkQueue}
+   * @throws Exception exception
+   */
   @Override
   public void produce() throws Exception {
     final BufferedReader br = new BufferedReader(new FileReader(config.serverPerformanceGetTestBlobIdFilePath));
@@ -97,6 +109,14 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
     }
   }
 
+  /**
+   * Returns the replica of the datanode which has passed partition id
+   * If not returns a random replica
+   * @param dataNodeId datanode id
+   * @param partitionId partition id
+   * @param clusterMap cluster map
+   * @return replica id
+   */
   private ReplicaId getReplicaFromNode(DataNodeId dataNodeId, PartitionId partitionId, ClusterMap clusterMap) {
     ReplicaId replicaToReturn = null;
     if (partitionId != null) {
@@ -113,6 +133,10 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
     return replicaToReturn;
   }
 
+  /**
+   * Polls {@link #networkQueue} and passes the function {@link #processGetResponse(ResponseInfo)} which decodes response
+   * @throws ShutDownException if it encounters {@link ShutDownException}
+   */
   @Override
   public void consume() throws Exception {
     try {
@@ -125,11 +149,15 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
     }
   }
 
+  /**
+   * Decodes the response and prints log for information
+   * @param responseInfo response from network
+   */
   void processGetResponse(ResponseInfo responseInfo) {
     try {
-      if (responseInfo.getError() == NetworkClientErrorCode.TimeoutError) {
-        logger.info("Timeout error for correlation id {}",
-            responseInfo.getRequestInfo().getRequest().getCorrelationId());
+      if (responseInfo.getError() != null) {
+        logger.info("Error for correlation id {} {} ", responseInfo.getRequestInfo().getRequest().getCorrelationId(),
+            responseInfo.getError());
         return;
       }
       InputStream serverResponseStream = new NettyByteBufDataInputStream(responseInfo.content());
