@@ -186,3 +186,63 @@ java -cp ambry.jar com.github.ambry.tools.admin.ConcurrencyTestTool --hardwareLa
  --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --routerPropsFilePath [Path to router props
  file] --deleteAndValidate true
 ```
+
+### ServerPerformanceTool
+
+Testing for GET blobs
+This tool will read the log file for blobs and keep making get requests for each blob until time out
+```bash
+java -cp ambry.jar com.github.ambry.tools.perf.serverperf.ServerPerformance  -Dlog4j2.configurationFile=file:../config/log4j2.xml --propsFile [Config file path]
+//Contents of config file
+server.performance.test.type=GET_BLOB
+server.performance.hardware.layout.file.path=[HardwareLayoutFile]
+server.performance.partition.layout.file.path=[PartitionLayoutFile]
+server.performance.max.parallel.requests=[number of paraller requests we want to keep]
+server.performance.hostname=[host name to which we want to make requests]
+server.performance.port=[port of the host above]
+server.performance.time.out.seconds=[time after which tool will stop]
+server.performance.operations.time.out.sec=[time after which requests will be timedout if response not received]
+server.performance.get.test.blob.id.file.path=[File which contains blobids separated by new line]
+```
+We will be able to see logs 
+
+```
+[2025-02-06 20:57:41,227] INFO submitting the blob id AAYQAgBoAAMAAQAAAAAAAAC5jpIA0niiQ62hJkNsJaxCFA to network queue correlation id 4 (com.github.ambry.tools.perf.serverperf.GetLoadProducerConsumer)
+[2025-02-06 20:57:41,227] INFO submitting the blob id AAYQAgBoAAMAAQAAAAAAAAC5jpIA0niiQ62hJkNsJaxCFA to network queue correlation id 5 (com.github.ambry.tools.perf.serverperf.GetLoadProducerConsumer)
+[2025-02-06 20:57:41,227] INFO submitting the blob id AAYQAgBoAAMAAQAAAAAAAAC5jpIA0niiQ62hJkNsJaxCFA to network queue correlation id 6 (com.github.ambry.tools.perf.serverperf.GetLoadProducerConsumer)
+[2025-02-06 20:57:45,654] INFO blob id AAYQAgBoAAMAAQAAAAAAAAC5jpIA0niiQ62hJkNsJaxCFA blob size 1000000  correlation id 1 (com.github.ambry.tools.perf.serverperf.GetLoadProducerConsumer)
+[2025-02-06 20:57:45,653] INFO blob id AAYQAgBoAAMAAQAAAAAAAAC5jpIA0niiQ62hJkNsJaxCFA blob size 1000000  correlation id 5 (com.github.ambry.tools.perf.serverperf.GetLoadProducerConsumer)
+[2025-02-06 20:57:45,655] INFO blob id AAYQAgBoAAMAAQAAAAAAAAC5jpIA0niiQ62hJkNsJaxCFA blob size 1000000  correlation id 3 (com.github.ambry.tools.perf.serverperf.GetLoadProducerConsumer)
+
+```
+
+
+Testing for PUT blobs
+
+This tool will try to put blobs to one partition per disk of the target host in round-robin format until
+time out or it has reached limit of total number of bytes
+```bash
+java -cp ambry.jar com.github.ambry.tools.perf.serverperf.ServerPerformance -Dlog4j2.configurationFile=file:../config/log4j2.xml  --propsFile [Config file path]
+//Contents of config file
+server.performance.test.type=PUT_BLOB
+server.performance.hardware.layout.file.path=[HardwareLayoutFile]
+server.performance.partition.layout.file.path=[PartitionLayoutFile]
+server.performance.max.parallel.requests=[number of paraller requests we want to keep]
+server.performance.hostname=[host name to which we want to make requests]
+server.performance.port=[port of the host above]
+server.performance.time.out.seconds=[time after which tool will stop]
+server.performance.operations.time.out.sec=[time after which requests will be timedout if response not received]
+server.performance.put.test.data.limit.bytes=[maximum number of bytes which we want to send from the tool]
+```
+We will be able to see logs
+
+```
+[2025-02-06 21:11:42,004] INFO Submitting put request correlationId 14, blob id AAYQAv____8AAQAAAAAAAADPyZlGH92nT_-MtTuwjv1fTw , blob size 4096 (com.github.ambry.tools.perf.serverperf.PutLoadProducerConsumer)
+[2025-02-06 21:11:42,004] INFO Submitting put request correlationId 15, blob id AAYQAv____8AAQAAAAAAAAB-_lPPvQMoSnSJMG0i-f4WEA , blob size 4096 (com.github.ambry.tools.perf.serverperf.PutLoadProducerConsumer)
+[2025-02-06 21:11:42,005] INFO Submitting put request correlationId 16, blob id AAYQAv____8AAQAAAAAAAALgA7Dmj4g-Qa2ilxHxltHuCQ , blob size 4096 (com.github.ambry.tools.perf.serverperf.PutLoadProducerConsumer)
+[2025-02-06 21:11:42,416] INFO received success response and decoded response successfully for correlation id 11 AAYQAv____8AAQAAAAAAAAIvYd-809X8S5OJ5OUXE9amLA (com.github.ambry.tools.perf.serverperf.PutLoadProducerConsumer)
+[2025-02-06 21:11:42,417] INFO received success response and decoded response successfully for correlation id 13 AAYQAv____8AAQAAAAAAAALB72n194MWSz2bLaq2LRCPDA (com.github.ambry.tools.perf.serverperf.PutLoadProducerConsumer)
+[2025-02-06 21:11:42,416] INFO received success response and decoded response successfully for correlation id 14 AAYQAv____8AAQAAAAAAAADPyZlGH92nT_-MtTuwjv1fTw (com.github.ambry.tools.perf.serverperf.PutLoadProducerConsumer)
+```
+
+We can also exit the process using CTRL+C command for both the tests
