@@ -76,34 +76,34 @@ public class GetLoadProducerConsumer implements LoadProducerConsumer {
    */
   @Override
   public void produce() throws Exception {
-    final BufferedReader br = new BufferedReader(new FileReader(config.serverPerformanceGetTestBlobIdFilePath));
-    String line;
     boolean isShutDown = false;
 
-    while ((line = br.readLine()) != null) {
-      String[] id = line.split("\n");
-      BlobId blobId = new BlobId(id[0], clusterMap);
+    try (final BufferedReader br = new BufferedReader(new FileReader(config.serverPerformanceGetTestBlobIdFilePath))) {
+      String line;
 
-      PartitionRequestInfo partitionRequestInfo =
-          new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
-      GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, MessageFormatFlags.Blob,
-          Collections.singletonList(partitionRequestInfo), GetOption.Include_All);
-      ReplicaId replicaId =
-          getReplicaFromNode(dataNodeId, getRequest.getPartitionInfoList().get(0).getPartition(), clusterMap);
-      String hostname = dataNodeId.getHostname();
-      Port port = dataNodeId.getPortToConnectTo();
-      RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replicaId, null);
-      logger.info("submitting the blob id {} to network queue correlation id {}", blobId,
-          requestInfo.getRequest().getCorrelationId());
-      try {
-        networkQueue.submit(requestInfo);
-      } catch (ShutDownException e) {
-        isShutDown = true;
-        break;
+      while ((line = br.readLine()) != null) {
+        String[] id = line.split("\n");
+        BlobId blobId = new BlobId(id[0], clusterMap);
+
+        PartitionRequestInfo partitionRequestInfo =
+            new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
+        GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, MessageFormatFlags.Blob,
+            Collections.singletonList(partitionRequestInfo), GetOption.Include_All);
+        ReplicaId replicaId =
+            getReplicaFromNode(dataNodeId, getRequest.getPartitionInfoList().get(0).getPartition(), clusterMap);
+        String hostname = dataNodeId.getHostname();
+        Port port = dataNodeId.getPortToConnectTo();
+        RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replicaId, null);
+        logger.info("submitting the blob id {} to network queue correlation id {}", blobId,
+            requestInfo.getRequest().getCorrelationId());
+        try {
+          networkQueue.submit(requestInfo);
+        } catch (ShutDownException e) {
+          isShutDown = true;
+          break;
+        }
       }
     }
-    br.close();
-
     if (isShutDown) {
       throw new ShutDownException();
     }
