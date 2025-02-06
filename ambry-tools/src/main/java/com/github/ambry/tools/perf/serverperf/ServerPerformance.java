@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.StaticClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.tools.util.ToolUtils;
@@ -98,13 +99,6 @@ public class ServerPerformance {
     public final int serverPerformanceOperationsTimeOutSec;
 
     /**
-     * Path to file from which to read the blob ids
-     */
-    @Config("server.performance.blob.id.file.path")
-    @Default("")
-    public final String serverPerformanceBlobIdFilePath;
-
-    /**
      * The hostname of the target server as it appears in the partition layout.
      */
     @Config("server.performance.hostname")
@@ -125,13 +119,32 @@ public class ServerPerformance {
     @Default("30")
     public final int serverPerformanceTimeOutSeconds;
 
+    /**
+     * Path to file from which to read the blob ids
+     */
+    @Config("server.performance.get.test.blob.id.file.path")
+    @Default("")
+    public final String serverPerformanceGetTestBlobIdFilePath;
+
+
+    @Config("server.performance.put.test.blob.size.bytes")
+    @Default("4096")
+    public final int serverPerformancePutTestBlobSizeBytes;
+
+    @Config("server.performance.put.test.blob.expiry.seconds")
+    @Default("10")
+    public final int serverPerformancePutTestBlobExpirySeconds;
+
+    @Config("server.performance.put.test.data.limit.bytes")
+    @Default("204800")
+    public final int serverPerformancePutTestDataLimitBytes;
+
     public ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
       serverPerformanceTestType = TestType.valueOf(verifiableProperties.getString("server.performance.test.type"));
       serverPerformanceHardwareLayoutFilePath =
           verifiableProperties.getString("server.performance.hardware.layout.file.path", "");
       serverPerformancePartitionLayoutFilePath =
           verifiableProperties.getString("server.performance.partition.layout.file.path", "");
-      serverPerformanceBlobIdFilePath = verifiableProperties.getString("server.performance.blob.id.file.path", "");
       serverPerformanceHostname = verifiableProperties.getString("server.performance.hostname", "localhost");
       serverPerformancePort = verifiableProperties.getInt("server.performance.port", 6667);
       serverPerformanceMaxParallelRequests =
@@ -140,12 +153,21 @@ public class ServerPerformance {
       serverPerformanceTimeOutSeconds = verifiableProperties.getInt("server.performance.time.out.seconds", 30);
       serverPerformanceOperationsTimeOutSec =
           verifiableProperties.getInt("server.performance.operations.time.out.sec", 15);
+      serverPerformanceGetTestBlobIdFilePath =
+          verifiableProperties.getString("server.performance.get.test.blob.id.file.path", "");
+      serverPerformancePutTestBlobSizeBytes =
+          verifiableProperties.getInt("server.performance.put.test.blob.size.bytes", 4096);
+      serverPerformancePutTestBlobExpirySeconds =
+          verifiableProperties.getInt("server.performance.put.test.blob.expiry.seconds", 10);
+      serverPerformancePutTestDataLimitBytes =
+          verifiableProperties.getInt("server.performance.put.test.data.limit.bytes", 204800);
     }
   }
 
   public ServerPerformance(VerifiableProperties verifiableProperties) throws Exception {
     config = new ServerPerformanceConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     ClusterMap clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.serverPerformanceHardwareLayoutFilePath,
@@ -158,15 +180,16 @@ public class ServerPerformance {
         config.serverPerformanceOperationsTimeOutSec);
     networkQueue.start();
 
-   switch (config.serverPerformanceTestType) {
-     case GET_BLOB:
-       producerConsumer = new GetLoadProducerConsumer(networkQueue, config, clusterMap);
-       break;
-     case PUT_BLOB:
-       producerConsumer = new PutLoadProducerConsumer(networkQueue, config, clusterMap);
-     default:
-       throw new IllegalArgumentException("Unrecognized test type: "+ config.serverPerformanceTestType);
-   }
+    switch (config.serverPerformanceTestType) {
+      case GET_BLOB:
+        producerConsumer = new GetLoadProducerConsumer(networkQueue, config, clusterMap);
+        break;
+      case PUT_BLOB:
+        producerConsumer = new PutLoadProducerConsumer(networkQueue, config, clusterMap, routerConfig);
+        break;
+      default:
+        throw new IllegalArgumentException("Unrecognized test type: " + config.serverPerformanceTestType);
+    }
   }
 
   public static void main(String[] args) throws Exception {
@@ -193,6 +216,7 @@ public class ServerPerformance {
     loadProducer.start();
     loadConsumer.start();
     loadProducer.join();
+    timedShutDownLatch.countDown();
     loadConsumer.join();
     shutDownLatch.countDown();
   }

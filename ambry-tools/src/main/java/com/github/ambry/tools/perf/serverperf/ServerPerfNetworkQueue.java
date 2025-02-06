@@ -196,7 +196,7 @@ public class ServerPerfNetworkQueue extends Thread {
    *
    *  If shutdown is triggered , waits for all responses to be processed and shuts down  {@link #executorService}
    *  1. Releases a token so if any thread trying to submit is waiting stops waiting.
-   *  2. Tries to acquire {@link #maxParallelism+1} tokens as it can only acquire all tokens when
+   *  2. Tries to acquire {@link #maxParallelism} +1 tokens as it can only acquire all tokens when
    *      all responses get processed
    */
   @Override
