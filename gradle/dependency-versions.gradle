@@ -21,7 +21,7 @@ ext {
     nettyVersion = "4.1.79.Final"
     nettyTcNativeBoringSSLStatic_linux_x86_64 = "2.0.61.Final:linux-x86_64"
     nettyTcNativeBoringSSLStatic_osx_aarch_64 = "2.0.61.Final:osx-aarch_64"
-    helixLockVersion = "1.1.0"
+    helixLockVersion = "1.4.3:jdk8"
     helixVersion = "1.4.1:jdk8"
     jacksonVersion = "2.13.5"
     jaydioVersion = "0.1"
