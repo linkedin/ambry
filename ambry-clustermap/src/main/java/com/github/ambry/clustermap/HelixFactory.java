@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.HelixManager;
-import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.HelixManagerProperty;
 import org.apache.helix.InstanceType;
 import org.apache.helix.constants.InstanceConstants;
@@ -39,7 +38,6 @@ public class HelixFactory {
   // exposed for use in testing
   private final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
   private final Map<String, DataNodeConfigSource> dataNodeConfigSources = new ConcurrentHashMap<>();
-  private static final String INSTANCE_CONFIG_HELIX_PORT = "15088";
 
   /**
    * Get a reference to a {@link HelixManager}
