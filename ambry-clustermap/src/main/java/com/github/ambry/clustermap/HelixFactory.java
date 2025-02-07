@@ -28,6 +28,8 @@ import org.apache.helix.model.InstanceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * A factory class to construct and get a reference to a {@link HelixManager}
@@ -101,9 +103,15 @@ public class HelixFactory {
    * @return a new instance of {@link HelixManager}.
    */
   HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
-    HelixManagerProperty participantHelixProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(
-        new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN)).build();
 
+    String port = getPortFromInstanceName(instanceName);
+
+    InstanceConfig.Builder instanceConfigBuilder = new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN);
+    if (port != null && !port.isEmpty()) {
+      instanceConfigBuilder.setPort(port);
+    }
+
+    HelixManagerProperty participantHelixProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(instanceConfigBuilder).build();
     HelixManagerProperty defaultHelixManagerProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(new InstanceConfig.Builder()).build();
 
     HelixManager helixManager = new ZKHelixManager(clusterName, instanceName, instanceType, zkAddr, null,
