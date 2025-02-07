@@ -21,7 +21,8 @@ ext {
     nettyVersion = "4.1.79.Final"
     nettyTcNativeBoringSSLStatic_linux_x86_64 = "2.0.61.Final:linux-x86_64"
     nettyTcNativeBoringSSLStatic_osx_aarch_64 = "2.0.61.Final:osx-aarch_64"
-    helixVersion = "1.1.0"
+    helixLockVersion = "1.4.3:jdk8"
+    helixVersion = "1.4.1:jdk8"
     jacksonVersion = "2.13.5"
     jaydioVersion = "0.1"
     azureMsal4jVersion="1.7.1"
@@ -36,4 +37,5 @@ ext {
     powermockVersion = "2.+"
     caffeineVersion = "2.9.3"
     hadoopCommonVersion = "3.3.6"
+    commonsLangVersion = "3.12.0"
 }

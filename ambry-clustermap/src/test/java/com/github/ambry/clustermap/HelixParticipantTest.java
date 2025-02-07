@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.constants.InstanceConstants;
 import org.apache.helix.lock.LockScope;
 import org.apache.helix.lock.helix.HelixLockScope;
 import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
@@ -871,6 +872,29 @@ public class HelixParticipantTest {
     Thread.sleep(500);
     getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
     assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("offline", metricRegistry));
+
+    helixParticipant.close();
+  }
+
+
+  @Test
+  public void testEnableStatePostParticipate() throws IOException {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixManager manager = helixParticipant.getHelixManager();
+
+    assertEquals(manager.getInstanceType(), InstanceType.PARTICIPANT);
+    assertNotNull("HelixManager cannot be null", manager);
+
+    helixParticipant.participate(Collections.emptyList(), null, null);
+
+    // Without cloud config, instances should still be in ENABLE state
+    assertEquals(InstanceConstants.InstanceOperation.ENABLE,
+        manager.getConfigAccessor().getInstanceConfig(clusterName, manager.getInstanceName()).getInstanceOperation().getOperation());
 
     helixParticipant.close();
   }

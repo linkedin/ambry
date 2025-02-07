@@ -19,10 +19,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.HelixManager;
-import org.apache.helix.HelixManagerFactory;
+import org.apache.helix.HelixManagerProperty;
 import org.apache.helix.InstanceType;
+import org.apache.helix.constants.InstanceConstants;
+import org.apache.helix.manager.zk.ZKHelixManager;
+import org.apache.helix.model.InstanceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
@@ -96,7 +101,21 @@ public class HelixFactory {
    * @return a new instance of {@link HelixManager}.
    */
   HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
-    return HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
+
+    String port = getPortFromInstanceName(instanceName);
+
+    InstanceConfig.Builder instanceConfigBuilder = new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN);
+    if (port != null && !port.isEmpty()) {
+      instanceConfigBuilder.setPort(port);
+    }
+
+    HelixManagerProperty participantHelixProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(instanceConfigBuilder).build();
+    HelixManagerProperty defaultHelixManagerProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(new InstanceConfig.Builder()).build();
+
+    HelixManager helixManager = new ZKHelixManager(clusterName, instanceName, instanceType, zkAddr, null,
+        instanceType == InstanceType.PARTICIPANT ?  participantHelixProperty : defaultHelixManagerProperty);
+    LOGGER.info("Created HelixManager for cluster {} with instanceName {} and instanceType {}", clusterName, instanceName, instanceType);
+    return helixManager;
   }
 
   /**

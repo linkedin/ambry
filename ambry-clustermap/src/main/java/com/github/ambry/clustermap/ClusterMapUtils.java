@@ -110,6 +110,7 @@ public class ClusterMapUtils {
   static final int CURRENT_SCHEMA_VERSION = 0;
   static final String WRITABLE_LOG_STR = "writable";
   static final String FULLY_WRITABLE_LOG_STR = "fully writable";
+  private static final String INSTANCE_NAME_DELIMITER = "_";
   private static final Logger logger = LoggerFactory.getLogger(ClusterMapUtils.class);
 
   /**
@@ -160,7 +161,7 @@ public class ClusterMapUtils {
    * @return the constructed instance name.
    */
   public static String getInstanceName(String host, Integer port) {
-    return port == null ? host : host + "_" + port;
+    return port == null ? host : host + INSTANCE_NAME_DELIMITER + port;
   }
 
   /**
@@ -170,6 +171,10 @@ public class ClusterMapUtils {
    */
   public static String getInstanceName(DataNodeId dataNodeId) {
     return getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
+  }
+
+  public static String getPortFromInstanceName(String instanceName) {
+    return instanceName.contains(INSTANCE_NAME_DELIMITER) ? instanceName.split(INSTANCE_NAME_DELIMITER)[1] : null;
   }
 
   /**
