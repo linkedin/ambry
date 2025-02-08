@@ -19,23 +19,33 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import javax.annotation.Nonnull;
 
 
 public class FileCopyGetMetaDataResponse extends Response {
   private final int numberOfLogfiles;
   private final List<LogInfo> logInfos;
-  private static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
+  public static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
+
+  static short CURRENT_VERSION = File_Copy_Protocol_Metadata_Response_Version_V1;
 
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
-      List<LogInfo> logInfos, ServerErrorCode errorCode) {
+      @Nonnull List<LogInfo> logInfos, @Nonnull ServerErrorCode errorCode) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
+
     validateVersion(versionId);
     this.numberOfLogfiles = numberOfLogfiles;
     this.logInfos = logInfos;
   }
 
-  public static FileCopyGetMetaDataResponse readFrom(DataInputStream stream) throws IOException {
+  public FileCopyGetMetaDataResponse(int correlationId, String clientId, ServerErrorCode serverErrorCode) {
+    this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), serverErrorCode);
+  }
+
+  public static FileCopyGetMetaDataResponse readFrom(
+      @Nonnull DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.FileCopyGetMetaDataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible. Expected : {}, Actual : {}" +
@@ -50,7 +60,6 @@ public class FileCopyGetMetaDataResponse extends Response {
       //Setting the number of logfiles to 0 as there are no logfiles to be read.
       return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, 0, new ArrayList<>(), errorCode);
     }
-
     int numberOfLogfiles = stream.readInt();
     List<LogInfo> logInfos = new ArrayList<>();
     for (int i = 0; i < numberOfLogfiles; i++) {
@@ -58,6 +67,8 @@ public class FileCopyGetMetaDataResponse extends Response {
     }
     return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode);
   }
+
+  @Override
   protected void prepareBuffer() {
     super.prepareBuffer();
     bufferToSend.writeInt(numberOfLogfiles);
@@ -66,14 +77,19 @@ public class FileCopyGetMetaDataResponse extends Response {
     }
   }
 
+  @Override
   public long sizeInBytes() {
     return super.sizeInBytes() + Integer.BYTES + logInfos.stream().mapToLong(LogInfo::sizeInBytes).sum();
   }
 
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("FileMetaDataResponse[NumberOfLogfiles=").append(numberOfLogfiles).append(", logInfoList").append(
-        logInfos.toString()).append("]");
+    sb
+      .append("FileCopyGetMetaDataResponse[NumberOfLogfiles=")
+      .append(numberOfLogfiles)
+      .append(", logInfoList")
+      .append(logInfos.toString())
+      .append("]");
     return sb.toString();
   }
 
@@ -82,7 +98,7 @@ public class FileCopyGetMetaDataResponse extends Response {
   }
 
   public List<LogInfo> getLogInfos() {
-    return logInfos;
+    return Collections.unmodifiableList(logInfos);
   }
 
   static void validateVersion(short version) {

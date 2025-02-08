@@ -15,6 +15,8 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Reservoir;
+import com.codahale.metrics.Snapshot;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
@@ -60,9 +62,12 @@ import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
+import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.LogInfo;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.PurgeRequest;
@@ -233,6 +238,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case ReplicateBlobRequest:
           handleReplicateBlobRequest(networkRequest);
+          break;
+        case FileCopyGetMetaDataRequest:
+          handleFileCopyGetMetaDataRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -1673,6 +1681,69 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
+   * Handler for FileMetadataRequest
+   */
+  void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+
+    FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest =
+        FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    FileCopyGetMetaDataResponse response = null;
+    List<LogInfo> logInfos;
+    try {
+      List<com.github.ambry.store.LogInfo> logSegments = storeManager.getLogSegmentMetadataFiles(
+          fileCopyGetMetaDataRequest.getPartitionId(), true);
+      logInfos = convertStoreToProtocolLogInfo(logSegments);
+
+      response = new FileCopyGetMetaDataResponse(
+          FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+          fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
+          logInfos.size(), logInfos, ServerErrorCode.No_Error);
+    } catch (Exception e) {
+      logger.error("Error while getting log segment metadata for partition {}",
+          fileCopyGetMetaDataRequest.getPartitionId().getId(), e);
+
+      response = new FileCopyGetMetaDataResponse(
+          FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+          fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
+          0, new ArrayList<>(), ServerErrorCode.Unknown_Error);
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", fileCopyGetMetaDataRequest, response, processingTime);
+
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(
+          requestQueueTime, processingTime, 0, 0, false);
+      fileCopyGetMetaDataRequest.accept(metricsUpdater);
+    }
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.fileCopyGetMetadataResponseQueueTimeInMs,
+            metrics.fileCopyGetMetadataSendTimeInMs, metrics.fileCopyGetMetadataTotalTimeInMs,
+            null, null, totalTimeSpent));
+  }
+
+  private List<LogInfo> convertStoreToProtocolLogInfo(List<com.github.ambry.store.LogInfo> logSegments) {
+    List<LogInfo> logInfos = new ArrayList<>();
+    for (com.github.ambry.store.LogInfo logSegment : logSegments) {
+      List<com.github.ambry.protocol.FileInfo> indexSegments = new ArrayList<>();
+      logSegment.getIndexSegments().forEach(indexSegment ->
+        indexSegments.add(new com.github.ambry.protocol.FileInfo(indexSegment.getFileName(), indexSegment.getFileSize())));
+
+      List<com.github.ambry.protocol.FileInfo> bloomFilters = new ArrayList<>();
+      logSegment.getBloomFilters().forEach(bloomFilter ->
+        bloomFilters.add(new com.github.ambry.protocol.FileInfo(bloomFilter.getFileName(), bloomFilter.getFileSize())));
+
+      logInfos.add(new LogInfo(
+        logSegment.getLogSegment().getFileName(), logSegment.getLogSegment().getFileSize(),
+        indexSegments, bloomFilters));
+    }
+    return logInfos;
+  }
+
+  /**
    * Get the formatted messages which needs to be written to Store.
    * @param receivedRequest received Put Request
    * @return {@link MessageFormatWriteSet} that contains the formatted messages which needs to be written to store.
@@ -2047,6 +2118,20 @@ public class AmbryRequests implements RequestAPI {
     @Override
     public void visit(BatchDeleteRequest deleteRequest) {
 
+    }
+
+    @Override
+    public void visit(FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest) {
+      metrics.fileCopyGetMetadataRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.fileCopyGetMetadataRequestRate.mark();
+      metrics.fileCopyGetMetadataProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.fileCopyGetMetadataResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.fileCopyGetMetadataSendTimeInMs;
+      requestTotalTimeHistogram = metrics.fileCopyGetMetadataTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.fileCopyGetMetadataDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
     }
 
     @Override

@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import java.nio.file.FileStore;
 import java.util.Collection;
@@ -148,6 +149,11 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

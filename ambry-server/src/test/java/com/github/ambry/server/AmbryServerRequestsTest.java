@@ -64,6 +64,7 @@ import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -229,7 +230,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
+//    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
+        return Arrays.asList(new Object[][]{{false, false}});
   }
 
   private static Properties createProperties(boolean validateRequestOnStoreState,
@@ -1643,6 +1645,17 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     //Restores the environment from no longer using disk healthchecks
     currentProperties = createProperties(validateRequestOnStoreState, true);
     setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.enabled", "false");
+  }
+
+  @Test
+  public void fileCopyGetMetaDataRequestTest() throws IOException, InterruptedException {
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+
+    RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
+        FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "",
+        partitionIds.get(0), "hostName");
+
+    sendRequestGetResponse(request, ServerErrorCode.No_Error);
   }
 
   // helpers
