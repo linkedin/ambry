@@ -34,7 +34,7 @@ public class FileInfo {
 
   public FileInfo(
       @Nonnull String fileName,
-      @Nonnull long fileSize) {
+      long fileSize) {
     this.fileName = fileName;
     this.fileSizeInBytes = fileSize;
   }
@@ -56,8 +56,10 @@ public class FileInfo {
 
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("FileInfo[").append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes)
-        .append("]");
+    sb.append("FileInfo[")
+        .append("FileName=").append(fileName)
+        .append(", FileSizeInBytes=").append(fileSizeInBytes)
+      .append("]");
     return sb.toString();
   }
 

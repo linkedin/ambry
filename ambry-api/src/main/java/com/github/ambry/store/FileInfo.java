@@ -18,7 +18,9 @@ public class FileInfo {
   private final String fileName;
   private final long fileSize;
 
-  public FileInfo(String fileName, Long fileSize) {
+  public FileInfo(
+      String fileName,
+      Long fileSize) {
     this.fileName = fileName;
     this.fileSize = fileSize;
   }
@@ -29,5 +31,13 @@ public class FileInfo {
 
   public Long getFileSize() {
     return fileSize;
+  }
+
+  @Override
+  public String toString() {
+    return "FileInfo{" +
+        "fileName='" + fileName + '\'' +
+        ", fileSize=" + fileSize +
+        '}';
   }
 }

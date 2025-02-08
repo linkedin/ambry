@@ -32,7 +32,7 @@ public class FileCopyGetMetaDataResponse extends Response {
   static short CURRENT_VERSION = File_Copy_Protocol_Metadata_Response_Version_V1;
 
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
-      List<LogInfo> logInfos, ServerErrorCode errorCode) {
+      @Nonnull List<LogInfo> logInfos, @Nonnull ServerErrorCode errorCode) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
 
     validateVersion(versionId);
@@ -60,7 +60,6 @@ public class FileCopyGetMetaDataResponse extends Response {
       //Setting the number of logfiles to 0 as there are no logfiles to be read.
       return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, 0, new ArrayList<>(), errorCode);
     }
-
     int numberOfLogfiles = stream.readInt();
     List<LogInfo> logInfos = new ArrayList<>();
     for (int i = 0; i < numberOfLogfiles; i++) {
@@ -68,6 +67,8 @@ public class FileCopyGetMetaDataResponse extends Response {
     }
     return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode);
   }
+
+  @Override
   protected void prepareBuffer() {
     super.prepareBuffer();
     bufferToSend.writeInt(numberOfLogfiles);
@@ -76,6 +77,7 @@ public class FileCopyGetMetaDataResponse extends Response {
     }
   }
 
+  @Override
   public long sizeInBytes() {
     return super.sizeInBytes() + Integer.BYTES + logInfos.stream().mapToLong(LogInfo::sizeInBytes).sum();
   }

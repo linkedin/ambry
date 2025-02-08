@@ -22,7 +22,10 @@ public class LogInfo {
   private final List<FileInfo> indexSegments;
   private final List<FileInfo> bloomFilters;
 
-  public LogInfo(FileInfo logSegment, List<FileInfo> indexSegments, List<FileInfo> bloomFilters) {
+  public LogInfo(
+      FileInfo logSegment,
+      List<FileInfo> indexSegments,
+      List<FileInfo> bloomFilters) {
     this.logSegment = logSegment;
     this.indexSegments = indexSegments;
     this.bloomFilters = bloomFilters;
@@ -41,5 +44,14 @@ public class LogInfo {
 
   public List<FileInfo> getBloomFilters() {
     return Collections.unmodifiableList(bloomFilters);
+  }
+
+  @Override
+  public String toString() {
+    return "LogInfo{" +
+        "logSegment=" + logSegment +
+        ", indexSegments=" + indexSegments +
+        ", bloomFilters=" + bloomFilters +
+        '}';
   }
 }

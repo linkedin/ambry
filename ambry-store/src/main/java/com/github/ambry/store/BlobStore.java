@@ -1330,22 +1330,10 @@ public class BlobStore implements Store {
     List<FileInfo> sealedLogsAndMetaDataFiles = getLogSegments(includeActiveLogSegment);
     if (null != sealedLogsAndMetaDataFiles) {
       for (FileInfo E : sealedLogsAndMetaDataFiles) {
-        logger.info("[Dw] LS file: {} size: {}", E.getFileName(), E.getFileSize());
-
         LogSegmentName logSegmentName = LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX);
-
         List<FileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(dataDir, logSegmentName);
-        if (null != allIndexSegmentsForLogSegment) {
-          for (FileInfo is : allIndexSegmentsForLogSegment) {
-            logger.info("[Dw] IS file: {} size: {}", is.getFileName(), is.getFileSize());
-          }
-        }
         List<FileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(dataDir, logSegmentName);
-        if (null != bloomFiltersForLogSegment) {
-          for (FileInfo bf : bloomFiltersForLogSegment) {
-            logger.info("[Dw] BF file: {} size: {}", bf.getFileName(), bf.getFileSize());
-          }
-        }
+
         result.add(new LogInfo(E, allIndexSegmentsForLogSegment, bloomFiltersForLogSegment));
       }
     }

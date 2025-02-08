@@ -22,7 +22,7 @@ import java.nio.charset.Charset;
 import javax.annotation.Nonnull;
 
 
-public class FileCopyGetMetaDataRequest extends RequestOrResponse{
+public class FileCopyGetMetaDataRequest extends RequestOrResponse {
   private final PartitionId partitionId;
   private final String hostName;
   public static final short File_Metadata_Request_Version_V1 = 1;
@@ -56,10 +56,12 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse{
       @Nonnull ClusterMap clusterMap) throws IOException {
     short versionId = stream.readShort();
     validateVersion(versionId);
+
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     String hostName = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
+
     return new FileCopyGetMetaDataRequest(versionId, correlationId, clientId, partitionId, hostName);
   }
 
@@ -73,10 +75,17 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse{
     return sb.toString();
   }
 
+  @Override
+  public void accept(RequestVisitor visitor) {
+    visitor.visit(this);
+  }
+
+  @Override
   public long sizeInBytes() {
     return super.sizeInBytes() + HostName_Field_Size_In_Bytes + hostName.length() + partitionId.getBytes().length;
   }
 
+  @Override
   protected void prepareBuffer() {
     super.prepareBuffer();
     Utils.serializeString(bufferToSend, hostName, Charset.defaultCharset());
