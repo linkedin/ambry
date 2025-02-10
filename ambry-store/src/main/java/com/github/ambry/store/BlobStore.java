@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.clustermap.FileStoreException;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaState;
@@ -33,13 +34,20 @@ import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.io.SequenceInputStream;
+import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -56,6 +64,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1315,6 +1324,105 @@ public class BlobStore implements Store {
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);
+  }
+
+  /**
+   * Gets the log segment metadata files from in-memory data structures
+   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
+   */
+  List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+    List<LogInfo> result = new ArrayList<>();
+
+    List<FileInfo> sealedLogsAndMetaDataFiles = getLogSegments(includeActiveLogSegment);
+    if (null != sealedLogsAndMetaDataFiles) {
+      for (FileInfo E : sealedLogsAndMetaDataFiles) {
+        logger.info("[Dw] LS file: {} size: {}", E.getFileName(), E.getFileSize());
+
+        LogSegmentName logSegmentName = LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX);
+
+        List<FileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(dataDir, logSegmentName);
+        if (null != allIndexSegmentsForLogSegment) {
+          for (FileInfo is : allIndexSegmentsForLogSegment) {
+            logger.info("[Dw] IS file: {} size: {}", is.getFileName(), is.getFileSize());
+          }
+        }
+        List<FileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(dataDir, logSegmentName);
+        if (null != bloomFiltersForLogSegment) {
+          for (FileInfo bf : bloomFiltersForLogSegment) {
+            logger.info("[Dw] BF file: {} size: {}", bf.getFileName(), bf.getFileSize());
+          }
+        }
+        result.add(new LogInfo(E, allIndexSegmentsForLogSegment, bloomFiltersForLogSegment));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Get all log segments in the store.
+   * Param includeActiveLogSegment is used to determine if the active log segment should be included in the result.
+   */
+  List<FileInfo> getLogSegments(boolean includeActiveLogSegment){
+    return log.getAllLogSegmentNames().stream()
+        .filter(segment -> includeActiveLogSegment || !segment.equals(log.getActiveSegment().getName()))
+        .filter(segment -> !segment.isSingleSegment())
+        .map(segment -> log.getSegment(segment))
+        .map(segment -> new FileInfo(segment.getName().toString(), segment.getView().getFirst().length()))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Get all index segments for a log segment.
+   */
+  List<FileInfo> getAllIndexSegmentsForLogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
+        .map(file -> new FileInfo(file.getName(), file.length()))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Get all bloom filter files for a log segment.
+   */
+  List<FileInfo> getAllBloomFiltersForLogSegment(String dataDir, LogSegmentName logSegmentName){
+    return Arrays.stream(PersistentIndex.getBloomFilterFiles(dataDir, logSegmentName))
+        .map(file -> new FileInfo(file.getName(), file.length()))
+        .collect(Collectors.toList());
+  }
+
+  public ChunkResponse getStreamForFile(String fileName, long sizeInBytes, long startOffset) throws IOException {
+    if (startOffset == 0 && sizeInBytes == Long.MAX_VALUE) {
+      return getStreamForFile(fileName);
+    }
+    final File file = validateAndGetFile(fileName);
+
+    RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
+    randomAccessFile.seek(startOffset);
+    ByteBuffer buf = ByteBuffer.allocate((int)sizeInBytes);
+    randomAccessFile.getChannel().read(buf);
+    buf.flip();
+
+    byte[] byteArray = new byte[buf.remaining()];
+    buf.get(byteArray);
+    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(byteArray);
+
+    return new ChunkResponse(new DataInputStream(byteArrayInputStream), byteArray.length);
+  }
+
+  private ChunkResponse getStreamForFile(String fileName) throws IOException {
+    final File file = validateAndGetFile(fileName);
+    return new ChunkResponse(new DataInputStream(Files.newInputStream(file.toPath())), file.length());
+  }
+
+  private File validateAndGetFile(String fileName) throws IOException {
+    String filePath = getDataDir() + File.separator + fileName;
+    File file = new File(filePath);
+    if (!file.exists()) {
+      throw new IOException("File doesn't exist: " + filePath);
+    }
+    if (!file.canRead()) {
+      throw new IOException("File cannot be read: " + filePath);
+    }
+    return file;
   }
 
   /**

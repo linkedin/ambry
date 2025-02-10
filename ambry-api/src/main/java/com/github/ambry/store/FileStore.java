@@ -1,6 +1,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.clustermap.FileStoreException;
+import com.github.ambry.clustermap.FileStoreException.FileStoreErrorCode;
 import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.CrcInputStream;
@@ -14,18 +15,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import com.github.ambry.clustermap.FileStoreException.FileStoreErrorCode;
 import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 public class FileStore {
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
@@ -52,19 +51,19 @@ public class FileStore {
 
 
   // TODO Moved to BlobStore as the bootstrapping node wouldn't have FileStore instantiated.
-  public ByteBuffer readChunkForFileCopy(String mountPath, String fileName, int offset, int size)
+  public FileInputStream getStreamForFileRead(String mountPath, String fileName)
       throws IOException {
     if(!isRunning){
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
     }
+    // TODO: Handle edge cases and validations
     String filePath = mountPath + "/" + fileName;
     File file = new File(filePath);
-    RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
-    randomAccessFile.seek(offset);
-    ByteBuffer buf = ByteBuffer.allocate(size);
-    randomAccessFile.getChannel().read(buf);
-    buf.flip();
-    return buf;
+    // Check if file exists and is readable
+    if (!file.exists() || !file.canRead()) {
+      throw new IOException("File doesn't exist or cannot be read: " + filePath);
+    }
+    return new FileInputStream(file);
   }
 
   public void putChunkToFile(String outputFilePath, FileInputStream fileInputStream)
@@ -86,9 +85,10 @@ public class FileStore {
     fileInputStream.read(content); // Read bytes into the array
     Files.write(Paths.get(outputFilePath), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 
-    System.out.println("Demo: Write successful for chunk to file: " + outputFilePath);
+    System.out.println("Write successful for chunk to file: " + outputFilePath);
   }
 
+  // New class in input: List<FileMetaData>
   public void persistMetaDataToFile(String mountPath, List<LogInfo> logInfoList) throws IOException {
     if(!isRunning){
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);

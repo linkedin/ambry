@@ -103,7 +103,7 @@ public class BootstrapController {
       PartitionStateChangeListener listenerToInvoke = null;
 
       if (null == replica) {
-        if (isFileCopyFeatureEnabled()) {
+        if (isFileCopyFeatureEnabled() && partitionName == "") {
           // "New partition -> FC"
           // This is a new partition placement and FileCopy bootstrap protocol is enabled.
           listenerToInvoke = fileCopyManagerListener;

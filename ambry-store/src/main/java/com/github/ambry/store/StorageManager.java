@@ -36,9 +36,10 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.FileStore;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -171,6 +172,31 @@ public class StorageManager implements StoreManager {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
       }
     }
+  }
+
+  /**
+   * Gets the log segment metadata files from in-memory data structures
+   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
+   */
+  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
+    if (!partitionToDiskManager.containsKey(partitionId)) {
+      throw new IllegalArgumentException("DiskManager not found for partition " + partitionId);
+    }
+    return partitionToDiskManager.get(partitionId).getLogSegmentMetadataFiles(partitionId, includeActiveLogSegment);
+  }
+
+  /**
+   * Get the chunk for the given {@link PartitionId}
+   * This method returns FileInputStream containing the
+   * chunk of size {@code sizeInBytes} starting from {@code startOffset}.
+   */
+  @Override
+  public ChunkResponse getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+      throws IOException {
+    if (!partitionToDiskManager.containsKey(partitionId)) {
+      throw new IllegalArgumentException("DiskManager not found for partition " + partitionId);
+    }
+    return partitionToDiskManager.get(partitionId).getStreamForFile(partitionId, fileName, sizeInBytes, startOffset);
   }
 
   /**
@@ -459,7 +485,7 @@ public class StorageManager implements StoreManager {
 
   @Override
   public boolean isFileExists(PartitionId partitionId, String fileName) {
-    return this.getDiskManager(partitionId).isFileExists(fileName);
+    return this.getDiskManager(partitionId).isFileExists(partitionId, fileName);
   }
 
   @Override
@@ -580,10 +606,56 @@ public class StorageManager implements StoreManager {
    * @param replica the {@link ReplicaId} of the {@link Store} for which store needs to be built
    */
   @Override
-  public boolean addFileStore(ReplicaId replicaId) {
-    //TODO: Implementation To Be added.
-    return false;
+  public boolean addFileStore(ReplicaId replica) {
+    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
+      return false;
+    }
+    DiskManager diskManager = addDisk(replica.getDiskId());
+    if (diskManager == null || !diskManager.addBlobStore(replica)) {
+      logger.error("Failed to add new store into DiskManager");
+      return false;
+    }
+    partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+    partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
+    logger.info("New store is successfully added into StorageManager");
+    return true;
   }
+
+  @Override
+  public void setUpReplica(String partitionName) {
+    ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+    if (replica == null) {
+      ReplicaId replicaToAdd;
+      boolean replicaAdded = false;
+      do {
+        // there can be two scenarios:
+        // 1. this is the first time to add new replica onto current node;
+        // 2. last replica addition failed at some point before updating InstanceConfig in Helix
+        // In either case, we should add replica to current node by calling "addBlobStore(ReplicaId replica)"
+        replicaToAdd = clusterMap.getBootstrapReplica(partitionName, currentNode);
+        if (replicaToAdd == null) {
+          logger.error("No new replica found for partition {} in cluster map", partitionName);
+          throw new StateTransitionException(
+              "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
+        }
+        // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
+        // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
+        // at some point). Then a brand new store associated with this replica should be created and started.
+        if (!addFileStore(replicaToAdd)) {
+          // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+          // back since addition of store failed.
+          replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
+
+          logger.info("Failed to add store {} at location {}. Retrying bootstrapping replica at different location",
+              partitionName, replicaToAdd.getReplicaPath());
+        }else{
+          replicaAdded = true;
+        }
+      } while (!replicaAdded);
+    }
+  }
+
   public void buildStateForFileCopy(ReplicaId replica){
     if (replica == null) {
       logger.error("ReplicaId is null");

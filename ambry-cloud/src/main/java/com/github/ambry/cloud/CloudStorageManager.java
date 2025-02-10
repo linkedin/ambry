@@ -22,8 +22,12 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.ChunkResponse;
+import com.github.ambry.store.FileStore;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
-import java.nio.file.FileStore;
+import java.io.DataInputStream;
+import java.io.FileInputStream;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -79,6 +83,11 @@ public class CloudStorageManager implements StoreManager {
   public boolean addFileStore(ReplicaId replicaId) {
     return false;
 
+  }
+
+  @Override
+  public void setUpReplica(String partitionName) {
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override
@@ -148,6 +157,16 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public ChunkResponse getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

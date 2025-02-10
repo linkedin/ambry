@@ -110,7 +110,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     private long startTimeInMs;
     private int processorId;
 
-    LocalChannelRequest(RequestInfo requestInfo, int processorId) {
+    public LocalChannelRequest(RequestInfo requestInfo, int processorId) {
       this.requestInfo = requestInfo;
       this.processorId = processorId;
       startTimeInMs = System.currentTimeMillis();

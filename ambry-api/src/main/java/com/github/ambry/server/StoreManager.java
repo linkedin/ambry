@@ -16,10 +16,14 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.store.ChunkResponse;
+import com.github.ambry.store.FileStore;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import java.io.DataInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -50,6 +54,8 @@ public interface StoreManager {
    * @return {@code true} if adding FileStore was successful. {@code false} if not.
    */
   boolean addFileStore(ReplicaId replicaId);
+
+  void setUpReplica(String partitionName);
 
   /**
    * Build state after filecopy is completed
@@ -153,4 +159,23 @@ public interface StoreManager {
    * @throws IOException
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
+
+  /**
+   * Get the list of log segment metadata files for a given partition.
+   * @param partitionId
+   * @param includeActiveLogSegment
+   * @return List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
+   */
+  List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment);
+
+  /**
+   * Get the chunk from the requested file (Log segment, Index File, Bloom Filter).
+   * @param partitionId
+   * @param fileName
+   * @param sizeInBytes
+   * @param startOffset
+   * @return FileInputStream containing the chunk of size {@code sizeInBytes} starting from {@code startOffset}.
+   */
+  ChunkResponse getChunk(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+      throws IOException;
 }

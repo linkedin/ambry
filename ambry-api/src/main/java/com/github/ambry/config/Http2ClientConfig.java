@@ -203,10 +203,10 @@ public class Http2ClientConfig {
     http2DropRequestOnWriteAndFlushTimeout =
         verifiableProperties.getBoolean(HTTP2_DROP_REQUEST_ON_WRITE_AND_FLUSH_TIMEOUT, false);
     http2BlockingChannelAcquireTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_ACQUIRE_TIMEOUT_MS, 1000);
-    http2BlockingChannelSendTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS, 2000);
-    http2BlockingChannelReceiveTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS, 5000);
+    http2BlockingChannelSendTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS, 99999);
+    http2BlockingChannelReceiveTimeoutMs = verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS, 99999);
     http2BlockingChannelPoolShutdownTimeoutMs =
-        verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_POOL_SHUTDOWN_TIMEOUT_MS, 3000);
+        verifiableProperties.getInt(HTTP2_BLOCKING_CHANNEL_POOL_SHUTDOWN_TIMEOUT_MS, 99999);
     http2PeerCertificateSanRegex = verifiableProperties.getString(HTTP2_PEER_CERTIFICATE_SAN_REGEX, "");
     http2TimeoutAsNetworkError = verifiableProperties.getBoolean(HTTP2_TIMEOUT_AS_NETWORK_ERROR, false);
     http2RequestAdditionalTimeoutMs = verifiableProperties.getInt(HTTP2_REQUEST_ADDITIONAL_TIMEOUT_MS, 2500);

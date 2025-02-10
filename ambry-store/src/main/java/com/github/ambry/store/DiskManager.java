@@ -24,7 +24,9 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousFileChannel;
@@ -41,6 +43,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
@@ -52,6 +55,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -188,6 +192,11 @@ public class DiskManager {
       ConcurrentHashMap<PartitionId, Exception> startExceptions = new ConcurrentHashMap<>();
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
+        if(Objects.equals(146L, partitionAndStore.getKey().getId()) &&
+            partitionToReplicaMap.get(partitionAndStore.getKey()).getDataNodeId().getHostname().equals("ltx1-app3602.stg.linkedin.com")) {
+          logger.info("Demo: Skip the store {} at bootstrapping node", partitionAndStore.getKey());
+          continue;
+        }
         if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
           logger.info("Skip the store {} because it is on the stopped list", partitionAndStore.getKey());
           continue;
@@ -813,13 +822,40 @@ public class DiskManager {
     return diskHealthStatus;
   }
 
-  public boolean isFileExists(String fileName) {
-    String filePath = this.disk.getMountPath() + File.separator + fileName;
+  /**
+   * Checks if the file exists on the disk
+   * @param fileName
+   * @return
+   */
+  public boolean isFileExists(PartitionId partitionId, String fileName) {
+    String filePath = this.disk.getMountPath() + "/" + partitionId.toPathString() + File.separator + fileName;
     return new File(filePath).exists();
   }
 
+  /**
+   * Gets the files for the given pattern from the disk
+   */
   public List<File> getFilesForPattern(Pattern pattern) throws IOException {
     return Utils.getFilesForPattern(this.disk.getMountPath(), pattern);
+  }
+
+  /**
+   * Gets the log segment metadata files from in-memory data structures
+   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
+   */
+  List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
+    if (!stores.containsKey(partitionId)) {
+      throw new IllegalArgumentException("BlobStore for partition " + partitionId + " is not found on disk " + disk);
+    }
+    return stores.get(partitionId).getLogSegmentMetadataFiles(includeActiveLogSegment);
+  }
+
+  public ChunkResponse getStreamForFile(PartitionId partitionId, String fileName, long sizeInBytes, long startOffset)
+      throws IOException {
+    if (!stores.containsKey(partitionId)) {
+      throw new IllegalArgumentException("BlobStore for partition " + partitionId + " is not found on disk " + disk);
+    }
+    return stores.get(partitionId).getStreamForFile(fileName, sizeInBytes, startOffset);
   }
 
   /**
