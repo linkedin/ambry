@@ -13,13 +13,9 @@
  */
 package com.github.ambry.tools.perf.serverperf;
 
-import com.github.ambry.network.ResponseInfo;
+public class ShutDownException extends Exception {
 
+  public ShutDownException() {
 
-/**
- * Interface to implement a class which can process {@link ResponseInfo}
- * and can be passed to {@link ServerPerfNetworkQueue#poll(ResponseInfoProcessor)}
- */
-interface ResponseInfoProcessor {
-  void process(ResponseInfo responseInfo) throws Exception;
+  }
 }
