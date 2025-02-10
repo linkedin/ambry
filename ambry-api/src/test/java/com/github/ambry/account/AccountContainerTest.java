@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
