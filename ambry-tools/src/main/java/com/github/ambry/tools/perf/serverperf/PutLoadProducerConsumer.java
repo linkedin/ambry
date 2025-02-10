@@ -60,7 +60,7 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
   private final List<ReplicaId> replicaIdsSelected;
   private final AtomicInteger correlationId;
 
-  private int totalDataSentBytes;
+  private long totalDataSentBytes;
 
   private static final String CLIENT_ID = "ServerPUTPerformance";
 
@@ -80,8 +80,8 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
   }
 
   /**
-   * Selects one unsealed replica randomly for each disk in the {@link #dataNodeId}.
-   * and stores these in {@link #replicaIdsSelected}
+   * Selects {@link ServerPerformanceConfig#serverPerformancePutTestPartitionCountPerDisk} unsealed replicas randomly for
+   * each disk in the {@link #dataNodeId} and stores these in {@link #replicaIdsSelected}
    */
   void selectReplica() {
     Random random = new Random();
@@ -89,15 +89,26 @@ public class PutLoadProducerConsumer implements LoadProducerConsumer {
 
     Map<DiskId, List<ReplicaId>> diskIdToReplicaIds = new HashMap<>();
     allReplicaIds.forEach(replicaId -> {
+      diskIdToReplicaIds.putIfAbsent(replicaId.getDiskId(), new ArrayList<>());
       if (!replicaId.isUnsealed()) {
         return;
       }
-      diskIdToReplicaIds.putIfAbsent(replicaId.getDiskId(), new ArrayList<>());
       diskIdToReplicaIds.get(replicaId.getDiskId()).add(replicaId);
     });
 
-    diskIdToReplicaIds.values().forEach(replicaIds -> {
-      replicaIdsSelected.add(replicaIds.get(random.nextInt(replicaIds.size())));
+    diskIdToReplicaIds.keySet().forEach(diskId -> {
+      List<ReplicaId> replicaIds = diskIdToReplicaIds.get(diskId);
+
+      if (replicaIds.size() < config.serverPerformancePutTestPartitionCountPerDisk) {
+        throw new IllegalArgumentException("disk does not have enough replicas " + diskId);
+      }
+
+      for (int i = 0; i < config.serverPerformancePutTestPartitionCountPerDisk; i++) {
+        int randomIndex = random.nextInt(replicaIds.size());
+        replicaIdsSelected.add(replicaIds.get(randomIndex));
+        replicaIds.set(randomIndex, replicaIds.get(replicaIds.size() - 1));
+        replicaIds.remove(replicaIds.size() - 1);
+      }
     });
   }
 

@@ -141,11 +141,18 @@ public class ServerPerformance {
     public final int serverPerformancePutTestBlobExpirySeconds;
 
     /**
+     * Number of random unsealed partitions per disk to pick for PUT test
+     */
+    @Config("server.performance.put.test.partition.count.per.disk")
+    @Default("1")
+    public final int serverPerformancePutTestPartitionCountPerDisk;
+
+    /**
      * Maximum amount of bytes which will be written for PUT test
      */
     @Config("server.performance.put.test.data.limit.bytes")
     @Default("204800")
-    public final int serverPerformancePutTestDataLimitBytes;
+    public final long serverPerformancePutTestDataLimitBytes;
 
     public ServerPerformanceConfig(VerifiableProperties verifiableProperties) {
       serverPerformanceTestType = TestType.valueOf(verifiableProperties.getString("server.performance.test.type"));
@@ -167,8 +174,10 @@ public class ServerPerformance {
           verifiableProperties.getInt("server.performance.put.test.blob.size.bytes", 4096);
       serverPerformancePutTestBlobExpirySeconds =
           verifiableProperties.getInt("server.performance.put.test.blob.expiry.seconds", 10);
+      serverPerformancePutTestPartitionCountPerDisk =
+          verifiableProperties.getInt("server.performance.put.test.partition.count.per.disk", 1);
       serverPerformancePutTestDataLimitBytes =
-          verifiableProperties.getInt("server.performance.put.test.data.limit.bytes", 204800);
+          verifiableProperties.getLong("server.performance.put.test.data.limit.bytes", 204800);
     }
   }
 
