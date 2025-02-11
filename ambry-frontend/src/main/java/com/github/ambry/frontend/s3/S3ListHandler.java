@@ -16,6 +16,7 @@ package com.github.ambry.frontend.s3;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import com.github.ambry.account.Container;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.FrontendMetrics;
@@ -104,6 +105,8 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private ReadableStreamChannel serializeAsXml(RestRequest restRequest, Page<NamedBlobListEntry> namedBlobRecordPage)
       throws IOException, RestServiceException {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    Container container = (Container) restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY);
+    String containerName = container.getName();
     String prefix = getHeader(restRequest.getArgs(), PREFIX_PARAM_NAME, false);
     String delimiter = getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
     String encodingType = getHeader(restRequest.getArgs(), ENCODING_TYPE_PARAM_NAME, false);
@@ -131,7 +134,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     }
     if (LIST_TYPE_VERSION_2.equals(getHeader(restRequest.getArgs(), LIST_TYPE, false))) {
       ListBucketResultV2 resultV2 =
-          new ListBucketResultV2(restRequest.getPath(), prefix, maxKeysValue, keyCount, delimiter, contentsList,
+          new ListBucketResultV2(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList,
               encodingType, continuationToken, namedBlobRecordPage.getNextPageToken(),
               namedBlobRecordPage.getNextPageToken() != null);
       LOGGER.debug("Sending response for S3 ListObjects {}", resultV2);
@@ -139,7 +142,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
       xmlMapper.writeValue(outputStream, resultV2);
     } else {
       ListBucketResult result =
-          new ListBucketResult(restRequest.getPath(), prefix, maxKeysValue, keyCount, delimiter, contentsList,
+          new ListBucketResult(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList,
               encodingType, marker, namedBlobRecordPage.getNextPageToken(),
               namedBlobRecordPage.getNextPageToken() != null);
       LOGGER.debug("Sending response for S3 ListObjects {}", result);

@@ -166,6 +166,7 @@ public class S3ListHandlerTest {
     listBucketResult = xmlMapper.readValue(byteBuffer.array(), ListBucketResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", XML_CONTENT_TYPE, restResponseChannel.getHeader(Headers.CONTENT_TYPE));
+    assertEquals("Mismatch in bucket name", container.getName(), listBucketResult.getName());
     assertEquals("Mismatch in key name", KEY_NAME, listBucketResult.getContents().get(0).getKey());
     assertEquals("Mismatch in key count", 1, listBucketResult.getKeyCount());
     assertEquals("Mismatch in next token", KEY_NAME, listBucketResult.getMarker());
@@ -224,6 +225,7 @@ public class S3ListHandlerTest {
     ListBucketResultV2 listBucketResultV2 = xmlMapper.readValue(byteBuffer.array(), ListBucketResultV2.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", XML_CONTENT_TYPE, restResponseChannel.getHeader(Headers.CONTENT_TYPE));
+    assertEquals("Mismatch in bucket name", container.getName(), listBucketResultV2.getName());
     assertEquals("Mismatch in key name", KEY_NAME, listBucketResultV2.getContents().get(0).getKey());
     assertEquals("Mismatch in key name", KEY_NAME1, listBucketResultV2.getContents().get(1).getKey());
     assertEquals("Mismatch in key count", 2, listBucketResultV2.getKeyCount());
