@@ -39,6 +39,11 @@ allprojects {
         mavenCentral()
         mavenLocal()
     }
+
+    configurations.all {
+        exclude group: "org.apache.avro", module: "avro-parent"
+        exclude group: "com.google.protobuf", module: "protobuf-parent"
+    }
 }
 
 subprojects {
