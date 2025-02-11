@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
  */
 public class Offset implements Comparable<Offset> {
   private final LogSegmentName name;
-  private final long offset;
+  private long offset;
 
   private static final short CURRENT_VERSION = 0;
   private static final int VERSION_SIZE = 2;
@@ -81,6 +81,10 @@ public class Offset implements Comparable<Offset> {
    */
   public long getOffset() {
     return offset;
+  }
+
+  public void reset() {
+    offset = 0L;
   }
 
   /**

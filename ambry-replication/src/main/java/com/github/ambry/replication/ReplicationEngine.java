@@ -33,6 +33,7 @@ import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -447,6 +448,10 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfoList = persistor.retrieve(mountPath);
 
     for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfoList) {
+      if (tokenInfo.getPartitionId().getId() == 221L){
+        ((StoreFindToken)tokenInfo.getReplicaToken()).reset();
+        logger.info("Demo: Remote token reset for partition id 221");
+      }
       String hostname = tokenInfo.getHostname();
       int port = tokenInfo.getPort();
       PartitionId partitionId = tokenInfo.getPartitionId();

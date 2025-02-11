@@ -210,6 +210,10 @@ public class StoreFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
+  public void reset() {
+    this.offset.reset();
+  }
+
   static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory) throws IOException {
     StoreFindToken storeFindToken;
     // read version
