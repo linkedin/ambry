@@ -448,14 +448,15 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfoList = persistor.retrieve(mountPath);
 
     for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfoList) {
-      if (tokenInfo.getPartitionId().getId() == 221L){
-        ((StoreFindToken)tokenInfo.getReplicaToken()).reset();
-        logger.info("Demo: Remote token reset for partition id 221");
-      }
       String hostname = tokenInfo.getHostname();
       int port = tokenInfo.getPort();
       PartitionId partitionId = tokenInfo.getPartitionId();
       FindToken token = tokenInfo.getReplicaToken();
+      if (tokenInfo.getPartitionId().getId() == 221L){
+        ((StoreFindToken)token).reset();
+        tokenWasReset = true;
+        logger.info("Demo: Remote token reset for partition id 221: " + token);
+      }
       // update token
       PartitionInfo partitionInfo = partitionToPartitionInfo.get(tokenInfo.getPartitionId());
       if (partitionInfo != null) {
@@ -498,6 +499,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
       // before the replica token file is persisted after the reset.
       if (persistor != null) {
+        logger.info("Demo: Token persisted");
         persistor.write(mountPath, false);
       } else {
         logger.warn("Unable to persist after token reset, persistor is null");
