@@ -39,6 +39,16 @@ allprojects {
         mavenCentral()
         mavenLocal()
     }
+
+    configurations.all {
+        resolutionStrategy {
+            // Force avro-parent to version 1.11.4. Currently, a vulnerable version 1.7.7 is being picked up transitively.
+            force 'org.apache.avro:avro-parent:1.11.4'
+            // Force protobuf-parent to version 3.15.0. Currently, a vulnerable version 3.11.4 is being picked up
+            // transitively.
+            force 'com.google.protobuf:protobuf-parent:3.15.0'
+        }
+    }
 }
 
 subprojects {

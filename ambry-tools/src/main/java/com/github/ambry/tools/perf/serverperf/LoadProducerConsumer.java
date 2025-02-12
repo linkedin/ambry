@@ -13,13 +13,22 @@
  */
 package com.github.ambry.tools.perf.serverperf;
 
-import com.github.ambry.network.ResponseInfo;
-
-
 /**
- * Interface to implement a class which can process {@link ResponseInfo}
- * and can be passed to {@link ServerPerfNetworkQueue#poll(ResponseInfoProcessor)}
+ * Interface which needs to implemented for Load producer and consumer for
+ * Server performance test
  */
-interface ResponseInfoProcessor {
-  void process(ResponseInfo responseInfo) throws Exception;
+public interface LoadProducerConsumer {
+  /**
+   * This will be called continuously until {@link ShutDownException} is thrown.
+   * @throws ShutDownException shutdown exception
+   * @throws Exception exception
+   */
+  void produce() throws Exception;
+
+  /**
+   * This will be called continuously until {@link ShutDownException} is thrown.
+   * @throws ShutDownException shutdown exception
+   * @throws Exception exception
+   */
+  void consume() throws Exception;
 }

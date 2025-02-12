@@ -51,13 +51,13 @@ import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.ForceDeleteAdminRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
-import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.tools.util.ToolRequestResponseUtil;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -66,7 +66,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import java.io.Closeable;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -862,13 +861,7 @@ public class ServerAdminTool implements Closeable {
     GetRequest getRequest =
         new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, flags, partitionRequestInfos, getOption);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, getRequest);
-    InputStream serverResponseStream = new NettyByteBufDataInputStream(response.content());
-    GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
-    ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-    ServerErrorCode errorCode =
-        partitionErrorCode == ServerErrorCode.No_Error ? getResponse.getError() : partitionErrorCode;
-    InputStream stream = errorCode == ServerErrorCode.No_Error ? getResponse.getInputStream() : null;
-    return new Pair<>(new Pair<>(errorCode, stream), response);
+    return new Pair<>(ToolRequestResponseUtil.decodeGetResponse(response, clusterMap).getFirst(), response);
   }
 
   /**
@@ -881,7 +874,7 @@ public class ServerAdminTool implements Closeable {
    */
   private ResponseInfo sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId,
       SendWithCorrelationId request) throws TimeoutException {
-    ReplicaId replicaId = getReplicaFromNode(dataNodeId, partitionId);
+    ReplicaId replicaId = ToolRequestResponseUtil.getReplicaFromNode(dataNodeId, partitionId, clusterMap);
     String hostname = dataNodeId.getHostname();
     Port port = dataNodeId.getPortToConnectTo();
     String identifier = hostname + ":" + port.getPort();
@@ -908,28 +901,5 @@ public class ServerAdminTool implements Closeable {
           identifier + ": Encountered error while trying to send request - " + responseInfo.getError());
     }
     return responseInfo;
-  }
-
-  /**
-   * Get replica of given {@link PartitionId} from given {@link DataNodeId}. If partitionId is null, it returns any
-   * replica on the certain node.
-   * @param dataNodeId the {@link DataNodeId} on which replica resides.
-   * @param partitionId the {@link PartitionId} which replica belongs to.
-   * @return {@link ReplicaId} from given node.
-   */
-  private ReplicaId getReplicaFromNode(DataNodeId dataNodeId, PartitionId partitionId) {
-    ReplicaId replicaToReturn = null;
-    if (partitionId != null) {
-      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
-        if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())) {
-          replicaToReturn = replicaId;
-          break;
-        }
-      }
-    } else {
-      // pick any replica on this node
-      replicaToReturn = clusterMap.getReplicaIds(dataNodeId).get(0);
-    }
-    return replicaToReturn;
   }
 }
