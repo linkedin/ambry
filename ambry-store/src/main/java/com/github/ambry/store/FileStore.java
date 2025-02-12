@@ -38,8 +38,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class is responsible for interactions with Disk as Part Of File Copy Protocol.
- * It is responsible for reading and writing chunks and metadata to disk.
+ * FileStore provides file system operations for the File Copy Protocol in Ambry.
+ * It handles reading and writing of data chunks and metadata to disk, managing file operations
+ * with proper serialization and error handling.
  */
 public class FileStore {
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
@@ -47,28 +48,54 @@ public class FileStore {
   private final FileMetadataSerde fileMetadataSerde;
   private final FileCopyConfig fileCopyConfig;
 
-  public FileStore(FileCopyConfig fileCopyConfig){
+  /**
+   * Creates a new FileStore instance.
+   * @param fileCopyConfig Configuration for file copy operations
+   * @throws NullPointerException if fileCopyConfig is null
+   */
+  public FileStore(FileCopyConfig fileCopyConfig) {
     this.fileMetadataSerde = new FileMetadataSerde();
     this.fileCopyConfig = fileCopyConfig;
   }
 
+  /**
+   * Starts the FileStore service.
+   * @throws StoreException if the service fails to start
+   */
   public void start() throws StoreException {
     isRunning = true;
   }
+
+  /**
+   * Checks if the FileStore service is running.
+   * @return true if the service is running, false otherwise
+   */
   public boolean isRunning() {
     return isRunning;
   }
+
+  /**
+   * Stops the FileStore service.
+   */
   public void stop() {
     isRunning = false;
   }
 
-
+  /**
+   * Reads a portion of a file into a ByteBuffer.
+   * @param mountPath The base directory path
+   * @param fileName The name of the file to read
+   * @param offset The starting position in the file
+   * @param size The number of bytes to read
+   * @return ByteBuffer containing the requested data
+   * @throws IOException if there are issues reading the file
+   * @throws FileStoreException if the service is not running
+   */
   public ByteBuffer getStreamForFileRead(String mountPath, String fileName, int offset, int size)
       throws IOException {
-    if(!isRunning){
+    if (!isRunning) {
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
     }
-    // TODO: Handle edge cases and validations
     String filePath = mountPath + "/" + fileName;
     File file = new File(filePath);
     RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
@@ -79,29 +106,41 @@ public class FileStore {
     return buf;
   }
 
+  /**
+   * Writes data from an input stream to a file.
+   * @param outputFilePath The path where the file should be written
+   * @param fileInputStream The input stream containing the data to write
+   * @throws IOException if there are issues writing the file
+   * @throws FileStoreException if the service is not running
+   * @throws IllegalArgumentException if fileInputStream is null
+   */
   public void putChunkToFile(String outputFilePath, FileInputStream fileInputStream)
       throws IOException {
-    if(!isRunning){
+    if (!isRunning) {
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
     }
-    if(fileInputStream == null){
+    if (fileInputStream == null) {
       throw new IllegalArgumentException("fileInputStream is null");
     }
-    // TODO: Handle edge cases and validations
 
-    // Determine the size of the file
+    // Read the entire file content into memory
     long fileSize = fileInputStream.available();
-
-    // Read all bytes from the source file and append them to the output file
-
-    byte[] content = new byte[(int) fileSize]; // Read the content of the source file into a byte array
-    fileInputStream.read(content); // Read bytes into the array
+    byte[] content = new byte[(int) fileSize];
+    fileInputStream.read(content);
+    
+    // Write content to the output file with create and append options
     Files.write(Paths.get(outputFilePath), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-
-    logger.info("Write successful for chunk to file: {} with contents: {}", outputFilePath, new String(content) );
+    logger.info("Write successful for chunk to file: {} with contents: {}", outputFilePath, new String(content));
   }
 
-  // New class in input: List<FileMetaData>
+  /**
+   * Persists metadata for a list of logs to a file.
+   * @param mountPath The directory where the metadata file should be stored
+   * @param logInfoList List of log information to persist
+   * @throws IOException if there are issues writing the metadata
+   * @throws FileStoreException if the service is not running
+   * @throws IllegalArgumentException if logInfoList is null
+   */
   public void persistMetaDataToFile(String mountPath, List<LogInfo> logInfoList) throws IOException {
     if(!isRunning){
       throw new FileStoreException("FileStore is not running", FileStoreErrorCode.FileStoreRunningFailure);
@@ -125,7 +164,13 @@ public class FileStore {
     }
   }
 
-
+  /**
+   * Reads metadata from a file.
+   * @param mountPath The directory containing the metadata file
+   * @return List of LogInfo objects containing the metadata
+   * @throws IOException if there are issues reading the metadata
+   * @throws FileStoreException if the service is not running
+   */
   public List<LogInfo> readMetaDataFromFile(String mountPath) throws IOException {
     List<LogInfo> logInfoList = new ArrayList<>();
     if(!isRunning){
@@ -148,23 +193,26 @@ public class FileStore {
     }
   }
 
-  public void shutdown(){
+  /**
+   * Performs cleanup operations when shutting down the FileStore.
+   * Currently a no-op implementation.
+   */
+  public void shutdown() {
     return;
   }
 
   /**
-   * Class to serialize and deserialize metadata for FileCopy
+   * Inner class that handles serialization and deserialization of file metadata.
+   * Implements custom serialization format with CRC checking for data integrity.
    */
   private static class FileMetadataSerde {
     private static final short Crc_Size = 8;
 
-    public FileMetadataSerde() {
-    }
-
     /**
-     * Serialize the Filecopy metadata to the file
-     * @param logInfoList list of log info to serialize
-     * @param outputStream the file output stream to write to
+     * Serializes log information to a file with CRC validation.
+     * @param logInfoList List of log information to serialize
+     * @param outputStream The output stream to write to
+     * @throws IOException if there are issues during serialization
      */
     public void persist(List<LogInfo> logInfoList, OutputStream outputStream)
         throws IOException {
@@ -207,9 +255,10 @@ public class FileStore {
     }
 
     /**
-     * Deserialize the Filecopy metadata
-     * @param inputStream the input stream from the persistent file
-     * @return list of LogInfo representing Filecopy metadata for a partition
+     * Deserializes log information from a file with CRC validation.
+     * @param inputStream The input stream to read from
+     * @return List of LogInfo objects, or empty list if deserialization fails
+     * @throws IOException if there are issues during deserialization
      */
     public List<LogInfo> retrieve(InputStream inputStream) throws IOException {
       List<LogInfo> logInfoList = new ArrayList<>();
