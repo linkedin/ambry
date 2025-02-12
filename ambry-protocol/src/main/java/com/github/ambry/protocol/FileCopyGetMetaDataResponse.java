@@ -21,6 +21,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import javax.annotation.Nonnull;
 
 
@@ -32,8 +33,9 @@ public class FileCopyGetMetaDataResponse extends Response {
   static short CURRENT_VERSION = File_Copy_Protocol_Metadata_Response_Version_V1;
 
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
-      @Nonnull List<LogInfo> logInfos, @Nonnull ServerErrorCode errorCode) {
+      @Nonnull List<LogInfo> logInfos, ServerErrorCode errorCode) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
+    Objects.requireNonNull(logInfos, "logInfos must not be null");
 
     validateVersion(versionId);
     this.numberOfLogfiles = numberOfLogfiles;
@@ -44,8 +46,14 @@ public class FileCopyGetMetaDataResponse extends Response {
     this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), serverErrorCode);
   }
 
+  public FileCopyGetMetaDataResponse(ServerErrorCode serverErrorCode) {
+    this(CURRENT_VERSION, -1, "", 0, new ArrayList<>(), serverErrorCode);
+  }
+
   public static FileCopyGetMetaDataResponse readFrom(
       @Nonnull DataInputStream stream) throws IOException {
+    Objects.requireNonNull(stream, "stream should not be null");
+
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.FileCopyGetMetaDataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible. Expected : {}, Actual : {}" +

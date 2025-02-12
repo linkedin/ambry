@@ -291,6 +291,11 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
+  public void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
+    throw new UnsupportedOperationException("FileCopyGetMetaDataRequest is not supported in cloud yet.");
+  }
+
+  @Override
   public void handleTtlUpdateRequest(NetworkRequest request) throws InterruptedException {
 
     if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {

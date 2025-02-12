@@ -21,6 +21,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import javax.annotation.Nonnull;
 
 
@@ -44,10 +45,13 @@ public class LogInfo {
   private static final int ListSize_In_Bytes = 4;
 
   public LogInfo(
-      @Nonnull String fileName,
+      String fileName,
       long fileSizeInBytes,
       @Nonnull List<FileInfo> indexFiles,
       @Nonnull List<FileInfo> bloomFilters) {
+    Objects.requireNonNull(indexFiles, "indexFiles must not be null");
+    Objects.requireNonNull(bloomFilters, "bloomFilters must not be null");
+
     this.fileName = fileName;
     this.fileSizeInBytes = fileSizeInBytes;
     this.indexFiles = indexFiles;
@@ -83,6 +87,8 @@ public class LogInfo {
   }
 
   public static LogInfo readFrom(@Nonnull DataInputStream stream) throws IOException {
+    Objects.requireNonNull(stream, "stream should not be null");
+
     String fileName = Utils.readIntString(stream );
     long fileSize = stream.readLong();
     List<FileInfo> listOfIndexFiles = new ArrayList<>();
@@ -101,6 +107,8 @@ public class LogInfo {
   }
 
   public void writeTo(@Nonnull ByteBuf buf){
+    Objects.requireNonNull(buf, "buf should not be null");
+
     Utils.serializeString(buf, fileName, Charset.defaultCharset());
     buf.writeLong(fileSizeInBytes);
     buf.writeInt(indexFiles.size());

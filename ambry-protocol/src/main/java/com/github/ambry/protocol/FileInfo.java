@@ -18,6 +18,7 @@ import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.Objects;
 import javax.annotation.Nonnull;
 
 
@@ -33,7 +34,7 @@ public class FileInfo {
   private static final int FileSize_Field_Size_In_Bytes = 8;
 
   public FileInfo(
-      @Nonnull String fileName,
+      String fileName,
       long fileSize) {
     this.fileName = fileName;
     this.fileSizeInBytes = fileSize;
@@ -44,12 +45,16 @@ public class FileInfo {
   }
 
   public static FileInfo readFrom(@Nonnull DataInputStream stream) throws IOException {
+    Objects.requireNonNull(stream, "stream should not be null");
+
     String fileName = Utils.readIntString(stream);
     long fileSize = stream.readLong();
     return new FileInfo(fileName, fileSize);
   }
 
   public void writeTo(@Nonnull ByteBuf buf) {
+    Objects.requireNonNull(buf, "buf should not be null");
+
     Utils.serializeString(buf, fileName, Charset.defaultCharset());
     buf.writeLong(fileSizeInBytes);
   }

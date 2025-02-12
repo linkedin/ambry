@@ -65,6 +65,7 @@ import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
+import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -147,6 +148,7 @@ import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
@@ -230,8 +232,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-//    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
-        return Arrays.asList(new Object[][]{{false, false}});
+    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
   }
 
   private static Properties createProperties(boolean validateRequestOnStoreState,
@@ -1653,9 +1654,24 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
     RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
         FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "",
-        partitionIds.get(0), "hostName");
+        partitionIds.get(0), "localhost");
 
-    sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    FileCopyGetMetaDataResponse response = (FileCopyGetMetaDataResponse)sendRequestGetResponse(
+        request, ServerErrorCode.No_Error);
+
+    Assert.assertEquals("Correlation id in response does match the one in the request",
+        request.getCorrelationId(), response.getCorrelationId());
+    Assert.assertEquals("Client id in response does match the one in the request",
+        request.getClientId(), response.getClientId());
+    Assert.assertEquals("Error code does not match expected",
+        ServerErrorCode.No_Error, response.getError());
+
+    Assert.assertEquals("1 log segment is expected",
+        1, response.getNumberOfLogfiles());
+    Assert.assertEquals("0 index file is expected",
+        0, response.getLogInfos().get(0).getIndexFiles().size());
+    Assert.assertEquals("0 bloom file is expected",
+        0, response.getLogInfos().get(0).getBloomFilters().size());
   }
 
   // helpers
@@ -1957,6 +1973,10 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         case TtlUpdateRequest:
           request = new TtlUpdateRequest(correlationId, clientId, originalBlobId, Utils.Infinite_Time,
               SystemTime.getInstance().milliseconds());
+          break;
+        case FileCopyGetMetaDataRequest:
+          request = new FileCopyGetMetaDataRequest(FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1,
+              correlationId, clientId, id, "localhost");
           break;
         default:
           throw new IllegalArgumentException(requestType + " not supported by this function");

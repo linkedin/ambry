@@ -23,6 +23,7 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.cloud.BackupIntegrityMonitor;
 import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.cloud.RecoveryNetworkClientFactory;
+import com.github.ambry.clustermap.AmbryDataNode;
 import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -30,8 +31,6 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -40,6 +39,7 @@ import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -56,19 +56,15 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
-import com.github.ambry.network.ChannelOutput;
-import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
-import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ServerRequestResponseHelper;
 import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.SocketServer;
@@ -77,10 +73,7 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
-import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.RequestHandlerPool;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.replication.FindTokenHelper;
@@ -97,14 +90,10 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -115,6 +104,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import org.apache.logging.log4j.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -492,30 +482,6 @@ public class AmbryServer {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
     }
-  }
-
-  private void testGetMetadataApi() {
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
-    FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
-        FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "", partitionIds.get(0), "hostName");
-
-    partitionIds.get(0).getReplicaIds().forEach(replicaId -> {
-      logger.info("Dw: partitionId: {}, replicaId: {}", partitionIds.get(0), replicaId);
-
-      if (replicaId.getDataNodeId().getHostname().equals("ltx1-app3645.stg.linkedin.com")) {
-        DataNodeId targetDataNodeId = replicaId.getDataNodeId();
-        try {
-          logger.info("Dw: Request: {}", request);
-          ConnectedChannel connectedChannel =
-              connectionPool.checkOutConnection(targetDataNodeId.getHostname(), targetDataNodeId.getPortToConnectTo(), 40);
-          ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
-          FileCopyGetMetaDataResponse response = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
-          logger.info("Dw: Response: {}", response);
-        } catch (Exception e) {
-          logger.error("Dw: Error while sending request to " + targetDataNodeId, e);
-        }
-      }
-    });
   }
 
   /**

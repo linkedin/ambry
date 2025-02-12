@@ -81,7 +81,6 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONObject;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -91,6 +90,7 @@ import sun.nio.ch.FileChannelImpl;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.ReplicaState.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static com.github.ambry.store.StoreTestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
@@ -327,7 +327,7 @@ public class BlobStoreTest {
 
   private final String storeId = TestUtils.getRandomString(10);
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
-  private final DiskSpaceAllocator diskSpaceAllocator = StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR;
+  private final DiskSpaceAllocator diskSpaceAllocator = DEFAULT_DISK_SPACE_ALLOCATOR;
   private final Properties properties = new Properties();
   private final long expiresAtMs;
   // TODO: make these final once again once compactor is ready and the hack to clear state is removed
@@ -363,7 +363,7 @@ public class BlobStoreTest {
     this.isLogSegmented = isLogSegmented;
     this.enableIndexDirectMemoryUsageMetric = enableIndexDirectMemoryUsageMetric;
     properties.put("store.enable.index.direct.memory.usage.metric", Boolean.toString(enableIndexDirectMemoryUsageMetric));
-    tempDir = StoreTestUtils.createTempDirectory("storeDir-" + storeId);
+    tempDir = createTempDirectory("storeDir-" + storeId);
     tempDirStr = tempDir.getAbsolutePath();
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     long bufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
@@ -388,7 +388,7 @@ public class BlobStoreTest {
       // verify that the index object was removed from the metrics.
       assertFalse(storeMetrics.indexes.containsKey(store.getReplicaId().getPartitionId().toString()));
     }
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", cleanDirectory(tempDir, true));
     generatedKeys.clear();
     allKeys.clear();
     idsByLogSegment.clear();
@@ -418,7 +418,7 @@ public class BlobStoreTest {
     properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(true));
     //Setup threshold test properties, replicaId, mock write status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
     when(replicaStatusDelegate.unseal(any())).thenReturn(true);
     when(replicaStatusDelegate.partialSeal(any())).thenReturn(true);
@@ -504,13 +504,13 @@ public class BlobStoreTest {
   @Test
   public void multiReplicaStatusDelegatesTest() throws Exception {
     Set<ReplicaId> sealedReplicas1 = new HashSet<>();
-    ReplicaStatusDelegate mockDelegate1 = Mockito.mock(ReplicaStatusDelegate.class);
+    ReplicaStatusDelegate mockDelegate1 = mock(ReplicaStatusDelegate.class);
     doAnswer(invocation -> {
       sealedReplicas1.add(invocation.getArgument(0));
       return true;
     }).when(mockDelegate1).seal(any());
     Set<ReplicaId> sealedReplicas2 = new HashSet<>();
-    ReplicaStatusDelegate mockDelegate2 = Mockito.mock(ReplicaStatusDelegate.class);
+    ReplicaStatusDelegate mockDelegate2 = mock(ReplicaStatusDelegate.class);
     doAnswer(invocation -> {
       sealedReplicas2.add(invocation.getArgument(0));
       return true;
@@ -540,7 +540,7 @@ public class BlobStoreTest {
         .when(mockDelegate2)
         .getSealedReplicas();
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     reloadStore(defaultConfig, replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
     // make the replica sealed
     put(4, (long) (SEGMENT_CAPACITY * 0.8), Utils.Infinite_Time);
@@ -618,7 +618,7 @@ public class BlobStoreTest {
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
 
     assertTrue("Could not set readable state to true", createdDir.setReadable(true));
-    assertTrue("Directory could not be deleted", StoreTestUtils.cleanDirectory(createdDir, true));
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
 
     // fail if provided path is not a directory
     File file = new File(tempDir, TestUtils.getRandomString(10));
@@ -1281,10 +1281,10 @@ public class BlobStoreTest {
     store = new MockBlobStore(replicaId, config, null, storeMetrics, mockBlobStoreStats);
     try {
       store.start();
-      Assert.fail("Shouldn't be successful.");
+      fail("Shouldn't be successful.");
     } catch (StoreException e) {
-      Assert.assertEquals(StoreErrorCodes.Initialization_Error, e.getErrorCode());
-      Assert.assertTrue(e.getMessage().contains("stale"));
+      assertEquals(StoreErrorCodes.Initialization_Error, e.getErrorCode());
+      assertTrue(e.getMessage().contains("stale"));
     }
 
     // config.storeStaleBlockBootup is false
@@ -1698,6 +1698,97 @@ public class BlobStoreTest {
       verifyBatchDeleteSameFailure(Collections.singletonList(new MockId(mockId.getID(), accountIds[i], containerIds[i])),
           StoreErrorCodes.Authorization_Failure);
     }
+  }
+
+  @Test
+  public void testGetLogSegmentMetadataFilesForDefaultTestStore() throws StoreException, IOException {
+    // Arrange
+    final BlobStore blobStore = createAndStartBlobStore();
+
+    // Passing includeActiveSegment = false should return 0 log segments
+    List<LogInfo> logInfos = blobStore.getLogSegmentMetadataFiles(false);
+    assertEquals("Expecting 0 log segments", 0, logInfos.size());
+
+    // Act
+    // Passing includeActiveSegment = true should return 1 log segment
+    // Local Store creates one single log segment with name ""
+    logInfos = blobStore.getLogSegmentMetadataFiles(true);
+    assertEquals("Expecting 0 log segments", 1, logInfos.size());
+
+    // Assert
+    if (this.isLogSegmented) {
+      // When Store Log is segmented, store creates one single log segment with name "0_0"
+      assertEquals("Expecting the name of log segment = '0_0'",
+          "0_0", logInfos.get(0).getLogSegment().getFileName());
+    } else {
+      // When Store Log is not segmented, store creates one single log segment with name ""
+      assertTrue("Expecting the name of log segment = ''",
+          logInfos.get(0).getLogSegment().getFileName().isEmpty());
+    }
+    assertEquals("Expecting 0 index files", 0, logInfos.get(0).getIndexSegments().size());
+    assertEquals("Expecting 0 bloom files", 0, logInfos.get(0).getBloomFilters().size());
+  }
+
+  @Test
+  public void testGetLogSegmentMetadataFilesAfterAddingNewLogSegments() throws StoreException, IOException {
+    if (!this.isLogSegmented) {
+      // This test is only applicable when the log is segmented
+      return;
+    }
+
+    // Arrange
+    final BlobStore blobStore = createAndStartBlobStore();
+
+    long totalLogSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
+    LogSegment loadedSegment = getLogSegment(LogSegmentName.fromPositionAndGeneration(totalLogSegments, 0),
+        SEGMENT_CAPACITY, true);
+    List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
+
+    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        createStoreConfig(SEGMENT_CAPACITY, true),
+        null, true, segmentsToLoad, Collections.EMPTY_LIST.iterator(), null);
+    blobStore.setLog(log);
+
+    for (int i = 1; i < totalLogSegments; i++) {
+      LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
+      LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+      blobStore.getLog().addSegment(segment, true);
+    }
+
+    // Act
+    List<LogInfo> logInfos = blobStore.getLogSegmentMetadataFiles(true);
+
+    // Assert
+    assertEquals("Expecting " + totalLogSegments + " log segments", totalLogSegments, logInfos.size());
+  }
+
+  private BlobStore createAndStartBlobStore() throws StoreException, IOException {
+    store.shutdown();
+    File testDir = createTempDirectory("testStoreDir-" + storeId);
+    testDir.deleteOnExit();
+    MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    BlobStore blobStore = createBlobStore(testReplica);
+    blobStore.start();
+
+    assertTrue("Store should start successfully", blobStore.isStarted());
+    return blobStore;
+  }
+
+  private LogSegment getLogSegment(LogSegmentName name, long capacityInBytes, boolean writeHeader)
+      throws IOException, StoreException {
+    File file = create(name.toFilename());
+    return new LogSegment(name, file, capacityInBytes, createStoreConfig(capacityInBytes, true),
+        Mockito.mock(StoreMetrics.class), writeHeader);
+  }
+
+  private File create(String filename) throws IOException {
+    File file = new File(tempDir, filename);
+    if (file.exists()) {
+      assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
+    }
+    assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
+    file.deleteOnExit();
+    return file;
   }
 
   /**
@@ -2122,7 +2213,7 @@ public class BlobStoreTest {
     properties.put("store.io.error.count.to.trigger.shutdown", "3");
     MetricRegistry registry = new MetricRegistry();
     storeMetrics = new StoreMetrics(registry);
-    StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
+    StoreKeyFactory mockStoreKeyFactory = spy(STORE_KEY_FACTORY);
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
             storeStatsScheduler, null, diskIOScheduler, diskSpaceAllocator, storeMetrics, storeMetrics,
@@ -2184,7 +2275,7 @@ public class BlobStoreTest {
     assertEquals("Mismatch in error count", 2, testStore2.getErrorCount().get());
 
     // verify error count would be reset after successful Get operation
-    Mockito.reset(mockStoreKeyFactory);
+    reset(mockStoreKeyFactory);
     StoreInfo storeInfo = testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
     assertNotNull(storeInfo);
     assertEquals("Error count should not be reset before reading bytes", 2, testStore2.getErrorCount().get());
@@ -2337,8 +2428,8 @@ public class BlobStoreTest {
   public void deleteStoreFilesTest() throws Exception {
     store.shutdown();
     // create test store directory
-    File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
-    File reserveDir = StoreTestUtils.createTempDirectory("reserve-pool");
+    File storeDir = createTempDirectory("store-" + storeId);
+    File reserveDir = createTempDirectory("reserve-pool");
     reserveDir.deleteOnExit();
     DiskSpaceAllocator diskAllocator =
         new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
@@ -2406,9 +2497,9 @@ public class BlobStoreTest {
   @Test
   public void inBootstrapAndCompleteBootstrapTest() throws Exception {
     store.shutdown();
-    File testDir = StoreTestUtils.createTempDirectory("testStoreDir-" + storeId);
+    File testDir = createTempDirectory("testStoreDir-" + storeId);
     testDir.deleteOnExit();
-    StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
     BlobStore blobStore = createBlobStore(testReplica);
     blobStore.start();
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
@@ -2426,9 +2517,9 @@ public class BlobStoreTest {
   @Test
   public void inDecommissionTest() throws Exception {
     store.shutdown();
-    File testDir = StoreTestUtils.createTempDirectory("testStoreDir-" + storeId);
+    File testDir = createTempDirectory("testStoreDir-" + storeId);
     testDir.deleteOnExit();
-    StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
     BlobStore blobStore = createBlobStore(testReplica);
     blobStore.start();
     assertFalse("Store should not be in decommission state because there is no decommission file",
@@ -2452,15 +2543,15 @@ public class BlobStoreTest {
   public void resolveStoreInitialStateTest() throws Exception {
     store.shutdown();
     properties.setProperty(StoreConfig.storeReplicaStatusDelegateEnableName, "true");
-    File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
-    File reserveDir = StoreTestUtils.createTempDirectory("reserve-pool");
+    File storeDir = createTempDirectory("store-" + storeId);
+    File reserveDir = createTempDirectory("reserve-pool");
     reserveDir.deleteOnExit();
     DiskSpaceAllocator diskAllocator =
         new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
     storeMetrics = new StoreMetrics(registry);
-    ClusterParticipant dynamicParticipant = Mockito.mock(ClusterParticipant.class);
+    ClusterParticipant dynamicParticipant = mock(ClusterParticipant.class);
     when(dynamicParticipant.supportsStateChanges()).thenReturn(true);
     ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(dynamicParticipant);
     BlobStore testStore =
@@ -2485,11 +2576,11 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     int storeUnsealPercentage = config.storePartialWriteEnableSizeThresholdPercentage
         - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     storeMetrics = new StoreMetrics(new MetricRegistry());
     BlobStore testStore =
         createBlobStore(replicaId, config, Collections.singletonList(mockReplicaStatusDelegate), storeMetrics);
-    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+    PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
     testStore.index = mockPersistentIndex;
     // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
     // and replica is not sealed then seal should be attempted.
@@ -2605,12 +2696,12 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     int storeUnsealPercentage = config.storePartialWriteEnableSizeThresholdPercentage
         - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     List<ReplicaStatusDelegate> replicaStatusDelegates =
         Arrays.asList(mockReplicaStatusDelegate1, mockReplicaStatusDelegate2);
     storeMetrics = new StoreMetrics(new MetricRegistry());
     BlobStore testStore = createBlobStore(replicaId, config, replicaStatusDelegates, storeMetrics);
-    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+    PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
     testStore.index = mockPersistentIndex;
     // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
     // then replica seal status should be resolved as ReplicaSealStatus#Sealed.
@@ -2697,8 +2788,8 @@ public class BlobStoreTest {
    */
   @Test
   public void testResolveReplicaSealStatusFromLogSize() {
-    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
-    StoreTestUtils.MockReplicaId replicaId = (StoreTestUtils.MockReplicaId) store.getReplicaId();
+    PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
+    MockReplicaId replicaId = (MockReplicaId) store.getReplicaId();
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
     store.index = mockPersistentIndex;
     // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
@@ -2706,17 +2797,17 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
     // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
@@ -2724,7 +2815,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
     // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
@@ -2732,7 +2823,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
     // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
@@ -2740,7 +2831,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
     // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
@@ -2748,7 +2839,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
     // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
@@ -2756,7 +2847,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
     // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
@@ -2764,38 +2855,38 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     long readWritePercentageLimit = config.storePartialWriteEnableSizeThresholdPercentage - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
   }
 
   /**
@@ -4218,12 +4309,12 @@ public class BlobStoreTest {
     return new MockBlobStore(replicaId, config, replicaStatusDelegates, metrics);
   }
 
-  private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
-    return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
+  private MockReplicaId getMockReplicaId(String filePath) {
+    return createMockReplicaId(storeId, LOG_CAPACITY, filePath);
   }
 
   private AmbryReplica getMockAmbryReplica(ClusterMapConfig clusterMapConfig, String filePath) {
-    return StoreTestUtils.createMockAmbryReplica(storeId, 1024 * 1024 * 1024L, filePath, false);
+    return createMockAmbryReplica(storeId, 1024 * 1024 * 1024L, filePath, false);
   }
 
   /**
@@ -4298,7 +4389,7 @@ public class BlobStoreTest {
      * @throws StoreException
      */
     void setPersistentIndex(StoreException exception) throws StoreException {
-      PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+      PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
       index = mockPersistentIndex;
       doThrow(exception).when(mockPersistentIndex).findEntriesSince(any(FindToken.class), anyLong());
       doThrow(exception).when(mockPersistentIndex).findMissingKeys(anyList());

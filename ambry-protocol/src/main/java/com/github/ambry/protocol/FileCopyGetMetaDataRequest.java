@@ -19,6 +19,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.Objects;
 import javax.annotation.Nonnull;
 
 
@@ -36,6 +37,7 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
       @Nonnull String hostName) {
     super(RequestOrResponseType.FileCopyGetMetaDataRequest, versionId, correlationId, clientId);
 
+    Objects.requireNonNull(partitionId, "partitionId must not be null");
     if (hostName.isEmpty()){
       throw new IllegalArgumentException("Host Name cannot be null");
     }
@@ -54,6 +56,9 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
   public static FileCopyGetMetaDataRequest readFrom(
       @Nonnull DataInputStream stream,
       @Nonnull ClusterMap clusterMap) throws IOException {
+    Objects.requireNonNull(stream, "stream should not be null");
+    Objects.requireNonNull(clusterMap, "clusterMap should not be null");
+
     short versionId = stream.readShort();
     validateVersion(versionId);
 

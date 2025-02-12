@@ -328,8 +328,6 @@ public class BlobStore implements Store {
         }
         metrics.storeStartFailure.inc();
         String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
-        // [Dw-remove]
-        //  throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
       } finally {
         context.stop();
       }
@@ -1244,6 +1242,11 @@ public class BlobStore implements Store {
     return log;
   }
 
+  // Only for testing.
+  void setLog(Log log) {
+    this.log = log;
+  }
+
   /**
    * Set if the store is recovering from decommission
    * @param value {@code true if store is recovering from decommission}. {@code false} otherwise.
@@ -1324,19 +1327,29 @@ public class BlobStore implements Store {
    * Gets the log segment metadata files from in-memory data structures
    * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
    */
-  List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+  @Override
+  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
     List<LogInfo> result = new ArrayList<>();
+    final Timer.Context context = metrics.fileCopyGetMetadataResponse.time();
 
-    List<FileInfo> sealedLogsAndMetaDataFiles = getLogSegments(includeActiveLogSegment);
-    if (null != sealedLogsAndMetaDataFiles) {
-      for (FileInfo E : sealedLogsAndMetaDataFiles) {
-        LogSegmentName logSegmentName = LogSegmentName.fromFilename(E.getFileName() + LogSegmentName.SUFFIX);
-        List<FileInfo> allIndexSegmentsForLogSegment = getAllIndexSegmentsForLogSegment(dataDir, logSegmentName);
-        List<FileInfo> bloomFiltersForLogSegment = getAllBloomFiltersForLogSegment(dataDir, logSegmentName);
+    List<FileInfo> logSegments = getLogSegments(includeActiveLogSegment);
+    if (null != logSegments) {
+      for (FileInfo fileInfo : logSegments) {
+        LogSegmentName logSegmentName;
 
-        result.add(new LogInfo(E, allIndexSegmentsForLogSegment, bloomFiltersForLogSegment));
+        if (fileInfo.getFileName().isEmpty()) {
+          // This happens when the code is running locally and a single LS exists with the name "log_current"
+          logSegmentName = LogSegmentName.fromFilename(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
+        } else {
+          logSegmentName = LogSegmentName.fromFilename(fileInfo.getFileName() + LogSegmentName.SUFFIX);
+        }
+        List<FileInfo> indexFiles = getIndexSegmentFilesForLogSegment(dataDir, logSegmentName);
+        List<FileInfo> bloomFiles = getBloomFilterFilesForLogSegment(dataDir, logSegmentName);
+
+        result.add(new LogInfo(fileInfo, indexFiles, bloomFiles));
       }
     }
+    context.stop();
     return result;
   }
 
@@ -1344,11 +1357,10 @@ public class BlobStore implements Store {
    * Get all log segments in the store.
    * Param includeActiveLogSegment is used to determine if the active log segment should be included in the result.
    */
-  List<FileInfo> getLogSegments(boolean includeActiveLogSegment){
+  private List<FileInfo> getLogSegments(boolean includeActiveLogSegment) {
     return log.getAllLogSegmentNames().stream()
-        .filter(segment -> includeActiveLogSegment || !segment.equals(log.getActiveSegment().getName()))
-        .filter(segment -> !segment.isSingleSegment())
-        .map(segment -> log.getSegment(segment))
+        .filter(segmentName -> includeActiveLogSegment || !segmentName.equals(log.getActiveSegment().getName()))
+        .map(segmentName -> log.getSegment(segmentName))
         .map(segment -> new FileInfo(segment.getName().toString(), segment.getView().getFirst().length()))
         .collect(Collectors.toList());
   }
@@ -1356,7 +1368,7 @@ public class BlobStore implements Store {
   /**
    * Get all index segments for a log segment.
    */
-  List<FileInfo> getAllIndexSegmentsForLogSegment(String dataDir, LogSegmentName logSegmentName){
+  private List<FileInfo> getIndexSegmentFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
     return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
         .map(file -> new FileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
@@ -1365,8 +1377,8 @@ public class BlobStore implements Store {
   /**
    * Get all bloom filter files for a log segment.
    */
-  List<FileInfo> getAllBloomFiltersForLogSegment(String dataDir, LogSegmentName logSegmentName){
-    return Arrays.stream(PersistentIndex.getBloomFilterFiles(dataDir, logSegmentName))
+  private List<FileInfo> getBloomFilterFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
+    return Arrays.stream(PersistentIndex.getBloomFilterFilesForLogSegment(dataDir, logSegmentName))
         .map(file -> new FileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
   }
