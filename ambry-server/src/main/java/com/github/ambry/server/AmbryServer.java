@@ -87,9 +87,6 @@ import com.github.ambry.rest.ServerSecurityService;
 import com.github.ambry.rest.ServerSecurityServiceFactory;
 import com.github.ambry.rest.StorageServerNettyFactory;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
-import com.github.ambry.store.FileInfo;
-import com.github.ambry.store.FileStore;
-import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -97,13 +94,8 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -487,31 +479,6 @@ public class AmbryServer {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
-
-      // Testing FileStore utils
-      FileCopyConfig fileCopyConfig = new FileCopyConfig(properties);
-      FileStore fileStore = new FileStore(fileCopyConfig);
-      fileStore.start();
-      List<LogInfo> logInfoList = Collections.singletonList(new LogInfo(new FileInfo("0_log", 20000L),
-          Collections.singletonList(new FileInfo("0_index", 100L)),
-          Collections.singletonList(new FileInfo("0_bloom", 50L))));
-      System.out.println("Persisting metadata" + logInfoList + " to file");
-      fileStore.persistMetaDataToFile("/tmp/0/", logInfoList);
-      System.out.println("Reading metadata" + fileStore.readMetaDataFromFile("/tmp/0/") + " from file");
-      String chunkPath = "/tmp/0/test_chunk";
-      try (FileInputStream inputStream = new FileInputStream(chunkPath)) {
-        System.out.println("Trying putChunkToFile for chunk at " + chunkPath);
-        fileStore.putChunkToFile("/tmp/0/0_log", inputStream);
-      } catch (IOException e) {
-        System.err.println("An error occurred: " + e.getMessage());
-      }
-
-      int offset = 10;
-      int size = 10;
-      ByteBuffer byteBuffer = fileStore.getStreamForFileRead("/tmp/0/", "0_log", offset, size);
-      System.out.println("Parsed log file contents read for offset=" + offset + ", size=" + size + " is: " + StandardCharsets.UTF_8.decode(byteBuffer));
-
-
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
