@@ -48,6 +48,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1750,9 +1751,15 @@ public class BlobStoreTest {
     blobStore.setLog(log);
 
     for (int i = 1; i < totalLogSegments; i++) {
-      LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
-      LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+      final LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
+      final LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
       blobStore.getLog().addSegment(segment, true);
+
+      final Path indexFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_index");
+      Files.copy(Paths.get(tempDir + "/0_0_18_index"), indexFilePath);
+
+      final Path bloomFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_bloom");
+      Files.copy(Paths.get(tempDir + "/0_0_18_bloom"), bloomFilePath);
     }
 
     // Act
@@ -1760,6 +1767,22 @@ public class BlobStoreTest {
 
     // Assert
     assertEquals("Expecting " + totalLogSegments + " log segments", totalLogSegments, logInfos.size());
+
+    for (int i = 0; i < totalLogSegments - 1; i++) {
+      final LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i + 1, 0);
+      assertEquals("Expecting the name of log segment = " + segmentName,
+          segmentName.toString(), logInfos.get(i).getLogSegment().getFileName());
+
+      assertEquals("Expecting 1 index file for log segment =" + segmentName,
+          1, logInfos.get(i).getIndexSegments().size());
+      assertEquals("Expecting name of index file for log segment =" + segmentName,
+          segmentName + "_index", logInfos.get(i).getIndexSegments().get(0).getFileName());
+
+      assertEquals("Expecting 1 bloom file for log segment =" + segmentName,
+          1, logInfos.get(i).getBloomFilters().size());
+      assertEquals("Expecting name of bloom file for log segment =" + segmentName,
+          segmentName + "_bloom", logInfos.get(i).getBloomFilters().get(0).getFileName());
+    }
   }
 
   private BlobStore createAndStartBlobStore() throws StoreException, IOException {
@@ -1776,13 +1799,13 @@ public class BlobStoreTest {
 
   private LogSegment getLogSegment(LogSegmentName name, long capacityInBytes, boolean writeHeader)
       throws IOException, StoreException {
-    File file = create(name.toFilename());
+    File file = create(tempDir, name.toFilename());
     return new LogSegment(name, file, capacityInBytes, createStoreConfig(capacityInBytes, true),
         Mockito.mock(StoreMetrics.class), writeHeader);
   }
 
-  private File create(String filename) throws IOException {
-    File file = new File(tempDir, filename);
+  private File create(File dir, String filename) throws IOException {
+    File file = new File(dir, filename);
     if (file.exists()) {
       assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
     }
