@@ -1648,6 +1648,11 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.enabled", "false");
   }
 
+  /**
+   * Tests the {@link AdminRequestOrResponseType#BlobStoreControl} request and response.
+   * @throws InterruptedException
+   * @throws IOException
+   */
   @Test
   public void fileCopyGetMetaDataRequestTest() throws IOException, InterruptedException {
     List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);

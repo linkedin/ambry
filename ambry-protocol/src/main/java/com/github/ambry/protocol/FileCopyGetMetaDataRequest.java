@@ -23,12 +23,38 @@ import java.util.Objects;
 import javax.annotation.Nonnull;
 
 
+/**
+ * Protocol class representing request to get metadata of a file.
+ */
 public class FileCopyGetMetaDataRequest extends RequestOrResponse {
+  /**
+   * The partition id of the file.
+   */
   private final PartitionId partitionId;
+
+  /**
+   * The hostname of the server.
+   */
   private final String hostName;
+
+  /**
+   * The version of the request.
+   */
   public static final short File_Metadata_Request_Version_V1 = 1;
+
+  /**
+   * The size of the hostname field in bytes.
+   */
   private static final int HostName_Field_Size_In_Bytes = 4;
 
+  /**
+   * Constructor for FileCopyGetMetaDataRequest
+   * @param versionId The version of the request.
+   * @param correlationId The correlation id of the request.
+   * @param clientId The client id of the request.
+   * @param partitionId The partition id of the file.
+   * @param hostName The hostname of the server.
+   */
   public FileCopyGetMetaDataRequest(
       short versionId,
       int correlationId,
@@ -45,14 +71,23 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
     this.hostName = hostName;
   }
 
+  /**
+   * Get the hostname of the server.
+   */
   public String getHostName() {
     return hostName;
   }
 
+  /**
+   * Get the partition id of the file.
+   */
   public PartitionId getPartitionId() {
     return partitionId;
   }
 
+  /**
+   * Serialize the request into a buffer.
+   */
   public static FileCopyGetMetaDataRequest readFrom(
       @Nonnull DataInputStream stream,
       @Nonnull ClusterMap clusterMap) throws IOException {
@@ -85,11 +120,17 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
     visitor.visit(this);
   }
 
+  /**
+   * Get the size of the request in bytes.
+   */
   @Override
   public long sizeInBytes() {
     return super.sizeInBytes() + HostName_Field_Size_In_Bytes + hostName.length() + partitionId.getBytes().length;
   }
 
+  /**
+   * Prepare the buffer to be sent over the network.
+   */
   @Override
   protected void prepareBuffer() {
     super.prepareBuffer();
@@ -97,6 +138,9 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
     bufferToSend.writeBytes(partitionId.getBytes());
   }
 
+  /**
+   * Validate the version of the request.
+   */
   static void validateVersion(short version) {
     if (version != File_Metadata_Request_Version_V1) {
       throw new IllegalArgumentException("Unknown version for FileMetadataRequest: " + version);

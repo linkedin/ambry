@@ -31,6 +31,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
+import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
@@ -1701,6 +1702,11 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Test {@link BlobStore#getLogSegmentMetadataFiles} for default test store.
+   * @throws StoreException
+   * @throws IOException
+   */
   @Test
   public void testGetLogSegmentMetadataFilesForDefaultTestStore() throws StoreException, IOException {
     // Arrange
@@ -1730,13 +1736,17 @@ public class BlobStoreTest {
     assertEquals("Expecting 0 bloom files", 0, logInfos.get(0).getBloomFilters().size());
   }
 
+  /**
+   * Test {@link BlobStore#getLogSegmentMetadataFiles} for a store by adding new log segments.
+   * @throws StoreException
+   * @throws IOException
+   */
   @Test
   public void testGetLogSegmentMetadataFilesAfterAddingNewLogSegments() throws StoreException, IOException {
     if (!this.isLogSegmented) {
       // This test is only applicable when the log is segmented
       return;
     }
-
     // Arrange
     final BlobStore blobStore = createAndStartBlobStore();
 
@@ -1745,31 +1755,31 @@ public class BlobStoreTest {
         SEGMENT_CAPACITY, true);
     List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
 
-    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+    final Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, true),
         null, true, segmentsToLoad, Collections.EMPTY_LIST.iterator(), null);
     blobStore.setLog(log);
 
     for (int i = 1; i < totalLogSegments; i++) {
-      final LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
-      final LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+      LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
+      LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
       blobStore.getLog().addSegment(segment, true);
 
-      final Path indexFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_index");
+      Path indexFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_index");
       Files.copy(Paths.get(tempDir + "/0_0_18_index"), indexFilePath);
 
-      final Path bloomFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_bloom");
+      Path bloomFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_bloom");
       Files.copy(Paths.get(tempDir + "/0_0_18_bloom"), bloomFilePath);
     }
 
     // Act
-    List<LogInfo> logInfos = blobStore.getLogSegmentMetadataFiles(true);
+    final List<LogInfo> logInfos = blobStore.getLogSegmentMetadataFiles(true);
 
     // Assert
     assertEquals("Expecting " + totalLogSegments + " log segments", totalLogSegments, logInfos.size());
 
     for (int i = 0; i < totalLogSegments - 1; i++) {
-      final LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i + 1, 0);
+      LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i + 1, 0);
       assertEquals("Expecting the name of log segment = " + segmentName,
           segmentName.toString(), logInfos.get(i).getLogSegment().getFileName());
 
@@ -1785,6 +1795,11 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * A test util method to create and start a BlobStore.
+   * @throws StoreException
+   * @throws IOException
+   */
   private BlobStore createAndStartBlobStore() throws StoreException, IOException {
     store.shutdown();
     File testDir = createTempDirectory("testStoreDir-" + storeId);
@@ -1797,6 +1812,13 @@ public class BlobStoreTest {
     return blobStore;
   }
 
+  /**
+   * A test util method to get a log segment for a given logSegmentName.
+   * @param name the name of the log segment.
+   * @param capacityInBytes the capacity of the log segment.
+   * @param writeHeader whether to write the header or not.
+   * @return the created {@link BlobStore}.
+   */
   private LogSegment getLogSegment(LogSegmentName name, long capacityInBytes, boolean writeHeader)
       throws IOException, StoreException {
     File file = create(tempDir, name.toFilename());
@@ -1804,6 +1826,13 @@ public class BlobStoreTest {
         Mockito.mock(StoreMetrics.class), writeHeader);
   }
 
+  /**
+   * A test util method to create a temporary directory.
+   * @param dir the parent directory.
+   * @param filename the name of the file.
+   * @return the created temporary directory.
+   * @throws IOException
+   */
   private File create(File dir, String filename) throws IOException {
     File file = new File(dir, filename);
     if (file.exists()) {

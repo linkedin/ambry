@@ -32,18 +32,52 @@ import javax.annotation.Nonnull;
 public class LogInfo {
   // TODO: Replace these fields with FileInfo
   // private FileInfo fileInfo;
+
+  /**
+   * Contains the information about a file.
+   */
   private final String fileName;
+
+  /**
+   * The size of the file in bytes.
+   */
   private final long fileSizeInBytes;
+
+  /**
+   * The list of index files for the log.
+   */
   private final List<FileInfo> indexFiles;
+
+  /**
+   * The list of bloom filter files for the log.
+   */
   private final List<FileInfo> bloomFilters;
 
   // TODO: Add isSealed prop
   // private final boolean isSealed;
 
+  /**
+   * The size of the file name field in bytes.
+   */
   private static final int FileName_Field_Size_In_Bytes = 4;
+
+  /**
+   * The size of the file size field in bytes.
+   */
   private static final int FileSize_Field_Size_In_Bytes = 8;
+
+  /**
+   * The size of the list field in bytes.
+   */
   private static final int ListSize_In_Bytes = 4;
 
+  /**
+   * Constructor to create a LogInfo object.
+   * @param fileName The name of the file.
+   * @param fileSizeInBytes The size of the file in bytes.
+   * @param indexFiles The list of index files for the log.
+   * @param bloomFilters The list of bloom filter files for the log.
+   */
   public LogInfo(
       String fileName,
       long fileSizeInBytes,
@@ -58,22 +92,42 @@ public class LogInfo {
     this.bloomFilters = bloomFilters;
   }
 
+  /**
+   * Get the file name.
+   * @return The file name.
+   */
   public String getFileName() {
     return fileName;
   }
 
+  /**
+   * Get the file size in bytes.
+   * @return The file size in bytes.
+   */
   public long getFileSizeInBytes() {
     return fileSizeInBytes;
   }
 
+  /**
+   * Get the list of index files in a read-only format.
+   * @return The list of index files.
+   */
   public List<FileInfo> getBloomFilters() {
     return Collections.unmodifiableList(bloomFilters);
   }
 
+  /**
+   * Get the list of bloom filter files in a read-only format.
+   * @return The list of bloom filter files.
+   */
   public List<FileInfo> getIndexFiles() {
     return Collections.unmodifiableList(indexFiles);
   }
 
+  /**
+   * Get the size of the LogInfo object in bytes.
+   * @return The size of the LogInfo object in bytes.
+   */
   public long sizeInBytes() {
     long size = FileName_Field_Size_In_Bytes + fileName.length() + FileSize_Field_Size_In_Bytes + ListSize_In_Bytes;
     for (FileInfo fileInfo : indexFiles) {
@@ -86,6 +140,11 @@ public class LogInfo {
     return size;
   }
 
+  /**
+   * Read the LogInfo object from the input stream.
+   * @param stream The input stream.
+   * @return The LogInfo object.
+   */
   public static LogInfo readFrom(@Nonnull DataInputStream stream) throws IOException {
     Objects.requireNonNull(stream, "stream should not be null");
 
@@ -106,6 +165,10 @@ public class LogInfo {
     return new LogInfo(fileName, fileSize, listOfIndexFiles, listOfBloomFilters);
   }
 
+  /**
+   * Write the LogInfo object to the output stream.
+   * @param buf The output stream.
+   */
   public void writeTo(@Nonnull ByteBuf buf){
     Objects.requireNonNull(buf, "buf should not be null");
 

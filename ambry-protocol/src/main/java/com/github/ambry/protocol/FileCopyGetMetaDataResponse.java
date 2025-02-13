@@ -24,14 +24,39 @@ import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 
-
+/**
+ * Protocol class representing response to get metadata of a file.
+ */
 public class FileCopyGetMetaDataResponse extends Response {
+  /**
+   * The number of log files.
+   */
   private final int numberOfLogfiles;
+
+  /**
+   * The list of log files.
+   */
   private final List<LogInfo> logInfos;
+
+  /**
+   * The version of the response.
+   */
   public static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
 
+  /**
+   * The current version of the response.
+   */
   static short CURRENT_VERSION = File_Copy_Protocol_Metadata_Response_Version_V1;
 
+  /**
+   * Constructor for FileCopyGetMetaDataResponse
+   * @param versionId The version of the response.
+   * @param correlationId The correlation id of the response.
+   * @param clientId The client id of the response.
+   * @param numberOfLogfiles The number of log files.
+   * @param logInfos The list of log files.
+   * @param errorCode The error code of the response.
+   */
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
       @Nonnull List<LogInfo> logInfos, ServerErrorCode errorCode) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
@@ -42,14 +67,29 @@ public class FileCopyGetMetaDataResponse extends Response {
     this.logInfos = logInfos;
   }
 
+  /**
+   * Constructor for FileCopyGetMetaDataResponse
+   * @param correlationId The correlation id of the response.
+   * @param clientId The client id of the response.
+   * @param serverErrorCode The error code of the response.
+   */
   public FileCopyGetMetaDataResponse(int correlationId, String clientId, ServerErrorCode serverErrorCode) {
     this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), serverErrorCode);
   }
 
+  /**
+   * Constructor for FileCopyGetMetaDataResponse
+   * @param serverErrorCode The error code of the response.
+   */
   public FileCopyGetMetaDataResponse(ServerErrorCode serverErrorCode) {
     this(CURRENT_VERSION, -1, "", 0, new ArrayList<>(), serverErrorCode);
   }
 
+  /**
+   * Deserialize a FileCopyGetMetaDataResponse
+   * @param stream The stream to read from
+   * @return The FileCopyGetMetaDataResponse
+   */
   public static FileCopyGetMetaDataResponse readFrom(
       @Nonnull DataInputStream stream) throws IOException {
     Objects.requireNonNull(stream, "stream should not be null");
@@ -76,6 +116,9 @@ public class FileCopyGetMetaDataResponse extends Response {
     return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode);
   }
 
+  /**
+   * Write the response to the buffer
+   */
   @Override
   protected void prepareBuffer() {
     super.prepareBuffer();
@@ -85,6 +128,9 @@ public class FileCopyGetMetaDataResponse extends Response {
     }
   }
 
+  /**
+   * Get the size of the response in bytes
+   */
   @Override
   public long sizeInBytes() {
     return super.sizeInBytes() + Integer.BYTES + logInfos.stream().mapToLong(LogInfo::sizeInBytes).sum();
@@ -101,16 +147,25 @@ public class FileCopyGetMetaDataResponse extends Response {
     return sb.toString();
   }
 
+  /**
+   * Get the number of log files
+   */
   public int getNumberOfLogfiles() {
     return numberOfLogfiles;
   }
 
+  /**
+   * Get the list of log files
+   */
   public List<LogInfo> getLogInfos() {
     return Collections.unmodifiableList(logInfos);
   }
 
+  /**
+   * Validate the version of the response
+   */
   static void validateVersion(short version) {
-    if (version != File_Copy_Protocol_Metadata_Response_Version_V1) {
+    if (version != CURRENT_VERSION) {
       throw new IllegalArgumentException("Unknown version for FileCopyProtocolMetaDataResponse: " + version);
     }
   }

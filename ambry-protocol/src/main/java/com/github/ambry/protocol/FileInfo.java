@@ -27,12 +27,31 @@ import javax.annotation.Nonnull;
  * by LogInfo as part of filecopy metadata request.
  */
 public class FileInfo {
+  /**
+   * The name of the file.
+   */
   private final String fileName;
+
+  /**
+   * The size of the file in bytes.
+   */
   private final long fileSizeInBytes;
 
+  /**
+   * The size of the file name field in bytes.
+   */
   private static final int FileName_Field_Size_In_Bytes = 4;
+
+  /**
+   * The size of the file size field in bytes.
+   */
   private static final int FileSize_Field_Size_In_Bytes = 8;
 
+  /**
+   * Constructs a FileInfo object with the given file name and size.
+   * @param fileName The name of the file.
+   * @param fileSize The size of the file in bytes.
+   */
   public FileInfo(
       String fileName,
       long fileSize) {
@@ -40,10 +59,18 @@ public class FileInfo {
     this.fileSizeInBytes = fileSize;
   }
 
+  /**
+   * Returns the size of the FileInfo object in bytes.
+   */
   public long sizeInBytes() {
     return FileName_Field_Size_In_Bytes + fileName.length() + FileSize_Field_Size_In_Bytes;
   }
 
+  /**
+   * Reads a FileInfo object from the given input stream.
+   * @param stream The input stream to read from.
+   * @return The FileInfo object read from the input stream.
+   */
   public static FileInfo readFrom(@Nonnull DataInputStream stream) throws IOException {
     Objects.requireNonNull(stream, "stream should not be null");
 
@@ -52,6 +79,10 @@ public class FileInfo {
     return new FileInfo(fileName, fileSize);
   }
 
+  /**
+   * Writes the FileInfo object to the given output stream.
+   * @param buf The output stream to write to.
+   */
   public void writeTo(@Nonnull ByteBuf buf) {
     Objects.requireNonNull(buf, "buf should not be null");
 
@@ -68,10 +99,16 @@ public class FileInfo {
     return sb.toString();
   }
 
+  /**
+   * Returns the name of the file.
+   */
   public String getFileName() {
     return fileName;
   }
 
+  /**
+   * Returns the size of the file in bytes.
+   */
   public long getFileSizeInBytes() {
     return fileSizeInBytes;
   }
