@@ -38,8 +38,8 @@ public class NamedBlobPath {
   public static final String MARKER = "marker";
   public static final String CONTINUATION_TOKEN = "continuation-token";
   static final int MAX_BLOB_NAME_LENGTH = 350;
-  public static final String LIST_TYPE = "list-type";
-  public static final String LIST_TYPE_VERSION_2 = "2";
+
+
 
   /**
    * Parse the input path if it's a named blob request.
@@ -95,28 +95,23 @@ public class NamedBlobPath {
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
     boolean isBatchDelete = args.containsKey(BATCH_DELETE_QUERY_PARAM);
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
-    //There are two cases for S3 listing
-    //1.has prefix (Ex:GET /?prefix=prefixName&delimiter=&encoding-type=url)
-    //2.no prefix but listObjectV2 (Ex:GET /?list-type=2&prefix=&delimiter=&encoding-type=url)
-    boolean isListObjectV2Request = LIST_TYPE_VERSION_2.equals(RestUtils.getHeader(args, LIST_TYPE, false));
-    boolean isListRequest = blobNamePrefix != null || isListObjectV2Request;
-    int expectedSegments = (isListRequest || isGetObjectLockRequest) ? 3 : 4;
+    // For s3 request, if splitPath.length = 3 && Method = GET, the expected segments = 3
+    // All other requests require segments = 4
+    boolean isListObjectRequest = RestUtils.isListObjectRequest(path, args);
+    int expectedSegments = (isListObjectRequest || isGetObjectLockRequest) ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
       throw new RestServiceException(String.format(
           "Path must have format '/named/<account_name>/<container_name>%s.  Received path='%s', arg='%s'",
-          isListRequest || isGetObjectLockRequest ? "" : "/<blob_name>'", path, args), RestServiceErrorCode.BadRequest);
+          isListObjectRequest || isGetObjectLockRequest ? "" : "/<blob_name>'", path, args), RestServiceErrorCode.BadRequest);
     }
     String accountName = splitPath[1];
     String containerName = splitPath[2];
     String pageToken;
     //S3 listObject use Marker as page token.
     //S3 listObjectV2 use ContinuationToken as page token.
-    if (isListRequest) {
-      if (isListObjectV2Request) {
-        pageToken = RestUtils.getHeader(args, CONTINUATION_TOKEN, false);
-      } else {
-        pageToken = RestUtils.getHeader(args, MARKER, false);
-      }
+    if (isListObjectRequest) {
+      String tokenKey = isListObjectV2Request(args) ? CONTINUATION_TOKEN : MARKER;
+      pageToken = RestUtils.getHeader(args, tokenKey, false);
       return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
     }
     if (isGetObjectLockRequest || isBatchDelete) {
@@ -141,6 +136,17 @@ public class NamedBlobPath {
    */
   public static NamedBlobPath parse(RequestPath requestPath, Map<String, Object> args) throws RestServiceException {
     return parse(requestPath.getOperationOrBlobId(true), args);
+  }
+
+  /**
+   * Parse the request to see if it's a List request
+   * @param restRequest
+   * @return
+   * @throws RestServiceException
+   */
+  public static NamedBlobPath parse(RestRequest restRequest) throws RestServiceException {
+    restRequest.setArg(InternalKeys.REST_METHOD, restRequest.getRestMethod());
+    return parse(getRequestPath(restRequest), restRequest.getArgs());
   }
 
   /**

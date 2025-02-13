@@ -128,8 +128,7 @@ public class AccountAndContainerInjector {
   public void injectAccountContainerForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
       throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
-
-    NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+    NamedBlobPath namedBlobPath = NamedBlobPath.parse(restRequest);
     String accountName = namedBlobPath.getAccountName();
     Account targetAccount = accountService.getAccountByName(accountName);
     if (targetAccount == null) {
@@ -368,7 +367,7 @@ public class AccountAndContainerInjector {
   private void accountAndContainerSanityCheck(RestRequest restRequest) throws RestServiceException {
     NamedBlobPath namedBlobPath = null;
     if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
-      namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+      namedBlobPath = NamedBlobPath.parse(restRequest);
     }
     if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
         || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false)) || (
