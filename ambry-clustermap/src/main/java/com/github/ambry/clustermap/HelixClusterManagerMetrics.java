@@ -181,7 +181,7 @@ class HelixClusterManagerMetrics {
 
     Gauge<Long> onHostPartitionSealedCount = clusterMapCallback::getOnHostPartitionSealedCount;
     registry.gauge(MetricRegistry.name(HelixClusterManager.class, "onHostPartitionSealedCount"),
-        () -> );
+        () -> onHostPartitionSealedCount);
 
     Gauge<Long> partitionPartiallySealedCount = clusterMapCallback::getPartitionPartiallySealedCount;
     registry.gauge(MetricRegistry.name(HelixClusterManager.class, "partitionPartiallySealedCount"),
