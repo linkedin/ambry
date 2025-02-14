@@ -58,6 +58,7 @@ public class StorageManagerMetrics {
 
   // A map from mount path to a set of blob store to skip in compactions (error state)
   private final Map<String, Set<BlobStore>> mountPathToStoreSetToSkipInCompactions = new ConcurrentHashMap<>();
+  private final Map<String, Set<BlobStore>> mountPathToStoreDisabledInCompactions = new ConcurrentHashMap<>();
   private final Map<String, Integer> mountPathToNumberOfUnexpectedDirs = new ConcurrentHashMap<>();
 
   /**
@@ -113,6 +114,11 @@ public class StorageManagerMetrics {
     registry.gauge(MetricRegistry.name(CompactionManager.class, "CompactionNumberOfStoresToSkip"),
         () -> storeToSkipGauge);
 
+    Gauge<Long> storeDisabledInCompactionGauge =
+        () -> mountPathToStoreDisabledInCompactions.values().stream().mapToLong(Set::size).sum();
+    registry.gauge(MetricRegistry.name(CompactionManager.class, "CompactionNumberOfStoresDisabled"),
+        () -> storeDisabledInCompactionGauge);
+
     Gauge<Integer> unexpectedDirGauge =
         () -> mountPathToNumberOfUnexpectedDirs.values().stream().mapToInt(v -> v).sum();
     registry.gauge(MetricRegistry.name(DiskManager.class, "UnexpectedDirsOnDisk"), () -> unexpectedDirGauge);
@@ -159,10 +165,13 @@ public class StorageManagerMetrics {
   /**
    * Register the set of blobstores to skip in compaction with the given mount path.
    * @param mountPath The mount path
-   * @param stores The set of blobstores to skip in compaction.
+   * @param storesToSkip The set of blobstores to skip in compaction.
+   * @param storesDisabled The set of blobstores disabled for compaction.
    */
-  void registerStoreSetToSkipInCompactionForMountPath(String mountPath, Set<BlobStore> stores) {
-    mountPathToStoreSetToSkipInCompactions.put(mountPath, stores);
+  void registerStoresInCompactionForMountPath(String mountPath, Set<BlobStore> storesToSkip,
+      Set<BlobStore> storesDisabled) {
+    mountPathToStoreSetToSkipInCompactions.put(mountPath, storesToSkip);
+    mountPathToStoreDisabledInCompactions.put(mountPath, storesDisabled);
   }
 
   /**

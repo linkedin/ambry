@@ -179,8 +179,8 @@ public class StorageManager implements StoreManager {
    * new disk order that we saved to Helix.
    * @param diskToReplicas A map of disks to the replicas on those disks.
    */
-  protected void reshuffleDisksAndMaybeExit(Map<DiskId, List<ReplicaId>> diskToReplicas, PartitionFinder partitionFinder,
-      ReplicaPlacementValidator placementValidator) {
+  protected void reshuffleDisksAndMaybeExit(Map<DiskId, List<ReplicaId>> diskToReplicas,
+      PartitionFinder partitionFinder, ReplicaPlacementValidator placementValidator) {
     Map<DiskId, Set<String>> disksToPartitions = new HashMap<>();
     for (DiskId currentDisk : diskToReplicas.keySet()) {
       disksToPartitions.put(currentDisk, partitionFinder.findPartitionsOnDisk(currentDisk));
@@ -189,7 +189,7 @@ public class StorageManager implements StoreManager {
     Map<DiskId, DiskId> disksToReshuffle = placementValidator.reshuffleDisks(diskToReplicas, disksToPartitions);
     if (!disksToReshuffle.isEmpty()) {
       logger.info("Disks need to be reshuffled: {}", disksToReshuffle);
-      if(primaryClusterParticipant.setDisksOrder(disksToReshuffle)) {
+      if (primaryClusterParticipant.setDisksOrder(disksToReshuffle)) {
         logger.info("Successfully reshuffled disks. Now terminating"
             + " the process so we can restart with the new disk order.");
         System.exit(1);
@@ -464,7 +464,7 @@ public class StorageManager implements StoreManager {
 
   @Override
   public boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException {
-    List<File> result =  this.getDiskManager(partitionId).getFilesForPattern(pattern);
+    List<File> result = this.getDiskManager(partitionId).getFilesForPattern(pattern);
     return (null != result && !result.isEmpty());
   }
 
@@ -544,7 +544,8 @@ public class StorageManager implements StoreManager {
   @Override
   public boolean addBlobStoreForFileCopy(ReplicaId replica) {
     if (!partitionToDiskManager.containsKey(replica.getPartitionId())) {
-      logger.info("PartitionId {} doesn't exist in storage manager during state build, rejecting adding store request", replica.getPartitionId());
+      logger.info("PartitionId {} doesn't exist in storage manager during state build, rejecting adding store request",
+          replica.getPartitionId());
       return false;
     }
     // We don't require addDisk since DiskManager is already started during initialization of StorageManager as part
@@ -576,28 +577,31 @@ public class StorageManager implements StoreManager {
   }
 
   /**
-   * Build inmemory state for file copy based replication post filecopy is completed.
-   * @param replica the {@link ReplicaId} of the {@link Store} for which store needs to be built
+   * Build in-memory state for file copy based replication post filecopy is completed.
+   * @param replicaId the {@link ReplicaId} of the {@link Store} for which store needs to be built
    */
   @Override
   public boolean addFileStore(ReplicaId replicaId) {
     //TODO: Implementation To Be added.
     return false;
   }
-  public void buildStateForFileCopy(ReplicaId replica){
+
+  public void buildStateForFileCopy(ReplicaId replica) {
     if (replica == null) {
       logger.error("ReplicaId is null");
-      throw new StateTransitionException("ReplicaId null is not found in clustermap for " + currentNode, ReplicaNotFound);
+      throw new StateTransitionException("ReplicaId null is not found in clustermap for " + currentNode,
+          ReplicaNotFound);
     }
     PartitionId partitionId = replica.getPartitionId();
 
-    if (!addBlobStoreForFileCopy(replica)){
+    if (!addBlobStoreForFileCopy(replica)) {
       // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
       // back since addition of store failed.
       replica.getDiskId().increaseAvailableSpaceInBytes(replica.getCapacityInBytes());
       if (!clusterMap.isDataNodeInFullAutoMode(currentNode)) {
         logger.error("Failed to add store for replica {} into storage manager", partitionId.getId());
-        throw new StateTransitionException("Failed to add store for replica " + partitionId.getId() + " into storage manager",
+        throw new StateTransitionException(
+            "Failed to add store for replica " + partitionId.getId() + " into storage manager",
             ReplicaOperationFailure);
       } else {
         logger.info("Failed to add store for replica {} at location {}. Cleanup and raise StateTransitionException",
@@ -606,7 +610,8 @@ public class StorageManager implements StoreManager {
         tryRemoveFailedBootstrapBlobStore(replica);
         // Throwing StateTransitionException here since we cannot retry adding BlobStore since Filecopy has copied data
         // into the selected disk itself. Hence, putting the replica into ERROR state via StateTransitionException
-        throw new StateTransitionException("Failed to add store for replica " + partitionId.getId() + " into storage manager",
+        throw new StateTransitionException(
+            "Failed to add store for replica " + partitionId.getId() + " into storage manager",
             ReplicaOperationFailure);
       }
     }
@@ -924,7 +929,26 @@ public class StorageManager implements StoreManager {
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      // no op
+      // This callback will be invoked after ReplicationManager's callback to transition from bootstrap to standby
+      // So if we are here, the partition is already standby.
+      //
+      // In onPartitionBecomeBootstrap callback, we add the blob store to storage manager, which would add this blob
+      // store to disk manager and the respective compaction manager. However, we disabled compaction for this blob
+      // store since replication should only copy live blobs so there is not much compaction to do. Now we finished
+      // bootstrap here, we should reenable compaction.
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      if (replica == null) {
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            ReplicaNotFound);
+      }
+      // Operation to enable compaction is idempotent
+      if (!controlCompactionForBlobStore(replica.getPartitionId(), true)) {
+        logger.error("Fail to enable compaction for blob store {}", replica.getReplicaPath());
+        throw new StateTransitionException("Replica " + partitionName + " can't enable compaction",
+            ReplicaOperationFailure);
+      } else {
+        logger.info("Compaction is successfully enabled on store {}", partitionName);
+      }
     }
 
     @Override

@@ -237,7 +237,7 @@ class CompactionManager {
       this.triggers = triggers;
       bundleReadBuffer = bundleReadBufferSize == 0 ? null : new byte[bundleReadBufferSize];
       logger.info("Buffer size is {} in compaction thread for {}", bundleReadBufferSize, mountPath);
-      metrics.registerStoreSetToSkipInCompactionForMountPath(mountPath, storesToSkip);
+      metrics.registerStoresInCompactionForMountPath(mountPath, storesToSkip, storesDisabledCompaction);
     }
 
     /**
