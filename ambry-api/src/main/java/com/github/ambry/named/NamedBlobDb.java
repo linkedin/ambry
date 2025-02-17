@@ -36,7 +36,7 @@ public interface NamedBlobDb extends Closeable {
    * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
    *         blob or an exception if an error occurred.
    */
-  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option);
+  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option, boolean localGet);
 
   /**
    * Look up a {@link NamedBlobRecord} by name.
@@ -47,7 +47,7 @@ public interface NamedBlobDb extends Closeable {
    *         blob or an exception if an error occurred.
    */
   default CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
-    return get(accountName, containerName, blobName, GetOption.None);
+    return get(accountName, containerName, blobName, GetOption.None, false);
   }
 
   /**

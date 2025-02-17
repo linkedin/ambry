@@ -43,6 +43,7 @@ import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
@@ -165,6 +166,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       CompletionStage<String> conversionFuture;
       LOGGER.debug("input for convertId : " + input);
       LOGGER.debug("restRequest for convertId : " + restRequest);
+
+      Object localGetHeader = restRequest.getArgs().get(LOCAL_GET);
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
@@ -177,13 +180,18 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           //If operation == UPDATE_TTL, we will get the version and blobId info from named blob first
           //and do update ttl in routerCallBack.
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), getOption).thenApply(result -> {
+              namedBlobPath.getBlobName(), getOption, false).thenApply(result -> {
             restRequest.setArg(NAMED_BLOB_VERSION, result.getVersion());
             return result.getBlobId();
           });
         } else {
-          conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);
+          if (localGetHeader != null) {
+            conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                namedBlobPath.getBlobName(), getOption, true).thenApply(NamedBlobRecord::getBlobId);
+          } else {
+            conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                namedBlobPath.getBlobName(), getOption, false).thenApply(NamedBlobRecord::getBlobId);
+          }
         }
       } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
         if (restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
