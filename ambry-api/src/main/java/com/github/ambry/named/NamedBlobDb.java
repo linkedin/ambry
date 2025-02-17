@@ -33,6 +33,7 @@ public interface NamedBlobDb extends Closeable {
    * @param containerName the name of the container.
    * @param blobName the name of the blob.
    * @param option The {@link GetOption} for this get method.
+   * @param localGet the boolean for whether to do localGet.
    * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
    *         blob or an exception if an error occurred.
    */

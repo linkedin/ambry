@@ -372,6 +372,9 @@ public class RestUtils {
      */
     public static final String IGNORE_CONTAINERS = "x-ambry-ignore-containers";
 
+    /**
+     * Boolean field set to "true" for only local DB lookups via GET /accounts API.
+     */
     public final static String LOCAL_GET = "x-ambry-local-get";
   }
 
