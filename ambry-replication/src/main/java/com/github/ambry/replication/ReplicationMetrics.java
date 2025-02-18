@@ -141,6 +141,7 @@ public class ReplicationMetrics {
   private final Map<String, Counter> metadataRequestErrorMap = new ConcurrentHashMap<>();
   private final Map<String, Counter> getRequestErrorMap = new HashMap<>();
   private final Map<String, Counter> localStoreErrorMap = new HashMap<>();
+  private final Map<String, Meter> replicaToReplicationFetchBytesRateMap = new HashMap<>();
   private final Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
   // ConcurrentHashMap is used to avoid cache incoherence.
   private final Map<PartitionId, Map<DataNodeId, Long>> partitionLags = new ConcurrentHashMap<>();
@@ -568,6 +569,13 @@ public class ReplicationMetrics {
     String localStoreErrorMetricName = metricNamePrefix + "-localStoreError";
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
+
+    String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + "-replicationFetchBytesRate";
+    Meter replicaToReplicationFetchBytesRate =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, replicaToReplicationFetchBytesRateMetricName));
+    replicaToReplicationFetchBytesRateMap.put(replicaToReplicationFetchBytesRateMetricName,
+        replicaToReplicationFetchBytesRate);
+
     Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
     registry.gauge(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"), () -> replicaLag);
     if (trackPerDatacenterLag) {
@@ -608,6 +616,8 @@ public class ReplicationMetrics {
     registry.remove(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
     String localStoreErrorMetricName = metricNamePrefix + "-localStoreError";
     localStoreErrorMap.remove(localStoreErrorMetricName);
+    String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + "-replicationFetchBytesRate";
+    replicaToReplicationFetchBytesRateMap.remove(replicaToReplicationFetchBytesRateMetricName);
     registry.remove(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     registry.remove(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"));
   }
@@ -627,6 +637,15 @@ public class ReplicationMetrics {
             + remoteReplica.getPartitionId().toString() + "-getRequestError";
     if (getRequestErrorMap.containsKey(getRequestErrorMetricName)) {
       getRequestErrorMap.get(getRequestErrorMetricName).inc();
+    }
+  }
+
+  public void updateReplicaFetchBytes(ReplicaId remoteReplica, long totalBytesFixed) {
+    String replicaFetchBytes =
+        remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
+            + remoteReplica.getPartitionId().toString() + "-replicaFetchBytes";
+    if (replicaToReplicationFetchBytesRateMap.containsKey(replicaFetchBytes)) {
+      replicaToReplicationFetchBytesRateMap.get(replicaFetchBytes).mark(totalBytesFixed);
     }
   }
 

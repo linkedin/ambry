@@ -1520,6 +1520,7 @@ public class ReplicaThread implements Runnable {
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
+    Map<ReplicaId, Long> replicaIdTotalBytesFixed = new HashMap<>();
     long startTime = time.milliseconds();
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
@@ -1567,6 +1568,8 @@ public class ReplicaThread implements Runnable {
 
               for (MessageInfo messageInfo : messageInfoList) {
                 totalBytesFixed += messageInfo.getSize();
+
+                replicationMetrics.updateReplicaFetchBytes(remoteReplicaInfo.getReplicaId(), messageInfo.getSize());
                 logger.trace("Remote node: {} Thread name: {} Remote replica: {} Message replicated: {} Partition: {} "
                         + "Local mount path: {} Message size: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                     messageInfo.getStoreKey(), remoteReplicaInfo.getReplicaId().getPartitionId(),
