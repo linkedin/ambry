@@ -1567,7 +1567,7 @@ public class FrontendRestRequestServiceTest {
     reset(namedBlobDb);
     namedBlobRecord = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName + SLASH + version,
         blobIdFromRouter, Utils.Infinite_Time);
-    when(namedBlobDb.get(any(), any(), any(), any(), false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(any(), any(), any(), any(), eq(false))).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
 
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
@@ -1583,7 +1583,7 @@ public class FrontendRestRequestServiceTest {
     reset(namedBlobDb);
     when(namedBlobDb.delete(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
-    when(namedBlobDb.get(any(), any(), any(), any(), false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(any(), any(), any(), any(), eq(false))).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
 
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
