@@ -640,10 +640,10 @@ public class ReplicationMetrics {
     }
   }
 
-  public void updateReplicaFetchBytes(ReplicaId remoteReplica, long totalBytesFixed) {
+  public void updateReplicationFetchBytes(ReplicaId remoteReplica, long totalBytesFixed) {
     String replicaFetchBytes =
         remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
-            + remoteReplica.getPartitionId().toString() + "-replicaFetchBytes";
+            + remoteReplica.getPartitionId().toString() + "-replicationFetchBytesRate";
     if (replicaToReplicationFetchBytesRateMap.containsKey(replicaFetchBytes)) {
       replicaToReplicationFetchBytesRateMap.get(replicaFetchBytes).mark(totalBytesFixed);
     }
