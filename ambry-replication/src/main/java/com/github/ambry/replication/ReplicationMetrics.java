@@ -620,6 +620,7 @@ public class ReplicationMetrics {
     localStoreErrorMap.remove(localStoreErrorMetricName);
     String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + REPLICATION_FETCH_BYTES_RATE_SUFFIX;
     replicaToReplicationFetchBytesRateMap.remove(replicaToReplicationFetchBytesRateMetricName);
+    registry.remove(MetricRegistry.name(ReplicaThread.class, replicaToReplicationFetchBytesRateMetricName));
     registry.remove(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     registry.remove(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"));
   }
