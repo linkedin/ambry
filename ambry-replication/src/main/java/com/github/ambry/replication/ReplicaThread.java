@@ -1567,6 +1567,8 @@ public class ReplicaThread implements Runnable {
 
               for (MessageInfo messageInfo : messageInfoList) {
                 totalBytesFixed += messageInfo.getSize();
+
+                replicationMetrics.updateReplicationFetchBytes(remoteReplicaInfo, messageInfo.getSize());
                 logger.trace("Remote node: {} Thread name: {} Remote replica: {} Message replicated: {} Partition: {} "
                         + "Local mount path: {} Message size: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                     messageInfo.getStoreKey(), remoteReplicaInfo.getReplicaId().getPartitionId(),
