@@ -39,6 +39,8 @@ public class ReplicationMetrics {
 
   private final static String MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE = "Partition-%s-maxLagFromPeersInBytes";
 
+  private final static String REPLICATION_FETCH_BYTES_RATE_SUFFIX = "-replicationFetchBytesRate";
+
   public final Map<String, Meter> interColoReplicationBytesRate = new HashMap<String, Meter>();
   public final Meter intraColoReplicationBytesRate;
   public final Map<String, Meter> plainTextInterColoReplicationBytesRate = new HashMap<String, Meter>();
@@ -570,7 +572,7 @@ public class ReplicationMetrics {
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
 
-    String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + "-replicationFetchBytesRate";
+    String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + REPLICATION_FETCH_BYTES_RATE_SUFFIX;
     Meter replicaToReplicationFetchBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, replicaToReplicationFetchBytesRateMetricName));
     replicaToReplicationFetchBytesRateMap.put(replicaToReplicationFetchBytesRateMetricName,
@@ -616,7 +618,7 @@ public class ReplicationMetrics {
     registry.remove(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
     String localStoreErrorMetricName = metricNamePrefix + "-localStoreError";
     localStoreErrorMap.remove(localStoreErrorMetricName);
-    String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + "-replicationFetchBytesRate";
+    String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + REPLICATION_FETCH_BYTES_RATE_SUFFIX;
     replicaToReplicationFetchBytesRateMap.remove(replicaToReplicationFetchBytesRateMetricName);
     registry.remove(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     registry.remove(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"));
@@ -640,10 +642,8 @@ public class ReplicationMetrics {
     }
   }
 
-  public void updateReplicationFetchBytes(ReplicaId remoteReplica, long totalBytesFixed) {
-    String replicaFetchBytes =
-        remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
-            + remoteReplica.getPartitionId().toString() + "-replicationFetchBytesRate";
+  public void updateReplicationFetchBytes(RemoteReplicaInfo remoteReplica, long totalBytesFixed) {
+    String replicaFetchBytes = generateRemoteReplicaMetricPrefix(remoteReplica) + REPLICATION_FETCH_BYTES_RATE_SUFFIX;
     if (replicaToReplicationFetchBytesRateMap.containsKey(replicaFetchBytes)) {
       replicaToReplicationFetchBytesRateMap.get(replicaFetchBytes).mark(totalBytesFixed);
     }
