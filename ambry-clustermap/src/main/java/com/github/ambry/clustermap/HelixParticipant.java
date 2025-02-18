@@ -952,7 +952,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       throw e;
     }
     localPartitionAndState.put(partitionName, ReplicaState.STANDBY);
-    participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.LEADER, ReplicaState.STANDBY);
+    participantMetrics.decStateTransitionMetric(partitionName, ReplicaState.LEADER, ReplicaState.STANDBY);
   }
 
   @Override
