@@ -167,7 +167,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       LOGGER.debug("input for convertId : " + input);
       LOGGER.debug("restRequest for convertId : " + restRequest);
 
-      Object localGetHeader = restRequest.getArgs().get(LOCAL_GET);
+      Boolean localGetHeader = RestUtils.getBooleanHeader(restRequest.getArgs(), LOCAL_GET, false);
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
@@ -185,13 +185,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             return result.getBlobId();
           });
         } else {
-          if (localGetHeader != null) {
-            conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                namedBlobPath.getBlobName(), getOption, true).thenApply(NamedBlobRecord::getBlobId);
-          } else {
-            conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                namedBlobPath.getBlobName(), getOption, false).thenApply(NamedBlobRecord::getBlobId);
-          }
+          conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+              namedBlobPath.getBlobName(), getOption, localGetHeader).thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
         if (restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
