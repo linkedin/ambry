@@ -1520,7 +1520,6 @@ public class ReplicaThread implements Runnable {
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
-    Map<ReplicaId, Long> replicaIdTotalBytesFixed = new HashMap<>();
     long startTime = time.milliseconds();
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
