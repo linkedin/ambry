@@ -27,7 +27,7 @@ import java.util.Map;
 class HelixParticipantMetrics {
   private static final String transitionUpdateTemplate = "Partition-%s-from-%s-to-%s";
 
-  private MetricRegistry registry;
+  private final MetricRegistry registry;
   private Map<ReplicaState, Integer> replicaCountByState = new HashMap<>();
   private final Map<String, ReplicaState> localPartitionAndState;
   // no need to record exact number of "dropped" partition, a counter to track partition-dropped events would suffice
@@ -92,22 +92,46 @@ class HelixParticipantMetrics {
     return replicaCountByState.get(state);
   }
 
-
-
-  void addAndUpdateStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
-    String metricName = String.format(transitionUpdateTemplate, partitionName, from, to);
+  /**
+   * Creates and increments the metric object for given partition's state transition
+   * @param partitionName partition name
+   * @param from begin state
+   * @param to end state
+   */
+  void incStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
+    String metricName = String.format(transitionUpdateTemplate, partitionName, from.toString(), to.toString());
     if (!partitionTransitionToCount.containsKey(metricName)) {
       Counter transitionMetric = registry.counter(MetricRegistry.name(HelixParticipant.class, metricName));
       partitionTransitionToCount.put(metricName, transitionMetric);
+      transitionMetric.inc();
     }
-    partitionTransitionToCount.get(metricName).inc();
   }
 
-  void decrementAndRemoveStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
-    String metricName = String.format(transitionUpdateTemplate, partitionName, from, to);
+  /**
+   * Decrements the metric for given partition's state transition
+   * @param partitionName partition name
+   * @param from begin name
+   * @param to end state
+   */
+  void decStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
+    String metricName = String.format(transitionUpdateTemplate, partitionName, from.toString(), to.toString());
     if (partitionTransitionToCount.containsKey(metricName)) {
       partitionTransitionToCount.get(metricName).dec();
     }
-    partitionTransitionToCount.remove(metricName);
+  }
+
+  /**
+   * Removes all the metric objects created for tracking state transitions
+   * for this partition.
+   * @param partitionName partition name
+   */
+  void clearStateTransitionMetric(String partitionName) {
+    partitionTransitionToCount.entrySet().removeIf((partitionToMetricCounter -> {
+      if (partitionToMetricCounter.getKey().startsWith("Partition-" + partitionName)) {
+        registry.remove(MetricRegistry.name(HelixParticipant.class, partitionToMetricCounter.getKey()));
+        return true;
+      }
+      return false;
+    }));
   }
 }
