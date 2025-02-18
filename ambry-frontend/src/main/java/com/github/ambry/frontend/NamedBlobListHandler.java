@@ -17,6 +17,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.rest.RestRequest;
@@ -49,20 +50,25 @@ public class NamedBlobListHandler {
   private final NamedBlobDb namedBlobDb;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics frontendMetrics;
+  private final FrontendConfig frontendConfig;
   private static final String DELIMITER = "/";
 
   /**
    * Constructs a handler for handling requests for listing blobs in named blob accounts.
+   *
    * @param securityService the {@link SecurityService} to use.
-   * @param namedBlobDb the {@link NamedBlobDb} to use.
+   * @param namedBlobDb     the {@link NamedBlobDb} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param frontendConfig {@link FrontendConfig} instance from which to fetch configs.
    */
   NamedBlobListHandler(SecurityService securityService, NamedBlobDb namedBlobDb,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics frontendMetrics) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics frontendMetrics,
+      FrontendConfig frontendConfig) {
     this.securityService = securityService;
     this.namedBlobDb = namedBlobDb;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.frontendMetrics = frontendMetrics;
+    this.frontendConfig = frontendConfig;
   }
 
   /**
@@ -142,7 +148,7 @@ public class NamedBlobListHandler {
         CallbackUtils.callCallbackAfter(
             listRecursively(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
                 namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(),
-                maxKeys == null ? DEFAULT_MAX_KEY_VALUE : Integer.parseInt(maxKeys),
+                maxKeys == null ? frontendConfig.listMaxResults : Integer.parseInt(maxKeys),
                 delimiter != null && delimiter.equals(DELIMITER)), listBlobsCallback());
       }, uri, LOGGER, finalCallback);
     }

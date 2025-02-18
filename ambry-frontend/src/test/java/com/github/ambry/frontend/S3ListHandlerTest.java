@@ -504,7 +504,8 @@ public class S3ListHandlerTest {
         ambryIdConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics,
         CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     NamedBlobListHandler namedBlobListHandler =
-        new NamedBlobListHandler(securityServiceFactory.getSecurityService(), namedBlobDb, injector, metrics);
+        new NamedBlobListHandler(securityServiceFactory.getSecurityService(), namedBlobDb, injector, metrics,
+            frontendConfig);
     s3ListHandler = new S3ListHandler(namedBlobListHandler, metrics);
   }
 }

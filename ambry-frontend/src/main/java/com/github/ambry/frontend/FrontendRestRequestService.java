@@ -56,7 +56,6 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.frontend.DatasetVersionPath.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
@@ -219,7 +218,8 @@ class FrontendRestRequestService implements RestRequestService {
             clusterMap, quotaManager);
 
     namedBlobListHandler =
-        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
+        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics,
+            frontendConfig);
     namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
         accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager, accountService,
         deleteBlobHandler);
