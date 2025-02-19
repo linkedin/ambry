@@ -31,18 +31,15 @@ import com.github.ambry.utils.ByteBufferDataInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
@@ -68,6 +65,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final NamedBlobListHandler namedBlobListHandler;
   private final FrontendMetrics metrics;
   public static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+  private static final String DELIMITER = "/";
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
@@ -115,10 +113,16 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     String continuationToken = getHeader(restRequest.getArgs(), CONTINUATION_TOKEN, false);
     //By default S3 list returns up to 1000 key names.
     int maxKeysValue = maxKeys == null ? DEFAULT_MAX_KEY_VALUE : Integer.parseInt(maxKeys);
+    int keyCount = namedBlobRecordPage.getEntries().size();
     // Iterate through list of blob names.
     List<Contents> contentsList = new ArrayList<>();
-    int keyCount = 0;
+    // Use LinkedHashSet to maintain order of directories.
+    Set<String> dirSet = new LinkedHashSet<>();
     for (NamedBlobListEntry namedBlobRecord : namedBlobRecordPage.getEntries()) {
+      if (namedBlobRecord.isDirectory()) {
+        dirSet.add(namedBlobRecord.getBlobName());
+        continue;
+      }
       String blobName = namedBlobRecord.getBlobName();
       long blobSize = namedBlobRecord.getBlobSize();
       long modifiedTimeMs = namedBlobRecord.getModifiedTimeMs();
@@ -128,23 +132,26 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
       ZonedDateTime zonedDateTime = Instant.ofEpochMilli(modifiedTimeMs).atZone(ZoneId.of("UTC"));
       String formattedDate = zonedDateTime.format(TIMESTAMP_FORMATTER);
       contentsList.add(new Contents(blobName, formattedDate, blobSize));
-      if (++keyCount == maxKeysValue) {
-        break;
-      }
     }
+
+    List<Prefix> commonPrefixes = new ArrayList<>();
+    for (String dir : dirSet) {
+      commonPrefixes.add(new Prefix(dir));
+    }
+
     if (LIST_TYPE_VERSION_2.equals(getHeader(restRequest.getArgs(), LIST_TYPE, false))) {
       ListBucketResultV2 resultV2 =
-          new ListBucketResultV2(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList,
-              encodingType, continuationToken, namedBlobRecordPage.getNextPageToken(),
-              namedBlobRecordPage.getNextPageToken() != null);
+          new ListBucketResultV2(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList, encodingType,
+              continuationToken, namedBlobRecordPage.getNextPageToken(), namedBlobRecordPage.getNextPageToken() != null,
+              delimiter != null && delimiter.equals(DELIMITER) ? commonPrefixes : null);
       LOGGER.debug("Sending response for S3 ListObjects {}", resultV2);
       // Serialize xml
       xmlMapper.writeValue(outputStream, resultV2);
     } else {
       ListBucketResult result =
-          new ListBucketResult(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList,
-              encodingType, marker, namedBlobRecordPage.getNextPageToken(),
-              namedBlobRecordPage.getNextPageToken() != null);
+          new ListBucketResult(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList, encodingType,
+              marker, namedBlobRecordPage.getNextPageToken(), namedBlobRecordPage.getNextPageToken() != null,
+              delimiter != null && delimiter.equals(DELIMITER) ? commonPrefixes : null);
       LOGGER.debug("Sending response for S3 ListObjects {}", result);
       // Serialize xml
       xmlMapper.writeValue(outputStream, result);

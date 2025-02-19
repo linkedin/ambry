@@ -95,6 +95,10 @@ public class TestNamedBlobDb implements NamedBlobDb {
       return future;
     }
 
+    if (blobNamePrefix == null) {
+      blobNamePrefix = "";
+    }
+
     TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> allNamedBlobsInContainer =
         allRecords.get(accountName).get(containerName);
     NavigableMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> nextMap;
