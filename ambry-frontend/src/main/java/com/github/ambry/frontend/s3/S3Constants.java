@@ -27,5 +27,7 @@ public class S3Constants {
   public static final String ERR_DUPLICATE_PART_NUMBER = "Duplicate part number found: %s.";
   public static final String ERR_DUPLICATE_ETAG = "Duplicate eTag found: %s.";
   public static final String ERR_EMPTY_REQUEST_BODY = "Xml request body cannot be empty.";
+  public static final String ERR_MALFORMED_REQUEST_BODY_CODE = "MalformedXML";
+  public static final String ERR_MALFORMED_REQUEST_BODY_MESSAGE = "The XML you provided was not well-formed or did not validate against our published schema";
   public static final String ERR_PART_LIST_TOO_LONG = String.format("Parts list size cannot exceed %s.", MAX_LIST_SIZE);
 }

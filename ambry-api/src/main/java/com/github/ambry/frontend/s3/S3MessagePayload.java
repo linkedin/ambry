@@ -14,11 +14,10 @@
  */
 package com.github.ambry.frontend.s3;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.List;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import java.util.List;
-
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
  * This class contains the payload for S3 requests rendered in XML.
@@ -539,6 +538,41 @@ public class S3MessagePayload {
     @Override
     public String toString() {
       return "S3DeletedObject{key='" + key + "'}";
+    }
+  }
+
+  public static class Error {
+    @JacksonXmlProperty(localName = "Code")
+    private String code;
+
+    @JacksonXmlProperty(localName = "Message")
+    private String message;
+
+    public Error() {}
+
+    // Getters and setters
+    public String getCode() {
+      return code;
+    }
+
+    public void setCode(String code) {
+      this.code = code;
+    }
+
+    public String getMessage() {
+      return message;
+    }
+
+    public void setMessage(String message) {
+      this.message = message;
+    }
+
+    @Override
+    public String toString() {
+      return "S3ErrorResponse{" +
+          "code='" + code + '\'' +
+          ", message='" + message + '\'' +
+          '}';
     }
   }
 }
