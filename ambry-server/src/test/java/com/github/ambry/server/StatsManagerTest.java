@@ -608,11 +608,6 @@ public class StatsManagerTest {
     }
 
     @Override
-    public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
-      throw new UnsupportedOperationException("Method not supported");
-    }
-
-    @Override
     public void purge(List<MessageInfo> messageInfos) {
       throw new IllegalStateException("Not implemented");
     }

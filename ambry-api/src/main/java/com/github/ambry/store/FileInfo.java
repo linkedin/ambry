@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 LinkedIn Corp. All rights reserved.
+ * Copyright 2025 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,9 +56,11 @@ public class FileInfo {
 
   @Override
   public String toString() {
-    return "FileInfo{" +
-        "fileName='" + fileName + '\'' +
-        ", fileSize=" + fileSize +
-        '}';
+    StringBuilder sb = new StringBuilder();
+    sb.append("FileInfo{")
+      .append("fileName='").append(fileName).append('\'')
+      .append(", fileSize=").append(fileSize)
+      .append('}');
+    return sb.toString();
   }
 }

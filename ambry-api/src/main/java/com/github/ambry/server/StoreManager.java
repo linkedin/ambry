@@ -154,12 +154,4 @@ public interface StoreManager {
    * @throws IOException
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
-
-  /**
-   * Get the list of log segment metadata files for a given partition.
-   * @param partitionId
-   * @param includeActiveLogSegment
-   * @return List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
-   */
-  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment);
 }

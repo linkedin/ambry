@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 LinkedIn Corp. All rights reserved.
+ * Copyright 2025 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -80,10 +80,12 @@ public class LogInfo {
 
   @Override
   public String toString() {
-    return "LogInfo{" +
-        "logSegment=" + logSegment +
-        ", indexSegments=" + indexSegments +
-        ", bloomFilters=" + bloomFilters +
-        '}';
+    StringBuilder sb = new StringBuilder();
+    sb.append("LogInfo{")
+        .append("logSegment=").append(logSegment)
+        .append(", indexSegments=").append(indexSegments)
+        .append(", bloomFilters=").append(bloomFilters)
+        .append('}');
+    return sb.toString();
   }
 }

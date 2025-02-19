@@ -30,6 +30,7 @@ import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -37,6 +38,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
+import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -1362,7 +1364,11 @@ public class BlobStore implements Store {
     return log.getAllLogSegmentNames().stream()
         .filter(segmentName -> includeActiveLogSegment || !segmentName.equals(log.getActiveSegment().getName()))
         .map(segmentName -> log.getSegment(segmentName))
-        .map(segment -> new FileInfo(segment.getName().toString(), segment.getView().getFirst().length()))
+        .map(segment -> {
+          FileInfo fileInfo = new FileInfo(segment.getName().toString(), segment.getView().getFirst().length());
+          segment.closeView();
+          return fileInfo;
+        })
         .collect(Collectors.toList());
   }
 

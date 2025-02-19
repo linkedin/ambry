@@ -153,11 +153,6 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
-    throw new UnsupportedOperationException("Method not supported");
-  }
-
-  @Override
   public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
     throw new UnsupportedOperationException("Method not supported");
   }

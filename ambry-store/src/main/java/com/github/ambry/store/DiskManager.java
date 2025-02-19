@@ -835,17 +835,6 @@ public class DiskManager {
   }
 
   /**
-   * Gets the log segment metadata files from in-memory data structures
-   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
-   */
-  List<LogInfo> getLogSegmentMetadataFiles(PartitionId partitionId, boolean includeActiveLogSegment) {
-    if (!stores.containsKey(partitionId)) {
-      throw new IllegalArgumentException("BlobStore for partition " + partitionId + " is not found on disk " + disk);
-    }
-    return stores.get(partitionId).getLogSegmentMetadataFiles(includeActiveLogSegment);
-  }
-
-  /**
    Manages the disk healthchecking tasks such as creating,writing, reading, and deleting a file
    */
   private class DiskHealthCheck {
