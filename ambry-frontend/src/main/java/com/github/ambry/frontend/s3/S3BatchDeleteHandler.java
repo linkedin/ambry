@@ -163,21 +163,21 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
 
       CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0]))
           .whenComplete((result, exception) -> {
-        try {
-          // construct and serialize response
-          S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
-          ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-          response.setDeleted(new ArrayList<>(deleted));
-          response.setErrors(new ArrayList<>(errors));
-          xmlMapper.writeValue(outputStream, response);
-          ReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
-          restResponseChannel.setHeader(Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
-          restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
-          restResponseChannel.setStatus(ResponseStatus.Ok);
-          finalCallback.onCompletion(readableStreamChannel, null);
-        } catch (IOException | RestServiceException e) {
-          finalCallback.onCompletion(null, e);
-        }
+            try {
+              // construct and serialize response
+              S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
+              ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+              response.setDeleted(new ArrayList<>(deleted));
+              response.setErrors(new ArrayList<>(errors));
+              xmlMapper.writeValue(outputStream, response);
+              ReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+              restResponseChannel.setHeader(Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+              restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
+              restResponseChannel.setStatus(ResponseStatus.Ok);
+              finalCallback.onCompletion(readableStreamChannel, null);
+            } catch (IOException | RestServiceException e) {
+              finalCallback.onCompletion(null, e);
+            }
       });
     }, restRequest.getUri(), LOGGER, finalCallback);
   }
