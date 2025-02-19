@@ -27,6 +27,8 @@ import java.util.Map;
 class HelixParticipantMetrics {
   private static final String transitionUpdateTemplate = "Partition-%s-from-%s-to-%s";
 
+  private final boolean enablePartitionStateTransitionMetrics;
+
   private final MetricRegistry registry;
   private Map<ReplicaState, Integer> replicaCountByState = new HashMap<>();
   private final Map<String, ReplicaState> localPartitionAndState;
@@ -39,10 +41,11 @@ class HelixParticipantMetrics {
   final Map<String, Counter> partitionTransitionToCount;
 
   HelixParticipantMetrics(MetricRegistry metricRegistry, String zkConnectStr,
-      Map<String, ReplicaState> localPartitionAndState) {
+      Map<String, ReplicaState> localPartitionAndState, boolean enablePartitionStateTransitionMetrics) {
     registry = metricRegistry;
     String zkSuffix = zkConnectStr == null ? "" : "-" + zkConnectStr;
     this.localPartitionAndState = localPartitionAndState;
+    this.enablePartitionStateTransitionMetrics = enablePartitionStateTransitionMetrics;
     EnumSet.complementOf(EnumSet.of(ReplicaState.DROPPED)).forEach(state -> replicaCountByState.put(state, 0));
     Gauge<Integer> bootstrapPartitionCount = () -> getReplicaCountInState(ReplicaState.BOOTSTRAP);
     registry.gauge(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount" + zkSuffix),
@@ -100,7 +103,7 @@ class HelixParticipantMetrics {
    */
   void incStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
     String metricName = String.format(transitionUpdateTemplate, partitionName, from.toString(), to.toString());
-    if (!partitionTransitionToCount.containsKey(metricName)) {
+    if (enablePartitionStateTransitionMetrics && !partitionTransitionToCount.containsKey(metricName)) {
       Counter transitionMetric = registry.counter(MetricRegistry.name(HelixParticipant.class, metricName));
       partitionTransitionToCount.put(metricName, transitionMetric);
       transitionMetric.inc();

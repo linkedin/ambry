@@ -101,7 +101,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     this.zkConnectStr = zkConnectStr;
     this.metricRegistry = metricRegistry;
     participantMetrics =
-        new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState);
+        new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState,
+            clusterMapConfig.clustermapEnablePartitionStateTransitionMetrics);
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName = getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
     if (clusterName.isEmpty()) {
