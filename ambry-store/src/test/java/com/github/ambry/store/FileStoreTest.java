@@ -16,8 +16,10 @@ package com.github.ambry.store;
 import com.github.ambry.clustermap.FileStoreException;
 import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -40,11 +42,8 @@ import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
-import java.io.EOFException;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.store.StoreMetrics;
 import java.nio.file.Files;
-import java.io.FileNotFoundException;
 
 import static org.junit.Assert.*;
 
@@ -75,7 +74,7 @@ public class FileStoreTest {
     metrics = new StoreMetrics(new MetricRegistry());
     Properties props = new Properties();
     fileCopyConfig = new FileCopyConfig(new VerifiableProperties(props));
-    fileStore = new FileStore(fileCopyConfig);
+    fileStore = new FileStore(fileCopyConfig, tempDir.getAbsolutePath());
     fileStore.start();
   }
 
@@ -97,11 +96,11 @@ public class FileStoreTest {
    * Expects FileStoreException with appropriate message.
    */
   @Test
-  public void testOperationsWhenNotRunning() throws IOException {
+  public void testOperationsWhenNotRunning() throws StoreException {
     fileStore.stop();
     expectedException.expect(FileStoreException.class);
     expectedException.expectMessage("FileStore is not running");
-    fileStore.getStreamForFileRead(tempDir.getAbsolutePath(), "test.txt", 0, 10);
+    fileStore.getByteBufferForFileChunk("test.txt", 0, 10);
   }
 
   /**
@@ -109,7 +108,7 @@ public class FileStoreTest {
    * Verifies content is correctly read from specified offset.
    */
   @Test
-  public void testGetStreamForFileRead() throws IOException {
+  public void testGetStreamForFileRead() throws StoreException, IOException {
     // Create test file
     File testFile = new File(tempDir, "test.txt");
     String content = "test data content";
@@ -117,9 +116,7 @@ public class FileStoreTest {
     fos.write(content.getBytes());
     fos.close();
 
-    ByteBuffer result = fileStore.getStreamForFileRead(
-        tempDir.getAbsolutePath(),
-        testFile.getName(),
+    ByteBuffer result = fileStore.getByteBufferForFileChunk(testFile.getName(),
         0,
         content.length()
     );
@@ -156,7 +153,7 @@ public class FileStoreTest {
         outputFile.getParentFile().exists() || outputFile.getParentFile().mkdirs());
 
     // Write data using FileInputStream
-    try (FileInputStream fis = new FileInputStream(tempInputFile)) {
+    try (DataInputStream fis = new DataInputStream(Files.newInputStream(tempInputFile.toPath()))) {
         fileStore.putChunkToFile(outputFile.getAbsolutePath(), fis);
     }
 
@@ -184,10 +181,10 @@ public class FileStoreTest {
     List<LogInfo> logInfoList = createMultipleLogInfo();
 
     // Write metadata to file
-    fileStore.persistMetaDataToFile(tempDir.getAbsolutePath(), logInfoList);
+    fileStore.persistMetaDataToFile(logInfoList);
 
     // Read back metadata
-    List<LogInfo> readLogInfoList = fileStore.readMetaDataFromFile(tempDir.getAbsolutePath());
+    List<LogInfo> readLogInfoList = fileStore.readMetaDataFromFile();
 
     // Verify number of entries matches
     assertEquals("Number of entries should match",
@@ -263,7 +260,7 @@ public class FileStoreTest {
     // Define concurrent write task 1
     Runnable writeTask1 = () -> {
         try {
-            fileStore.persistMetaDataToFile(tempDir.getAbsolutePath(), logInfoList);
+            fileStore.persistMetaDataToFile(logInfoList);
             latch.countDown();
         } catch (Exception e) {
             exception.set(e);
@@ -273,7 +270,7 @@ public class FileStoreTest {
     // Define concurrent write task 2
     Runnable writeTask2 = () -> {
         try {
-            fileStore.persistMetaDataToFile(tempDir.getAbsolutePath(), logInfoList);
+            fileStore.persistMetaDataToFile(logInfoList);
             latch.countDown();
         } catch (Exception e) {
             exception.set(e);
@@ -283,7 +280,7 @@ public class FileStoreTest {
     // Define concurrent read task
     Runnable readTask = () -> {
         try {
-            List<LogInfo> result = fileStore.readMetaDataFromFile(tempDir.getAbsolutePath());
+            List<LogInfo> result = fileStore.readMetaDataFromFile();
             assertNotNull("Read operation should complete", result);
             latch.countDown();
         } catch (Exception e) {
@@ -319,10 +316,10 @@ public class FileStoreTest {
   public void testCorruptMetadataFile() throws Exception {
     // Create and write valid metadata
     List<LogInfo> logInfoList = createMultipleLogInfo();
-    fileStore.persistMetaDataToFile(tempDir.getAbsolutePath(), logInfoList);
+    fileStore.persistMetaDataToFile(logInfoList);
 
     // Verify metadata file exists
-    File metadataFile = new File(tempDir, "sealed_logs_metadata_file");
+    File metadataFile = new File(tempDir, "logs_metadata_file");
     assertTrue("Metadata file should exist", metadataFile.exists());
 
     // Corrupt the file by truncating it
@@ -333,7 +330,7 @@ public class FileStoreTest {
 
     // Attempt to read corrupted file
     try {
-        fileStore.readMetaDataFromFile(tempDir.getAbsolutePath());
+        fileStore.readMetaDataFromFile();
         fail("Expected an exception when reading corrupted metadata file");
     } catch (Exception e) {
         // Verify exception type
@@ -373,9 +370,7 @@ public class FileStoreTest {
             @Override
             public ByteBuffer call() throws Exception {
                 try {
-                    ByteBuffer result = fileStore.getStreamForFileRead(
-                        tempDir.getAbsolutePath(),
-                        testFile.getName(),
+                    ByteBuffer result = fileStore.getByteBufferForFileChunk(testFile.getName(),
                         offset,
                         2
                     );
@@ -424,10 +419,10 @@ public class FileStoreTest {
     }
 
     // Write large dataset
-    fileStore.persistMetaDataToFile(tempDir.getAbsolutePath(), largeLogInfoList);
+    fileStore.persistMetaDataToFile(largeLogInfoList);
 
     // Read and verify large dataset
-    List<LogInfo> readLogInfoList = fileStore.readMetaDataFromFile(tempDir.getAbsolutePath());
+    List<LogInfo> readLogInfoList = fileStore.readMetaDataFromFile();
 
     // Verify size matches
     assertEquals("Size of read list should match written list",
@@ -471,7 +466,7 @@ public class FileStoreTest {
         executor.submit(() -> {
             try {
                 startLatch.await(); // Wait for write to begin
-                fileStore.readMetaDataFromFile(tempDir.getAbsolutePath());
+                fileStore.readMetaDataFromFile();
             } catch (Exception e) {
                 testException.set(e);
             } finally {
@@ -481,7 +476,7 @@ public class FileStoreTest {
     }
 
     // Perform write operation
-    fileStore.persistMetaDataToFile(tempDir.getAbsolutePath(), logInfoList);
+    fileStore.persistMetaDataToFile(logInfoList);
     startLatch.countDown(); // Signal readers to start
 
     // Wait for all readers to complete
@@ -508,10 +503,10 @@ public class FileStoreTest {
   public void testFilePermissions() throws Exception {
     // Create and write test data
     List<LogInfo> logInfoList = createMultipleLogInfo();
-    fileStore.persistMetaDataToFile(tempDir.getAbsolutePath(), logInfoList);
+    fileStore.persistMetaDataToFile(logInfoList);
 
     // Verify file exists
-    File metadataFile = new File(tempDir, "sealed_logs_metadata_file");
+    File metadataFile = new File(tempDir, "logs_metadata_file");
     assertTrue("Metadata file should exist", metadataFile.exists());
 
     // Verify initial permissions
@@ -522,7 +517,7 @@ public class FileStoreTest {
 
     // Attempt to read without permissions
     try {
-        fileStore.readMetaDataFromFile(tempDir.getAbsolutePath());
+        fileStore.readMetaDataFromFile();
         fail("Expected exception when reading file without permissions");
     } catch (IOException e) {
         // Expected exception

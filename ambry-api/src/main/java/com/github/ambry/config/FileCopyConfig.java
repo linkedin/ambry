@@ -29,45 +29,45 @@ public class FileCopyConfig {
    * Number of partitions that can be hydrated in parallel per disk.
    * Higher values increase parallelism but also resource usage.
    */
-  public static final String PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK = "parallel.partition.hydration.count.per.disk";
-  @Config(PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK)
-  public final int parallelPartitionHydrationCountPerDisk;
+  public static final String FILECOPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK = "filecopy.parallel.partition.hydration.count.per.disk";
+  @Config(FILECOPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK)
+  public final int filecopyParallelPartitionHydrationCountPerDisk;
 
   /**
    * Number of threads dedicated to file copy operations.
    * Controls the level of concurrent file transfers.
    */
-  public static final String NUMBER_OF_FILE_COPY_THREADS = "number.of.file.copy.threads";
-  @Config(NUMBER_OF_FILE_COPY_THREADS)
-  public final int numberOfFileCopyThreads;
+  public static final String FILECOPY_NUMBER_OF_FILE_COPY_THREADS = "filecopy.number.of.file.copy.threads";
+  @Config(FILECOPY_NUMBER_OF_FILE_COPY_THREADS)
+  public final int filecopyNumberOfFileCopyThreads;
 
   /**
    * Timeout duration for file chunk operations in minutes.
    * After this duration, incomplete chunk operations are considered failed.
    */
-  public static final String FILE_CHUNK_TIMEOUT_IN_MINUTES = "file.chunk.timeout.in.minutes";
-  @Config(FILE_CHUNK_TIMEOUT_IN_MINUTES)
-  public final long fileChunkTimeoutInMins;
+  public static final String FILECOPY_FILE_CHUNK_TIMEOUT_IN_MINUTES = "filecopy.file.chunk.timeout.in.minutes";
+  @Config(FILECOPY_FILE_CHUNK_TIMEOUT_IN_MINUTES)
+  public final long filecopyFileChunkTimeoutInMins;
 
   /**
    * The frequency at which data gets flushed to disk in megabytes.
    * Lower values increase durability but may impact performance.
    * Default: 1000MB
    */
-  public static final String STORE_DATA_FLUSH_INTERVAL_IN_MBS = "store.data.flush.interval.In.MBs";
-  @Config(STORE_DATA_FLUSH_INTERVAL_IN_MBS)
+  public static final String FILECOPY_STORE_DATA_FLUSH_INTERVAL_IN_MBS = "filecopy.store.data.flush.interval.In.MBs";
+  @Config(FILECOPY_STORE_DATA_FLUSH_INTERVAL_IN_MBS)
   @Default("1000")
-  public final long storeDataFlushIntervalInMbs;
+  public final long filecopyStoreDataFlushIntervalInMbs;
 
   /**
    * Name of the metadata file used for file copy operations.
    * This file stores information about sealed logs and their associated metadata.
-   * Default: "sealed_logs_metadata_file"
+   * Default: "logs_metadata_file"
    */
-  public static final String FILE_COPY_META_DATA_FILE_NAME = "file.copy.meta.data.file.name";
-  @Config(FILE_COPY_META_DATA_FILE_NAME)
-  @Default("sealed_logs_metadata_file")
-  public final String fileCopyMetaDataFileName;
+  public static final String FILECOPY_META_DATA_FILE_NAME = "filecopy.meta.data.file.name";
+  @Config(FILECOPY_META_DATA_FILE_NAME)
+  @Default("logs_metadata_file")
+  public final String filecopyMetaDataFileName;
 
   /**
    * Creates a new FileCopyConfig with the provided properties.
@@ -78,13 +78,14 @@ public class FileCopyConfig {
    *        - numberOfFileCopyThreads: 4
    *        - fileChunkTimeoutInMins: 5
    *        - storeDataFlushIntervalInMbs: 1000
-   *        - fileCopyMetaDataFileName: "sealed_logs_metadata_file"
+   *        - fileCopyMetaDataFileName: "logs_metadata_file"
    */
   public FileCopyConfig(VerifiableProperties verifiableProperties) {
-    fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "sealed_logs_metadata_file");
-    parallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
-    numberOfFileCopyThreads = verifiableProperties.getInt(NUMBER_OF_FILE_COPY_THREADS, 4);
-    fileChunkTimeoutInMins = verifiableProperties.getInt(FILE_CHUNK_TIMEOUT_IN_MINUTES, 5);
-    storeDataFlushIntervalInMbs = verifiableProperties.getLong(STORE_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
+    filecopyMetaDataFileName = verifiableProperties.getString(FILECOPY_META_DATA_FILE_NAME, "logs_metadata_file");
+    filecopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(
+        FILECOPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
+    filecopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILECOPY_NUMBER_OF_FILE_COPY_THREADS, 4);
+    filecopyFileChunkTimeoutInMins = verifiableProperties.getInt(FILECOPY_FILE_CHUNK_TIMEOUT_IN_MINUTES, 5);
+    filecopyStoreDataFlushIntervalInMbs = verifiableProperties.getLong(FILECOPY_STORE_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
   }
 }
