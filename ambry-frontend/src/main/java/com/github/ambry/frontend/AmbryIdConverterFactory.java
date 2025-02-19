@@ -167,7 +167,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       LOGGER.debug("input for convertId : " + input);
       LOGGER.debug("restRequest for convertId : " + restRequest);
 
-      Boolean localGetHeader = RestUtils.getBooleanHeader(restRequest.getArgs(), LOCAL_GET, false);
+      boolean localGetHeader = RestUtils.getBooleanHeader(restRequest.getArgs(), LOCAL_GET, false);
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
