@@ -2646,10 +2646,6 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     this.getBlobReadInfoTestCallback = getBlobReadInfoTestCallback;
   }
 
-//  File[] getIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName) {
-//    return PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName);
-//  }
-
   /**
    * Gets the list of {@link IndexSegment} files that refer to the log segment with name {@code logSegmentName}.
    * @param dataDir the directory where the index files are.

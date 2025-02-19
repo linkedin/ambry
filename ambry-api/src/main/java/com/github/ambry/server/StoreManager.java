@@ -16,7 +16,6 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;

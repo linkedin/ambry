@@ -52,7 +52,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -196,9 +195,6 @@ public class DiskManager {
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
             partitionAndStore.getValue().start();
-              // [Dw remove]
-//              logger.info("[Dw] PrintUtil for PartitionId: " + partitionAndStore.getKey().getId());
-//              partitionAndStore.getValue().printAndReturnFiles();
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
             logger.error("Exception while starting store for the {}", partitionAndStore.getKey(), e);

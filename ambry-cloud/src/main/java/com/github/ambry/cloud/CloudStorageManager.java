@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Store;
 import java.nio.file.FileStore;
 import java.util.Collection;
