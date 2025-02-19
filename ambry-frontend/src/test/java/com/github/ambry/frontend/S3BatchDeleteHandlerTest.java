@@ -189,6 +189,41 @@ public class S3BatchDeleteHandlerTest {
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 
+  @Test
+  public void exceedMaxBatchSizeTest() throws Exception {
+    String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
+    String xmlBody = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+        "<Delete xmlns=\"http://s3.amazonaws.com/doc/2006-03-01\">";
+
+    // Add 1001 <Object> elements
+    for (int i = 1; i <= 1001; i++) {
+      xmlBody += "<Object>" +
+          "<Key>key-" + i + "</Key>" +
+          "</Object>";
+    }
+    xmlBody += "</Delete>";
+    byte[] xmlBytes = xmlBody.getBytes("UTF-8");
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, new JSONObject(),
+            new LinkedList<>(Arrays.asList(ByteBuffer.wrap(xmlBytes), null)));
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
+    ReadableStreamChannel readableStreamChannel = futureResult.get();
+    ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
+    // Verify result value
+    String result = new String(byteBuffer.array(), StandardCharsets.UTF_8);
+    XmlMapper xmlMapper = new XmlMapper();
+    S3MessagePayload.Error response =
+        xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.Error.class);
+    assertEquals(response.getMessage(), ERR_MALFORMED_REQUEST_BODY_MESSAGE);
+    assertEquals(response.getCode(), ERR_MALFORMED_REQUEST_BODY_CODE);
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+  }
+
   private void setup() throws Exception {
     Properties properties = new Properties();
     CommonTestUtils.populateRequiredRouterProps(properties);

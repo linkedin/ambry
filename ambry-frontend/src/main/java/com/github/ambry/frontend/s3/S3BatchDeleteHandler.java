@@ -97,21 +97,21 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       try {
         // check for empty message
         if (bytesRead == 0) {
-          logger.info("bytesRead is empty");
+          logger.trace("bytesRead is empty");
           throw new RestServiceException("bytesRead is empty", RestServiceErrorCode.BadRequest);
         }
 
         // ensure request body format is correct
         deleteRequest = deserializeRequest(channel);
-        if (deleteRequest.getObjects() == null) {
-          logger.info("s3batchdelete request size needs to be at least 1");
+        if (deleteRequest.getObjects() == null || deleteRequest.getObjects().isEmpty()) {
+          logger.trace("s3batchdelete request size needs to be at least 1");
           String batchSizeEqualsZero = "Request size needs to be at least 1";
           throw new RestServiceException(batchSizeEqualsZero, RestServiceErrorCode.BadRequest);
         }
 
         // validate the request for size
         if (deleteRequest.getObjects().size() > MAX_BATCH_DELETE_SIZE) {
-          logger.info("exceeded max batch delete size " + MAX_BATCH_DELETE_SIZE);
+          logger.trace("exceeded max batch delete size " + MAX_BATCH_DELETE_SIZE);
           String batchSizeErrorMessage = "Exceeded Maximum Batch Size of " + MAX_BATCH_DELETE_SIZE;
           throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
         }
@@ -192,7 +192,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       byteBuffer.readBytes(byteArray);
       return new XmlMapper().readValue(byteArray, S3MessagePayload.S3BatchDeleteObjects.class);
     } catch (Exception e) {
-      logger.info("s3batchdelete failed to deserialize request");
+      logger.trace("s3batchdelete failed to deserialize request");
       throw new RestServiceException("failed to deserialize", e, RestServiceErrorCode.BadRequest);
     }
   }
