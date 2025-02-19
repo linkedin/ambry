@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.clustermap;
+package com.github.ambry.store;
 
 /**
  * Custom exception class for FileStore-related errors.

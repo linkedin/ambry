@@ -14,7 +14,6 @@
 
 package com.github.ambry.store;
 
-import com.github.ambry.clustermap.FileStoreException;
 import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
@@ -35,7 +34,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
-import com.github.ambry.clustermap.FileStoreException.FileStoreErrorCode;
+import com.github.ambry.store.FileStoreException.FileStoreErrorCode;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -195,7 +194,8 @@ class FileStore {
     int fileSize = dataInputStream.available();
     byte[] content = Utils.readBytesFromStream(dataInputStream, fileSize);
 
-    // Write content to file with create and append options
+    // Write content to file with create and append options, which will create a new file if file doesn't exist
+    // and append to the existing file if file exists
     Files.write(Paths.get(outputFilePath), content,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 
