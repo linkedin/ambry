@@ -1657,7 +1657,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   public void fileCopyGetMetaDataRequestTest() throws IOException, InterruptedException {
     List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
 
-    RequestOrResponse request = new com.github.ambry.protocol.FileCopyGetMetaDataRequest(
+    RequestOrResponse request = new FileCopyGetMetaDataRequest(
         FileCopyGetMetaDataRequest.File_Metadata_Request_Version_V1, 0, "",
         partitionIds.get(0), "localhost");
 
