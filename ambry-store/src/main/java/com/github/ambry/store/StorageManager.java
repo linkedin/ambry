@@ -457,6 +457,19 @@ public class StorageManager implements StoreManager {
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
   }
 
+  /**
+   * Return true is compaction is disabled for the given partition id.
+   * @param id
+   * @return
+   */
+  public boolean compactionDisabledForBlobStore(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    if (diskManager == null) {
+      throw new IllegalArgumentException("Failed to find disk manager for partition " + id);
+    }
+    return diskManager.compactionDisabledForBlobStore(id);
+  }
+
   @Override
   public boolean isFileExists(PartitionId partitionId, String fileName) {
     return this.getDiskManager(partitionId).isFileExists(fileName);

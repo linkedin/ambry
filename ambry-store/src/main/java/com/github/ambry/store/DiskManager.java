@@ -420,6 +420,24 @@ public class DiskManager {
     return succeed;
   }
 
+  /**
+   * Return true if the compaction is disabled for the given partition id.
+   * @param id
+   * @return
+   */
+  boolean compactionDisabledForBlobStore(PartitionId id) {
+    rwLock.readLock().lock();
+    try {
+      BlobStore store = stores.get(id);
+      if (store == null) {
+        throw new IllegalArgumentException("Failed to find store " + id);
+      }
+      return compactionManager.compactionDisabledForBlobStore(store);
+    } finally {
+      rwLock.readLock().unlock();
+    }
+  }
+
 
   /**
    * Add a new BlobStore with given {@link ReplicaId}.
