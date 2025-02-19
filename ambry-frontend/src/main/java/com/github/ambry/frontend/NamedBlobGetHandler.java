@@ -76,7 +76,7 @@ class NamedBlobGetHandler {
     NamedBlobPath namedBlobPath = NamedBlobPath.parse(namedBlobId, Collections.emptyMap());
     GetOption getOption = getGetOption(restRequest, GetOption.None);
     namedBlobDb.get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(),
-        getOption).thenApply(NamedBlobRecord::getBlobId).whenComplete((blobId, exception) -> {
+        getOption, false).thenApply(NamedBlobRecord::getBlobId).whenComplete((blobId, exception) -> {
       if (exception != null) {
         callback.onCompletion(null, Utils.extractFutureExceptionCause(exception));
         return;

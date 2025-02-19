@@ -551,8 +551,11 @@ public class ReplicationMetrics {
    * @param remoteReplicaInfo the {@link RemoteReplicaInfo} that contains all infos associated with remote replica
    * @param trackPerDatacenterLag whether to track remote replicas' lag from local by each datacenter. Specifically, it
    *                              tracks min/max/avg remote replica lag from each datacenter.
+   * @param trackPerReplicaReplicationBytes whether to track replicated bytes per second from each remote replica,
+   *                                        replica thread is replicating from.
    */
-  public void addMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo, boolean trackPerDatacenterLag) {
+  public void addMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo, boolean trackPerDatacenterLag,
+      boolean trackPerReplicaReplicationBytes) {
     String metricNamePrefix = generateRemoteReplicaMetricPrefix(remoteReplicaInfo);
 
     String metadataRequestErrorMetricName = metricNamePrefix + "-metadataRequestError";
@@ -572,11 +575,13 @@ public class ReplicationMetrics {
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
 
-    String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + REPLICATION_FETCH_BYTES_RATE_SUFFIX;
-    Meter replicaToReplicationFetchBytesRate =
-        registry.meter(MetricRegistry.name(ReplicaThread.class, replicaToReplicationFetchBytesRateMetricName));
-    replicaToReplicationFetchBytesRateMap.put(replicaToReplicationFetchBytesRateMetricName,
-        replicaToReplicationFetchBytesRate);
+    if (trackPerReplicaReplicationBytes) {
+      String replicaToReplicationFetchBytesRateMetricName = metricNamePrefix + REPLICATION_FETCH_BYTES_RATE_SUFFIX;
+      Meter replicaToReplicationFetchBytesRate =
+          registry.meter(MetricRegistry.name(ReplicaThread.class, replicaToReplicationFetchBytesRateMetricName));
+      replicaToReplicationFetchBytesRateMap.put(replicaToReplicationFetchBytesRateMetricName,
+          replicaToReplicationFetchBytesRate);
+    }
 
     Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
     registry.gauge(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"), () -> replicaLag);

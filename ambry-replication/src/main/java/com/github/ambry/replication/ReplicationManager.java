@@ -59,6 +59,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  */
 public class ReplicationManager extends ReplicationEngine {
   private final boolean trackPerPartitionLagInMetric;
+  private final boolean trackPerReplicaReplicationBytes;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -83,6 +84,7 @@ public class ReplicationManager extends ReplicationEngine {
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate,
         findTokenHelper, time, true);
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
+    trackPerReplicaReplicationBytes = replicationConfig.replicationTrackPerReplicaReplicationBytes;
     // make sure leaderBasedReplicationAdmin is constructed before creating ReplicaThreads since it is passed to them
     if (replicationConfig.replicationModelAcrossDatacenters.equals(ReplicationModelType.LEADER_BASED)) {
       logger.info("Leader-based cross colo replication model is being used");
@@ -279,7 +281,8 @@ public class ReplicationManager extends ReplicationEngine {
               TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
               SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
 
-      replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
+      replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric,
+          trackPerReplicaReplicationBytes);
       remoteReplicaInfos.add(remoteReplicaInfo);
     }
     replicationMetrics.addLagMetricForPartition(partition, replicationConfig.replicationTrackPerPartitionLagFromRemote);

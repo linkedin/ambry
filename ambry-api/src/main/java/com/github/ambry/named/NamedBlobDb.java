@@ -33,10 +33,11 @@ public interface NamedBlobDb extends Closeable {
    * @param containerName the name of the container.
    * @param blobName the name of the blob.
    * @param option The {@link GetOption} for this get method.
+   * @param localGet the boolean for whether to do localGet.
    * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
    *         blob or an exception if an error occurred.
    */
-  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option);
+  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option, boolean localGet);
 
   /**
    * Look up a {@link NamedBlobRecord} by name.
@@ -47,7 +48,7 @@ public interface NamedBlobDb extends Closeable {
    *         blob or an exception if an error occurred.
    */
   default CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
-    return get(accountName, containerName, blobName, GetOption.None);
+    return get(accountName, containerName, blobName, GetOption.None, false);
   }
 
   /**
@@ -60,8 +61,8 @@ public interface NamedBlobDb extends Closeable {
    * @param pageToken      if {@code null}, return the first page of {@link NamedBlobRecord}s that start with
    *                       {@code blobNamePrefix}. If set, use this as a token to resume reading additional pages of
    *                       records that start with the prefix.
-   * @param maxKey the maximum number of keys returned in the response. By default, the action returns up to listMaxResults
-   *               which can be tuned by config.
+   * @param maxKey         the maximum number of keys returned in the response. By default, the action returns up to
+   *                       listMaxResults which can be tuned by config.
    * @return a {@link CompletableFuture} that will eventually contain a {@link Page} of {@link NamedBlobRecord}s
    * starting with the specified prefix or an exception if an error occurred.
    */

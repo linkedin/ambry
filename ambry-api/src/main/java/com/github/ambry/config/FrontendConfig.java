@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.github.ambry.rest.RestUtils.*;
+
 
 /**
  * Configuration parameters required by the Ambry frontend.
@@ -44,7 +46,9 @@ public class FrontendConfig {
   public static final String CONTAINER_METRICS_AGGREGATED_ACCOUNTS = PREFIX + "container.metrics.aggregated.accounts";
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
   public static final String CONTAINER_METRICS_ENABLED_REQUEST_TYPES = PREFIX + "container.metrics.enabled.request.types";
-  public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = PREFIX + "container.metrics.enabled.get.request.types";
+  public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES =
+      PREFIX + "container.metrics.enabled.get.request.types";
+  public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -294,6 +298,14 @@ public class FrontendConfig {
    */
   public final boolean oneHundredContinueEnable;
 
+  /**
+   * The maximum number of entries to return per response page when listing blobs.
+   * TODO: Remove the config in {@link MySqlNamedBlobDbConfig} later.
+   */
+  @Config(LIST_MAX_RESULTS)
+  @Default("1000")
+  public final int listMaxResults;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -357,6 +369,8 @@ public class FrontendConfig {
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_EXCLUDED_ACCOUNTS, ""), ",");
     containerMetricsAggregatedAccounts =
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_AGGREGATED_ACCOUNTS, ""), ",");
+    this.listMaxResults =
+        verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
   }
 
   /**
