@@ -50,6 +50,7 @@ import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.frontend.s3.S3Constants.*;
 import static org.junit.Assert.*;
 
 
@@ -118,6 +119,73 @@ public class S3BatchDeleteHandlerTest {
         xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.DeleteResult.class);
     assertEquals(response.getDeleted().get(0).getKey(), KEY_NAME);
     assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3ErrorObject("key-error","InternalServerError").toString());
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+  }
+
+  @Test
+  public void malformedXMLRequestTest() throws Exception {
+    String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
+    // tests one correct delete and one error
+    String xmlBody = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+    "<Delete xmlns=\"http://s3.amazonaws.com/doc/2006-03-01\">" +
+    "<Object>" +
+    "<Key>key-success</Key>" +
+    "</Object>" +
+    "<Object>" +
+    "<Key>key-error</Key>" +
+    "</Object>" +
+    "<Object>" +
+    "<Key>key-error2</Key>" +
+    "</Object>" +
+    "<Object>" +
+    "<Key>key-success-2</Key>" +
+    "<Object>" +  // <-- Unclosed Object tag
+    "</Delete>";
+
+    byte[] xmlBytes = xmlBody.getBytes("UTF-8");
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, new JSONObject(), new LinkedList<>(Arrays.asList(ByteBuffer.wrap(xmlBytes), null)));
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
+    ReadableStreamChannel readableStreamChannel = futureResult.get();
+    ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
+    // verify correct XML via result value
+    String result = new String(byteBuffer.array(), StandardCharsets.UTF_8);
+    XmlMapper xmlMapper = new XmlMapper();
+    S3MessagePayload.Error response =
+        xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.Error.class);
+    assertEquals(response.getMessage(), ERR_MALFORMED_REQUEST_BODY_MESSAGE);
+    assertEquals(response.getCode(), ERR_MALFORMED_REQUEST_BODY_CODE);
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+  }
+
+  @Test
+  public void emptyRequestTest() throws Exception {
+    String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
+    // tests one correct delete and one error
+    String xmlBody = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<Delete xmlns=\"http://s3.amazonaws.com/doc/2006-03-01\">\n" + "</Delete>";
+
+    byte[] xmlBytes = xmlBody.getBytes("UTF-8");
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, new JSONObject(), new LinkedList<>(Arrays.asList(ByteBuffer.wrap(xmlBytes), null)));
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
+    ReadableStreamChannel readableStreamChannel = futureResult.get();
+    ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
+    // verify correct XML via result value
+    String result = new String(byteBuffer.array(), StandardCharsets.UTF_8);
+    XmlMapper xmlMapper = new XmlMapper();
+    S3MessagePayload.Error response =
+        xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.Error.class);
+    assertEquals(response.getMessage(), ERR_MALFORMED_REQUEST_BODY_MESSAGE);
+    assertEquals(response.getCode(), ERR_MALFORMED_REQUEST_BODY_CODE);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 
