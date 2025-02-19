@@ -93,6 +93,7 @@ public class RecoveryManager extends ReplicationEngine {
   private AtomicReference<List<CloudDataNode>> vcrNodes;
   private final Object notificationLock = new Object();
   private final boolean trackPerDatacenterLagInMetric;
+  private final boolean trackPerReplicaReplicationBytes;
   private static final Random random = new Random();
   private final RecoveryMetrics recoveryMetrics;
   public static final String RECOVER_TOKEN_FILE_PREFIX = "recovery_token";
@@ -132,6 +133,7 @@ public class RecoveryManager extends ReplicationEngine {
     this.vcrNodes = new AtomicReference<>(new ArrayList<>());
     this.persistor = null; // No need of a persistor
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
+    trackPerReplicaReplicationBytes = replicationConfig.replicationTrackPerReplicaReplicationBytes;
     this.recoveryMetrics = new RecoveryMetrics(metricRegistry);
   }
 
@@ -276,7 +278,8 @@ public class RecoveryManager extends ReplicationEngine {
         new RemoteReplicaInfo(peerCloudReplica, localReplica, store, findTokenFactory.getNewFindToken(),
             storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
             SystemTime.getInstance(), peerCloudReplica.getDataNodeId().getPortToConnectTo());
-    replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);
+    replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric,
+        trackPerReplicaReplicationBytes);
 
     // Note that for each replica on a Ambry server node, there is only one cloud replica that it will be replicating from.
     List<RemoteReplicaInfo> remoteReplicaInfos = Collections.singletonList(remoteReplicaInfo);

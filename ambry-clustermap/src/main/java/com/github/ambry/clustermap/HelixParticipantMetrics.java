@@ -25,6 +25,11 @@ import java.util.Map;
  * Metrics for {@link HelixParticipant} to monitor partition state transitions.
  */
 class HelixParticipantMetrics {
+  private static final String transitionUpdateTemplate = "Partition-%s-from-%s-to-%s";
+
+  private final boolean enablePartitionStateTransitionMetrics;
+
+  private final MetricRegistry registry;
   private Map<ReplicaState, Integer> replicaCountByState = new HashMap<>();
   private final Map<String, ReplicaState> localPartitionAndState;
   // no need to record exact number of "dropped" partition, a counter to track partition-dropped events would suffice
@@ -33,28 +38,32 @@ class HelixParticipantMetrics {
 
   public final Counter updateDiskCapacityCounter;
 
+  final Map<String, Counter> partitionTransitionToCount;
+
   HelixParticipantMetrics(MetricRegistry metricRegistry, String zkConnectStr,
-      Map<String, ReplicaState> localPartitionAndState) {
+      Map<String, ReplicaState> localPartitionAndState, boolean enablePartitionStateTransitionMetrics) {
+    registry = metricRegistry;
     String zkSuffix = zkConnectStr == null ? "" : "-" + zkConnectStr;
     this.localPartitionAndState = localPartitionAndState;
+    this.enablePartitionStateTransitionMetrics = enablePartitionStateTransitionMetrics;
     EnumSet.complementOf(EnumSet.of(ReplicaState.DROPPED)).forEach(state -> replicaCountByState.put(state, 0));
     Gauge<Integer> bootstrapPartitionCount = () -> getReplicaCountInState(ReplicaState.BOOTSTRAP);
-    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount" + zkSuffix),
+    registry.gauge(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount" + zkSuffix),
         () -> bootstrapPartitionCount);
     Gauge<Integer> standbyPartitionCount = () -> getReplicaCountInState(ReplicaState.STANDBY);
-    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "standbyPartitionCount" + zkSuffix),
+    registry.gauge(MetricRegistry.name(HelixParticipant.class, "standbyPartitionCount" + zkSuffix),
         () -> standbyPartitionCount);
     Gauge<Integer> leaderPartitionCount = () -> getReplicaCountInState(ReplicaState.LEADER);
-    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "leaderPartitionCount" + zkSuffix),
+    registry.gauge(MetricRegistry.name(HelixParticipant.class, "leaderPartitionCount" + zkSuffix),
         () -> leaderPartitionCount);
     Gauge<Integer> inactivePartitionCount = () -> getReplicaCountInState(ReplicaState.INACTIVE);
-    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "inactivePartitionCount" + zkSuffix),
+    registry.gauge(MetricRegistry.name(HelixParticipant.class, "inactivePartitionCount" + zkSuffix),
         () -> inactivePartitionCount);
     Gauge<Integer> offlinePartitionCount = () -> getReplicaCountInState(ReplicaState.OFFLINE);
-    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount" + zkSuffix),
+    registry.gauge(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount" + zkSuffix),
         () -> offlinePartitionCount);
     Gauge<Integer> errorStatePartitionCount = () -> getReplicaCountInState(ReplicaState.ERROR);
-    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount" + zkSuffix),
+    registry.gauge(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount" + zkSuffix),
         () -> errorStatePartitionCount);
     partitionDroppedCount =
         metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "partitionDroppedCount" + zkSuffix));
@@ -62,6 +71,7 @@ class HelixParticipantMetrics {
         MetricRegistry.name(HelixParticipant.class, "setReplicaDisabledStateErrorCount" + zkSuffix));
     updateDiskCapacityCounter =
         metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "updateDiskCapacityCount"));
+    partitionTransitionToCount = new HashMap<>();
   }
 
   /**
@@ -83,5 +93,48 @@ class HelixParticipantMetrics {
       replicaCountByState = replicaStateAndCount;
     }
     return replicaCountByState.get(state);
+  }
+
+  /**
+   * Creates and increments the metric object for given partition's state transition
+   * @param partitionName partition name
+   * @param from begin state
+   * @param to end state
+   */
+  void incStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
+    String metricName = String.format(transitionUpdateTemplate, partitionName, from.toString(), to.toString());
+    if (enablePartitionStateTransitionMetrics && !partitionTransitionToCount.containsKey(metricName)) {
+      Counter transitionMetric = registry.counter(MetricRegistry.name(HelixParticipant.class, metricName));
+      partitionTransitionToCount.put(metricName, transitionMetric);
+      transitionMetric.inc();
+    }
+  }
+
+  /**
+   * Decrements the metric for given partition's state transition
+   * @param partitionName partition name
+   * @param from begin name
+   * @param to end state
+   */
+  void decStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
+    String metricName = String.format(transitionUpdateTemplate, partitionName, from.toString(), to.toString());
+    if (partitionTransitionToCount.containsKey(metricName)) {
+      partitionTransitionToCount.get(metricName).dec();
+    }
+  }
+
+  /**
+   * Removes all the metric objects created for tracking state transitions
+   * for this partition.
+   * @param partitionName partition name
+   */
+  void clearStateTransitionMetric(String partitionName) {
+    partitionTransitionToCount.entrySet().removeIf((partitionToMetricCounter -> {
+      if (partitionToMetricCounter.getKey().startsWith("Partition-" + partitionName)) {
+        registry.remove(MetricRegistry.name(HelixParticipant.class, partitionToMetricCounter.getKey()));
+        return true;
+      }
+      return false;
+    }));
   }
 }

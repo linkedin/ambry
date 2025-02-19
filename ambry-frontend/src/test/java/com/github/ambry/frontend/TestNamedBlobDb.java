@@ -59,7 +59,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
-      GetOption option) {
+      GetOption option, boolean localGet) {
     CompletableFuture<NamedBlobRecord> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
