@@ -161,7 +161,8 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
         deleteFutures.add(future);
       }
 
-      CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0])).whenComplete((result, exception) -> {
+      CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0]))
+          .whenComplete((result, exception) -> {
         try {
           // construct and serialize response
           S3MessagePayload.DeleteResult response = new S3MessagePayload.DeleteResult();
