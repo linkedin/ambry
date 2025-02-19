@@ -378,9 +378,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
-      GetOption option) {
-    TransactionStateTracker transactionStateTracker =
-        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+      GetOption option, boolean localGet) {
+    TransactionStateTracker transactionStateTracker = null;
+    if (!localGet) {
+      transactionStateTracker =
+          new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+    }
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
       NamedBlobRecord record =
