@@ -53,5 +53,7 @@ public enum StateModelListenerType {
    * The partition state change listener owned by Bootstrap Controller.
    * It takes actions when Offline -> Bootstrap state transition is called for a partition.
    */
-  BootstrapControllerListener
+  BootstrapControllerListener,
+
+  PartitionPrioritizationListener
 }
