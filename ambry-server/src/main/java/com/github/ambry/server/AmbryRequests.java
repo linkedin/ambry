@@ -62,11 +62,9 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
-import com.github.ambry.protocol.FileInfo;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.LogInfo;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.PurgeRequest;
@@ -93,6 +91,7 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageErrorInfo;
 import com.github.ambry.store.MessageInfo;
@@ -1704,14 +1703,13 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetMetaDataResponse(
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), error);
       } else {
-        List<StoreLogInfo> logSegments = storeManager.getStore(
+        List<LogInfo> logSegments = storeManager.getStore(
             fileCopyGetMetaDataRequest.getPartitionId()).getLogSegmentMetadataFiles(false);
-        List<LogInfo> logInfos =  convertStoreLogInfoToLogInfo(logSegments);
 
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
-            logInfos.size(), logInfos, ServerErrorCode.No_Error);
+            logSegments.size(), logSegments, ServerErrorCode.No_Error);
       }
     } catch (Exception e) {
       if (null == fileCopyGetMetaDataRequest) {
@@ -1740,24 +1738,6 @@ public class AmbryRequests implements RequestAPI {
         new ServerNetworkResponseMetrics(metrics.fileCopyGetMetadataResponseQueueTimeInMs,
             metrics.fileCopyGetMetadataSendTimeInMs, metrics.fileCopyGetMetadataTotalTimeInMs,
             null, null, totalTimeSpent));
-  }
-
-  private List<LogInfo> convertStoreLogInfoToLogInfo(List<StoreLogInfo> logSegments) {
-    List<LogInfo> logInfos = new ArrayList<>();
-    for (StoreLogInfo logSegment : logSegments) {
-      List<FileInfo> indexSegments = new ArrayList<>();
-      logSegment.getIndexSegments().forEach(indexSegment ->
-        indexSegments.add(new FileInfo(indexSegment.getFileName(), indexSegment.getFileSize())));
-
-      List<FileInfo> bloomFilters = new ArrayList<>();
-      logSegment.getBloomFilters().forEach(bloomFilter ->
-        bloomFilters.add(new FileInfo(bloomFilter.getFileName(), bloomFilter.getFileSize())));
-
-      logInfos.add(new LogInfo(
-        logSegment.getLogSegment().getFileName(), logSegment.getLogSegment().getFileSize(),
-        indexSegments, bloomFilters));
-    }
-    return logInfos;
   }
 
   /**

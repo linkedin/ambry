@@ -14,10 +14,11 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.LogInfo;
+import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -111,7 +112,7 @@ public class FileCopyGetMetaDataResponse extends Response {
     int numberOfLogfiles = stream.readInt();
     List<LogInfo> logInfos = new ArrayList<>();
     for (int i = 0; i < numberOfLogfiles; i++) {
-      logInfos.add(LogInfo.readFrom(stream));
+      logInfos.add(StoreLogInfo.readFrom(stream));
     }
     return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode);
   }

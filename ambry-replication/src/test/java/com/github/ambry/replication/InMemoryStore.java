@@ -23,6 +23,7 @@ import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -505,7 +506,7 @@ public class InMemoryStore implements Store {
   }
 
   @Override
-  public List<StoreLogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
     throw new UnsupportedOperationException("Method not supported");
   }
 }

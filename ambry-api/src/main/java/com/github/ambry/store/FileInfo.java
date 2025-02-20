@@ -13,52 +13,48 @@
  */
 package com.github.ambry.store;
 
+import io.netty.buffer.ByteBuf;
+import java.io.DataInputStream;
+import java.io.IOException;
+
+
 /**
- * Represents a file saved in store.
- * Contains basic info like fileName and fileSize
+ * Represents a file info for a file saved in store.
  */
-public class FileInfo {
-  /**
-   * Name of the file
-   */
-  private final String fileName;
-
-  /**
-   * Size of the file in bytes
-   */
-  private final long fileSize;
-
-  /**
-   * Constructor to create a FileInfo
-   * @param fileName name of the file
-   * @param fileSize file size in bytes
-   */
-  public FileInfo(String fileName, Long fileSize) {
-    this.fileName = fileName;
-    this.fileSize = fileSize;
-  }
+public interface FileInfo {
 
   /**
    * Get the name of the file
+   * @return String
    */
-  public String getFileName() {
-    return fileName;
+  String getFileName();
+
+  /**
+   * Get the size of the file in bytes
+   * @return Long
+   */
+  Long getFileSize();
+
+  /**
+   * Read FileInfo from the stream
+   * @param stream the input stream of type DataInputStream
+   * @return FileInfo
+   * @throws IOException if an I/O error occurs
+   */
+  static FileInfo readFrom(DataInputStream stream) throws IOException {
+    return null;
   }
 
   /**
-   * Get the size of the file
+   * Write the LogInfo to the buffer
+   * @param bufferToSend the buffer to write to of type ByteBuf
    */
-  public Long getFileSize() {
-    return fileSize;
-  }
+  void writeTo(ByteBuf bufferToSend);
 
-  @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("FileInfo{")
-      .append("fileName='").append(fileName).append('\'')
-      .append(", fileSize=").append(fileSize)
-      .append('}');
-    return sb.toString();
-  }
+  /**
+   * Get the size of the LogInfo in bytes
+   * This is to be used for SerDe purposes
+   * @return Long
+   */
+  long sizeInBytes();
 }

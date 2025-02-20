@@ -1712,7 +1712,7 @@ public class BlobStoreTest {
     final BlobStore blobStore = createAndStartBlobStore();
 
     // Passing includeActiveSegment = false should return 0 log segments
-    List<StoreLogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(false);
+    List<LogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(false);
     assertEquals("Expecting 0 log segments", 0, storeLogInfos.size());
 
     // Act
@@ -1772,7 +1772,7 @@ public class BlobStoreTest {
     }
 
     // Act
-    final List<StoreLogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
+    final List<LogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
 
     // Assert
     assertEquals("Expecting " + totalLogSegments + " log segments", totalLogSegments, storeLogInfos.size());

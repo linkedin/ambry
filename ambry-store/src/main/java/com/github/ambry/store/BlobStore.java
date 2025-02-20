@@ -1329,25 +1329,25 @@ public class BlobStore implements Store {
    * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
    */
   @Override
-  public List<StoreLogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
-    List<StoreLogInfo> result = new ArrayList<>();
+  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+    List<LogInfo> result = new ArrayList<>();
     final Timer.Context context = metrics.fileCopyGetMetadataResponse.time();
 
     List<FileInfo> logSegments = getLogSegments(includeActiveLogSegment);
     if (null != logSegments) {
-      for (FileInfo fileInfo : logSegments) {
+      for (FileInfo storeFileInfo : logSegments) {
         LogSegmentName logSegmentName;
 
-        if (fileInfo.getFileName().isEmpty()) {
+        if (storeFileInfo.getFileName().isEmpty()) {
           // This happens when the code is running locally and a single LS exists with the name "log_current"
           logSegmentName = LogSegmentName.fromFilename(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
         } else {
-          logSegmentName = LogSegmentName.fromFilename(fileInfo.getFileName() + LogSegmentName.SUFFIX);
+          logSegmentName = LogSegmentName.fromFilename(storeFileInfo.getFileName() + LogSegmentName.SUFFIX);
         }
         List<FileInfo> indexFiles = getIndexSegmentFilesForLogSegment(dataDir, logSegmentName);
         List<FileInfo> bloomFiles = getBloomFilterFilesForLogSegment(dataDir, logSegmentName);
 
-        result.add(new StoreLogInfo(fileInfo, indexFiles, bloomFiles));
+        result.add(new StoreLogInfo(storeFileInfo, indexFiles, bloomFiles));
       }
     }
     context.stop();
@@ -1363,9 +1363,9 @@ public class BlobStore implements Store {
         .filter(segmentName -> includeActiveLogSegment || !segmentName.equals(log.getActiveSegment().getName()))
         .map(segmentName -> log.getSegment(segmentName))
         .map(segment -> {
-          FileInfo fileInfo = new FileInfo(segment.getName().toString(), segment.getView().getFirst().length());
+          FileInfo storeFileInfo = new StoreFileInfo(segment.getName().toString(), segment.getView().getFirst().length());
           segment.closeView();
-          return fileInfo;
+          return storeFileInfo;
         })
         .collect(Collectors.toList());
   }
@@ -1375,7 +1375,7 @@ public class BlobStore implements Store {
    */
   private List<FileInfo> getIndexSegmentFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
     return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
-        .map(file -> new FileInfo(file.getName(), file.length()))
+        .map(file -> new StoreFileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
   }
 
@@ -1384,7 +1384,7 @@ public class BlobStore implements Store {
    */
   private List<FileInfo> getBloomFilterFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
     return Arrays.stream(PersistentIndex.getBloomFilterFilesForLogSegment(dataDir, logSegmentName))
-        .map(file -> new FileInfo(file.getName(), file.length()))
+        .map(file -> new StoreFileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
   }
 

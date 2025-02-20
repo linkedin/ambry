@@ -33,7 +33,11 @@ import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.FileInfo;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreFileInfo;
+import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
@@ -65,7 +69,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mock;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -708,40 +711,46 @@ public class RequestResponseTest {
 
   @Test
   public void doFileInfoObjectParsingTest() throws IOException {
-    FileInfo fileInfo = new FileInfo("/tmp", 1000);
+    FileInfo fileInfo = new StoreFileInfo("/tmp", 1000L);
     ByteBuf byteBuf = Unpooled.buffer();
     fileInfo.writeTo(byteBuf);
     DataInputStream stream = new NettyByteBufDataInputStream(byteBuf);
-    FileInfo transformedFileInfo = FileInfo.readFrom(stream);
+    FileInfo transformedFileInfo = StoreFileInfo.readFrom(stream);
+
+    assert transformedFileInfo != null;
     Assert.assertEquals(fileInfo.getFileName(), transformedFileInfo.getFileName());
-    Assert.assertEquals(fileInfo.getFileSizeInBytes(), transformedFileInfo.getFileSizeInBytes());
+    Assert.assertEquals(fileInfo.getFileSize(), transformedFileInfo.getFileSize());
     byteBuf.release();
   }
 
   @Test
   public void doLogInfoParsingTest() throws IOException {
-    LogInfo logInfo = new LogInfo("0_index", 1000,
-        new ArrayList<>(Arrays.asList(new FileInfo("0_1_index", 1010))),
-        new ArrayList<>(Arrays.asList(new FileInfo("1_1_bloom", 1020))));
+    LogInfo logInfo = new StoreLogInfo(new StoreFileInfo("0_index", 1000L),
+        new ArrayList<>(Collections.singletonList(new StoreFileInfo("0_1_index", 1010L))),
+        new ArrayList<>(Collections.singletonList(new StoreFileInfo("1_1_bloom", 1020L))));
 
     ByteBuf byteBuf = Unpooled.buffer();
     logInfo.writeTo(byteBuf);
     DataInputStream stream = new NettyByteBufDataInputStream(byteBuf);
-    LogInfo transformedLogInfo = LogInfo.readFrom(stream);
-    Assert.assertEquals(logInfo.getFileName(), transformedLogInfo.getFileName());
-    Assert.assertEquals(logInfo.getFileSizeInBytes(), transformedLogInfo.getFileSizeInBytes());
+    LogInfo transformedLogInfo = StoreLogInfo.readFrom(stream);
+
+    assert transformedLogInfo != null;
+    assert transformedLogInfo.getLogSegment() != null;
+    Assert.assertEquals(logInfo.getLogSegment().getFileName(), transformedLogInfo.getLogSegment().getFileName());
+    Assert.assertEquals(logInfo.getLogSegment().getFileSize(), transformedLogInfo.getLogSegment().getFileSize());
     byteBuf.release();
   }
 
   @Test
   public void doFileCopyMetaDataResponseTest() throws IOException{
     short requestVersionToUse = 1;
-    LogInfo logInfo1 = new LogInfo("0_log", 1000,
-        new ArrayList<>(Arrays.asList(new FileInfo("0_1_index", 1010))),
-        new ArrayList<>(Arrays.asList(new FileInfo("0_1_bloom", 1020))));
-    LogInfo logInfo2 = new LogInfo("1_log", 1050,
-        new ArrayList<>(Arrays.asList(new FileInfo("1_1_index", 1030))),
-        new ArrayList<>(Arrays.asList(new FileInfo("1_1_bloom", 1040))));
+    LogInfo logInfo1 = new StoreLogInfo(new StoreFileInfo("0_log", 1000L),
+        new ArrayList<>(Collections.singletonList(new StoreFileInfo("0_1_index", 1010L))),
+        new ArrayList<>(Collections.singletonList(new StoreFileInfo("0_1_bloom", 1020L))));
+
+    LogInfo logInfo2 = new StoreLogInfo(new StoreFileInfo("1_log", 1050L),
+        new ArrayList<>(Collections.singletonList(new StoreFileInfo("1_1_index", 1030L))),
+        new ArrayList<>(Collections.singletonList(new StoreFileInfo("1_1_bloom", 1040L))));
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
 
     FileCopyGetMetaDataResponse response =
@@ -757,22 +766,28 @@ public class RequestResponseTest {
     Assert.assertEquals(ServerErrorCode.No_Error, response1.getError());
     Assert.assertEquals(2, response1.getNumberOfLogfiles());
     Assert.assertEquals(2, response1.getLogInfos().size());
-    Assert.assertEquals("0_log", response1.getLogInfos().get(0).getFileName());
-    Assert.assertEquals(1000, response1.getLogInfos().get(0).getFileSizeInBytes());
-    Assert.assertEquals(1, response1.getLogInfos().get(0).getIndexFiles().size());
+
+    Assert.assertEquals("0_log", response1.getLogInfos().get(0).getLogSegment().getFileName());
+    Assert.assertEquals(1000, (long)response1.getLogInfos().get(0).getLogSegment().getFileSize());
+    Assert.assertEquals(1, response1.getLogInfos().get(0).getIndexSegments().size());
     Assert.assertEquals(1, response1.getLogInfos().get(0).getBloomFilters().size());
-    Assert.assertEquals("1_log", response1.getLogInfos().get(1).getFileName());
-    Assert.assertEquals(1050, response1.getLogInfos().get(1).getFileSizeInBytes());
-    Assert.assertEquals(1, response1.getLogInfos().get(1).getIndexFiles().size());
+
+    Assert.assertEquals("1_log", response1.getLogInfos().get(1).getLogSegment().getFileName());
+    Assert.assertEquals(1050, (long)response1.getLogInfos().get(1).getLogSegment().getFileSize());
+    Assert.assertEquals(1, response1.getLogInfos().get(1).getIndexSegments().size());
     Assert.assertEquals(1, response1.getLogInfos().get(1).getBloomFilters().size());
-    Assert.assertEquals("0_1_index", response1.getLogInfos().get(0).getIndexFiles().get(0).getFileName());
-    Assert.assertEquals(1010, response1.getLogInfos().get(0).getIndexFiles().get(0).getFileSizeInBytes());
+
+    Assert.assertEquals("0_1_index", response1.getLogInfos().get(0).getIndexSegments().get(0).getFileName());
+    Assert.assertEquals(1010, (long)response1.getLogInfos().get(0).getIndexSegments().get(0).getFileSize());
+
     Assert.assertEquals("0_1_bloom", response1.getLogInfos().get(0).getBloomFilters().get(0).getFileName());
-    Assert.assertEquals(1020, response1.getLogInfos().get(0).getBloomFilters().get(0).getFileSizeInBytes());
-    Assert.assertEquals("1_1_index", response1.getLogInfos().get(1).getIndexFiles().get(0).getFileName());
-    Assert.assertEquals(1030, response1.getLogInfos().get(1).getIndexFiles().get(0).getFileSizeInBytes());
+    Assert.assertEquals(1020, (long)response1.getLogInfos().get(0).getBloomFilters().get(0).getFileSize());
+
+    Assert.assertEquals("1_1_index", response1.getLogInfos().get(1).getIndexSegments().get(0).getFileName());
+    Assert.assertEquals(1030, (long)response1.getLogInfos().get(1).getIndexSegments().get(0).getFileSize());
+
     Assert.assertEquals("1_1_bloom", response1.getLogInfos().get(1).getBloomFilters().get(0).getFileName());
-    Assert.assertEquals(1040, response1.getLogInfos().get(1).getBloomFilters().get(0).getFileSizeInBytes());
+    Assert.assertEquals(1040, (long)response1.getLogInfos().get(1).getBloomFilters().get(0).getFileSize());
     response.release();
 
     response =

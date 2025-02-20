@@ -1674,7 +1674,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     Assert.assertEquals("1 log segment is expected",
         1, response.getNumberOfLogfiles());
     Assert.assertEquals("0 index file is expected",
-        0, response.getLogInfos().get(0).getIndexFiles().size());
+        0, response.getLogInfos().get(0).getIndexSegments().size());
     Assert.assertEquals("0 bloom file is expected",
         0, response.getLogInfos().get(0).getBloomFilters().size());
   }

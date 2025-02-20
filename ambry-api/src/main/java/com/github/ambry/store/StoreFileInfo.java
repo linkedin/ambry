@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.protocol;
+package com.github.ambry.store;
 
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -19,23 +19,22 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Objects;
-import javax.annotation.Nonnull;
 
 
 /**
- * Contains the fileName and fileSizeInBytes for a local partition. This is used
- * by LogInfo as part of filecopy metadata request.
+ * Represents a file saved in store.
+ * Contains basic info like fileName and fileSize
  */
-public class FileInfo {
+public class StoreFileInfo implements FileInfo {
   /**
-   * The name of the file.
+   * Name of the file
    */
   private final String fileName;
 
   /**
-   * The size of the file in bytes.
+   * Size of the file in bytes
    */
-  private final long fileSizeInBytes;
+  private final long fileSize;
 
   /**
    * The size of the file name field in bytes.
@@ -48,13 +47,39 @@ public class FileInfo {
   private static final int FILE_SIZE_FIELD_SIZE_IN_BYTES = 8;
 
   /**
-   * Constructs a FileInfo object with the given file name and size.
-   * @param fileName The name of the file.
-   * @param fileSize The size of the file in bytes.
+   * Constructor to create a FileInfo
+   * @param fileName name of the file
+   * @param fileSize file size in bytes
    */
-  public FileInfo(String fileName, long fileSize) {
+  public StoreFileInfo(String fileName, Long fileSize) {
     this.fileName = fileName;
-    this.fileSizeInBytes = fileSize;
+    this.fileSize = fileSize;
+  }
+
+  /**
+   * Get the name of the file
+   */
+  @Override
+  public String getFileName() {
+    return fileName;
+  }
+
+  /**
+   * Get the size of the file
+   */
+  @Override
+  public Long getFileSize() {
+    return fileSize;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("FileInfo{")
+      .append("fileName='").append(fileName).append('\'')
+      .append(", fileSize=").append(fileSize)
+      .append('}');
+    return sb.toString();
   }
 
   /**
@@ -69,45 +94,22 @@ public class FileInfo {
    * @param stream The input stream to read from.
    * @return The FileInfo object read from the input stream.
    */
-  public static FileInfo readFrom(@Nonnull DataInputStream stream) throws IOException {
+  public static FileInfo readFrom(DataInputStream stream) throws IOException {
     Objects.requireNonNull(stream, "stream should not be null");
 
     String fileName = Utils.readIntString(stream);
     long fileSize = stream.readLong();
-    return new FileInfo(fileName, fileSize);
+    return new StoreFileInfo(fileName, fileSize);
   }
 
   /**
    * Writes the FileInfo object to the given output stream.
    * @param buf The output stream to write to.
    */
-  public void writeTo(@Nonnull ByteBuf buf) {
+  public void writeTo(ByteBuf buf) {
     Objects.requireNonNull(buf, "buf should not be null");
 
     Utils.serializeString(buf, fileName, Charset.defaultCharset());
-    buf.writeLong(fileSizeInBytes);
-  }
-
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("FileInfo[")
-      .append("FileName=").append(fileName)
-      .append(", FileSizeInBytes=").append(fileSizeInBytes)
-      .append("]");
-    return sb.toString();
-  }
-
-  /**
-   * Returns the name of the file.
-   */
-  public String getFileName() {
-    return fileName;
-  }
-
-  /**
-   * Returns the size of the file in bytes.
-   */
-  public long getFileSizeInBytes() {
-    return fileSizeInBytes;
+    buf.writeLong(fileSize);
   }
 }
