@@ -31,7 +31,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
-import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
@@ -1713,27 +1712,27 @@ public class BlobStoreTest {
     final BlobStore blobStore = createAndStartBlobStore();
 
     // Passing includeActiveSegment = false should return 0 log segments
-    List<LogInfo> logInfos = blobStore.getLogSegmentMetadataFiles(false);
-    assertEquals("Expecting 0 log segments", 0, logInfos.size());
+    List<StoreLogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(false);
+    assertEquals("Expecting 0 log segments", 0, storeLogInfos.size());
 
     // Act
     // Passing includeActiveSegment = true should return 1 log segment
     // Local Store creates one single log segment with name ""
-    logInfos = blobStore.getLogSegmentMetadataFiles(true);
-    assertEquals("Expecting 0 log segments", 1, logInfos.size());
+    storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
+    assertEquals("Expecting 0 log segments", 1, storeLogInfos.size());
 
     // Assert
     if (this.isLogSegmented) {
       // When Store Log is segmented, store creates one single log segment with name "0_0"
       assertEquals("Expecting the name of log segment = '0_0'",
-          "0_0", logInfos.get(0).getLogSegment().getFileName());
+          "0_0", storeLogInfos.get(0).getLogSegment().getFileName());
     } else {
       // When Store Log is not segmented, store creates one single log segment with name ""
       assertTrue("Expecting the name of log segment = ''",
-          logInfos.get(0).getLogSegment().getFileName().isEmpty());
+          storeLogInfos.get(0).getLogSegment().getFileName().isEmpty());
     }
-    assertEquals("Expecting 0 index files", 0, logInfos.get(0).getIndexSegments().size());
-    assertEquals("Expecting 0 bloom files", 0, logInfos.get(0).getBloomFilters().size());
+    assertEquals("Expecting 0 index files", 0, storeLogInfos.get(0).getIndexSegments().size());
+    assertEquals("Expecting 0 bloom files", 0, storeLogInfos.get(0).getBloomFilters().size());
   }
 
   /**
@@ -1773,25 +1772,25 @@ public class BlobStoreTest {
     }
 
     // Act
-    final List<LogInfo> logInfos = blobStore.getLogSegmentMetadataFiles(true);
+    final List<StoreLogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
 
     // Assert
-    assertEquals("Expecting " + totalLogSegments + " log segments", totalLogSegments, logInfos.size());
+    assertEquals("Expecting " + totalLogSegments + " log segments", totalLogSegments, storeLogInfos.size());
 
     for (int i = 0; i < totalLogSegments - 1; i++) {
       LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i + 1, 0);
       assertEquals("Expecting the name of log segment = " + segmentName,
-          segmentName.toString(), logInfos.get(i).getLogSegment().getFileName());
+          segmentName.toString(), storeLogInfos.get(i).getLogSegment().getFileName());
 
       assertEquals("Expecting 1 index file for log segment =" + segmentName,
-          1, logInfos.get(i).getIndexSegments().size());
+          1, storeLogInfos.get(i).getIndexSegments().size());
       assertEquals("Expecting name of index file for log segment =" + segmentName,
-          segmentName + "_index", logInfos.get(i).getIndexSegments().get(0).getFileName());
+          segmentName + "_index", storeLogInfos.get(i).getIndexSegments().get(0).getFileName());
 
       assertEquals("Expecting 1 bloom file for log segment =" + segmentName,
-          1, logInfos.get(i).getBloomFilters().size());
+          1, storeLogInfos.get(i).getBloomFilters().size());
       assertEquals("Expecting name of bloom file for log segment =" + segmentName,
-          segmentName + "_bloom", logInfos.get(i).getBloomFilters().get(0).getFileName());
+          segmentName + "_bloom", storeLogInfos.get(i).getBloomFilters().get(0).getFileName());
     }
   }
 

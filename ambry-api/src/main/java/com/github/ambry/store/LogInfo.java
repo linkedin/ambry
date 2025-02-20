@@ -13,76 +13,12 @@
  */
 package com.github.ambry.store;
 
-import java.util.Collections;
 import java.util.List;
 
+public interface LogInfo {
+  FileInfo getLogSegment();
 
-/**
- * Contains information about a log segment,
- * FileInfo info for the log segment,
- * FileInfo info for the linked index segments and
- * FileInfo info for the linked bloom filters.
- */
-public class LogInfo {
-  /**
-   * FileInfo for the log segment.
-   */
-  private final FileInfo logSegment;
+  List<FileInfo> getIndexSegments();
 
-  /**
-   * FileInfo for the linked index segments.
-   */
-  private final List<FileInfo> indexSegments;
-
-  /**
-   * FileInfo for the linked bloom filters.
-   */
-  private final List<FileInfo> bloomFilters;
-
-  /**
-   * Constructs a LogInfo with the given log segment, index segments and bloom filters.
-   * @param logSegment FileInfo for the log segment.
-   * @param indexSegments FileInfo for the linked index segments.
-   * @param bloomFilters FileInfo for the linked bloom filters.
-   */
-  public LogInfo(FileInfo logSegment, List<FileInfo> indexSegments, List<FileInfo> bloomFilters) {
-    this.logSegment = logSegment;
-    this.indexSegments = indexSegments;
-    this.bloomFilters = bloomFilters;
-  }
-
-  // TODO: Add isSealed prop
-  // private final boolean isSealed;
-
-  /**
-   * @return FileInfo for the log segment.
-   */
-  public FileInfo getLogSegment() {
-    return logSegment;
-  }
-
-  /**
-   * @return FileInfo for the linked index segments.
-   */
-  public List<FileInfo> getIndexSegments() {
-    return Collections.unmodifiableList(indexSegments);
-  }
-
-  /**
-   * @return FileInfo for the linked bloom filters.
-   */
-  public List<FileInfo> getBloomFilters() {
-    return Collections.unmodifiableList(bloomFilters);
-  }
-
-  @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("LogInfo{")
-        .append("logSegment=").append(logSegment)
-        .append(", indexSegments=").append(indexSegments)
-        .append(", bloomFilters=").append(bloomFilters)
-        .append('}');
-    return sb.toString();
-  }
+  List<FileInfo> getBloomFilters();
 }

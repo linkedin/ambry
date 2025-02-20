@@ -13,8 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.storage.blob.models.BlobErrorCode;
-import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -26,10 +24,9 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.protocol.BatchDeletePartitionResponseInfo;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.FindInfo;
-import com.github.ambry.store.LogInfo;
+import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
@@ -728,7 +725,7 @@ public class CloudBlobStore implements Store {
   }
 
   @Override
-  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+  public List<StoreLogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

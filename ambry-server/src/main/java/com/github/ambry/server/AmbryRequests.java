@@ -107,6 +107,7 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
+import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -1703,9 +1704,9 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetMetaDataResponse(
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), error);
       } else {
-        List<com.github.ambry.store.LogInfo> logSegments = storeManager.getStore(
+        List<StoreLogInfo> logSegments = storeManager.getStore(
             fileCopyGetMetaDataRequest.getPartitionId()).getLogSegmentMetadataFiles(false);
-        List<LogInfo> logInfos = convertStoreToProtocolLogInfo(logSegments);
+        List<LogInfo> logInfos =  convertStoreLogInfoToLogInfo(logSegments);
 
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
@@ -1741,9 +1742,9 @@ public class AmbryRequests implements RequestAPI {
             null, null, totalTimeSpent));
   }
 
-  private List<LogInfo> convertStoreToProtocolLogInfo(List<com.github.ambry.store.LogInfo> logSegments) {
+  private List<LogInfo> convertStoreLogInfoToLogInfo(List<StoreLogInfo> logSegments) {
     List<LogInfo> logInfos = new ArrayList<>();
-    for (com.github.ambry.store.LogInfo logSegment : logSegments) {
+    for (StoreLogInfo logSegment : logSegments) {
       List<FileInfo> indexSegments = new ArrayList<>();
       logSegment.getIndexSegments().forEach(indexSegment ->
         indexSegments.add(new FileInfo(indexSegment.getFileName(), indexSegment.getFileSize())));

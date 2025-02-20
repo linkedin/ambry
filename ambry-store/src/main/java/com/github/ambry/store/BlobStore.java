@@ -30,7 +30,6 @@ import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -38,7 +37,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
-import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -1331,8 +1329,8 @@ public class BlobStore implements Store {
    * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
    */
   @Override
-  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
-    List<LogInfo> result = new ArrayList<>();
+  public List<StoreLogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+    List<StoreLogInfo> result = new ArrayList<>();
     final Timer.Context context = metrics.fileCopyGetMetadataResponse.time();
 
     List<FileInfo> logSegments = getLogSegments(includeActiveLogSegment);
@@ -1349,7 +1347,7 @@ public class BlobStore implements Store {
         List<FileInfo> indexFiles = getIndexSegmentFilesForLogSegment(dataDir, logSegmentName);
         List<FileInfo> bloomFiles = getBloomFilterFilesForLogSegment(dataDir, logSegmentName);
 
-        result.add(new LogInfo(fileInfo, indexFiles, bloomFiles));
+        result.add(new StoreLogInfo(fileInfo, indexFiles, bloomFiles));
       }
     }
     context.stop();

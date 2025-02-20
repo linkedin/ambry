@@ -246,5 +246,5 @@ public interface Store {
    * @param includeActiveLogSegment
    * @return
    */
-  List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment);
+  List<StoreLogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment);
 }
