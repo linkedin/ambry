@@ -718,10 +718,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp deletionTime = resultSet.getTimestamp(4);
           long blobSize = resultSet.getLong(5);
           Timestamp modifiedTime = resultSet.getTimestamp(6);
-
           entries.add(
               new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version,
-                  blobSize, timestampToMs(modifiedTime)));
+                  blobSize, timestampToMs(modifiedTime), false));
         }
         return new Page<>(entries, nextContinuationToken);
       }
