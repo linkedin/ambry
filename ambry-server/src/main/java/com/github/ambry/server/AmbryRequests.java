@@ -1703,8 +1703,8 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetMetaDataResponse(
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), error);
       } else {
-        List<com.github.ambry.store.LogInfo> logSegments =
-            storeManager.getStore(fileCopyGetMetaDataRequest.getPartitionId()).getLogSegmentMetadataFiles(false);
+        List<com.github.ambry.store.LogInfo> logSegments = storeManager.getStore(
+            fileCopyGetMetaDataRequest.getPartitionId()).getLogSegmentMetadataFiles(false);
         List<LogInfo> logInfos = convertStoreToProtocolLogInfo(logSegments);
 
         response = new FileCopyGetMetaDataResponse(

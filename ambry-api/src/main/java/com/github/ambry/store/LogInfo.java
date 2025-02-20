@@ -45,10 +45,7 @@ public class LogInfo {
    * @param indexSegments FileInfo for the linked index segments.
    * @param bloomFilters FileInfo for the linked bloom filters.
    */
-  public LogInfo(
-      FileInfo logSegment,
-      List<FileInfo> indexSegments,
-      List<FileInfo> bloomFilters) {
+  public LogInfo(FileInfo logSegment, List<FileInfo> indexSegments, List<FileInfo> bloomFilters) {
     this.logSegment = logSegment;
     this.indexSegments = indexSegments;
     this.bloomFilters = bloomFilters;

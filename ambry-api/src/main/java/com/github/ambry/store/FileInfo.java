@@ -33,9 +33,7 @@ public class FileInfo {
    * @param fileName name of the file
    * @param fileSize file size in bytes
    */
-  public FileInfo(
-      String fileName,
-      Long fileSize) {
+  public FileInfo(String fileName, Long fileSize) {
     this.fileName = fileName;
     this.fileSize = fileSize;
   }

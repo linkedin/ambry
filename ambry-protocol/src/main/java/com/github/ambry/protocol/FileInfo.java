@@ -40,21 +40,19 @@ public class FileInfo {
   /**
    * The size of the file name field in bytes.
    */
-  private static final int FileName_Field_Size_In_Bytes = 4;
+  private static final int FILE_NAME_FIELD_SIZE_IN_BYTES = 4;
 
   /**
    * The size of the file size field in bytes.
    */
-  private static final int FileSize_Field_Size_In_Bytes = 8;
+  private static final int FILE_SIZE_FIELD_SIZE_IN_BYTES = 8;
 
   /**
    * Constructs a FileInfo object with the given file name and size.
    * @param fileName The name of the file.
    * @param fileSize The size of the file in bytes.
    */
-  public FileInfo(
-      String fileName,
-      long fileSize) {
+  public FileInfo(String fileName, long fileSize) {
     this.fileName = fileName;
     this.fileSizeInBytes = fileSize;
   }
@@ -63,7 +61,7 @@ public class FileInfo {
    * Returns the size of the FileInfo object in bytes.
    */
   public long sizeInBytes() {
-    return FileName_Field_Size_In_Bytes + fileName.length() + FileSize_Field_Size_In_Bytes;
+    return FILE_NAME_FIELD_SIZE_IN_BYTES + fileName.length() + FILE_SIZE_FIELD_SIZE_IN_BYTES;
   }
 
   /**
@@ -93,8 +91,8 @@ public class FileInfo {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("FileInfo[")
-        .append("FileName=").append(fileName)
-        .append(", FileSizeInBytes=").append(fileSizeInBytes)
+      .append("FileName=").append(fileName)
+      .append(", FileSizeInBytes=").append(fileSizeInBytes)
       .append("]");
     return sb.toString();
   }

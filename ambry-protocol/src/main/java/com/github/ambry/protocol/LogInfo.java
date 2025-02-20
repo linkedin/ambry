@@ -59,17 +59,17 @@ public class LogInfo {
   /**
    * The size of the file name field in bytes.
    */
-  private static final int FileName_Field_Size_In_Bytes = 4;
+  private static final int FILE_NAME_FIELD_SIZE_IN_BYTES = 4;
 
   /**
    * The size of the file size field in bytes.
    */
-  private static final int FileSize_Field_Size_In_Bytes = 8;
+  private static final int FILE_SIZE_FIELD_SIZE_IN_BYTES = 8;
 
   /**
    * The size of the list field in bytes.
    */
-  private static final int ListSize_In_Bytes = 4;
+  private static final int LIST_SIZE_IN_BYTES = 4;
 
   /**
    * Constructor to create a LogInfo object.
@@ -78,11 +78,8 @@ public class LogInfo {
    * @param indexFiles The list of index files for the log.
    * @param bloomFilters The list of bloom filter files for the log.
    */
-  public LogInfo(
-      String fileName,
-      long fileSizeInBytes,
-      @Nonnull List<FileInfo> indexFiles,
-      @Nonnull List<FileInfo> bloomFilters) {
+  public LogInfo(String fileName, long fileSizeInBytes,
+      @Nonnull List<FileInfo> indexFiles, @Nonnull List<FileInfo> bloomFilters) {
     Objects.requireNonNull(indexFiles, "indexFiles must not be null");
     Objects.requireNonNull(bloomFilters, "bloomFilters must not be null");
 
@@ -129,11 +126,11 @@ public class LogInfo {
    * @return The size of the LogInfo object in bytes.
    */
   public long sizeInBytes() {
-    long size = FileName_Field_Size_In_Bytes + fileName.length() + FileSize_Field_Size_In_Bytes + ListSize_In_Bytes;
+    long size = FILE_NAME_FIELD_SIZE_IN_BYTES + fileName.length() + FILE_SIZE_FIELD_SIZE_IN_BYTES + LIST_SIZE_IN_BYTES;
     for (FileInfo fileInfo : indexFiles) {
       size += fileInfo.sizeInBytes();
     }
-    size += ListSize_In_Bytes;
+    size += LIST_SIZE_IN_BYTES;
     for (FileInfo fileInfo : bloomFilters) {
       size += fileInfo.sizeInBytes();
     }
@@ -185,28 +182,36 @@ public class LogInfo {
   }
 
   public String toString(){
-    StringBuilder sb = new StringBuilder();
-    sb.append("LogInfo[");
-    sb.append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes);
-
-    if(!indexFiles.isEmpty()) {
-      sb.append(", IndexFiles=[");
-      for (FileInfo fileInfo : indexFiles) {
-        sb.append(fileInfo.toString());
-      }
-      sb.append("]");
-      if(!bloomFilters.isEmpty()) {
-        sb.append(", ");
-      }
+    {
+      return "LogInfo{" +
+          "fileName='" + fileName + '\'' +
+          ", fileSizeInBytes=" + fileSizeInBytes +
+          ", indexFiles=" + indexFiles +
+          ", bloomFilters=" + bloomFilters +
+          '}';
     }
-    if(!bloomFilters.isEmpty()){
-      sb.append(" BloomFilters=[");
-      for(FileInfo fileInfo: bloomFilters){
-        sb.append(fileInfo.toString());
-      }
-      sb.append("]");
-    }
-    sb.append("]");
-    return sb.toString();
+//    StringBuilder sb = new StringBuilder();
+//    sb.append("LogInfo[");
+//    sb.append("FileName=").append(fileName).append(", FileSizeInBytes=").append(fileSizeInBytes);
+//
+//    if(!indexFiles.isEmpty()) {
+//      sb.append(", IndexFiles=[");
+//      for (FileInfo fileInfo : indexFiles) {
+//        sb.append(fileInfo.toString());
+//      }
+//      sb.append("]");
+//      if(!bloomFilters.isEmpty()) {
+//        sb.append(", ");
+//      }
+//    }
+//    if(!bloomFilters.isEmpty()){
+//      sb.append(" BloomFilters=[");
+//      for(FileInfo fileInfo: bloomFilters){
+//        sb.append(fileInfo.toString());
+//      }
+//      sb.append("]");
+//    }
+//    sb.append("]");
+//    return sb.toString();
   }
 }
