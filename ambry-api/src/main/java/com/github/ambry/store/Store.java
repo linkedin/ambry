@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.replication.FindToken;
 import java.io.IOException;
@@ -247,4 +248,7 @@ public interface Store {
    * @return
    */
   List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment);
+
+
+  FileChunk getFileChunk(String fileName, long sizeInBytes, long startOffset) throws IOException;
 }

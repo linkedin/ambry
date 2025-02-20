@@ -60,6 +60,8 @@ import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetChunkRequest;
+import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetOption;
@@ -89,6 +91,7 @@ import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
+import com.github.ambry.store.FileChunk;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.LogInfo;
@@ -240,6 +243,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case FileCopyGetMetaDataRequest:
           handleFileCopyGetMetaDataRequest(networkRequest);
+          break;
+        case FileCopyGetChunkRequest:
+          handleFileCopyGetChunkRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -1738,6 +1744,56 @@ public class AmbryRequests implements RequestAPI {
         new ServerNetworkResponseMetrics(metrics.fileCopyGetMetadataResponseQueueTimeInMs,
             metrics.fileCopyGetMetadataSendTimeInMs, metrics.fileCopyGetMetadataTotalTimeInMs,
             null, null, totalTimeSpent));
+  }
+
+  void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException, IOException {
+    FileCopyGetChunkRequest fileCopyGetChunkRequest =
+        FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+
+    FileChunk chunkResponse;
+    FileCopyGetChunkResponse response;
+    try {
+      chunkResponse = storeManager.getStore(fileCopyGetChunkRequest.getPartitionId()).getFileChunk(
+          fileCopyGetChunkRequest.getFileName(), fileCopyGetChunkRequest.getChunkLengthInBytes(),
+          fileCopyGetChunkRequest.getStartOffset());
+    } catch (Exception e) {
+      response = new FileCopyGetChunkResponse(
+          FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
+          fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
+          ServerErrorCode.Unknown_Error, fileCopyGetChunkRequest.getPartitionId(),
+          fileCopyGetChunkRequest.getFileName(), null,
+          fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.sizeInBytes(), false);
+
+      requestResponseChannel.sendResponse(response, request, null);
+      return;
+    }
+    response = new FileCopyGetChunkResponse(
+        FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
+        fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
+        ServerErrorCode.No_Error, fileCopyGetChunkRequest.getPartitionId(),
+        fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
+        fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
+
+    // TODO: Add metrics for this operation
+    Histogram dummyHistogram = new Histogram(new Reservoir() {
+      @Override
+      public int size() {
+        return 0;
+      }
+
+      @Override
+      public void update(long value) {
+      }
+
+      @Override
+      public Snapshot getSnapshot() {
+        return null;
+      }
+    });
+    ServerNetworkResponseMetrics serverNetworkResponseMetrics = new ServerNetworkResponseMetrics(dummyHistogram,
+        dummyHistogram, dummyHistogram, null, null, 0);
+
+    requestResponseChannel.sendResponse(response, request, serverNetworkResponseMetrics);
   }
 
   /**
