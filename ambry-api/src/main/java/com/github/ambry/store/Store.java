@@ -241,4 +241,10 @@ public interface Store {
    */
   default Long getBlobContentCRC(MessageInfo msg) throws StoreException, IOException { return null; }
 
-  }
+  /**
+   * Returns the log segment metadata files
+   * @param includeActiveLogSegment
+   * @return
+   */
+  List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment);
+}

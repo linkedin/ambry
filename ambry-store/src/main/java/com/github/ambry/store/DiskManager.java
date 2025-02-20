@@ -813,11 +813,19 @@ public class DiskManager {
     return diskHealthStatus;
   }
 
+  /**
+   * Checks if the file exists on the disk
+   * @param fileName
+   * @return
+   */
   public boolean isFileExists(String fileName) {
     String filePath = this.disk.getMountPath() + File.separator + fileName;
     return new File(filePath).exists();
   }
 
+  /**
+   * Gets the files for the given pattern from the disk
+   */
   public List<File> getFilesForPattern(Pattern pattern) throws IOException {
     return Utils.getFilesForPattern(this.disk.getMountPath(), pattern);
   }
