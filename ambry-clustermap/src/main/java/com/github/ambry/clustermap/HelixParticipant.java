@@ -890,14 +890,21 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
     participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
-    PartitionStateChangeListener replicationManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
     try {
+      // 1. take actions in replication manager (wait for replica to finish bootstrapping)
+      PartitionStateChangeListener replicationManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
       if (replicationManagerListener != null) {
         replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
         // after bootstrap is initiated in ReplicationManager, transition is blocked here and wait until local replica has
         // caught up with enough peer replicas.
         replicaSyncUpManager.waitBootstrapCompleted(partitionName);
+      }
+      // 2. take actions in storage manager (enable compaction)
+      PartitionStateChangeListener storageManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+      if (storageManagerListener != null) {
+        storageManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
       }
     } catch (InterruptedException e) {
       logger.error("Bootstrap was interrupted on partition {}", partitionName);
