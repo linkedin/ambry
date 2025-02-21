@@ -44,6 +44,8 @@ import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.store.DeleteTombstoneStats;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.LogInfo;
+import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -706,6 +708,11 @@ public class StatsManagerTest {
 
     @Override
     public void shutdown() throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
       throw new IllegalStateException("Not implemented");
     }
 

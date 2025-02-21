@@ -154,6 +154,15 @@ class CompactionManager {
   }
 
   /**
+   * Return true if the compaction is disabled for the given blob store.
+   * @param store
+   * @return
+   */
+  boolean compactionDisabledForBlobStore(BlobStore store) {
+    return compactionExecutor == null || compactionExecutor.storesDisabledCompaction.contains(store);
+  }
+
+  /**
    * Remove store from compaction manager.
    * @param store the {@link BlobStore} to remove
    * @return {@code true} if store is removed successfully. {@code false} if not.
@@ -237,7 +246,7 @@ class CompactionManager {
       this.triggers = triggers;
       bundleReadBuffer = bundleReadBufferSize == 0 ? null : new byte[bundleReadBufferSize];
       logger.info("Buffer size is {} in compaction thread for {}", bundleReadBufferSize, mountPath);
-      metrics.registerStoreSetToSkipInCompactionForMountPath(mountPath, storesToSkip);
+      metrics.registerStoresInCompactionForMountPath(mountPath, storesToSkip, storesDisabledCompaction);
     }
 
     /**

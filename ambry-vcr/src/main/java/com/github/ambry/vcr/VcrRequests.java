@@ -67,6 +67,11 @@ public class VcrRequests extends AmbryRequests {
   }
 
   @Override
+  public void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws IOException, InterruptedException {
+    throw new UnsupportedOperationException("Request type not supported");
+  }
+
+  @Override
   public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }

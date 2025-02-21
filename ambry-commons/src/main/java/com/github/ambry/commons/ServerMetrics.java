@@ -101,6 +101,15 @@ public class ServerMetrics {
   public final Histogram deleteBlobProcessingTimeInMs;
   public final Histogram deleteBlobResponseQueueTimeInMs;
 
+  public final Histogram fileCopyGetMetadataRequestQueueTimeInMs;
+  public final Histogram fileCopyGetMetadataProcessingTimeInMs;
+  public final Histogram fileCopyGetMetadataResponseQueueTimeInMs;
+  public final Histogram fileCopyGetMetadataSendTimeInMs;
+  public final Histogram fileCopyGetMetadataTotalTimeInMs;
+  public final Meter fileCopyGetMetadataRequestRate;
+  public final Meter fileCopyGetMetadataDroppedRate;
+
+
   public final Histogram batchDeleteBlobRequestQueueTimeInMs;
   public final Histogram batchDeleteBlobProcessingTimeInMs;
   public final Histogram batchDeleteBlobResponseQueueTimeInMs;
@@ -419,6 +428,22 @@ public class ServerMetrics {
     deleteBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobProcessingTime"));
     deleteBlobResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobResponseQueueTime"));
+
+    fileCopyGetMetadataRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetMetadataRequestQueueTimeInMs"));
+    fileCopyGetMetadataProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetMetadataProcessingTimeInMs"));
+    fileCopyGetMetadataResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetMetadataResponseQueueTimeInMs"));
+    fileCopyGetMetadataSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetMetadataSendTimeInMs"));
+    fileCopyGetMetadataTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetMetadataTotalTimeInMs"));
+    fileCopyGetMetadataRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "FileCopyGetMetadataRequestRate"));
+    fileCopyGetMetadataDroppedRate =
+        registry.meter(MetricRegistry.name(requestClass, "FileCopyGetMetadataDroppedRate"));
+
     batchDeleteBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobRequestQueueTimeInMs"));
     batchDeleteBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobProcessingTimeInMs"));

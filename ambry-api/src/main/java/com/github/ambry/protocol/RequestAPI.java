@@ -116,4 +116,12 @@ public interface RequestAPI {
   default void handleUndeleteRequest(NetworkRequest request) throws InterruptedException, IOException {
     throw new UnsupportedOperationException("Undelete request not supported on this node");
   }
+
+  /**
+   * Get metadata about log segments in a partition.
+   * @param request the request that contains the partition and the id of the blob that needs to be undeleted.
+   * @throws IOException if there are I/O errors carrying our the required operation.
+   * @throws InterruptedException if request processing is interrupted.
+   */
+  void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException;
 }

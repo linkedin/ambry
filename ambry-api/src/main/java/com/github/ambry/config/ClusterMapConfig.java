@@ -333,6 +333,13 @@ public class ClusterMapConfig {
   public final int clustermapRetryDisablePartitionCompletionBackoffMs;
 
   /**
+   * If true, enables metrics that tracks state transition for each partition.
+   */
+  @Config("clustermap.enable.partition.state.transition.metrics")
+  @Default("false")
+  public final boolean clustermapEnablePartitionStateTransitionMetrics;
+
+  /**
    * True to enable aggregation task to generate a base account report for each month.
    */
   @Config(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT)
@@ -439,6 +446,8 @@ public class ClusterMapConfig {
     clustermapRetryDisablePartitionCompletionBackoffMs =
         verifiableProperties.getIntInRange("clustermap.retry.disable.partition.completion.backoff.ms", 10 * 1000, 1,
             Integer.MAX_VALUE);
+    clustermapEnablePartitionStateTransitionMetrics =
+        verifiableProperties.getBoolean("clustermap.enable.partition.state.transition.metrics", false);
     clustermapEnableAggregatedMonthlyAccountReport =
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =

@@ -11,109 +11,52 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-
 package com.github.ambry.store;
 
+import io.netty.buffer.ByteBuf;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.List;
 
+
 /**
- * Represents information about a log segment and its associated metadata files.
- * Contains details about:
- * - The sealed log segment
- * - Associated index segments
- * - Bloom filters for efficient lookups
+ * Represents the info for a log segment saved in store.
+ * Contains basic info like log segment, index segments and bloom filters.
  */
-public class LogInfo {
-  // The sealed log segment containing the actual data
-  FileInfo sealedSegment;
-
-  // List of index segments associated with this log
-  // Each index segment provides lookup capabilities for a portion of the log
-  List<FileInfo> indexSegments;
-
-  // List of bloom filters for efficient key lookups
-  // Each bloom filter corresponds to an index segment
-  List<FileInfo> bloomFilters;
+public interface LogInfo {
 
   /**
-   * Creates a new LogInfo instance with the specified components.
-   *
-   * @param sealedSegment The sealed log segment file information
-   * @param indexSegments List of index segment file information
-   * @param bloomFilters List of bloom filter file information
+   * Get the log segment
+   * @return Info about the log segment of type FileInfo
    */
-  public LogInfo(FileInfo sealedSegment, List<FileInfo> indexSegments, List<FileInfo> bloomFilters) {
-    this.sealedSegment = sealedSegment;
-    this.indexSegments = indexSegments;
-    this.bloomFilters = bloomFilters;
+  FileInfo getLogSegment();
+
+  /**
+   * Get the index segments
+   * @return Info about the index segments of type FileInfo
+   */
+  List<FileInfo> getIndexSegments();
+
+  /**
+   * Get the bloom filters
+   * @return Info about the bloom filters of type FileInfo
+   */
+  List<FileInfo> getBloomFilters();
+
+  static LogInfo readFrom(DataInputStream stream) throws IOException {
+    return null;
   }
 
   /**
-   * Gets the sealed log segment information.
-   *
-   * @return FileInfo for the sealed log segment
+   * Write the LogInfo to the buffer
+   * @param bufferToSend the buffer to write to of type ByteBuf
    */
-  public FileInfo getSealedSegment() {
-    return sealedSegment;
-  }
+  void writeTo(ByteBuf bufferToSend);
 
   /**
-   * Sets the sealed log segment information.
-   *
-   * @param sealedSegments New sealed segment information
+   * Get the size of the LogInfo in bytes
+   * This is to be used for SerDe purposes
+   * @return Long
    */
-  public void setSealedSegments(FileInfo sealedSegments) {
-    this.sealedSegment = sealedSegments;
-  }
-
-  /**
-   * Gets the list of index segment information.
-   *
-   * @return List of FileInfo objects for index segments
-   */
-  public List<FileInfo> getIndexSegments() {
-    return indexSegments;
-  }
-
-  /**
-   * Sets the list of index segment information.
-   *
-   * @param indexSegments New list of index segment information
-   */
-  public void setIndexSegments(List<FileInfo> indexSegments) {
-    this.indexSegments = indexSegments;
-  }
-
-  /**
-   * Gets the list of bloom filter information.
-   *
-   * @return List of FileInfo objects for bloom filters
-   */
-  public List<FileInfo> getBloomFilters() {
-    return bloomFilters;
-  }
-
-  /**
-   * Sets the list of bloom filter information.
-   *
-   * @param bloomFilters New list of bloom filter information
-   */
-  public void setBloomFilters(List<FileInfo> bloomFilters) {
-    this.bloomFilters = bloomFilters;
-  }
-
-  /**
-   * Returns a string representation of the LogInfo object.
-   * Useful for logging and debugging.
-   *
-   * @return String containing details of sealed segment, index segments, and bloom filters
-   */
-  @Override
-  public String toString() {
-    return "LogInfo{" +
-        "sealedSegment=" + sealedSegment +
-        ", indexSegments=" + indexSegments +
-        ", bloomFilters=" + bloomFilters +
-        '}';
-  }
+  long sizeInBytes();
 }

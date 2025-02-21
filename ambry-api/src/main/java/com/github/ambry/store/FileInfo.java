@@ -11,62 +11,50 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-
 package com.github.ambry.store;
 
+import io.netty.buffer.ByteBuf;
+import java.io.DataInputStream;
+import java.io.IOException;
+
+
 /**
- * Represents metadata about a file in the Ambry storage system.
- * Contains basic file information like name and size.
- * Used for tracking file details during copy operations and metadata management.
+ * Represents a file info for a file saved in store.
  */
-public class FileInfo {
-  // Name of the file, including any path components
-  private String fileName;
-
-  // Size of the file in bytes
-  // Marked final as size shouldn't change after creation
-  private final long fileSize;
+public interface FileInfo {
 
   /**
-   * Creates a new FileInfo instance.
-   *
-   * @param fileName Name or path of the file
-   * @param fileSize Size of the file in bytes
+   * Get the name of the file
+   * @return String
    */
-  public FileInfo(String fileName, Long fileSize) {
-    this.fileName = fileName;
-    this.fileSize = fileSize;
+  String getFileName();
+
+  /**
+   * Get the size of the file in bytes
+   * @return Long
+   */
+  Long getFileSize();
+
+  /**
+   * Read FileInfo from the stream
+   * @param stream the input stream of type DataInputStream
+   * @return FileInfo
+   * @throws IOException if an I/O error occurs
+   */
+  static FileInfo readFrom(DataInputStream stream) throws IOException {
+    return null;
   }
 
   /**
-   * Gets the name of the file.
-   *
-   * @return The file name or path
+   * Write the LogInfo to the buffer
+   * @param bufferToSend the buffer to write to of type ByteBuf
    */
-  public String getFileName() {
-    return fileName;
-  }
+  void writeTo(ByteBuf bufferToSend);
 
   /**
-   * Gets the size of the file in bytes.
-   *
-   * @return The file size
+   * Get the size of the LogInfo in bytes
+   * This is to be used for SerDe purposes
+   * @return Long
    */
-  public Long getFileSize() {
-    return fileSize;
-  }
-
-  /**
-   * Returns a string representation of the FileInfo object.
-   * Useful for logging and debugging.
-   *
-   * @return String containing file name and size
-   */
-  @Override
-  public String toString() {
-    return "FileInfo{" +
-        "fileName='" + fileName + '\'' +
-        ", fileSize=" + fileSize +
-        '}';
-  }
+  long sizeInBytes();
 }

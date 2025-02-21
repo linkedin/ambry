@@ -542,8 +542,9 @@ public class NamedBlobMysqlDatabasePerf {
           String containerName = String.format(CONTAINER_NAME_FORMAT, HUGE_LIST_CONTAINER_ID);
           String token = null;
           for (int i = 0; i < 100; i++) {
-            token =
-                namedBlobDb.list(accountName, containerName, HUGE_LIST_COMMON_PREFIX, token, null).get().getNextPageToken();
+            token = namedBlobDb.list(accountName, containerName, HUGE_LIST_COMMON_PREFIX, token, null)
+                .get()
+                .getNextPageToken();
           }
           System.out.println("PerformanceTestWorker " + id + " finishes listing for huge records");
         }

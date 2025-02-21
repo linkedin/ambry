@@ -39,6 +39,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.frontend.s3.S3Constants.*;
@@ -48,6 +50,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static DeleteBlobHandler deleteBlobHandler;
   private final XmlMapper xmlMapper;
   private FrontendMetrics metrics;
+  private static final Logger logger = LoggerFactory.getLogger(S3BatchDeleteHandler.class);
 
   // Constructor
   public S3BatchDeleteHandler(DeleteBlobHandler deleteBlobHandler, FrontendMetrics frontendMetrics) {
@@ -90,17 +93,40 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       Callback<ReadableStreamChannel> finalCallback) {
 
     return buildCallback(metrics.s3BatchDeleteHandleMetrics, bytesRead -> {
-      if (bytesRead == 0) {
-        throw new RestServiceException("bytesRead is empty", RestServiceErrorCode.BadRequest);
-      }
+      S3MessagePayload.S3BatchDeleteObjects deleteRequest = null;
+      try {
+        // check for empty message
+        if (bytesRead == 0) {
+          logger.trace("bytesRead is empty");
+          throw new RestServiceException("bytesRead is empty", RestServiceErrorCode.BadRequest);
+        }
 
-      // deserialize the xml as deleteRequest
-      S3MessagePayload.S3BatchDeleteObjects deleteRequest = deserializeRequest(channel);
-;
-      // validate the request for size
-      if (deleteRequest.getObjects().size() > MAX_BATCH_DELETE_SIZE) {
-        String batchSizeErrorMessage = "Exceeded Maximum Batch Size of ";
-        throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
+        // ensure request body format is correct
+        deleteRequest = deserializeRequest(channel);
+        if (deleteRequest.getObjects() == null || deleteRequest.getObjects().isEmpty()) {
+          logger.trace("s3batchdelete request size needs to be at least 1");
+          String batchSizeEqualsZero = "Request size needs to be at least 1";
+          throw new RestServiceException(batchSizeEqualsZero, RestServiceErrorCode.BadRequest);
+        }
+
+        // validate the request for size
+        if (deleteRequest.getObjects().size() > MAX_BATCH_DELETE_SIZE) {
+          logger.trace("exceeded max batch delete size " + MAX_BATCH_DELETE_SIZE);
+          String batchSizeErrorMessage = "Exceeded Maximum Batch Size of " + MAX_BATCH_DELETE_SIZE;
+          throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
+        }
+      } catch (Exception e) {
+        S3MessagePayload.Error response = new S3MessagePayload.Error();
+        response.setCode(ERR_MALFORMED_REQUEST_BODY_CODE);
+        response.setMessage(ERR_MALFORMED_REQUEST_BODY_MESSAGE);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        xmlMapper.writeValue(outputStream, response);
+        ReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+        restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
+        restResponseChannel.setStatus(ResponseStatus.Ok);
+        finalCallback.onCompletion(readableStreamChannel, null);
+        return;
       }
 
       RequestPath requestPath = (RequestPath) restRequest.getArgs().get(InternalKeys.REQUEST_PATH);
@@ -124,12 +150,10 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
           // Call our custom onDeleteCompletion to track success/failure
           if (exception == null) {
             deleted.add(new S3MessagePayload.S3DeletedObject(object.getKey()));
-          }
-          else if (exception instanceof RestServiceException) {
+          } else if (exception instanceof RestServiceException) {
             RestServiceException restServiceException = (RestServiceException) exception;
             errors.add((new S3MessagePayload.S3ErrorObject(object.getKey(), restServiceException.getErrorCode().toString())));
-          }
-          else {
+          } else {
             errors.add((new S3MessagePayload.S3ErrorObject(object.getKey(), RestServiceErrorCode.InternalServerError.toString())));
           }
           future.complete(null);
@@ -146,8 +170,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
               response.setDeleted(new ArrayList<>(deleted));
               response.setErrors(new ArrayList<>(errors));
               xmlMapper.writeValue(outputStream, response);
-              ReadableStreamChannel readableStreamChannel =
-                  new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+              ReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
               restResponseChannel.setHeader(Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
               restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
               restResponseChannel.setStatus(ResponseStatus.Ok);
@@ -155,7 +178,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
             } catch (IOException | RestServiceException e) {
               finalCallback.onCompletion(null, e);
             }
-          });
+      });
     }, restRequest.getUri(), LOGGER, finalCallback);
   }
 
@@ -170,6 +193,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
       byteBuffer.readBytes(byteArray);
       return new XmlMapper().readValue(byteArray, S3MessagePayload.S3BatchDeleteObjects.class);
     } catch (Exception e) {
+      logger.trace("s3batchdelete failed to deserialize request");
       throw new RestServiceException("failed to deserialize", e, RestServiceErrorCode.BadRequest);
     }
   }
