@@ -30,6 +30,8 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
@@ -73,14 +75,19 @@ class FileStore {
   private static boolean isRunning = false;
 
   // Handles serialization/deserialization of file metadata
-  private final FileMetadataSerde fileMetadataSerde;
+  // Initialize metadata serializer and store config
+  private final FileMetadataSerde fileMetadataSerde = new FileMetadataSerde();;
 
   // Configuration for file copy operations
   private final String mountPath;
 
+  // File object for temporary metadata file writing
   private final File tempMetadataFile;
 
+  // File object for actual metadata file writing
   private final File actualMetadataFile;
+  // Lock for write operations in Filestore
+  private final Object storeWriteLock = new Object();
 
 
   /**
@@ -90,8 +97,6 @@ class FileStore {
    * @throws NullPointerException if fileCopyConfig is null
    */
   public FileStore(FileCopyConfig fileCopyConfig, String mountPath) {
-    // Initialize metadata serializer and store config
-    this.fileMetadataSerde = new FileMetadataSerde();
     this.mountPath = mountPath;
 
     // Create temporary and actual file paths for metadata persistence
@@ -152,17 +157,30 @@ class FileStore {
     File file = new File(filePath);
 
     try (RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r")) {
+      // Verify if offset + size is lesser than the filesize to avoid EOF exceptions
+      if (offset + size > randomAccessFile.length()){
+        throw new IndexOutOfBoundsException("Read offset and size exceeds the filesize for file: " + fileName);
+      }
+
       // Seek to the specified offset
       randomAccessFile.seek(offset);
 
       // Allocate buffer for reading data
       ByteBuffer buf = ByteBuffer.allocate(size);
 
-      // Read data into buffer
-      randomAccessFile.getChannel().read(buf);
+      // Read data into buffer. Looping sinze read() doesn't guarantee reading all bytes in one go.
+      while (buf.hasRemaining()) {
+        int bytesRead = randomAccessFile.getChannel().read(buf);
+
+        if (bytesRead == -1) {
+          break; // EOF reached
+        }
+      }
 
       // Prepare buffer for reading
       buf.flip();
+
+      // return file chunk buffer read
       return buf;
     }  catch (FileNotFoundException e) {
       throw new StoreException("File not found while reading chunk for FileCopy", e,
@@ -184,24 +202,40 @@ class FileStore {
    */
   public void putChunkToFile(String outputFilePath, DataInputStream dataInputStream)
       throws IOException {
-    // Verify service is running
-    validateIfFileStoreIsRunning();
 
-    // Validate input
-    Objects.requireNonNull(dataInputStream, "fileInputStream must not be null");
+      // Verify service is running
+      validateIfFileStoreIsRunning();
 
-    // Read the entire file content into memory
-    int fileSize = dataInputStream.available();
-    byte[] content = Utils.readBytesFromStream(dataInputStream, fileSize);
+      // Validate input
+      Objects.requireNonNull(dataInputStream, "fileInputStream must not be null");
 
-    // Write content to file with create and append options, which will create a new file if file doesn't exist
-    // and append to the existing file if file exists
-    Files.write(Paths.get(outputFilePath), content,
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+      // Can add buffered streaming to avoid memory overusage if multiple threads calling FileStore.
+      // Read the entire file content into memory
+      int fileSize = dataInputStream.available();
+      byte[] content = Utils.readBytesFromStream(dataInputStream, fileSize);
 
-    // Log successful write operation
-    logger.info("Write successful for chunk to file: {} with size: {}",
-                outputFilePath, content.length);
+      try {
+        synchronized (storeWriteLock) {
+
+          Path outputPath = Paths.get(outputFilePath);
+          Path parentDir = outputPath.getParent();
+
+          // Validate if parent directory exists
+          if (parentDir != null && !Files.exists(parentDir)) {
+            // Throwing IOException if the parent directory does not exist
+            throw new IOException("Parent directory does not exist: " + parentDir);
+          }
+
+          // Write content to file with create and append options, which will create a new file if file doesn't exist
+          // and append to the existing file if file exists
+          Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        }
+      } catch (Exception e){
+        throw new FileStoreException("FileStore encountered write error", FileStoreErrorCode.FileStoreWriteError);
+      }
+      // Log successful write operation
+      logger.info("Write successful for chunk to file: {} with size: {}", outputFilePath, content.length);
+
   }
 
   /**
@@ -220,16 +254,19 @@ class FileStore {
     Objects.requireNonNull(logInfoList, "logInfoList must not be null");
 
     try {
-      // Write metadata to temporary file first
-      FileOutputStream fileStream = new FileOutputStream(tempMetadataFile);
-      fileMetadataSerde.persist(logInfoList, fileStream);
-      logger.info("FileCopyMetadata file serialized and written to temp file: {}",
-                  tempMetadataFile.getAbsolutePath());
+      synchronized (storeWriteLock){
+        // Write metadata to temporary file first
+        try (FileOutputStream fileStream = new FileOutputStream(tempMetadataFile)) {
+          fileMetadataSerde.persist(logInfoList, fileStream);
+        }
+        logger.info("FileCopyMetadata file serialized and written to temp file: {}",
+            tempMetadataFile.getAbsolutePath());
 
-      // Atomically rename temp file to actual file
-      tempMetadataFile.renameTo(actualMetadataFile);
-      logger.debug("Completed writing filecopy metadata to file {}",
-                  actualMetadataFile.getAbsolutePath());
+        // Atomically rename temp file to actual file
+        tempMetadataFile.renameTo(actualMetadataFile);
+        logger.debug("Completed writing filecopy metadata to file {}",
+            actualMetadataFile.getAbsolutePath());
+      }
     } catch (IOException e) {
       logger.error("IO error while persisting filecopy metadata to disk {}",
                   tempMetadataFile.getAbsoluteFile());
@@ -259,10 +296,11 @@ class FileStore {
 
     try {
       // Read metadata from file
-      FileInputStream fileStream = new FileInputStream(actualMetadataFile);
-      logger.info("Attempting reading from file: {}", actualMetadataFile.getAbsolutePath());
-      logInfoList = fileMetadataSerde.retrieve(fileStream);
-      return logInfoList;
+      try (FileInputStream fileStream = new FileInputStream(actualMetadataFile)) {
+        logger.info("Attempting reading from file: {}", actualMetadataFile.getAbsolutePath());
+        logInfoList = fileMetadataSerde.retrieve(fileStream);
+        return logInfoList;
+      }
     } catch (IOException e) {
       logger.error("IO error while reading filecopy metadata from disk {}",
                   actualMetadataFile.getAbsoluteFile());

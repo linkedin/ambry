@@ -59,6 +59,10 @@ public class FileStoreException extends RuntimeException {
      * Indicates that the FileStore service is not in running state
      * when an operation was attempted.
      */
-    FileStoreRunningFailure
+    FileStoreRunningFailure,
+    /**
+     * Indicates that the FileStore service encountered an error during write
+     */
+    FileStoreWriteError
   }
 }
