@@ -64,7 +64,7 @@ public class HelixVcrClusterSpectator implements VcrClusterSpectator {
     // Once we add more fabrics, we should revisit this.
     HelixManager helixManager =
         helixFactory.getZkHelixManagerAndConnect(cloudConfig.vcrClusterName, selfInstanceName, InstanceType.SPECTATOR,
-            cloudConfig.vcrClusterZkConnectString);
+            cloudConfig.vcrClusterZkConnectString, clusterMapConfig);
 
     helixManager.addInstanceConfigChangeListener(this);
     helixManager.addLiveInstanceChangeListener(this);
