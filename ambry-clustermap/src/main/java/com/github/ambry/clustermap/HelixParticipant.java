@@ -107,7 +107,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Cluster name is empty in clusterMapConfig");
     }
-    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
+    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr, clusterMapConfig);
     replicaSyncUpManager = new AmbryReplicaSyncUpManager(clusterMapConfig);
     partitionStateChangeListeners = new HashMap<>();
     try {
@@ -115,7 +115,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       // SPECTATOR instance that is also used by HelixClusterManager. This avoids the need to start participating in a
       // cluster before reading/writing from zookeeper.
       HelixManager spectatorManager =
-          helixFactory.getZkHelixManagerAndConnect(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+          helixFactory.getZkHelixManagerAndConnect(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr, clusterMapConfig);
       helixAdmin = spectatorManager.getClusterManagmentTool();
       dataNodeConfigSource = helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr,
           new DataNodeConfigSourceMetrics(metricRegistry));

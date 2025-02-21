@@ -90,7 +90,7 @@ public class MockHelixManagerFactory extends HelixFactory {
    */
   @Override
   public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-      String zkAddr) {
+      String zkAddr, ClusterMapConfig clusterMapConfig) {
     return getHelixManager(instanceType);
   }
 
@@ -109,11 +109,11 @@ public class MockHelixManagerFactory extends HelixFactory {
 
   @Override
   public HelixManager getZkHelixManagerAndConnect(String clusterName, String instanceName, InstanceType instanceType,
-      String zkAddr) throws Exception {
+      String zkAddr, ClusterMapConfig clusterMapConfig) throws Exception {
     if (overrideGetHelixManager) {
       return mockHelixManager;
     }
-    return super.getZkHelixManagerAndConnect(clusterName, instanceName, instanceType, zkAddr);
+    return super.getZkHelixManagerAndConnect(clusterName, instanceName, instanceType, zkAddr, clusterMapConfig);
   }
 
   /**

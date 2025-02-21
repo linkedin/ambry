@@ -130,7 +130,7 @@ class HelixDatacenterInitializer {
       manager = Objects.requireNonNull(localManager, "localManager should have been set");
     } else {
       manager = helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
-          InstanceType.SPECTATOR, zkConnectStr);
+          InstanceType.SPECTATOR, zkConnectStr, clusterMapConfig);
     }
     HelixClusterChangeHandler clusterChangeHandler =
         helixClusterManager.new HelixClusterChangeHandler(dcName, clusterMapConfig.clusterMapClusterName,
