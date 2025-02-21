@@ -2415,7 +2415,7 @@ public class BlobStoreTest {
     HelixFactory mockHelixFactory = new HelixFactory() {
       @Override
       public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-          String zkAddr) {
+          String zkAddr, ClusterMapConfig clusterMapConfig1) {
         return mockHelixManager;
       }
     };
