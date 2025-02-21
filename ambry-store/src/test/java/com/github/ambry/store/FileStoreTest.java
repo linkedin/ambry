@@ -195,11 +195,11 @@ public class FileStoreTest {
 
         // Verify sealed segment details
         assertEquals("Log segment file name should match",
-            original.getSealedSegment().getFileName(),
-            read.getSealedSegment().getFileName());
+            original.getLogSegment().getFileName(),
+            read.getLogSegment().getFileName());
         assertEquals("Log segment size should match",
-            original.getSealedSegment().getFileSize(),
-            read.getSealedSegment().getFileSize());
+            original.getLogSegment().getFileSize(),
+            read.getLogSegment().getFileSize());
 
         // Verify index segments
         assertEquals("Index segments size should match",
@@ -222,16 +222,16 @@ public class FileStoreTest {
     List<LogInfo> logInfoList = new ArrayList<>();
 
     for (int i = 0; i < 3; i++) {
-      FileInfo sealedSegment = new FileInfo("log" + i + ".txt", 1000L * (i + 1));
+      FileInfo sealedSegment = new StoreFileInfo("log" + i + ".txt", 1000L * (i + 1));
 
       List<FileInfo> indexSegments = new ArrayList<>();
-      indexSegments.add(new FileInfo("index" + i + "_1.txt", 100L * (i + 1)));
-      indexSegments.add(new FileInfo("index" + i + "_2.txt", 200L * (i + 1)));
+      indexSegments.add(new StoreFileInfo("index" + i + "_1.txt", 100L * (i + 1)));
+      indexSegments.add(new StoreFileInfo("index" + i + "_2.txt", 200L * (i + 1)));
 
       List<FileInfo> bloomFilters = new ArrayList<>();
-      bloomFilters.add(new FileInfo("bloom" + i + ".txt", 50L * (i + 1)));
+      bloomFilters.add(new StoreFileInfo("bloom" + i + ".txt", 50L * (i + 1)));
 
-      logInfoList.add(new LogInfo(sealedSegment, indexSegments, bloomFilters));
+      logInfoList.add(new StoreLogInfo(sealedSegment, indexSegments, bloomFilters));
     }
 
     return logInfoList;
@@ -408,12 +408,12 @@ public class FileStoreTest {
     // Create large test dataset
     List<LogInfo> largeLogInfoList = new ArrayList<>();
     for (int i = 0; i < 1000; i++) {
-        FileInfo sealedSegment = new FileInfo("log" + i + ".txt", 1000L * (i + 1));
+        FileInfo sealedSegment = new StoreFileInfo("log" + i + ".txt", 1000L * (i + 1));
         List<FileInfo> indexSegments = new ArrayList<>();
-        indexSegments.add(new FileInfo("index" + i + "_1.txt", 100L * (i + 1)));
+        indexSegments.add(new StoreFileInfo("index" + i + "_1.txt", 100L * (i + 1)));
         List<FileInfo> bloomFilters = new ArrayList<>();
-        bloomFilters.add(new FileInfo("bloom" + i + ".txt", 50L * (i + 1)));
-        largeLogInfoList.add(new LogInfo(sealedSegment, indexSegments, bloomFilters));
+        bloomFilters.add(new StoreFileInfo("bloom" + i + ".txt", 50L * (i + 1)));
+        largeLogInfoList.add(new StoreLogInfo(sealedSegment, indexSegments, bloomFilters));
     }
 
     // Write large dataset
@@ -432,11 +432,11 @@ public class FileStoreTest {
         LogInfo read = readLogInfoList.get(i);
 
         assertEquals("Log segment name should match for index " + i,
-            original.getSealedSegment().getFileName(),
-            read.getSealedSegment().getFileName());
+            original.getLogSegment().getFileName(),
+            read.getLogSegment().getFileName());
         assertEquals("Log segment size should match for index " + i,
-            original.getSealedSegment().getFileSize(),
-            read.getSealedSegment().getFileSize());
+            original.getLogSegment().getFileSize(),
+            read.getLogSegment().getFileSize());
     }
   }
 

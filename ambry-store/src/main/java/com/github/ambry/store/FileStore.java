@@ -316,9 +316,9 @@ class FileStore {
         // Iterate through each log info entry
         for (LogInfo logInfo : logInfoList) {
           // Write sealed segment information
-          writer.writeLong(logInfo.getSealedSegment().getFileSize());
-          writer.writeLong(logInfo.getSealedSegment().getFileName().getBytes().length);
-          writer.write(logInfo.getSealedSegment().getFileName().getBytes());
+          writer.writeLong(logInfo.getLogSegment().getFileSize());
+          writer.writeLong(logInfo.getLogSegment().getFileName().getBytes().length);
+          writer.write(logInfo.getLogSegment().getFileName().getBytes());
 
           // Write index segments information
           writer.writeInt(logInfo.getIndexSegments().size());
@@ -378,7 +378,7 @@ class FileStore {
             byte[] logSegmentNameBytes = new byte[(int) stream.readLong()];
             stream.readFully(logSegmentNameBytes);
             String logSegmentName = new String(logSegmentNameBytes);
-            FileInfo logSegment = new FileInfo(logSegmentName, logSegmentSize);
+            FileInfo logSegment = new StoreFileInfo(logSegmentName, logSegmentSize);
 
             // Read index segments
             int indexSegmentsSize = stream.readInt();
@@ -388,7 +388,7 @@ class FileStore {
               byte[] indexSegmentNameBytes = new byte[(int) stream.readLong()];
               stream.readFully(indexSegmentNameBytes);
               String indexSegmentName = new String(indexSegmentNameBytes);
-              indexSegments.add(new FileInfo(indexSegmentName, fileSize));
+              indexSegments.add(new StoreFileInfo(indexSegmentName, fileSize));
             }
 
             // Read bloom filters
@@ -399,11 +399,11 @@ class FileStore {
               byte[] bloomFilterNameBytes = new byte[(int) stream.readLong()];
               stream.readFully(bloomFilterNameBytes);
               String bloomFilterName = new String(bloomFilterNameBytes);
-              bloomFilters.add(new FileInfo(bloomFilterName, fileSize));
+              bloomFilters.add(new StoreFileInfo(bloomFilterName, fileSize));
             }
 
             // Create and add LogInfo object to result list
-            logInfoList.add(new LogInfo(logSegment, indexSegments, bloomFilters));
+            logInfoList.add(new StoreLogInfo(logSegment, indexSegments, bloomFilters));
           }
         }
 
