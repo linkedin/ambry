@@ -12,7 +12,7 @@ public class PartitionPrioritization implements Runnable {
 
   interface PrioritiedPartitionChecker {
     void prepare(List<PartitionId> partitionIds);
-    List<List<PartitionId>> getPrioritizedList();
+    List<List<PartitionId>> getOrderedBatches();
   }
 
   StoreManager storeManager;
@@ -32,11 +32,13 @@ public class PartitionPrioritization implements Runnable {
     _prioritiedPartitionCheckerList = checkers;
   }
 
+  // maybe store total pause time for each parition in zookeeper or Mysql
   @Override
   public void run() {
     ReplicaId localReplica = storeManager.getReplica("partitionName");
     Store store = storeManager.getStore(localReplica.getPartitionId());
-    if(!store.isBootstrapInProgress()) {
+    //how to check if it is first time bootstrap , issue can be in get requests which already bootstrap
+    if(!store.isBootstrapInProgress() ) {
       partitionToLatch.get("partitionName").countDown();
     }
 
