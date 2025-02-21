@@ -106,7 +106,7 @@ class HelixAggregatedViewClusterInitializer {
     String localZkConnectStr = localDcZkInfo.getZkConnectStrs().get(0);
     HelixManager helixManager =
         helixFactory.getZkHelixManagerAndConnect(aggregatedViewClusterName, selfInstanceName, InstanceType.SPECTATOR,
-            localZkConnectStr);
+            localZkConnectStr, clusterMapConfig);
     logger.info("Helix cluster name {}", helixManager.getClusterName());
 
     clusterChangeHandler =
@@ -242,7 +242,7 @@ class HelixAggregatedViewClusterInitializer {
     String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
     HelixManager manager =
         helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
-            InstanceType.SPECTATOR, zkConnectStr);
+            InstanceType.SPECTATOR, zkConnectStr, clusterMapConfig);
     manager.addIdealStateChangeListener(
         (IdealStateChangeListener) (idealState, changeContext) -> clusterChangeHandler.handleIdealStateChange(
             idealState, dcName));
@@ -254,7 +254,7 @@ class HelixAggregatedViewClusterInitializer {
     String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
     HelixManager manager =
         helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
-            InstanceType.SPECTATOR, zkConnectStr);
+            InstanceType.SPECTATOR, zkConnectStr, clusterMapConfig);
     manager.addInstanceConfigChangeListener(clusterChangeHandler);
     logger.info("Registered instance config change listeners for cluster {} via Helix manager at {}",
         clusterMapConfig.clusterMapClusterName, zkConnectStr);
