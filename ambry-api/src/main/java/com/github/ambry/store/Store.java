@@ -247,14 +247,4 @@ public interface Store {
    * @return
    */
   List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment);
-
-  /**
-   * Returns thedata chunk for the reqyested file in store
-   * @param fileName The name of the file
-   * @param sizeInBytes The size of the file requested
-   * @param startOffset The start offset of the file requested
-   * @return FileChunk
-   * @throws IOException
-   */
-  StoreFileChunk getFileChunk(String fileName, long sizeInBytes, long startOffset) throws IOException;
 }

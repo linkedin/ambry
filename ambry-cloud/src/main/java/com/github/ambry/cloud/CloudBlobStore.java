@@ -33,7 +33,6 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreBatchDeleteInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
@@ -727,11 +726,6 @@ public class CloudBlobStore implements Store {
 
   @Override
   public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
-    throw new UnsupportedOperationException("Method not supported");
-  }
-
-  @Override
-  public StoreFileChunk getFileChunk(String fileName, long sizeInBytes, long startOffset) throws IOException {
     throw new UnsupportedOperationException("Method not supported");
   }
 
