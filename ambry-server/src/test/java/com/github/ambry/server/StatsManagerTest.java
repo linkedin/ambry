@@ -45,6 +45,7 @@ import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.store.DeleteTombstoneStats;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.LogInfo;
+import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
@@ -713,6 +714,11 @@ public class StatsManagerTest {
 
     @Override
     public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public StoreFileChunk getFileChunk(String fileName, long sizeInBytes, long startOffset) throws IOException {
       throw new IllegalStateException("Not implemented");
     }
 

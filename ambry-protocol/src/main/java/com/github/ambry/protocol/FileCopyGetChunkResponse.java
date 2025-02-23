@@ -22,19 +22,70 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 
 
+/**
+ * Response to a {@link FileCopyGetChunkRequest} that contains the chunk of the file requested.
+ * The response contains the chunk of the file requested, the start offset of the chunk, the size of the chunk and whether
+ * this is the last chunk of the file.
+ */
 public class FileCopyGetChunkResponse extends Response {
+  /**
+   * The chunk stream of the file requested.
+   */
   private final DataInputStream chunkStream;
+
+  /**
+   * Whether this is the last chunk of the file.
+   */
   private final boolean isLastChunk;
+
+  /**
+   * The start offset of the chunk.
+   */
   private final long startOffset;
+
+  /**
+   * The size of the chunk in bytes.
+   */
   private final long chunkSizeInBytes;
+
+  /**
+   * The partition id of the requested file.
+   */
   private final PartitionId partitionId;
+
+  /**
+   * The name of the requested file.
+   */
   private final String fileName;
 
-  private static final int File_Name_Field_Size_In_Bytes = 4;
-  public static final short File_Copy_Chunk_Response_Version_V1 = 1;
+  /**
+   * The size of the file name field in bytes.
+   */
+  private static final int FILE_NAME_FIELD_SIZE_IN_BYTES = 4;
 
-  static short CURRENT_VERSION = File_Copy_Chunk_Response_Version_V1;
+  /**
+   * The version of the response.
+   */
+  public static final short FILE_COPY_CHUNK_RESPONSE_VERSION_V_1 = 1;
 
+  /**
+   * The current version of the response.
+   */
+  static short CURRENT_VERSION = FILE_COPY_CHUNK_RESPONSE_VERSION_V_1;
+
+  /**
+   * Constructor for FileCopyGetChunkResponse
+   * @param versionId The version of the response.
+   * @param correlationId The correlation id of the response.
+   * @param clientId The client id of the response.
+   * @param errorCode The error code of the response.
+   * @param partitionId The partition id of the requested file.
+   * @param fileName The name of the requested file.
+   * @param chunkStream The chunk stream of the file requested.
+   * @param startOffset The start offset of the chunk.
+   * @param chunkSizeInBytes The size of the chunk in bytes.
+   * @param isLastChunk Whether this is the last chunk of the file.
+   */
   public FileCopyGetChunkResponse(short versionId, int correlationId, String clientId, ServerErrorCode errorCode,
       PartitionId partitionId, String fileName, DataInputStream chunkStream,
       long startOffset, long chunkSizeInBytes, boolean isLastChunk) {
@@ -50,33 +101,79 @@ public class FileCopyGetChunkResponse extends Response {
     this.fileName = fileName;
   }
 
+  /**
+   * Constructor for FileCopyGetChunkResponse
+   * @param correlationId The correlation id of the response.
+   * @param clientId The client id of the response.
+   * @param errorCode The error code of the response.
+   */
   public FileCopyGetChunkResponse(int correlationId, String clientId, ServerErrorCode errorCode) {
     this(CURRENT_VERSION, correlationId, clientId, errorCode, null, null, null, -1, -1, false);
   }
 
+  /**
+   * Constructor for FileCopyGetChunkResponse
+   * @param serverErrorCode The error code of the response.
+   */
+  public FileCopyGetChunkResponse(ServerErrorCode serverErrorCode) {
+    this(-1, "", serverErrorCode);
+  }
+
+  /**
+   * Get the partition id of the requested file.
+   * @return PartitionId
+   */
   public PartitionId getPartitionId() {
     return partitionId;
   }
 
+  /**
+   * Get the name of the requested file.
+   * @return String
+   */
   public String getFileName() {
     return fileName;
   }
 
+  /**
+   * Get the start offset of the chunk.
+   * @return long
+   */
   public long getStartOffset() {
     return startOffset;
   }
 
+  /**
+   * Get whether this is the last chunk of the file.
+   * @return boolean
+   */
   public boolean isLastChunk() {
     return isLastChunk;
   }
 
+  /**
+   * Get the size of the chunk in bytes.
+   * @return long
+   */
   public long getChunkSizeInBytes() {
     return chunkSizeInBytes;
   }
 
+  /**
+   * Get the chunk stream of the file requested.
+   * @return
+   */
+  public DataInputStream getChunkStream() {
+    return chunkStream;
+  }
+
+  /**
+   * Get the size of the response in bytes.
+   * @return long
+   */
   public long sizeInBytes() {
     try {
-      return super.sizeInBytes() + partitionId.getBytes().length + File_Name_Field_Size_In_Bytes +
+      return super.sizeInBytes() + partitionId.getBytes().length + FILE_NAME_FIELD_SIZE_IN_BYTES +
           fileName.length() + Long.BYTES + Long.BYTES + 1 + Integer.BYTES +
           (chunkStream != null ? chunkStream.available() : 0);
     } catch (IOException e) {
@@ -84,6 +181,13 @@ public class FileCopyGetChunkResponse extends Response {
     }
   }
 
+  /**
+   * Serialize the response into a buffer.
+   * @param chunkResponseStream The output stream.
+   * @param clusterMap The cluster map.
+   * @return FileCopyGetChunkResponse
+   * @throws IOException If an I/O error occurs.
+   */
   public static FileCopyGetChunkResponse readFrom(DataInputStream chunkResponseStream, ClusterMap clusterMap) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[chunkResponseStream.readShort()];
     if (type != RequestOrResponseType.FileCopyGetChunkResponse) {
@@ -109,6 +213,10 @@ public class FileCopyGetChunkResponse extends Response {
         chunkResponseStream, startOffset, sizeInBytes, isLastChunk);
   }
 
+  /**
+   * Write the response to the buffer.
+   */
+  @Override
   public void prepareBuffer(){
     super.prepareBuffer();
     bufferToSend.writeBytes(partitionId.getBytes());
@@ -119,6 +227,7 @@ public class FileCopyGetChunkResponse extends Response {
     try {
       bufferToSend.writeBytes(chunkStream, chunkStream.available());
     } catch (IOException e) {
+      logger.info("Error while writing chunkStream", e);
       throw new RuntimeException(e);
     }
   }
@@ -133,13 +242,10 @@ public class FileCopyGetChunkResponse extends Response {
           .append(", isLastChunk=").append(isLastChunk)
           .append("]");
     } catch (IOException e) {
+      logger.info("Error while reading chunkStream", e);
       throw new RuntimeException(e);
     }
     return sb.toString();
-  }
-
-  public DataInputStream getChunkStream() {
-    return chunkStream;
   }
 
   private static void validateVersion(short version) {

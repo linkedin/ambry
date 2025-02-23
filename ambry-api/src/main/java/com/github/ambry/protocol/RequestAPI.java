@@ -124,4 +124,12 @@ public interface RequestAPI {
    * @throws InterruptedException if request processing is interrupted.
    */
   void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException;
+
+  /**
+   * Get a chunk of a file (log segment, index file, bloom file) in a partition.
+   * @param request the request that contains the partition, filename, size and offset of the requested file chunk.
+   * @throws InterruptedException if request processing is interrupted.
+   * @throws IOException if there are I/O errors carrying our the required operation.
+   */
+  void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException, IOException;
 }

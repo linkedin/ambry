@@ -1491,7 +1491,7 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public FileChunk getFileChunk(String fileName, long sizeInBytes, long startOffset) throws IOException {
+  public StoreFileChunk getFileChunk(String fileName, long sizeInBytes, long startOffset) throws IOException {
     if (startOffset == 0 && sizeInBytes == Long.MAX_VALUE) {
       return getStreamForFile(fileName);
     }
@@ -1507,12 +1507,12 @@ public class BlobStore implements Store {
     buf.get(byteArray);
     ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(byteArray);
 
-    return new FileChunk(new DataInputStream(byteArrayInputStream), byteArray.length);
+    return new StoreFileChunk(new DataInputStream(byteArrayInputStream), byteArray.length);
   }
 
-  private FileChunk getStreamForFile(String fileName) throws IOException {
+  private StoreFileChunk getStreamForFile(String fileName) throws IOException {
     final File file = validateAndGetFile(fileName);
-    return new FileChunk(new DataInputStream(Files.newInputStream(file.toPath())), file.length());
+    return new StoreFileChunk(new DataInputStream(Files.newInputStream(file.toPath())), file.length());
   }
 
   private File validateAndGetFile(String fileName) throws IOException {

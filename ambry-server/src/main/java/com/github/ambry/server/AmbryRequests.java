@@ -91,7 +91,7 @@ import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
-import com.github.ambry.store.FileChunk;
+import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.LogInfo;
@@ -109,7 +109,6 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
-import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -1686,7 +1685,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   * Handler for FileMetadataRequest
+   * Handler for FileCopyGetMetaDataRequest
    */
   @Override
   public void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
@@ -1746,54 +1745,67 @@ public class AmbryRequests implements RequestAPI {
             null, null, totalTimeSpent));
   }
 
-  void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException, IOException {
-    FileCopyGetChunkRequest fileCopyGetChunkRequest =
-        FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+  /**
+   * Handler for FileCopyGetChunkRequest
+   */
+  @Override
+  public void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException, IOException {
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
 
-    FileChunk chunkResponse;
-    FileCopyGetChunkResponse response;
+    StoreFileChunk chunkResponse = null;
+    FileCopyGetChunkRequest fileCopyGetChunkRequest = null;
+    FileCopyGetChunkResponse response = null;
     try {
-      chunkResponse = storeManager.getStore(fileCopyGetChunkRequest.getPartitionId()).getFileChunk(
-          fileCopyGetChunkRequest.getFileName(), fileCopyGetChunkRequest.getChunkLengthInBytes(),
-          fileCopyGetChunkRequest.getStartOffset());
+      fileCopyGetChunkRequest =
+          FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+
+      ServerErrorCode error = validateRequest(fileCopyGetChunkRequest.getPartitionId(),
+          fileCopyGetChunkRequest, RequestOrResponseType.FileCopyGetMetaDataRequest);
+      if (error != ServerErrorCode.No_Error) {
+        logger.error("Validating FileCopyGetChunkRequest failed with error {} for request {}",
+            error, fileCopyGetChunkRequest);
+        response = new FileCopyGetChunkResponse(
+            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), error);
+      } else {
+        chunkResponse = storeManager.getStore(fileCopyGetChunkRequest.getPartitionId())
+            .getFileChunk(fileCopyGetChunkRequest.getFileName(), fileCopyGetChunkRequest.getChunkLengthInBytes(),
+                fileCopyGetChunkRequest.getStartOffset());
+        response = new FileCopyGetChunkResponse(
+            FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
+            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
+            ServerErrorCode.No_Error, fileCopyGetChunkRequest.getPartitionId(),
+            fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
+            fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
+      }
     } catch (Exception e) {
-      response = new FileCopyGetChunkResponse(
-          FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
-          fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
-          ServerErrorCode.Unknown_Error, fileCopyGetChunkRequest.getPartitionId(),
-          fileCopyGetChunkRequest.getFileName(), null,
-          fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.sizeInBytes(), false);
+      if (null == fileCopyGetChunkRequest) {
+        logger.error("Error while deserializing FileCopyGetChunkRequest", e);
+        response = new FileCopyGetChunkResponse(ServerErrorCode.Unknown_Error);
+      } else {
+        logger.error("Error while getting data chunk for partition {}",
+            fileCopyGetChunkRequest.getPartitionId().getId(), e);
+        response = new FileCopyGetChunkResponse(FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
+            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
+            ServerErrorCode.Unknown_Error, fileCopyGetChunkRequest.getPartitionId(),
+            fileCopyGetChunkRequest.getFileName(), null, fileCopyGetChunkRequest.getStartOffset(),
+            fileCopyGetChunkRequest.sizeInBytes(), false);
+      }
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", fileCopyGetChunkRequest, response, processingTime);
 
-      requestResponseChannel.sendResponse(response, request, null);
-      return;
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      if (null != fileCopyGetChunkRequest) {
+        fileCopyGetChunkRequest.accept(metricsUpdater);
+      }
     }
-    response = new FileCopyGetChunkResponse(
-        FileCopyGetChunkResponse.File_Copy_Chunk_Response_Version_V1,
-        fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
-        ServerErrorCode.No_Error, fileCopyGetChunkRequest.getPartitionId(),
-        fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
-        fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
-
-    // TODO: Add metrics for this operation
-    Histogram dummyHistogram = new Histogram(new Reservoir() {
-      @Override
-      public int size() {
-        return 0;
-      }
-
-      @Override
-      public void update(long value) {
-      }
-
-      @Override
-      public Snapshot getSnapshot() {
-        return null;
-      }
-    });
-    ServerNetworkResponseMetrics serverNetworkResponseMetrics = new ServerNetworkResponseMetrics(dummyHistogram,
-        dummyHistogram, dummyHistogram, null, null, 0);
-
-    requestResponseChannel.sendResponse(response, request, serverNetworkResponseMetrics);
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.fileCopyGetChunkResponseQueueTimeInMs,
+            metrics.fileCopyGetChunkSendTimeInMs, metrics.fileCopyGetChunkTotalTimeInMs,
+            null, null, totalTimeSpent));
   }
 
   /**
@@ -1947,6 +1959,28 @@ public class AmbryRequests implements RequestAPI {
       return ServerErrorCode.Partition_ReadOnly;
     }
     return ServerErrorCode.No_Error;
+  }
+
+  private ServerErrorCode validateRequest(PartitionId partition, RequestOrResponse request,
+      RequestOrResponseType requestType) {
+    if (requestType.equals(RequestOrResponseType.FileCopyGetChunkRequest)) {
+      if (!(request instanceof FileCopyGetChunkRequest)) {
+        logger.error("Request is not an instance of FileCopyGetChunkRequest");
+        return ServerErrorCode.Bad_Request;
+      }
+      final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
+      final String BLOOM_FILE_NAME_SUFFIX = "bloom";
+      final String LOG_FILE_NAME_SUFFIX = "log";
+      FileCopyGetChunkRequest fileCopyGetChunkRequest = (FileCopyGetChunkRequest) request;
+
+      if (!fileCopyGetChunkRequest.getFileName().endsWith(INDEX_SEGMENT_FILE_NAME_SUFFIX)
+          && !fileCopyGetChunkRequest.getFileName().endsWith(BLOOM_FILE_NAME_SUFFIX)
+          && !fileCopyGetChunkRequest.getFileName().endsWith(LOG_FILE_NAME_SUFFIX)) {
+        logger.error("FileCopyGetChunkRequest file name is not valid");
+        return ServerErrorCode.Bad_Request;
+      }
+    }
+    return validateRequest(partition, requestType, false);
   }
 
   /**
@@ -2183,6 +2217,20 @@ public class AmbryRequests implements RequestAPI {
       requestTotalTimeHistogram = metrics.fileCopyGetMetadataTotalTimeInMs;
       if (isRequestDropped) {
         metrics.fileCopyGetMetadataDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(FileCopyGetChunkRequest fileCopyGetChunkRequest) {
+      metrics.fileCopyGetChunkRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.fileCopyGetChunkRequestRate.mark();
+      metrics.fileCopyGetChunkProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.fileCopyGetChunkResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.fileCopyGetChunkSendTimeInMs;
+      requestTotalTimeHistogram = metrics.fileCopyGetChunkTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.fileCopyGetChunkDroppedRate.mark();
         metrics.totalRequestDroppedRate.mark();
       }
     }

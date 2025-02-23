@@ -55,6 +55,12 @@ public interface RequestVisitor {
   void visit(FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest);
 
   /**
+   * Performs any actions related to Get data chunk request.
+   * @param fileCopyGetChunkRequest to visit.
+   */
+  void visit(FileCopyGetChunkRequest fileCopyGetChunkRequest);
+
+  /**
    * Performs any actions related to Un-delete request.
    * @param undeleteRequest to visit.
    */

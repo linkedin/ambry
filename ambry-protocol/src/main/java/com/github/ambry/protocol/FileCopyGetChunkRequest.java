@@ -21,17 +21,55 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 
 
+/**
+ * Protocol class representing request to get a chunk of a file.
+ */
 public class FileCopyGetChunkRequest extends RequestOrResponse {
+  /**
+   * The partition id of the requested file.
+   */
   private final PartitionId partitionId;
+
+  /**
+   * The name of the requested file.
+   */
   private final String fileName;
+
+  /**
+   * The start offset of the chunk.
+   */
   private final long startOffset;
+
+  /**
+   * The size of the chunk in bytes.
+   */
   private final long chunkLengthInBytes;
-  public static final short File_Chunk_Request_Version_V1 = 1;
-  private static final int File_Name_Size_In_Bytes = 4;
 
-  static short CURRENT_VERSION = File_Chunk_Request_Version_V1;
+  /**
+   * The version of the FileChunkRequest
+   */
+  public static final short FILE_CHUNK_REQUEST_VERSION_V_1 = 1;
 
+  /**
+   * The size of the file name field in bytes.
+   */
+  private static final int FILE_NAME_SIZE_IN_BYTES = 4;
 
+  /**
+   * The current version of the FileChunkRequest
+   */
+  static short CURRENT_VERSION = FILE_CHUNK_REQUEST_VERSION_V_1;
+
+  /**
+   * Constructor for FileCopyGetChunkRequest
+   * @param versionId The version of the request.
+   * @param correlationId The correlation id of the request.
+   * @param clientId The client id of the request.
+   * @param partitionId The partition id of the requested file.
+   * @param fileName The name of the requested file.
+   * @param startOffset The start offset of the chunk.
+   * @param sizeInBytes The size of the chunk in bytes.
+   */
   public FileCopyGetChunkRequest( short versionId, int correlationId,
       String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
     super(RequestOrResponseType.FileCopyGetChunkRequest, versionId, correlationId, clientId);
@@ -44,6 +82,13 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     this.chunkLengthInBytes = sizeInBytes;
   }
 
+  /**
+   * Serialize the request into a buffer
+   * @param stream The stream to write to
+   * @param clusterMap The cluster map
+   * @return FileCopyGetChunkRequest
+   * @throws IOException
+   */
   public static FileCopyGetChunkRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
       throws IOException {
     Short versionId = stream.readShort();
@@ -60,6 +105,10 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
         fileName, startOffset, sizeInBytes);
   }
 
+  /**
+   * Prepare the buffer to send
+   */
+  @Override
   protected void prepareBuffer(){
     super.prepareBuffer();
     bufferToSend.writeBytes(partitionId.getBytes());
@@ -79,23 +128,43 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     return sb.toString();
   }
 
+  /**
+   * Get the size of the request in bytes
+   * @return long
+   */
   public long sizeInBytes() {
-    return super.sizeInBytes() + partitionId.getBytes().length + File_Name_Size_In_Bytes + fileName.length() +
+    return super.sizeInBytes() + partitionId.getBytes().length + FILE_NAME_SIZE_IN_BYTES + fileName.length() +
         Long.BYTES + Long.BYTES;
   }
 
+  /**
+   * Get the partition id of the request
+   * @return PartitionId
+   */
   public PartitionId getPartitionId() {
     return partitionId;
   }
 
+  /**
+   * Get the name of the requested file
+   * @return String
+   */
   public String getFileName() {
     return fileName;
   }
 
+  /**
+   * Get the start offset of the chunk
+   * @return long
+   */
   public long getStartOffset() {
     return startOffset;
   }
 
+  /**
+   * Get the size of the chunk in bytes
+   * @return long
+   */
   public long getChunkLengthInBytes() {
     return chunkLengthInBytes;
   }
