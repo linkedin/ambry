@@ -42,6 +42,7 @@ public class ClusterMapConfig {
   public static final String DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK =
       "clustermap.delete.data.from.datanode.config.in.property.store.clean.up.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
+  public static final String IS_AUTO_REGISTRATION_ENABLED = "clustermap.auto.registration.enabled";
 
   /**
    * The factory class used to get the resource state policies.
@@ -379,6 +380,10 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapIgnoreDownwardStateTransition;
 
+  @Config(IS_AUTO_REGISTRATION_ENABLED)
+  @Default("false")
+  public final boolean clusterMapAutoRegistrationEnabled;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -464,5 +469,6 @@ public class ClusterMapConfig {
         verifiableProperties.getLongInRange("clustermap.default.replica.capacity.in.bytes", 384L * 1024 * 1024 * 1024,
             0, Long.MAX_VALUE);
     clusterMapIgnoreDownwardStateTransition = verifiableProperties.getBoolean(IGNORE_DOWNWARD_STATE_TRANSITION, false);
+    clusterMapAutoRegistrationEnabled = verifiableProperties.getBoolean(IS_AUTO_REGISTRATION_ENABLED, false);
   }
 }

@@ -20,9 +20,15 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
+import org.apache.helix.HelixManagerProperty;
 import org.apache.helix.InstanceType;
+import org.apache.helix.constants.InstanceConstants;
+import org.apache.helix.manager.zk.ZKHelixManager;
+import org.apache.helix.model.InstanceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
@@ -43,10 +49,10 @@ public class HelixFactory {
    * @return the constructed {@link HelixManager}.
    */
   public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-      String zkAddr) {
+      String zkAddr, ClusterMapConfig clusterMapConfig) {
     ManagerKey managerKey = new ManagerKey(clusterName, instanceName, instanceType, zkAddr);
     return helixManagers.computeIfAbsent(managerKey,
-        k -> buildZKHelixManager(clusterName, instanceName, instanceType, zkAddr));
+        k -> buildZKHelixManager(clusterName, instanceName, instanceType, zkAddr, clusterMapConfig));
   }
 
   /**
@@ -59,8 +65,8 @@ public class HelixFactory {
    * @throws Exception if connecting failed.
    */
   public HelixManager getZkHelixManagerAndConnect(String clusterName, String instanceName, InstanceType instanceType,
-      String zkAddr) throws Exception {
-    HelixManager manager = getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
+      String zkAddr, ClusterMapConfig clusterMapConfig) throws Exception {
+    HelixManager manager = getZKHelixManager(clusterName, instanceName, instanceType, zkAddr, clusterMapConfig);
     synchronized (manager) {
       if (!manager.isConnected()) {
         LOGGER.info("Connecting to HelixManager at {}", zkAddr);
@@ -95,8 +101,32 @@ public class HelixFactory {
    * @param zkAddr the address identifying the zk service to which this request is to be made.
    * @return a new instance of {@link HelixManager}.
    */
-  HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
-    return HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
+  HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr
+  , ClusterMapConfig clusterMapConfig) {
+    HelixManager helixManager;
+    if (clusterMapConfig != null && clusterMapConfig.clusterMapAutoRegistrationEnabled) {
+      LOGGER.info("Autoregistration enabled for cluster {} with instanceName {} and instanceType {}", clusterName, instanceName, instanceType);
+
+      String port = getPortFromInstanceName(instanceName);
+
+      InstanceConfig.Builder instanceConfigBuilder = new InstanceConfig.Builder().setInstanceOperation(InstanceConstants.InstanceOperation.UNKNOWN);
+      if (port != null && !port.isEmpty()) {
+        instanceConfigBuilder.setPort(port);
+      }
+
+      HelixManagerProperty participantHelixProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(instanceConfigBuilder).build();
+      HelixManagerProperty defaultHelixManagerProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(new InstanceConfig.Builder()).build();
+
+      helixManager = new ZKHelixManager(clusterName, instanceName, instanceType, zkAddr, null,
+          instanceType == InstanceType.PARTICIPANT ?  participantHelixProperty : defaultHelixManagerProperty);
+      LOGGER.info("Created HelixManager for cluster {} with instanceName {} and instanceType {}", clusterName, instanceName, instanceType);
+
+    } else {
+      helixManager =  HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
+    }
+
+
+    return helixManager;
   }
 
   /**
@@ -114,7 +144,7 @@ public class HelixFactory {
         instanceConfigSource = new InstanceConfigToDataNodeConfigAdapter(
             getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName,
                 ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort),
-                InstanceType.SPECTATOR, zkAddr), clusterMapConfig);
+                InstanceType.SPECTATOR, zkAddr, clusterMapConfig), clusterMapConfig);
       }
       PropertyStoreToDataNodeConfigAdapter propertyStoreSource = null;
       if (clusterMapConfig.clusterMapDataNodeConfigSourceType.isPropertyStoreAware()) {
