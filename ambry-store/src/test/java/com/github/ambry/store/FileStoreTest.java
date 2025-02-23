@@ -114,13 +114,12 @@ public class FileStoreTest {
     fos.write(content.getBytes());
     fos.close();
 
-    ByteBuffer result = fileStore.getByteBufferForFileChunk(testFile.getName(),
-        0,
-        content.length()
-    );
+    StoreFileChunk result = fileStore.getByteBufferForFileChunk(testFile.getName(), 0, content.length());
+    assertNotNull("Result should not be null", result);
 
-    byte[] readContent = new byte[result.remaining()];
-    result.get(readContent);
+    ByteBuffer buf = result.toBuffer();
+    byte[] readContent = new byte[buf.remaining()];
+    buf.get(readContent);
     assertEquals("Content should match", content, new String(readContent));
   }
 
@@ -368,12 +367,9 @@ public class FileStoreTest {
             @Override
             public ByteBuffer call() throws Exception {
                 try {
-                    ByteBuffer result = fileStore.getByteBufferForFileChunk(testFile.getName(),
-                        offset,
-                        2
-                    );
+                    StoreFileChunk result = fileStore.getByteBufferForFileChunk(testFile.getName(), offset, 2);
                     latch.countDown();
-                    return result;
+                    return result.toBuffer();
                 } catch (Exception e) {
                     throw e;
                 }

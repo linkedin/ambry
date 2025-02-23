@@ -13,7 +13,11 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Objects;
 
 
 /**
@@ -36,8 +40,33 @@ public class StoreFileChunk {
    * @param chunkLength the size of the chunk in bytes
    */
   public StoreFileChunk(DataInputStream stream, long chunkLength) {
+    Objects.requireNonNull(stream, "DataInputStream cannot be null");
+    Objects.requireNonNull(chunkLength, "Chunk length cannot be null");
+
     this.stream = stream;
     this.chunkLength = chunkLength;
+  }
+
+  /**
+   * Create a StoreFileChunk from a ByteBuffer
+   * @param buf the ByteBuffer to create the StoreFileChunk from
+   * @return StoreFileChunk representing the chunk stream of the file requested
+   */
+  public static StoreFileChunk from(ByteBuffer buf) {
+    Objects.requireNonNull(buf, "ByteBuffer cannot be null");
+    return new StoreFileChunk(
+        new DataInputStream(new ByteBufferInputStream(buf)), buf.remaining());
+  }
+
+  /**
+   * Convert the chunk stream to a ByteBuffer
+   * @return ByteBuffer representing the chunk stream of the file requested
+   * @throws IOException
+   */
+  public ByteBuffer toBuffer() throws IOException {
+    byte[] buf = new byte[(int) chunkLength];
+    stream.readFully(buf);
+    return ByteBuffer.wrap(buf);
   }
 
   /**

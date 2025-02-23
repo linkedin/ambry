@@ -67,7 +67,7 @@ import org.slf4j.LoggerFactory;
  * - Uses atomic operations for file writes
  * - Maintains thread-safe state management
  */
-class FileStore {
+class FileStore implements LogSegmentStore {
   // Logger instance for this class
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
 
@@ -147,7 +147,7 @@ class FileStore {
    * @return ByteBuffer containing the requested data
    * @throws StoreException        if there are issues reading the file
    */
-  public ByteBuffer getByteBufferForFileChunk(String fileName, int offset, int size)
+  public StoreFileChunk getByteBufferForFileChunk(String fileName, long offset, long size)
       throws StoreException {
     // Verify service is running before proceeding
     validateIfFileStoreIsRunning();
@@ -166,7 +166,7 @@ class FileStore {
       randomAccessFile.seek(offset);
 
       // Allocate buffer for reading data
-      ByteBuffer buf = ByteBuffer.allocate(size);
+      ByteBuffer buf = ByteBuffer.allocate((int) size);
 
       // Read data into buffer. Looping sinze read() doesn't guarantee reading all bytes in one go.
       while (buf.hasRemaining()) {
@@ -181,7 +181,7 @@ class FileStore {
       buf.flip();
 
       // return file chunk buffer read
-      return buf;
+      return StoreFileChunk.from(buf);
     }  catch (FileNotFoundException e) {
       throw new StoreException("File not found while reading chunk for FileCopy", e,
           StoreErrorCodes.File_Not_Found);

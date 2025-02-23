@@ -356,7 +356,7 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public FileStore getFileStore(PartitionId id) {
+  public LogSegmentStore getFileStore(PartitionId id) {
     //TODO: Implementation To Be added.
     return null;
   }

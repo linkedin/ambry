@@ -118,6 +118,7 @@ import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1769,9 +1770,9 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetChunkResponse(
             fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), error);
       } else {
-        chunkResponse = storeManager.getStore(fileCopyGetChunkRequest.getPartitionId())
-            .getFileChunk(fileCopyGetChunkRequest.getFileName(), fileCopyGetChunkRequest.getChunkLengthInBytes(),
-                fileCopyGetChunkRequest.getStartOffset());
+        chunkResponse = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId())
+            .getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(), fileCopyGetChunkRequest.getStartOffset(),
+                fileCopyGetChunkRequest.getChunkLengthInBytes());
         response = new FileCopyGetChunkResponse(
             FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
             fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
