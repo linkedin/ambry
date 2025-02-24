@@ -42,6 +42,7 @@ public class ClusterMapConfig {
   public static final String DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK =
       "clustermap.delete.data.from.datanode.config.in.property.store.clean.up.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
+  public static final String IS_AUTO_REGISTRATION_ENABLED = "clustermap.auto.registration.enabled";
 
   /**
    * The factory class used to get the resource state policies.
@@ -333,6 +334,13 @@ public class ClusterMapConfig {
   public final int clustermapRetryDisablePartitionCompletionBackoffMs;
 
   /**
+   * If true, enables metrics that tracks state transition for each partition.
+   */
+  @Config("clustermap.enable.partition.state.transition.metrics")
+  @Default("false")
+  public final boolean clustermapEnablePartitionStateTransitionMetrics;
+
+  /**
    * True to enable aggregation task to generate a base account report for each month.
    */
   @Config(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT)
@@ -371,6 +379,10 @@ public class ClusterMapConfig {
   @Config(IGNORE_DOWNWARD_STATE_TRANSITION)
   @Default("false")
   public final boolean clusterMapIgnoreDownwardStateTransition;
+
+  @Config(IS_AUTO_REGISTRATION_ENABLED)
+  @Default("false")
+  public final boolean clusterMapAutoRegistrationEnabled;
 
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
@@ -439,6 +451,8 @@ public class ClusterMapConfig {
     clustermapRetryDisablePartitionCompletionBackoffMs =
         verifiableProperties.getIntInRange("clustermap.retry.disable.partition.completion.backoff.ms", 10 * 1000, 1,
             Integer.MAX_VALUE);
+    clustermapEnablePartitionStateTransitionMetrics =
+        verifiableProperties.getBoolean("clustermap.enable.partition.state.transition.metrics", false);
     clustermapEnableAggregatedMonthlyAccountReport =
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
@@ -455,5 +469,6 @@ public class ClusterMapConfig {
         verifiableProperties.getLongInRange("clustermap.default.replica.capacity.in.bytes", 384L * 1024 * 1024 * 1024,
             0, Long.MAX_VALUE);
     clusterMapIgnoreDownwardStateTransition = verifiableProperties.getBoolean(IGNORE_DOWNWARD_STATE_TRANSITION, false);
+    clusterMapAutoRegistrationEnabled = verifiableProperties.getBoolean(IS_AUTO_REGISTRATION_ENABLED, false);
   }
 }

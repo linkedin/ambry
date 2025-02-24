@@ -40,6 +40,7 @@ import java.io.SequenceInputStream;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -56,6 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1241,6 +1243,11 @@ public class BlobStore implements Store {
     return log;
   }
 
+  // Only for testing.
+  void setLog(Log log) {
+    this.log = log;
+  }
+
   /**
    * Set if the store is recovering from decommission
    * @param value {@code true if store is recovering from decommission}. {@code false} otherwise.
@@ -1315,6 +1322,70 @@ public class BlobStore implements Store {
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);
+  }
+
+  /**
+   * Gets the log segment metadata files from in-memory data structures
+   * This method returns List of LogSegmentFiles along with its IndexFiles, BloomFilterFiles
+   */
+  @Override
+  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+    List<LogInfo> result = new ArrayList<>();
+    final Timer.Context context = metrics.fileCopyGetMetadataResponse.time();
+
+    List<FileInfo> logSegments = getLogSegments(includeActiveLogSegment);
+    if (null != logSegments) {
+      for (FileInfo storeFileInfo : logSegments) {
+        LogSegmentName logSegmentName;
+
+        if (storeFileInfo.getFileName().isEmpty()) {
+          // This happens when the code is running locally and a single LS exists with the name "log_current"
+          logSegmentName = LogSegmentName.fromFilename(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
+        } else {
+          logSegmentName = LogSegmentName.fromFilename(storeFileInfo.getFileName() + LogSegmentName.SUFFIX);
+        }
+        List<FileInfo> indexFiles = getIndexSegmentFilesForLogSegment(dataDir, logSegmentName);
+        List<FileInfo> bloomFiles = getBloomFilterFilesForLogSegment(dataDir, logSegmentName);
+
+        result.add(new StoreLogInfo(storeFileInfo, indexFiles, bloomFiles));
+      }
+    }
+    context.stop();
+    return result;
+  }
+
+  /**
+   * Get all log segments in the store.
+   * Param includeActiveLogSegment is used to determine if the active log segment should be included in the result.
+   */
+  private List<FileInfo> getLogSegments(boolean includeActiveLogSegment) {
+    return log.getAllLogSegmentNames().stream()
+        .filter(segmentName -> includeActiveLogSegment || !segmentName.equals(log.getActiveSegment().getName()))
+        .map(segmentName -> log.getSegment(segmentName))
+        .map(segment -> {
+          FileInfo storeFileInfo = new StoreFileInfo(segment.getName().toString(), segment.getView().getFirst().length());
+          segment.closeView();
+          return storeFileInfo;
+        })
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Get all index segments for a log segment.
+   */
+  private List<FileInfo> getIndexSegmentFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
+    return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
+        .map(file -> new StoreFileInfo(file.getName(), file.length()))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Get all bloom filter files for a log segment.
+   */
+  private List<FileInfo> getBloomFilterFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
+    return Arrays.stream(PersistentIndex.getBloomFilterFilesForLogSegment(dataDir, logSegmentName))
+        .map(file -> new StoreFileInfo(file.getName(), file.length()))
+        .collect(Collectors.toList());
   }
 
   /**

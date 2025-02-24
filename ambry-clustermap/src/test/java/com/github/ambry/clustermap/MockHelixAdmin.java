@@ -89,6 +89,12 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   @Override
+  public void setPartitionsToError(String clusterName, String instanceName, String resourceName,
+      List<String> partitionNames) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void enableInstance(String clusterName, String instanceName, boolean enabled,
       InstanceConstants.InstanceDisabledType disabledType, String reason) {
   }
@@ -633,6 +639,24 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   @Override
+  public void setInstanceOperation(String clusterName, String instanceName,
+      InstanceConstants.InstanceOperation instanceOperation) {
+    setInstanceOperation(clusterName, instanceName, instanceOperation, "Not Implemented");
+  }
+
+  @Override
+  public void setInstanceOperation(String clusterName, String instanceName,
+      InstanceConstants.InstanceOperation instanceOperation, String reason) {
+    setInstanceOperation(clusterName, instanceName, instanceOperation, reason, false);
+  }
+
+  @Override
+  public void setInstanceOperation(String clusterName, String instanceName,
+      InstanceConstants.InstanceOperation instanceOperation, String reason, boolean overrideAll) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void enableResource(String clusterName, String resourceName, boolean enabled) {
     throw new IllegalStateException("Not implemented");
   }
@@ -763,6 +787,11 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   @Override
+  public void onDemandRebalance(String s) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void addIdealState(String clusterName, String resourceName, String idealStateFile) throws IOException {
     throw new IllegalStateException("Not implemented");
   }
@@ -868,6 +897,26 @@ public class MockHelixAdmin implements HelixAdmin {
   @Override
   public Map<String, Boolean> validateInstancesForWagedRebalance(String clusterName, List<String> instancesNames) {
     return null;
+  }
+
+  @Override
+  public boolean isEvacuateFinished(String clusterName, String instancesNames) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public boolean canCompleteSwap(String clusterName, String instanceName) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public boolean completeSwapIfPossible(String clusterName, String instanceName, boolean forceComplete) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public boolean isReadyForPreparingJoiningCluster(String clusterName, String instancesNames) {
+    throw new IllegalStateException("Not implemented");
   }
 
   /**

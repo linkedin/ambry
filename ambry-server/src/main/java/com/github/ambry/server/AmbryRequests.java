@@ -60,6 +60,8 @@ import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
+import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -89,6 +91,7 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageErrorInfo;
 import com.github.ambry.store.MessageInfo;
@@ -103,6 +106,7 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
+import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -233,6 +237,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case ReplicateBlobRequest:
           handleReplicateBlobRequest(networkRequest);
+          break;
+        case FileCopyGetMetaDataRequest:
+          handleFileCopyGetMetaDataRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -1673,6 +1680,67 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
+   * Handler for FileMetadataRequest
+   */
+  @Override
+  public void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+
+    FileCopyGetMetaDataResponse response = null;
+    FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest = null;
+
+    try {
+      fileCopyGetMetaDataRequest =
+          FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+
+      ServerErrorCode error = validateRequest(fileCopyGetMetaDataRequest.getPartitionId(),
+              RequestOrResponseType.FileCopyGetMetaDataRequest, false);
+      if (error != ServerErrorCode.No_Error) {
+        logger.error("Validating FileCopyGetMetaDataRequest failed with error {} for request {}",
+            error, fileCopyGetMetaDataRequest);
+        response = new FileCopyGetMetaDataResponse(
+            fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), error);
+      } else {
+        List<LogInfo> logSegments = storeManager.getStore(
+            fileCopyGetMetaDataRequest.getPartitionId()).getLogSegmentMetadataFiles(false);
+
+        response = new FileCopyGetMetaDataResponse(
+            FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+            fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
+            logSegments.size(), logSegments, ServerErrorCode.No_Error);
+      }
+    } catch (Exception e) {
+      if (null == fileCopyGetMetaDataRequest) {
+        logger.error("Error while deserializing FileCopyGetMetaDataRequest", e);
+        response = new FileCopyGetMetaDataResponse(ServerErrorCode.Unknown_Error);
+      } else {
+        logger.error("Error while getting log segment metadata for partition {}",
+            fileCopyGetMetaDataRequest.getPartitionId().getId(), e);
+        response = new FileCopyGetMetaDataResponse(
+            FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+            fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), 0,
+            new ArrayList<>(), ServerErrorCode.Unknown_Error);
+      }
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", fileCopyGetMetaDataRequest, response, processingTime);
+
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(
+          requestQueueTime, processingTime, 0, 0, false);
+      if (null != fileCopyGetMetaDataRequest) {
+        fileCopyGetMetaDataRequest.accept(metricsUpdater);
+      }
+    }
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.fileCopyGetMetadataResponseQueueTimeInMs,
+            metrics.fileCopyGetMetadataSendTimeInMs, metrics.fileCopyGetMetadataTotalTimeInMs,
+            null, null, totalTimeSpent));
+  }
+
+  /**
    * Get the formatted messages which needs to be written to Store.
    * @param receivedRequest received Put Request
    * @return {@link MessageFormatWriteSet} that contains the formatted messages which needs to be written to store.
@@ -2047,6 +2115,20 @@ public class AmbryRequests implements RequestAPI {
     @Override
     public void visit(BatchDeleteRequest deleteRequest) {
 
+    }
+
+    @Override
+    public void visit(FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest) {
+      metrics.fileCopyGetMetadataRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.fileCopyGetMetadataRequestRate.mark();
+      metrics.fileCopyGetMetadataProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.fileCopyGetMetadataResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.fileCopyGetMetadataSendTimeInMs;
+      requestTotalTimeHistogram = metrics.fileCopyGetMetadataTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.fileCopyGetMetadataDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
     }
 
     @Override

@@ -2353,7 +2353,7 @@ public class HelixClusterManagerTest {
 
     @Override
     HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-        String zkAddr) {
+        String zkAddr, ClusterMapConfig clusterMapConfig1) {
       if (!helixCluster.getZkAddrs().contains(zkAddr)) {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }

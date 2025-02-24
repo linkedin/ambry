@@ -49,6 +49,12 @@ public interface RequestVisitor {
   void visit(BatchDeleteRequest deleteRequest);
 
   /**
+   * Performs any actions related to Get file metadata request.
+   * @param fileCopyGetMetaDataRequest to visit.
+   */
+  void visit(FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest);
+
+  /**
    * Performs any actions related to Un-delete request.
    * @param undeleteRequest to visit.
    */

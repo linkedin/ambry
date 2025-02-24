@@ -420,6 +420,24 @@ public class DiskManager {
     return succeed;
   }
 
+  /**
+   * Return true if the compaction is disabled for the given partition id.
+   * @param id
+   * @return
+   */
+  boolean compactionDisabledForBlobStore(PartitionId id) {
+    rwLock.readLock().lock();
+    try {
+      BlobStore store = stores.get(id);
+      if (store == null) {
+        throw new IllegalArgumentException("Failed to find store " + id);
+      }
+      return compactionManager.compactionDisabledForBlobStore(store);
+    } finally {
+      rwLock.readLock().unlock();
+    }
+  }
+
 
   /**
    * Add a new BlobStore with given {@link ReplicaId}.
@@ -813,11 +831,19 @@ public class DiskManager {
     return diskHealthStatus;
   }
 
+  /**
+   * Checks if the file exists on the disk
+   * @param fileName
+   * @return
+   */
   public boolean isFileExists(String fileName) {
     String filePath = this.disk.getMountPath() + File.separator + fileName;
     return new File(filePath).exists();
   }
 
+  /**
+   * Gets the files for the given pattern from the disk
+   */
   public List<File> getFilesForPattern(Pattern pattern) throws IOException {
     return Utils.getFilesForPattern(this.disk.getMountPath(), pattern);
   }

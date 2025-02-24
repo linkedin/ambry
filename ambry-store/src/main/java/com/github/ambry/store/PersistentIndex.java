@@ -2670,6 +2670,26 @@ public class PersistentIndex implements LogSegmentSizeProvider {
   }
 
   /**
+   * Gets the list of bloom filter files that refer to the log segment with name {@code logSegmentName}.
+   * @param dataDir the directory where the index files are.
+   * @param logSegmentName the name of the log segment whose bloom filter files are required.
+   * @return the list of bloom filter files that refer to the log segment with name {@code logSegmentName}.
+   */
+  static File[] getBloomFilterFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
+   return new File(dataDir).listFiles(new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        if (logSegmentName.toString().isEmpty()) {
+          return name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX);
+        } else {
+          return name.startsWith(logSegmentName + BlobStore.SEPARATOR) &&
+              name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX);
+        }
+      }
+    });
+  }
+
+  /**
    * Cleans up all files related to index segments that refer to the log segment with name {@code logSegmentName}.
    *  @param dataDir the directory where the index files are.
    * @param logSegmentName the name of the log segment whose index segment related files need to be deleteds.

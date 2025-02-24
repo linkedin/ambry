@@ -142,6 +142,10 @@ class Log implements Write {
     return activeSegment.appendFrom(buffer);
   }
 
+  LogSegment getActiveSegment() {
+    return activeSegment;
+  }
+
   /**
    * Appends the given {@code byteArray} to the active log segment in direct IO manner.
    * The {@code byteArray} will be written to a single log segment i.e. its data will not exist across segments.

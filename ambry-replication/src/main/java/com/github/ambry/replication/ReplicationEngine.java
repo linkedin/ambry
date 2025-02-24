@@ -784,7 +784,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
                 remoteReplica.getDataNodeId());
             if (partitionInfo.addReplicaInfoIfAbsent(remoteReplicaInfo)) {
               replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo,
-                  replicationConfig.replicationTrackPerDatacenterLagFromLocal);
+                  replicationConfig.replicationTrackPerDatacenterLagFromLocal,
+                  replicationConfig.replicationTrackPerReplicaReplicationBytes);
               replicaInfosToAdd.add(remoteReplicaInfo);
             }
           }

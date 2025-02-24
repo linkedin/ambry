@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.constants.InstanceConstants;
 import org.apache.helix.lock.LockScope;
 import org.apache.helix.lock.helix.HelixLockScope;
 import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
@@ -495,6 +496,43 @@ public class HelixParticipantTest {
   }
 
   /**
+   * Tests whether the correct metrics that are getting logged for state transitions
+   * and correct clearance of metrics
+   * @throws Exception exception
+   */
+  @Test
+  public void testHelixParticipantPartitionStateTransitionMetrics() throws Exception {
+    props.setProperty("clustermap.enable.partition.state.transition.metrics", "true");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    HelixParticipant participant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory,
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipantMetrics metrics = participant.participantMetrics;
+    metrics.incStateTransitionMetric("test-1", ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
+    assertNotNull(metrics.partitionTransitionToCount.get("Partition-test-1-from-BOOTSTRAP-to-STANDBY"));
+
+    assertNull(metrics.partitionTransitionToCount.get(
+        "Partition-test-1-from-" + ReplicaState.STANDBY.name() + "-to-" + ReplicaState.LEADER.name()));
+
+    metrics.incStateTransitionMetric("test-1", ReplicaState.STANDBY, ReplicaState.LEADER);
+    assertNotNull(metrics.partitionTransitionToCount.get(
+        "Partition-test-1-from-" + ReplicaState.STANDBY.name() + "-to-" + ReplicaState.LEADER.name()));
+
+    metrics.incStateTransitionMetric("test-2", ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
+    assertNotNull(metrics.partitionTransitionToCount.get(
+        "Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
+
+    metrics.clearStateTransitionMetric("test-1");
+    assertNull(metrics.partitionTransitionToCount.get("Partition-test-1-from-BOOTSTRAP-to-STANDBY"));
+    assertNotNull(metrics.partitionTransitionToCount.get(
+        "Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
+
+    metrics.clearStateTransitionMetric("test-2");
+    assertNull(metrics.partitionTransitionToCount.get(
+        "Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
+  }
+
+  /**
    * Test both replica info addition and removal cases when updating node info in Helix cluster.
    * @throws Exception
    */
@@ -871,6 +909,29 @@ public class HelixParticipantTest {
     Thread.sleep(500);
     getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
     assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("offline", metricRegistry));
+
+    helixParticipant.close();
+  }
+
+
+  @Test
+  public void testEnableStatePostParticipate() throws IOException {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixManager manager = helixParticipant.getHelixManager();
+
+    assertEquals(manager.getInstanceType(), InstanceType.PARTICIPANT);
+    assertNotNull("HelixManager cannot be null", manager);
+
+    helixParticipant.participate(Collections.emptyList(), null, null);
+
+    // Without cloud config, instances should still be in ENABLE state
+    assertEquals(InstanceConstants.InstanceOperation.ENABLE,
+        manager.getConfigAccessor().getInstanceConfig(clusterName, manager.getInstanceName()).getInstanceOperation().getOperation());
 
     helixParticipant.close();
   }
