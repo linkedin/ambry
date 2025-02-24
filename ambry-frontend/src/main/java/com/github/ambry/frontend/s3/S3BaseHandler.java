@@ -27,6 +27,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
