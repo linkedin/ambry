@@ -97,7 +97,6 @@ public class NamedBlobPath {
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
     // For s3 request, if splitPath.length = 3 && Method = GET, the expected segments = 3
     // All other requests require segments = 4
-    System.out.println("RestMethod: " + args.get(InternalKeys.REST_METHOD));
     boolean isListObjectRequest = RestUtils.isListObjectRequest(path, args);
     int expectedSegments = (isListObjectRequest || isGetObjectLockRequest) ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
