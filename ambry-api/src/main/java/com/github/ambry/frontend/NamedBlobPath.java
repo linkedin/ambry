@@ -138,17 +138,6 @@ public class NamedBlobPath {
     return parse(requestPath.getOperationOrBlobId(true), args);
   }
 
-//  /**
-//   * Parse the request to see if it's a List request
-//   * @param restRequest
-//   * @return
-//   * @throws RestServiceException
-//   */
-//  public static NamedBlobPath parse(RestRequest restRequest) throws RestServiceException {
-//    restRequest.setArg(InternalKeys.REST_METHOD, restRequest.getRestMethod());
-//    return parse(getRequestPath(restRequest), restRequest.getArgs());
-//  }
-
   /**
    * Constructs a {@link NamedBlobPath}
    * @param accountName name of the account for named blob.

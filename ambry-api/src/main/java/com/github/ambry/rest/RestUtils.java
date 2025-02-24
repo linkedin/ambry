@@ -1616,7 +1616,5 @@ public class RestUtils {
       }
       return valueMap;
     }
-
-
   }
 }
