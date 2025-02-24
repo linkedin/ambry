@@ -262,7 +262,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
-  @Ignore
   @Test
   public void datasetTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -300,7 +299,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doListDatasetAndVerify(refAccount.getName(), namedBlobOptionalContainer.getName(), new ArrayList<>());
   }
 
-  @Ignore
   @Test
   public void datasetOutOfRetentionTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -343,7 +341,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     assertEquals("Should only have 1 version", 1, datasetVersions.size());
   }
 
-  @Ignore
   @Test
   public void datasetRenameTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -369,7 +366,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doListDatasetVersionAndVerify(datasetList, new ArrayList<>());
   }
 
-  @Ignore
   @Test
   public void datasetTtlTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
