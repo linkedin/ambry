@@ -100,8 +100,9 @@ abstract public class S3BaseHandler<R> {
    * @return {@code True} if it is a request to list parts of a completed multipart upload request.
    */
   public static boolean isListObjectRequest(RestRequest restRequest) throws RestServiceException {
+    RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
     return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
-        && NamedBlobPath.parse(restRequest).getBlobName() == null;
+        && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null;
   }
 
   /**

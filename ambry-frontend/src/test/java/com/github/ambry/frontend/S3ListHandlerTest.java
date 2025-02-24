@@ -57,6 +57,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
@@ -280,6 +281,7 @@ public class S3ListHandlerTest {
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
     request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> putResult = new FutureResult<>();
     namedBlobPutHandler.handle(request, restResponseChannel, putResult::done);
@@ -291,6 +293,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3ListHandler.handle(request, restResponseChannel, futureResult::done);

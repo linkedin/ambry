@@ -130,7 +130,7 @@ public class NamedBlobListHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.listSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(restRequest);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
         CallbackUtils.callCallbackAfter(
             namedBlobDb.list(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),

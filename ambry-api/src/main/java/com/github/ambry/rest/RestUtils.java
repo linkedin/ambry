@@ -529,7 +529,7 @@ public class RestUtils {
     public static final String CONTENT_RANGE_LENGTH = KEY_PREFIX + "content-range-length";
 
     /**
-     * Boolean field set to "true" if this is a S3 request.
+     * Rest method for the rest request
      */
     public static final String REST_METHOD = KEY_PREFIX + "rest-method";
   }
