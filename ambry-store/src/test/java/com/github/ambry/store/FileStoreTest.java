@@ -59,7 +59,6 @@ public class FileStoreTest {
 
   private FileStore fileStore;
   private File tempDir;
-  private StoreMetrics metrics;
   private FileCopyConfig fileCopyConfig;
 
   /**
@@ -69,7 +68,6 @@ public class FileStoreTest {
   @Before
   public void setUp() throws Exception {
     tempDir = Files.createTempDirectory("FileStoreTest").toFile();
-    metrics = new StoreMetrics(new MetricRegistry());
     Properties props = new Properties();
     fileCopyConfig = new FileCopyConfig(new VerifiableProperties(props));
     fileStore = new FileStore(fileCopyConfig, tempDir.getAbsolutePath());

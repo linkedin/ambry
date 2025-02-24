@@ -14,16 +14,13 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.LogSegmentStore;
 import com.github.ambry.store.Store;
-import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -113,7 +110,7 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public FileStore getFileStore(PartitionId id) {
+  public LogSegmentStore getFileStore(PartitionId id) {
     return null;
   }
 

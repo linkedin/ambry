@@ -1750,7 +1750,7 @@ public class AmbryRequests implements RequestAPI {
    * Handler for FileCopyGetChunkRequest
    */
   @Override
-  public void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException, IOException {
+  public void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();

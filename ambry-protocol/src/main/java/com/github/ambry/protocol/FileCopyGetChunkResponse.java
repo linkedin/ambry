@@ -20,6 +20,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.Objects;
 
 
 /**
@@ -92,7 +93,16 @@ public class FileCopyGetChunkResponse extends Response {
     super(RequestOrResponseType.FileCopyGetChunkResponse, versionId, correlationId, clientId, errorCode);
 
     validateVersion(versionId);
+    Objects.requireNonNull(partitionId, "PartitionId cannot be null");
+    Objects.requireNonNull(chunkStream, "ChunkStream cannot be null");
 
+    Objects.requireNonNull(fileName, "FileName cannot be null");
+    if (fileName.isEmpty()) {
+      throw new IllegalArgumentException("FileName cannot be empty");
+    }
+    if (startOffset < 0 || chunkSizeInBytes < 0) {
+      throw new IllegalArgumentException("StartOffset or ChunkSizeInBytes cannot be negative");
+    }
     this.chunkStream = chunkStream;
     this.startOffset = startOffset;
     this.chunkSizeInBytes = chunkSizeInBytes;
@@ -108,7 +118,14 @@ public class FileCopyGetChunkResponse extends Response {
    * @param errorCode The error code of the response.
    */
   public FileCopyGetChunkResponse(int correlationId, String clientId, ServerErrorCode errorCode) {
-    this(CURRENT_VERSION, correlationId, clientId, errorCode, null, null, null, -1, -1, false);
+    super(RequestOrResponseType.FileCopyGetChunkResponse, CURRENT_VERSION, correlationId, clientId, errorCode);
+
+    this.chunkStream = null;
+    this.startOffset = -1;
+    this.chunkSizeInBytes = -1;
+    this.isLastChunk = false;
+    this.partitionId = null;
+    this.fileName = null;
   }
 
   /**
