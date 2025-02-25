@@ -25,7 +25,7 @@ import java.util.Map;
  * Metrics for {@link HelixParticipant} to monitor partition state transitions.
  */
 class HelixParticipantMetrics {
-  private static final String transitionUpdateTemplate = "Partition-%s-from-%s-to-%s";
+  private static final String stateTransitionMetricTemplate = "State-Transition-Partition-%s-from-%s-to-%s";
 
   private final boolean enablePartitionStateTransitionMetrics;
 
@@ -102,7 +102,7 @@ class HelixParticipantMetrics {
    * @param to end state
    */
   void incStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
-    String metricName = String.format(transitionUpdateTemplate, partitionName, from.toString(), to.toString());
+    String metricName = String.format(stateTransitionMetricTemplate, partitionName, from.toString(), to.toString());
     if (enablePartitionStateTransitionMetrics && !partitionTransitionToCount.containsKey(metricName)) {
       Counter transitionMetric = registry.counter(MetricRegistry.name(HelixParticipant.class, metricName));
       partitionTransitionToCount.put(metricName, transitionMetric);
@@ -117,7 +117,7 @@ class HelixParticipantMetrics {
    * @param to end state
    */
   void decStateTransitionMetric(String partitionName, ReplicaState from, ReplicaState to) {
-    String metricName = String.format(transitionUpdateTemplate, partitionName, from.toString(), to.toString());
+    String metricName = String.format(stateTransitionMetricTemplate, partitionName, from.toString(), to.toString());
     if (partitionTransitionToCount.containsKey(metricName)) {
       partitionTransitionToCount.get(metricName).dec();
     }
@@ -130,7 +130,7 @@ class HelixParticipantMetrics {
    */
   void clearStateTransitionMetric(String partitionName) {
     partitionTransitionToCount.entrySet().removeIf((partitionToMetricCounter -> {
-      if (partitionToMetricCounter.getKey().startsWith("Partition-" + partitionName)) {
+      if (partitionToMetricCounter.getKey().startsWith("State-Transition-Partition-" + partitionName)) {
         registry.remove(MetricRegistry.name(HelixParticipant.class, partitionToMetricCounter.getKey()));
         return true;
       }
