@@ -13,6 +13,7 @@
  *
  */
 package com.github.ambry.frontend;
+import com.github.ambry.commons.InMemNamedBlobDbFactory;
 import java.nio.charset.StandardCharsets;
 
 import com.codahale.metrics.MetricRegistry;
@@ -237,7 +238,7 @@ public class S3BatchDeleteHandlerTest {
             idSigningService, injector, QuotaTestUtils.createDummyQuotaManager());
     SecurityService securityService = securityServiceFactory.getSecurityService();
     NamedBlobDbFactory namedBlobDbFactory =
-        new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+        new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     NamedBlobDb namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);

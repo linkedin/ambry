@@ -25,6 +25,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.InMemNamedBlobDbFactory;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3ListHandler;
@@ -552,7 +553,7 @@ public class S3ListHandlerTest {
     IdSigningService idSigningService = new AmbryIdSigningService();
     FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
     NamedBlobDbFactory namedBlobDbFactory =
-        new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+        new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     NamedBlobDb namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
