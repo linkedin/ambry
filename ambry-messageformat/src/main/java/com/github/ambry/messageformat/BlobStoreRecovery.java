@@ -57,7 +57,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         short version = headerVersion.getShort();
         if (!isValidHeaderVersion(version)) {
           throw new MessageFormatException("Version not known while reading message - " + version,
-              MessageFormatErrorCodes.Unknown_Format_Version);
+              MessageFormatErrorCodes.UnknownFormatVersion);
         }
         ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
         header.putShort(version);

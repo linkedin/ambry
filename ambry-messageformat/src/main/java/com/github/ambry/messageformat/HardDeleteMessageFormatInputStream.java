@@ -75,7 +75,7 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
         break;
       default:
         throw new MessageFormatException("Unknown version encountered when creating hard delete stream",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
 
     long blobRecordSize;
@@ -106,7 +106,7 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
         break;
       default:
         throw new MessageFormatException("Unknown version encountered when creating hard delete stream",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
 
     buffer = ByteBuffer.allocate(

@@ -108,7 +108,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
       if (!isValidHeaderVersion(headerVersion)) {
         throw new MessageFormatException(
             "Unknown header version during hard delete " + headerVersion + " storeKey " + readSet.getKeyAt(
-                readSetIndex), MessageFormatErrorCodes.Unknown_Format_Version);
+                readSetIndex), MessageFormatErrorCodes.UnknownFormatVersion);
       }
       ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(headerVersion));
       /* Read the rest of the header */
@@ -123,12 +123,12 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
       if (storeKey.compareTo(readSet.getKeyAt(readSetIndex)) != 0) {
         throw new MessageFormatException(
             "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(readSetIndex) + " storeId "
-                + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+                + storeKey, MessageFormatErrorCodes.StoreKeyIdMisMatch);
       }
 
       if (!headerFormat.isPutRecord()) {
         throw new MessageFormatException("Cleanup operation for a non-PUT record is unsupported",
-            MessageFormatErrorCodes.IO_Error);
+            MessageFormatErrorCodes.IOError);
       } else {
         HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata = recoveryInfoMap.get(storeKey);
 

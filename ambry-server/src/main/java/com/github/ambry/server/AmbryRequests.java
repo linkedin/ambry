@@ -409,9 +409,9 @@ public class AmbryRequests implements RequestAPI {
           } catch (MessageFormatException e) {
             logger.error("Message format exception on a get with error code {} for partitionRequestInfo {}",
                 e.getErrorCode(), partitionRequestInfo, e);
-            if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
+            if (e.getErrorCode() == MessageFormatErrorCodes.DataCorrupt) {
               metrics.dataCorruptError.inc();
-            } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
+            } else if (e.getErrorCode() == MessageFormatErrorCodes.UnknownFormatVersion) {
               metrics.unknownFormatError.inc();
             }
             PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
