@@ -48,7 +48,6 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.rmi.UnexpectedException;
 import java.util.ArrayList;
@@ -334,7 +333,7 @@ public class ServerReadPerformance {
             channel.send(deleteRequest);
             DeleteResponse deleteResponse =
                 DeleteResponse.readFrom(channel.receive().getInputStream());
-            if (deleteResponse.getError() != ServerErrorCode.No_Error) {
+            if (deleteResponse.getError() != ServerErrorCode.NoError) {
               throw new UnexpectedException("error " + deleteResponse.getError());
             }
             throttler.maybeThrottle(1);

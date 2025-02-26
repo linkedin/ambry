@@ -107,7 +107,7 @@ public class GetResponse extends Response {
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
 
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       return new GetResponse(correlationId, clientId, error);
     } else {
       int partitionResponseInfoCount = stream.readInt();

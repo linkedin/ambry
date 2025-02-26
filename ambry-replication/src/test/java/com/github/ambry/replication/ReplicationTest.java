@@ -2556,14 +2556,14 @@ public class ReplicationTest extends ReplicationTestHelper {
     NetworkClient c = replicaThread.getNetworkClient();
     assertNotNull(c);
     MockNetworkClient mockNetworkClient = (MockNetworkClient) c;
-    mockNetworkClient.setExpectedReplicaMetadataResponseError(ServerErrorCode.Unknown_Error);
+    mockNetworkClient.setExpectedReplicaMetadataResponseError(ServerErrorCode.UnknownError);
 
     replicaThread.replicate();
     List<ReplicaThread.ExchangeMetadataResponse> exchangeMetadataResponseList =
         replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
     assertEquals(0, exchangeMetadataResponseList.size());
 
-    mockNetworkClient.setExpectedReplicaMetadataResponseError(ServerErrorCode.No_Error);
+    mockNetworkClient.setExpectedReplicaMetadataResponseError(ServerErrorCode.NoError);
     replicaThread.replicate();
 
     Map<PartitionId, List<MessageInfo>> missingInfos = remoteHost.getMissingInfos(localHost.infosByPartition);
@@ -2611,7 +2611,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     NetworkClient c = replicaThread.getNetworkClient();
     assertNotNull(c);
     MockNetworkClient mockNetworkClient = (MockNetworkClient) c;
-    mockNetworkClient.setExpectedGetResponseError(ServerErrorCode.Unknown_Error);
+    mockNetworkClient.setExpectedGetResponseError(ServerErrorCode.UnknownError);
 
     // Bad error in GetResponse won't stop ReplicaMetadataRequest, but it will stop replication
     replicaThread.replicate();
@@ -2632,7 +2632,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       assertEquals("No buffers should be missing", 5, entry.getValue().size());
     }
 
-    mockNetworkClient.setExpectedGetResponseError(ServerErrorCode.No_Error);
+    mockNetworkClient.setExpectedGetResponseError(ServerErrorCode.NoError);
     replicaThread.replicate();
 
     missingInfos = remoteHost.getMissingInfos(localHost.infosByPartition);

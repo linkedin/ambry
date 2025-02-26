@@ -14,11 +14,9 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Utils;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -94,8 +92,9 @@ public class CloudRequestAgent {
       } else {
         // Either not retryable or exhausted attempts.
         Throwable t = cse.getCause();
-        Set<StoreErrorCodes> errorCodes = new HashSet<>(Arrays.asList(StoreErrorCodes.Already_Updated,
-            StoreErrorCodes.ID_Deleted, StoreErrorCodes.Life_Version_Conflict, StoreErrorCodes.ID_Undeleted));
+        Set<StoreErrorCodes> errorCodes = new HashSet<>(
+            Arrays.asList(StoreErrorCodes.AlreadyUpdated, StoreErrorCodes.IDDeleted,
+                StoreErrorCodes.LifeVersionConflict, StoreErrorCodes.IDUndeleted));
         if (t instanceof StoreException && errorCodes.contains(((StoreException)t).getErrorCode())) {
           // Not very useful to log error here as they are printed in several other places
           logger.trace("{} failed partition {} statusCode {} cause {} made {} attempts.", actionName, partitionPath,

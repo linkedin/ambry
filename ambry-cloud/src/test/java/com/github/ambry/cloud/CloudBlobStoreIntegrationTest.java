@@ -276,7 +276,7 @@ public class CloudBlobStoreIntegrationTest {
       cloudBlobStore.delete(Collections.singletonList(deleteMessageInfo));
       fail("Delete should fail with ID_Deleted StoreException");
     } catch (StoreException ex) {
-      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
     storeInfo = cloudBlobStore.get(
         messageWriteSet.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()),
@@ -321,7 +321,7 @@ public class CloudBlobStoreIntegrationTest {
     try {
       cloudBlobStore.delete(Collections.singletonList(deleteMessageInfo));
     } catch (StoreException ex) {
-      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
     storeInfo = cloudBlobStore.get(
         messageWriteSet.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()),
@@ -339,7 +339,7 @@ public class CloudBlobStoreIntegrationTest {
     try {
       cloudBlobStore.delete(Collections.singletonList(deleteMessageInfo));
     } catch (StoreException ex) {
-      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
     storeInfo = cloudBlobStore.get(
         messageWriteSet.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()),
@@ -372,7 +372,7 @@ public class CloudBlobStoreIntegrationTest {
       if (isVcr) {
         fail("Undelete for the vcr should fail silently");
       }
-      assertEquals("Unexpected error message", StoreErrorCodes.ID_Not_Deleted, ex.getErrorCode());
+      assertEquals("Unexpected error message", StoreErrorCodes.IDNotDeleted, ex.getErrorCode());
     }
 
     // delete the blob.
@@ -461,7 +461,7 @@ public class CloudBlobStoreIntegrationTest {
         fail("Update ttl of a deleted blob should fail for frontend.");
       }
     } catch (StoreException ex) {
-      assertEquals("Unexcpected error code", ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+      assertEquals("Unexcpected error code", ex.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
 
     // Clear cache by restarting blob store. ttlupdate of a deleted blob should throw ID_Delete Store Exception.
@@ -473,7 +473,7 @@ public class CloudBlobStoreIntegrationTest {
         fail("Update ttl of a deleted blob should fail.");
       }
     } catch (StoreException ex) {
-      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+      assertEquals("Unexpected error code", ex.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
   }
 }

@@ -100,7 +100,7 @@ public class RemoteReplicaInfo {
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     initializeTokens(token);
     // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
-    this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
+    this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.NoError);
     this.replicationRetryCount = 0;
     this.maxReplicationRetryCount = maxReplicationRetryCount;
   }

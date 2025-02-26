@@ -42,8 +42,8 @@ public class ToolRequestResponseUtil {
     GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
     ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
     ServerErrorCode errorCode =
-        partitionErrorCode == ServerErrorCode.No_Error ? getResponse.getError() : partitionErrorCode;
-    InputStream stream = errorCode == ServerErrorCode.No_Error ? getResponse.getInputStream() : null;
+        partitionErrorCode == ServerErrorCode.NoError ? getResponse.getError() : partitionErrorCode;
+    InputStream stream = errorCode == ServerErrorCode.NoError ? getResponse.getInputStream() : null;
     return new Pair<>(new Pair<>(errorCode, stream), getResponse);
   }
 

@@ -95,7 +95,7 @@ public class DiskTokenPersistorTest {
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(replicationProperties));
     findTokenHelper = new FindTokenHelper(blobIdFactory, replicationConfig);
     mockStoreManager = Mockito.mock(StoreManager.class);
-    Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any())).thenReturn(ServerErrorCode.No_Error);
+    Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any())).thenReturn(ServerErrorCode.NoError);
   }
 
   /**
@@ -145,7 +145,7 @@ public class DiskTokenPersistorTest {
     String pathWithException1 = pathItor.next();
     File mountPathDir1 = new File(pathWithException1);
     assertTrue("Can't make dir unwritable", mountPathDir1.setWritable(false));
-    Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any())).thenReturn(ServerErrorCode.Disk_Unavailable);
+    Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any())).thenReturn(ServerErrorCode.DiskUnavailable);
     try {
       List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
           mountPathToReplicaTokenInfos.get(pathWithException1);
@@ -159,7 +159,7 @@ public class DiskTokenPersistorTest {
     // mock I/O exception for 2nd mount path but disk is still available (at least one store is up)
     String pathWithException2 = pathItor.next();
     Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any()))
-        .thenReturn(ServerErrorCode.Replica_Unavailable);
+        .thenReturn(ServerErrorCode.ReplicaUnavailable);
     File mountPathDir2 = new File(pathWithException2);
     assertTrue("Can't make dir unwritable", mountPathDir2.setWritable(false));
     try {

@@ -371,11 +371,11 @@ public class RequestResponseTest {
         blob, blobSize, blobKey);
 
     // Response test
-    PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
+    PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.NoError);
     DataInputStream responseStream = serAndPrepForRead(response, -1, false);
     PutResponse deserializedPutResponse = PutResponse.readFrom(responseStream);
     Assert.assertEquals(deserializedPutResponse.getCorrelationId(), 1234);
-    Assert.assertEquals(deserializedPutResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedPutResponse.getError(), ServerErrorCode.NoError);
     response.release();
   }
 
@@ -475,11 +475,11 @@ public class RequestResponseTest {
     byte[] buf = TestUtils.getRandomBytes(1000);
     ByteArrayInputStream byteStream = new ByteArrayInputStream(buf);
     GetResponse response =
-        new GetResponse(1234, "clientId", partitionResponseInfoList, byteStream, ServerErrorCode.No_Error);
+        new GetResponse(1234, "clientId", partitionResponseInfoList, byteStream, ServerErrorCode.NoError);
     requestStream = serAndPrepForRead(response, -1, false);
     GetResponse deserializedGetResponse = GetResponse.readFrom(requestStream, clusterMap);
     Assert.assertEquals(deserializedGetResponse.getCorrelationId(), 1234);
-    Assert.assertEquals(deserializedGetResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedGetResponse.getError(), ServerErrorCode.NoError);
     Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().size(), 1);
     Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().size(), 1);
     MessageInfo msgInfo = deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
@@ -536,11 +536,11 @@ public class RequestResponseTest {
         } else {
           send = new SendWithoutContent(1000, useComposite);
         }
-        response = new GetResponse(1234, "clientId", partitionResponseInfoList, send, ServerErrorCode.No_Error);
+        response = new GetResponse(1234, "clientId", partitionResponseInfoList, send, ServerErrorCode.NoError);
         requestStream = serAndPrepForRead(response, -1, false);
         deserializedGetResponse = GetResponse.readFrom(requestStream, clusterMap);
         Assert.assertEquals(deserializedGetResponse.getCorrelationId(), 1234);
-        Assert.assertEquals(deserializedGetResponse.getError(), ServerErrorCode.No_Error);
+        Assert.assertEquals(deserializedGetResponse.getError(), ServerErrorCode.NoError);
         Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().size(), 1);
         Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().size(),
             1);
@@ -589,11 +589,11 @@ public class RequestResponseTest {
             deserializedDeleteRequest.getDeletionTimeInMs());
       }
       deleteRequest.release();
-      DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
+      DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.NoError);
       requestStream = serAndPrepForRead(response, -1, false);
       DeleteResponse deserializedDeleteResponse = DeleteResponse.readFrom(requestStream);
       Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), correlationId);
-      Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.NoError);
       response.release();
     }
   }
@@ -624,16 +624,16 @@ public class RequestResponseTest {
     undeleteRequest.release();
     UndeleteResponse response = null;
     try {
-      response = new UndeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
+      response = new UndeleteResponse(correlationId, "client", ServerErrorCode.NoError);
       Assert.fail("No Error is not a valid error node for this response");
     } catch (IllegalArgumentException e) {
       // do nothing
     }
-    response = new UndeleteResponse(correlationId, "client", ServerErrorCode.Blob_Deleted);
+    response = new UndeleteResponse(correlationId, "client", ServerErrorCode.BlobDeleted);
     requestStream = serAndPrepForRead(response, -1, false);
     UndeleteResponse deserializedUndeleteResponse = UndeleteResponse.readFrom(requestStream);
     Assert.assertEquals(deserializedUndeleteResponse.getCorrelationId(), correlationId);
-    Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.Blob_Deleted);
+    Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.BlobDeleted);
     Assert.assertEquals(deserializedUndeleteResponse.getLifeVersion(), UndeleteResponse.INVALID_LIFE_VERSION);
     response.release();
 
@@ -648,7 +648,7 @@ public class RequestResponseTest {
     requestStream = serAndPrepForRead(response, -1, false);
     deserializedUndeleteResponse = UndeleteResponse.readFrom(requestStream);
     Assert.assertEquals(deserializedUndeleteResponse.getCorrelationId(), correlationId);
-    Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedUndeleteResponse.getError(), ServerErrorCode.NoError);
     Assert.assertEquals(deserializedUndeleteResponse.getLifeVersion(), lifeVersion);
     response.release();
   }
@@ -754,8 +754,7 @@ public class RequestResponseTest {
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
 
     FileCopyGetMetaDataResponse response =
-        new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-            logInfoList, ServerErrorCode.No_Error);
+        new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2, logInfoList, ServerErrorCode.NoError);
 
     DataInputStream requestStream1 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response1 =
@@ -763,7 +762,7 @@ public class RequestResponseTest {
 
     Assert.assertEquals(111, response1.getCorrelationId());
     Assert.assertEquals(1, response1.versionId);
-    Assert.assertEquals(ServerErrorCode.No_Error, response1.getError());
+    Assert.assertEquals(ServerErrorCode.NoError, response1.getError());
     Assert.assertEquals(2, response1.getNumberOfLogfiles());
     Assert.assertEquals(2, response1.getLogInfos().size());
 
@@ -791,11 +790,10 @@ public class RequestResponseTest {
     response.release();
 
     response =
-        new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-            logInfoList, ServerErrorCode.IO_Error);
+        new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2, logInfoList, ServerErrorCode.IOError);
     DataInputStream requestStream2 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response2 = FileCopyGetMetaDataResponse.readFrom(requestStream2);
-    Assert.assertEquals(ServerErrorCode.IO_Error, response2.getError());
+    Assert.assertEquals(ServerErrorCode.IOError, response2.getError());
     response.release();
   }
 
@@ -911,13 +909,13 @@ public class RequestResponseTest {
       replicaMetadataResponseInfoList.add(responseInfo);
     }
     ReplicaMetadataResponse response =
-        new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, replicaMetadataResponseInfoList,
+        new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.NoError, replicaMetadataResponseInfoList,
             responseVersionToUse);
     requestStream = serAndPrepForRead(response, -1, false);
     ReplicaMetadataResponse deserializedReplicaMetadataResponse =
         ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenHelper(), clusterMap);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getCorrelationId(), 1234);
-    Assert.assertEquals(deserializedReplicaMetadataResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedReplicaMetadataResponse.getError(), ServerErrorCode.NoError);
     Assert.assertEquals("ReplicaMetadataResponse list size mismatch ", numResponseInfos,
         deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().size());
     for (int j = 0; j < replicaMetadataResponseInfoList.size(); j++) {
@@ -966,7 +964,7 @@ public class RequestResponseTest {
         new MockFindToken(0, 1000), Collections.emptyList(), 1000, responseVersionToUse);
     Assert.assertTrue("Length of toString() should be > 0", responseInfo.toString().length() > 0);
     // test toString() of a ReplicaMetadataResponse without any ReplicaMetadataResponseInfo
-    response = new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, Collections.emptyList(),
+    response = new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.NoError, Collections.emptyList(),
         responseVersionToUse);
     Assert.assertTrue("Length of toString() should be > 0", response.toString().length() > 0);
     response.release();
@@ -1046,12 +1044,12 @@ public class RequestResponseTest {
     System.out.println(objectMapper.writeValueAsString(returnedMap));
     byte[] content = objectMapper.writeValueAsBytes(returnedMap);
     AdminResponseWithContent response =
-        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, content);
+        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.NoError, content);
     DataInputStream responseStream = serAndPrepForRead(response, -1, false);
     AdminResponseWithContent deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
     Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
     Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
-    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.NoError);
     Assert.assertNotNull(deserializedAdminResponse.getContent());
 
     Map<String, String> deserializedMap =
@@ -1061,22 +1059,22 @@ public class RequestResponseTest {
     response.release();
 
     // test it with null content
-    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, null);
+    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.NoError, null);
     responseStream = serAndPrepForRead(response, -1, false);
     deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
     Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
     Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
-    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.NoError);
     Assert.assertNull(deserializedAdminResponse.getContent());
     response.release();
 
     // test it with empty content
-    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, new byte[0]);
+    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.NoError, new byte[0]);
     responseStream = serAndPrepForRead(response, -1, false);
     deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
     Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
     Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
-    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.NoError);
     Assert.assertNull(deserializedAdminResponse.getContent());
     response.release();
   }
@@ -1265,14 +1263,14 @@ public class RequestResponseTest {
       Assert.assertEquals("DeletionTime mismatch ", opTimeMs, deserializedTtlUpdateRequest.getOperationTimeInMs());
       ttlUpdateRequest.release();
 
-      TtlUpdateResponse response = new TtlUpdateResponse(correlationId, "client", ServerErrorCode.No_Error);
+      TtlUpdateResponse response = new TtlUpdateResponse(correlationId, "client", ServerErrorCode.NoError);
       requestStream = serAndPrepForRead(response, -1, false);
       TtlUpdateResponse deserializedTtlUpdateResponse = TtlUpdateResponse.readFrom(requestStream);
       Assert.assertEquals("Response type mismatch", RequestOrResponseType.TtlUpdateResponse,
           deserializedTtlUpdateResponse.getRequestType());
       Assert.assertEquals("Correlation ID mismatch", correlationId, deserializedTtlUpdateResponse.getCorrelationId());
       Assert.assertEquals("Client ID mismatch", "client", deserializedTtlUpdateResponse.getClientId());
-      Assert.assertEquals("Server error code mismatch", ServerErrorCode.No_Error,
+      Assert.assertEquals("Server error code mismatch", ServerErrorCode.NoError,
           deserializedTtlUpdateResponse.getError());
       response.release();
     }
@@ -1319,7 +1317,7 @@ public class RequestResponseTest {
       replicateBlobRequest.release();
 
       final ReplicateBlobResponse response =
-          new ReplicateBlobResponse(correlationId, clientId, ServerErrorCode.No_Error);
+          new ReplicateBlobResponse(correlationId, clientId, ServerErrorCode.NoError);
       requestStream = serAndPrepForRead(response, -1, false);
       final ReplicateBlobResponse deserializedReplicateBlobResponse = ReplicateBlobResponse.readFrom(requestStream);
       verifyReplicateBlobResponse(response, deserializedReplicateBlobResponse);
@@ -1359,10 +1357,10 @@ public class RequestResponseTest {
 
     final BatchDeletePartitionResponseInfo batchDeletePartitionResponseInfo =
         new BatchDeletePartitionResponseInfo(partitionId,
-            Arrays.asList(new BlobDeleteStatus(blobId1, ServerErrorCode.No_Error),
-                new BlobDeleteStatus(blobId2, ServerErrorCode.No_Error)));
+            Arrays.asList(new BlobDeleteStatus(blobId1, ServerErrorCode.NoError),
+                new BlobDeleteStatus(blobId2, ServerErrorCode.NoError)));
     final BatchDeleteResponse batchDeleteResponse = new BatchDeleteResponse((short) 1, correlationId, clientId,
-        Collections.singletonList(batchDeletePartitionResponseInfo), ServerErrorCode.No_Error);
+        Collections.singletonList(batchDeletePartitionResponseInfo), ServerErrorCode.NoError);
     requestStream = serAndPrepForRead(batchDeleteResponse, -1, false);
     final BatchDeleteResponse deserializedBatchDeleteResponse = BatchDeleteResponse.readFrom(requestStream, clusterMap);
     //verify the response
@@ -1419,16 +1417,16 @@ public class RequestResponseTest {
     //Delete Partition Response Info for Partition 0
     final BatchDeletePartitionResponseInfo batchDeletePartitionResponseInfo0 =
         new BatchDeletePartitionResponseInfo(partitionId0,
-            Arrays.asList(new BlobDeleteStatus(blobId1, ServerErrorCode.No_Error),
-                new BlobDeleteStatus(blobId2, ServerErrorCode.Blob_Not_Found)));
+            Arrays.asList(new BlobDeleteStatus(blobId1, ServerErrorCode.NoError),
+                new BlobDeleteStatus(blobId2, ServerErrorCode.BlobNotFound)));
     //Delete Partition Response Info for Partition 1
     final BatchDeletePartitionResponseInfo batchDeletePartitionResponseInfo1 =
         new BatchDeletePartitionResponseInfo(partitionId1,
-            Arrays.asList(new BlobDeleteStatus(blobId3, ServerErrorCode.Blob_Deleted),
-                new BlobDeleteStatus(blobId4, ServerErrorCode.Blob_Not_Deleted)));
+            Arrays.asList(new BlobDeleteStatus(blobId3, ServerErrorCode.BlobDeleted),
+                new BlobDeleteStatus(blobId4, ServerErrorCode.BlobNotDeleted)));
     //Batch Delete Response
     final BatchDeleteResponse batchDeleteResponse = new BatchDeleteResponse((short) 1, correlationId, clientId,
-        Arrays.asList(batchDeletePartitionResponseInfo0, batchDeletePartitionResponseInfo1), ServerErrorCode.No_Error);
+        Arrays.asList(batchDeletePartitionResponseInfo0, batchDeletePartitionResponseInfo1), ServerErrorCode.NoError);
     requestStream = serAndPrepForRead(batchDeleteResponse, -1, false);
     final BatchDeleteResponse deserializedBatchDeleteResponse = BatchDeleteResponse.readFrom(requestStream, clusterMap);
     //verify the response

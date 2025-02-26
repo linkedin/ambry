@@ -213,10 +213,10 @@ public class StorageManager implements StoreManager {
         < TimeUnit.SECONDS.toMinutes(storeConfig.storeDataFlushIntervalSeconds) + 1) {
       throw new StoreException(
           "Message retention hours must be greater than the store flush interval period when hard delete is enabled",
-          StoreErrorCodes.Initialization_Error);
+          StoreErrorCodes.InitializationError);
     }
     if (diskManagerConfig.diskManagerReserveFileDirName.length() == 0) {
-      throw new StoreException("Reserve file directory name is empty", StoreErrorCodes.Initialization_Error);
+      throw new StoreException("Reserve file directory name is empty", StoreErrorCodes.InitializationError);
     }
   }
 
@@ -285,7 +285,7 @@ public class StorageManager implements StoreManager {
     int failedDisks = failedDiskIds.size();
     if (tooManyFailedDisks(failedDisks)) {
       logger.error("Failed disks are {}", failedDisks);
-      throw new StoreException("More than enough disks failed", StoreErrorCodes.Initialization_Error);
+      throw new StoreException("More than enough disks failed", StoreErrorCodes.InitializationError);
     }
   }
 
@@ -397,15 +397,15 @@ public class StorageManager implements StoreManager {
       if (localReplica != null) {
         // check stores on the disk
         if (!isDiskAvailable(localReplica.getDiskId())) {
-          return ServerErrorCode.Disk_Unavailable;
+          return ServerErrorCode.DiskUnavailable;
         } else {
-          return ServerErrorCode.Replica_Unavailable;
+          return ServerErrorCode.ReplicaUnavailable;
         }
       } else {
-        return ServerErrorCode.Partition_Unknown;
+        return ServerErrorCode.PartitionUnknown;
       }
     }
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   /**

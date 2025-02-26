@@ -13,16 +13,9 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.core.http.rest.PagedResponse;
-import com.azure.storage.blob.BlobContainerClient;
-import com.azure.storage.blob.models.BlobItem;
-import com.azure.storage.blob.models.BlobListDetails;
-import com.azure.storage.blob.models.ListBlobsOptions;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzureMetrics;
@@ -31,7 +24,6 @@ import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.CloudServiceDataNode;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
@@ -93,7 +85,6 @@ import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -314,7 +305,7 @@ public class RecoveryNetworkClientTest {
       ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
           .getReplicaMetadataResponseInfoList().get(0);
-      if (rinfo.getError() == ServerErrorCode.No_Error) {
+      if (rinfo.getError() == ServerErrorCode.NoError) {
         // Extract token
         recoveryToken = (RecoveryToken) rinfo.getFindToken();
         // Extract ambry metadata

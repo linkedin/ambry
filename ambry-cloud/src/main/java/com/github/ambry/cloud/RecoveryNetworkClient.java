@@ -203,8 +203,7 @@ public class RecoveryNetworkClient implements NetworkClient {
         clientCallback.onListBlobs(rinfo);
       } catch (Throwable t) {
         responseList.add(
-            new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
-                ServerErrorCode.IO_Error,
+            new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(), ServerErrorCode.IOError,
                 ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
         logger.error("Failed to list blobs for Ambry partition {} in Azure Storage container {} due to {}",
             rinfo.getPartitionId().getId(), containerName, t);
@@ -238,7 +237,7 @@ public class RecoveryNetworkClient implements NetworkClient {
     }
 
     // return metadata response
-    return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.No_Error,
+    return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.NoError,
         responseList, ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
   }
 
@@ -298,7 +297,7 @@ public class RecoveryNetworkClient implements NetworkClient {
       MessageInfo info = messageInfoCache.remove(storeKey);
       if (info == null) {
         logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey, request.getPartition());
-        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.Blob_Not_Found);
+        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.BlobNotFound);
       }
 
       try {
@@ -308,7 +307,7 @@ public class RecoveryNetworkClient implements NetworkClient {
       } catch (CloudStorageException e) {
         logger.error("Failed to download blob {} due to {}", storeKey.getID(), e.getMessage());
         e.printStackTrace();
-        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.IO_Error);
+        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.IOError);
       }
     }
     List<MessageMetadata> messageMetadataList = new ArrayList<>();
@@ -332,7 +331,7 @@ public class RecoveryNetworkClient implements NetworkClient {
     List<Send> blobsToSend = Collections.singletonList(
         new AllSend(downloadToStream.size(), downloadToStream.toByteArray()));
     return new GetResponse(request.getCorrelationId(), request.getClientId(), partitionResponseInfoList,
-        new CompositeSend(blobsToSend), ServerErrorCode.No_Error);
+        new CompositeSend(blobsToSend), ServerErrorCode.NoError);
   }
 
   @Override

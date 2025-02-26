@@ -278,7 +278,7 @@ public class MockConnectionPool implements ConnectionPool {
                   ReplicaMetadataResponse.getCompatibleResponseVersion(metadataRequest.getVersionId()));
           responseInfoList.add(replicaMetadataResponseInfo);
         }
-        response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.No_Error, responseInfoList,
+        response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.NoError, responseInfoList,
             ReplicaMetadataResponse.getCompatibleResponseVersion(metadataRequest.getVersionId()));
         metadataRequest = null;
       } else {
@@ -288,10 +288,10 @@ public class MockConnectionPool implements ConnectionPool {
           PartitionResponseInfo partitionResponseInfo;
           if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
               .equals(GetOption.Include_Deleted_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isDeleted)) {
-            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.Blob_Deleted);
+            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.BlobDeleted);
           } else if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
               .equals(GetOption.Include_Expired_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isExpired)) {
-            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.Blob_Expired);
+            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.BlobExpired);
           } else {
             partitionResponseInfo =
                 new PartitionResponseInfo(requestInfo.getPartition(), infosToReturn.get(requestInfo.getPartition()),
@@ -300,7 +300,7 @@ public class MockConnectionPool implements ConnectionPool {
           responseInfoList.add(partitionResponseInfo);
         }
         response = new GetResponse(1, "replication", responseInfoList, new MockSend(buffersToReturn),
-            ServerErrorCode.No_Error);
+            ServerErrorCode.NoError);
         getRequest = null;
       }
       ByteBuffer buffer = ByteBuffer.allocate((int) response.sizeInBytes());

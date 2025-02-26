@@ -248,8 +248,8 @@ public class UndeleteManagerTest {
           .stream()
           .filter(server -> server.getDataCenter().equals(LOCAL_DC))
           .collect(Collectors.toList());
-      localServers.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Deleted);
-      localServers.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Already_Undeleted);
+      localServers.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotDeleted);
+      localServers.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobAlreadyUndeleted);
 
       FutureResult<Void> future = new FutureResult<>();
       router.currentOperationsCount.addAndGet(1);
@@ -284,7 +284,7 @@ public class UndeleteManagerTest {
       // Only set the first two server's error code to be blob not found, since first two servers
       // are in the same datacenter, and undelete requires a global quorum.
       for (MockServer server : servers.subList(0, 2)) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+        server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
       }
 
       executeOpAndVerify(Collections.singleton(blobId), RouterErrorCode.BlobDoesNotExist);
@@ -326,7 +326,7 @@ public class UndeleteManagerTest {
     // Only set the first two server's error code to be blob not found, since first two servers
     // are in the same datacenter, and undelete requires a global quorum.
     for (MockServer server : servers.subList(0, 2)) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
     }
     executeOpAndVerify(blobIds, RouterErrorCode.BlobDoesNotExist);
     serverLayout.getMockServers().forEach(server -> server.resetServerErrors());
@@ -346,9 +346,9 @@ public class UndeleteManagerTest {
         .forEach(server -> dcToMockServers.computeIfAbsent(server.getDataCenter(), k -> new ArrayList()).add(server));
 
     List<ServerErrorCode> errorCodes = new ArrayList<>();
-    errorCodes.add(ServerErrorCode.Blob_Not_Found);
-    errorCodes.add(ServerErrorCode.Blob_Not_Deleted);
-    errorCodes.add(ServerErrorCode.Disk_Unavailable);
+    errorCodes.add(ServerErrorCode.BlobNotFound);
+    errorCodes.add(ServerErrorCode.BlobNotDeleted);
+    errorCodes.add(ServerErrorCode.DiskUnavailable);
 
     int i = 0;
     for (Map.Entry<String, List<MockServer>> entry : dcToMockServers.entrySet()) {

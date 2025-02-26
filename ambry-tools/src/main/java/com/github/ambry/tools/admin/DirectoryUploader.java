@@ -247,8 +247,8 @@ public class DirectoryUploader {
         blockingChannel = null;
         return false;
       } else {
-        if (putResponse.getError() != ServerErrorCode.No_Error
-            && putResponse.getError() != ServerErrorCode.Blob_Already_Exists) {
+        if (putResponse.getError() != ServerErrorCode.NoError
+            && putResponse.getError() != ServerErrorCode.BlobAlreadyExists) {
           System.out.println(
               "PutResponse to a replica " + replicaId + " failed with Error code  " + putResponse.getError()
                   + " for blobId " + blobId);

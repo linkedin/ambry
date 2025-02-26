@@ -13,15 +13,11 @@
  */
 package com.github.ambry.vcr;
 
-import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
 import com.azure.data.tables.TableClient;
 import com.azure.data.tables.models.TableEntity;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
-import com.azure.storage.blob.models.BlobItem;
-import com.azure.storage.blob.models.BlobListDetails;
-import com.azure.storage.blob.models.ListBlobsOptions;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -648,7 +644,7 @@ public class CloudBlobStoreTest {
           fail("Uploading already uploaded blob should throw error");
         }
       } catch (StoreException ex) {
-        assertEquals(ex.getErrorCode(), StoreErrorCodes.Already_Exist);
+        assertEquals(ex.getErrorCode(), StoreErrorCodes.AlreadyExist);
       }
     }
     int expectedSkips = isVcr ? expectedUploads : 0;
@@ -752,7 +748,7 @@ public class CloudBlobStoreTest {
         // FIXME: I don't have the time to fix it. Check BlobStore::delete for correct behavior. V2 does the right thing however.
         fail("delete must throw an exception with errcode = ID_Deleted");
       } catch (StoreException ex) {
-        assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+        assertEquals(ex.getErrorCode(), StoreErrorCodes.IDDeleted);
       }
     }
     if (mockingDetails(dest).isMock()) {
@@ -776,7 +772,8 @@ public class CloudBlobStoreTest {
       } catch (StoreException ex) {
         // FIXME: snalli@: V1 throws the wrong error code with the cache and no error without the cache.
         // FIXME: I don't have the time to fix it. Check BlobStore::delete for correct behavior. V2 does the right thing however.
-        StoreErrorCodes storeErrorCode = currentCacheLimit > 0 ? StoreErrorCodes.ID_Deleted : StoreErrorCodes.Life_Version_Conflict;
+        StoreErrorCodes storeErrorCode =
+            currentCacheLimit > 0 ? StoreErrorCodes.IDDeleted : StoreErrorCodes.LifeVersionConflict;
         assertEquals(ex.getErrorCode(), storeErrorCode);
       }
     }
@@ -847,7 +844,7 @@ public class CloudBlobStoreTest {
         fail("UpdateTTL must throw Already_Updated error");
       }
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Already_Updated, e.getErrorCode());
+      assertEquals(StoreErrorCodes.AlreadyUpdated, e.getErrorCode());
     }
     if (mockingDetails(dest).isMock()) {
       verify(dest, times(1)).updateBlobExpiration(any(BlobId.class), anyLong(),
@@ -871,7 +868,7 @@ public class CloudBlobStoreTest {
         fail("UpdateTTL must throw Already_Updated error");
       }
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals(StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
     if (mockingDetails(dest).isMock()) {
       verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class));
@@ -901,7 +898,7 @@ public class CloudBlobStoreTest {
         fail("UpdateTTL must throw Already_Updated error");
       }
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Already_Updated, e.getErrorCode());
+      assertEquals(StoreErrorCodes.AlreadyUpdated, e.getErrorCode());
     }
     if (mockingDetails(dest).isMock()) {
       expectedCount = isVcr ? expectedCount : expectedCount + 1;
@@ -927,7 +924,8 @@ public class CloudBlobStoreTest {
     if (mockingDetails(dest).isMock()) {
       when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class)))
           .thenThrow(new CloudStorageException("absent blob",
-              new StoreException("absent blob", StoreErrorCodes.ID_Not_Found), CloudBlobStore.STATUS_NOT_FOUND, false, null));
+              new StoreException("absent blob", StoreErrorCodes.IDNotFound), CloudBlobStore.STATUS_NOT_FOUND, false,
+              null));
     }
     try {
       store.undelete(messageInfo);
@@ -976,14 +974,14 @@ public class CloudBlobStoreTest {
     if (mockingDetails(dest).isMock()) {
       when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class)))
           .thenThrow(new CloudStorageException("undeleted blob",
-              new StoreException("undeleted blob", StoreErrorCodes.ID_Undeleted)));
+              new StoreException("undeleted blob", StoreErrorCodes.IDUndeleted)));
     }
     try {
       store.undelete(undeleteMessage);
       fail("Undelete is expected to throw an exception");
     } catch (StoreException ex) {
       // The expected value must come first
-      assertEquals(StoreErrorCodes.ID_Undeleted, ex.getErrorCode());
+      assertEquals(StoreErrorCodes.IDUndeleted, ex.getErrorCode());
     }
     verifyCacheHits(2 + numPuts + numDeletes + numUndelete, 1);
     if (mockingDetails(dest).isMock()) {
@@ -1000,7 +998,7 @@ public class CloudBlobStoreTest {
     if (mockingDetails(dest).isMock()) {
       when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class)))
           .thenThrow(new CloudStorageException("undeleted blob",
-              new StoreException("undeleted blob", StoreErrorCodes.ID_Undeleted)));
+              new StoreException("undeleted blob", StoreErrorCodes.IDUndeleted)));
     }
     undeleteMessage = new MessageInfo.Builder(messageInfo)
         .lifeVersion((short) (initialLifeVersion-1))
@@ -1009,7 +1007,8 @@ public class CloudBlobStoreTest {
       store.undelete(undeleteMessage);
       fail("Undelete is expected to throw an exception");
     } catch (StoreException ex) {
-      StoreErrorCodes storeErrorCode = currentCacheLimit > 0 ? StoreErrorCodes.ID_Undeleted : StoreErrorCodes.Life_Version_Conflict;
+      StoreErrorCodes storeErrorCode =
+          currentCacheLimit > 0 ? StoreErrorCodes.IDUndeleted : StoreErrorCodes.LifeVersionConflict;
       // The expected value must come first
       assertEquals(storeErrorCode, ex.getErrorCode());
     }
@@ -1251,19 +1250,19 @@ public class CloudBlobStoreTest {
       store.put(messageWriteSet);
       fail("Store put should have failed.");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals(StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
     try {
       store.delete(messageWriteSet.getMessageSetInfo());
       fail("Store delete should have failed.");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals(StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
     try {
       store.findMissingKeys(keys);
       fail("Store findMissingKeys should have failed.");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals(StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
   }
 
@@ -1388,7 +1387,7 @@ public class CloudBlobStoreTest {
     try {
       exStore.put(messageWriteSet);
     } catch (StoreException ex) {
-      assertEquals(ex.getErrorCode(), StoreErrorCodes.Already_Exist);
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.AlreadyExist);
     }
     expectedCacheHits++;
     exStore.addToCache(blobId.getID(), (short) 0, CloudBlobStore.BlobState.TTL_UPDATED);
@@ -1398,7 +1397,7 @@ public class CloudBlobStoreTest {
     try {
       exStore.delete(messageWriteSet.getMessageSetInfo());
     } catch (StoreException ex) {
-      assertEquals(ex.getErrorCode(), StoreErrorCodes.ID_Deleted);
+      assertEquals(ex.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
     if (isVcr) {
       expectedCacheHits++;
@@ -1770,8 +1769,8 @@ public class CloudBlobStoreTest {
       store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
       fail("get with any non existent id should fail");
     } catch (StoreException e) {
-      assertEquals("get with any non existent blob id should throw exception with " + StoreErrorCodes.ID_Not_Found
-          + " error code.", e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
+      assertEquals("get with any non existent blob id should throw exception with " + StoreErrorCodes.IDNotFound
+          + " error code.", e.getErrorCode(), StoreErrorCodes.IDNotFound);
     }
   }
 
@@ -1786,7 +1785,7 @@ public class CloudBlobStoreTest {
     } catch (StoreException e) {
       assertEquals(
           "get for deleted blob with with Store_Include_Deleted not set in get options should throw exception with "
-              + StoreErrorCodes.ID_Deleted + " error code.", e.getErrorCode(), StoreErrorCodes.ID_Deleted);
+              + StoreErrorCodes.IDDeleted + " error code.", e.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
   }
 
@@ -1818,7 +1817,7 @@ public class CloudBlobStoreTest {
     } catch (StoreException e) {
       assertEquals(
           "get for expired blob with with StoreGetOptions.Store_Include_Expired not set in get options, should throw exception with "
-              + StoreErrorCodes.TTL_Expired + " error code.", e.getErrorCode(), StoreErrorCodes.TTL_Expired);
+              + StoreErrorCodes.TTLExpired + " error code.", e.getErrorCode(), StoreErrorCodes.TTLExpired);
     }
   }
 

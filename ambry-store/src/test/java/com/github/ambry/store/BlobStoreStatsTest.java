@@ -860,13 +860,13 @@ public class BlobStoreStatsTest {
       verifyContainerStorageStatsAndGetTotalValidSize(blobStoreStats, state.time.milliseconds());
       fail("Expected StoreException thrown upon request when BlobStoreStats is closing");
     } catch (StoreException e) {
-      assertEquals("Mismatch on expected error code", StoreErrorCodes.Store_Shutting_Down, e.getErrorCode());
+      assertEquals("Mismatch on expected error code", StoreErrorCodes.StoreShuttingDown, e.getErrorCode());
     }
     try {
       verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
       fail("Expected StoreException thrown upon request when BlobStoreStats is closing");
     } catch (StoreException e) {
-      assertEquals("Mismatch on expected error code", StoreErrorCodes.Store_Shutting_Down, e.getErrorCode());
+      assertEquals("Mismatch on expected error code", StoreErrorCodes.StoreShuttingDown, e.getErrorCode());
     }
   }
 

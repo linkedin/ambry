@@ -30,33 +30,33 @@ public class ErrorMapping {
 
   static {
     Map<StoreErrorCodes, ServerErrorCode> tempMap = new HashMap<StoreErrorCodes, ServerErrorCode>();
-    tempMap.put(StoreErrorCodes.IOError, ServerErrorCode.IO_Error);
-    tempMap.put(StoreErrorCodes.ID_Deleted, ServerErrorCode.Blob_Deleted);
-    tempMap.put(StoreErrorCodes.ID_Not_Found, ServerErrorCode.Blob_Not_Found);
-    tempMap.put(StoreErrorCodes.TTL_Expired, ServerErrorCode.Blob_Expired);
-    tempMap.put(StoreErrorCodes.Already_Exist, ServerErrorCode.Blob_Already_Exists);
-    tempMap.put(StoreErrorCodes.Authorization_Failure, ServerErrorCode.Blob_Authorization_Failure);
-    tempMap.put(StoreErrorCodes.Already_Updated, ServerErrorCode.Blob_Already_Updated);
-    tempMap.put(StoreErrorCodes.Update_Not_Allowed, ServerErrorCode.Blob_Update_Not_Allowed);
-    tempMap.put(StoreErrorCodes.Life_Version_Conflict, ServerErrorCode.Blob_Life_Version_Conflict);
-    tempMap.put(StoreErrorCodes.ID_Not_Deleted, ServerErrorCode.Blob_Not_Deleted);
-    tempMap.put(StoreErrorCodes.ID_Undeleted, ServerErrorCode.Blob_Already_Undeleted);
-    tempMap.put(StoreErrorCodes.ID_Deleted_Permanently, ServerErrorCode.Blob_Deleted_Permanently);
+    tempMap.put(StoreErrorCodes.IOError, ServerErrorCode.IOError);
+    tempMap.put(StoreErrorCodes.IDDeleted, ServerErrorCode.BlobDeleted);
+    tempMap.put(StoreErrorCodes.IDNotFound, ServerErrorCode.BlobNotFound);
+    tempMap.put(StoreErrorCodes.TTLExpired, ServerErrorCode.BlobExpired);
+    tempMap.put(StoreErrorCodes.AlreadyExist, ServerErrorCode.BlobAlreadyExists);
+    tempMap.put(StoreErrorCodes.AuthorizationFailure, ServerErrorCode.BlobAuthorizationFailure);
+    tempMap.put(StoreErrorCodes.AlreadyUpdated, ServerErrorCode.BlobAlreadyUpdated);
+    tempMap.put(StoreErrorCodes.UpdateNotAllowed, ServerErrorCode.BlobUpdateNotAllowed);
+    tempMap.put(StoreErrorCodes.LifeVersionConflict, ServerErrorCode.BlobLifeVersionConflict);
+    tempMap.put(StoreErrorCodes.IDNotDeleted, ServerErrorCode.BlobNotDeleted);
+    tempMap.put(StoreErrorCodes.IDUndeleted, ServerErrorCode.BlobAlreadyUndeleted);
+    tempMap.put(StoreErrorCodes.IDDeletedPermanently, ServerErrorCode.BlobDeletedPermanently);
     storeErrorMapping = Collections.unmodifiableMap(tempMap);
   }
 
   static {
     Map<MessageFormatErrorCodes, ServerErrorCode> tempMap = new HashMap<MessageFormatErrorCodes, ServerErrorCode>();
-    tempMap.put(MessageFormatErrorCodes.Data_Corrupt, ServerErrorCode.Data_Corrupt);
-    tempMap.put(MessageFormatErrorCodes.Unknown_Format_Version, ServerErrorCode.Data_Corrupt);
-    tempMap.put(MessageFormatErrorCodes.IO_Error, ServerErrorCode.IO_Error);
+    tempMap.put(MessageFormatErrorCodes.Data_Corrupt, ServerErrorCode.DataCorrupt);
+    tempMap.put(MessageFormatErrorCodes.Unknown_Format_Version, ServerErrorCode.DataCorrupt);
+    tempMap.put(MessageFormatErrorCodes.IO_Error, ServerErrorCode.IOError);
     messageFormatErrorMapping = Collections.unmodifiableMap(tempMap);
   }
 
   public static ServerErrorCode getStoreErrorMapping(StoreErrorCodes code) {
     ServerErrorCode errorCode = storeErrorMapping.get(code);
     if (errorCode == null) {
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     return errorCode;
   }
@@ -64,7 +64,7 @@ public class ErrorMapping {
   public static ServerErrorCode getMessageFormatErrorMapping(MessageFormatErrorCodes code) {
     ServerErrorCode errorCode = messageFormatErrorMapping.get(code);
     if (errorCode == null) {
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     return errorCode;
   }

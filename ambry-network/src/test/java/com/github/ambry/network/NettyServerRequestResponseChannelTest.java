@@ -237,7 +237,7 @@ public class NettyServerRequestResponseChannelTest {
         RequestOrResponseType.DeleteResponse);
     assertEquals("Mismatch in response correlation id", argument.getValue().getCorrelationId(), correlationId);
     assertEquals("Mismatch in response client id", argument.getValue().getClientId(), clientId);
-    assertEquals("Mismatch in error code", argument.getValue().getError(), ServerErrorCode.Retry_After_Backoff);
+    assertEquals("Mismatch in error code", argument.getValue().getError(), ServerErrorCode.RetryAfterBackoff);
   }
 
   private NettyServerRequest createNettyServerRequest(int len) {

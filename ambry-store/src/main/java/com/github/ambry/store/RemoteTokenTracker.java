@@ -67,7 +67,7 @@ public class RemoteTokenTracker implements Closeable {
       Time time) throws StoreException {
     if (scheduler == null || localReplica == null) {
       logger.error("localReplica and schedule CANNOT BE NULL.");
-      throw new StoreException("localReplica and schedule CANNOT BE NULL.", StoreErrorCodes.Initialization_Error);
+      throw new StoreException("localReplica and schedule CANNOT BE NULL.", StoreErrorCodes.InitializationError);
     }
     this.localReplica = localReplica;
     this.scheduler = scheduler;
