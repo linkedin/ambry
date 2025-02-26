@@ -1279,7 +1279,7 @@ class GetBlobOperation extends GetOperation {
     private void processGetBlobResponse(RequestInfo getRequestInfo, GetResponse getResponse)
         throws IOException, MessageFormatException {
       ServerErrorCode getError = getResponse.getError();
-      if (getError == ServerErrorCode.No_Error) {
+      if (getError == ServerErrorCode.NoError) {
         int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
         // Each get request issued by the router is for a single blob.
         if (partitionsInResponse != 1) {
@@ -1288,7 +1288,7 @@ class GetBlobOperation extends GetOperation {
               RouterErrorCode.UnexpectedInternalError));
         } else {
           getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-          if (getError == ServerErrorCode.No_Error) {
+          if (getError == ServerErrorCode.NoError) {
             PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
             int objectsInPartitionResponse = partitionResponseInfo.getMessageInfoList().size();
             if (objectsInPartitionResponse != 1) {
@@ -1309,15 +1309,15 @@ class GetBlobOperation extends GetOperation {
           } else {
             // process and set the most relevant exception.
             RouterErrorCode routerErrorCode = processServerError(getError);
-            if (getError == ServerErrorCode.Disk_Unavailable) {
+            if (getError == ServerErrorCode.DiskUnavailable) {
               chunkOperationTracker.onResponse(getRequestInfo.getReplicaId(), TrackedRequestFinalState.DISK_DOWN);
               setChunkException(buildChunkException("Server returned: " + getError, routerErrorCode));
               routerMetrics.routerRequestErrorCount.inc();
               routerMetrics.getDataNodeBasedMetrics(
                   getRequestInfo.getReplicaId().getDataNodeId()).getRequestErrorCount.inc();
             } else {
-              if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
-                  || getError == ServerErrorCode.Blob_Authorization_Failure) {
+              if (getError == ServerErrorCode.BlobDeleted || getError == ServerErrorCode.BlobExpired
+                  || getError == ServerErrorCode.BlobAuthorizationFailure) {
                 // this is a successful response and one that completes the operation regardless of whether the
                 // success target has been reached or not.
                 chunkCompleted = true;
@@ -1378,8 +1378,8 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Process the given {@link ServerErrorCode} and set operation status accordingly.
-     * Receiving a {@link ServerErrorCode#Blob_Deleted}, {@link ServerErrorCode#Blob_Expired} or
-     * {@link ServerErrorCode#Blob_Not_Found} is unexpected for all chunks except for the first.
+     * Receiving a {@link ServerErrorCode#BlobDeleted}, {@link ServerErrorCode#BlobExpired} or
+     * {@link ServerErrorCode#BlobNotFound} is unexpected for all chunks except for the first.
      * @param errorCode the {@link ServerErrorCode} to process.
      * @return the {@link RouterErrorCode} mapped from input server error code.
      */
@@ -1703,28 +1703,28 @@ class GetBlobOperation extends GetOperation {
     /**
      * {@inheritDoc}
      * <br>
-     * Receiving a {@link ServerErrorCode#Blob_Deleted}, {@link ServerErrorCode#Blob_Expired} or
-     * {@link ServerErrorCode#Blob_Not_Found} is not unexpected for the first chunk, unlike for subsequent chunks.
+     * Receiving a {@link ServerErrorCode#BlobDeleted}, {@link ServerErrorCode#BlobExpired} or
+     * {@link ServerErrorCode#BlobNotFound} is not unexpected for the first chunk, unlike for subsequent chunks.
      */
     @Override
     RouterErrorCode processServerError(ServerErrorCode errorCode) {
       logger.trace("Server returned an error: {} ", errorCode);
       RouterErrorCode resolvedRouterErrorCode;
       switch (errorCode) {
-        case Blob_Authorization_Failure:
+        case BlobAuthorizationFailure:
           resolvedRouterErrorCode = RouterErrorCode.BlobAuthorizationFailure;
           break;
-        case Blob_Deleted:
+        case BlobDeleted:
           resolvedRouterErrorCode = RouterErrorCode.BlobDeleted;
           break;
-        case Blob_Expired:
+        case BlobExpired:
           resolvedRouterErrorCode = RouterErrorCode.BlobExpired;
           break;
-        case Blob_Not_Found:
+        case BlobNotFound:
           resolvedRouterErrorCode = RouterErrorCode.BlobDoesNotExist;
           break;
-        case Disk_Unavailable:
-        case Replica_Unavailable:
+        case DiskUnavailable:
+        case ReplicaUnavailable:
           resolvedRouterErrorCode = RouterErrorCode.AmbryUnavailable;
           break;
         default:

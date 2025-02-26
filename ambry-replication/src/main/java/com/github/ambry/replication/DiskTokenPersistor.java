@@ -77,7 +77,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
       } else {
         PartitionInfo partitionInfo = partitioninfoIterator.next();
         if (storeManager.checkLocalPartitionStatus(partitionInfo.getPartitionId(), partitionInfo.getLocalReplicaId())
-            == ServerErrorCode.Disk_Unavailable) {
+            == ServerErrorCode.DiskUnavailable) {
           // check disk state in storeManager. If checkLocalPartitionStatus returns Disk_Unavailable, it means all stores on
           // this disk are unreachable due to hardware issues. In this case, persistor should skip the bad disk next time.
           mountPathsToSkip.add(mountPath);

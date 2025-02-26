@@ -228,7 +228,7 @@ public class LogSegmentTest {
           fail("Setting log end offset an invalid offset [" + offset + "] should have failed");
         } catch (StoreException e) {
           // expected. Nothing to do.
-          Assert.assertEquals(StoreErrorCodes.Log_End_Offset_Error, e.getErrorCode());
+          Assert.assertEquals(StoreErrorCodes.LogEndOffsetError, e.getErrorCode());
         }
       }
     } finally {
@@ -596,7 +596,7 @@ public class LogSegmentTest {
       fail("Construction should have failed because version is unknown");
     } catch (StoreException e) {
       // expected. Nothing to do.
-      Assert.assertEquals(StoreErrorCodes.Log_File_Format_Error, e.getErrorCode());
+      Assert.assertEquals(StoreErrorCodes.LogFileFormatError, e.getErrorCode());
     }
 
     // bad CRC
@@ -609,7 +609,7 @@ public class LogSegmentTest {
       fail("Construction should have failed because crc check should have failed");
     } catch (StoreException e) {
       // expected. Nothing to do.
-      Assert.assertEquals(StoreErrorCodes.Log_File_Format_Error, e.getErrorCode());
+      Assert.assertEquals(StoreErrorCodes.LogFileFormatError, e.getErrorCode());
     }
     closeSegmentAndDeleteFile(segment);
   }

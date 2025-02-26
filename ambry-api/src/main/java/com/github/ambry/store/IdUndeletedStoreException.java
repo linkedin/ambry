@@ -14,8 +14,8 @@
 package com.github.ambry.store;
 
 /**
- * This is a dedicated exception for {@link StoreErrorCodes#ID_Undeleted}. When {@link Store} throws an Exception
- * for {@link StoreErrorCodes#ID_Undeleted}, it's better that it throws an {@link IdUndeletedStoreException}.
+ * This is a dedicated exception for {@link StoreErrorCodes#IDUndeleted}. When {@link Store} throws an Exception
+ * for {@link StoreErrorCodes#IDUndeleted}, it's better that it throws an {@link IdUndeletedStoreException}.
  */
 public class IdUndeletedStoreException extends StoreException {
   private final short lifeVersion;
@@ -26,7 +26,7 @@ public class IdUndeletedStoreException extends StoreException {
    * @param lifeVersion The lifeVersion.
    */
   public IdUndeletedStoreException(String message, short lifeVersion) {
-    super(message, StoreErrorCodes.ID_Undeleted);
+    super(message, StoreErrorCodes.IDUndeleted);
     this.lifeVersion = lifeVersion;
   }
 

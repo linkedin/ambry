@@ -85,7 +85,7 @@ class LogSegment implements Read, Write {
       boolean writeHeader) throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
-          StoreErrorCodes.File_Not_Found);
+          StoreErrorCodes.FileNotFound);
     }
     this.file = file;
     this.name = name;
@@ -106,7 +106,7 @@ class LogSegment implements Read, Write {
         Files.setPosixFilePermissions(this.file.toPath(), config.storeDataFilePermission);
       }
     } catch (IOException e) {
-      throw new StoreException("File not found while creating the log segment", e, StoreErrorCodes.File_Not_Found);
+      throw new StoreException("File not found while creating the log segment", e, StoreErrorCodes.FileNotFound);
     }
   }
 
@@ -122,7 +122,7 @@ class LogSegment implements Read, Write {
   LogSegment(LogSegmentName name, File file, StoreConfig config, StoreMetrics metrics) throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
-          StoreErrorCodes.File_Not_Found);
+          StoreErrorCodes.FileNotFound);
     }
     // TODO: just because the file exists, it does not mean the headers have been written into it. LogSegment should
     // TODO: be able to handle this situation.
@@ -137,14 +137,14 @@ class LogSegment implements Read, Write {
             if (crcFromFile != computedCrc) {
               throw new StoreException(new IllegalStateException(
                   "CRC from the segment file [" + file.getAbsolutePath() + "] does not match computed CRC of header"),
-                  StoreErrorCodes.Log_File_Format_Error);
+                  StoreErrorCodes.LogFileFormatError);
             }
             startOffset = HEADER_SIZE;
             break;
           default:
             throw new StoreException(
                 new IllegalArgumentException("Unknown version in segment [" + file.getAbsolutePath() + "]"),
-                StoreErrorCodes.Log_File_Format_Error);
+                StoreErrorCodes.LogFileFormatError);
         }
       }
       this.file = file;
@@ -160,17 +160,17 @@ class LogSegment implements Read, Write {
       }
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while creating log segment [" + file.getAbsolutePath() + "]", e,
-          StoreErrorCodes.File_Not_Found);
+          StoreErrorCodes.FileNotFound);
     } catch (EOFException e) {
       throw new StoreException("Malformed log segment header at file [" + file.getAbsolutePath() + "]",
-          StoreErrorCodes.Log_File_Format_Error);
+          StoreErrorCodes.LogFileFormatError);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while creating log segment [" + file.getAbsolutePath() + "]", e,
           errorCode);
     } catch (Exception e) {
       // Any other exceptions, would be considered as log file format error
-      throw new StoreException(e, StoreErrorCodes.Log_File_Format_Error);
+      throw new StoreException(e, StoreErrorCodes.LogFileFormatError);
     }
   }
 
@@ -203,7 +203,7 @@ class LogSegment implements Read, Write {
       }
     } catch (IOException e) {
       // the IOException comes from Files.setPosixFilePermissions which happens when file not found
-      throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
+      throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.FileNotFound);
     }
   }
 
@@ -235,7 +235,7 @@ class LogSegment implements Read, Write {
         bytesWritten += fileChannel.write(buffer, endOffset.get() + bytesWritten);
       }
     } catch (ClosedChannelException e) {
-      throw new StoreException("Channel closed while writing into the log segment", e, StoreErrorCodes.Channel_Closed);
+      throw new StoreException("Channel closed while writing into the log segment", e, StoreErrorCodes.ChannelClosed);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while writing into the log segment", e, errorCode);
@@ -261,7 +261,7 @@ class LogSegment implements Read, Write {
     validateAppendSize(size);
     if (!fileChannel.isOpen()) {
       throw new StoreException("Channel is closed when trying to write into log segment",
-          StoreErrorCodes.Channel_Closed);
+          StoreErrorCodes.ChannelClosed);
     }
     int bytesWritten = 0;
     while (bytesWritten < size) {
@@ -274,7 +274,7 @@ class LogSegment implements Read, Write {
       try {
         if (channel.read(byteBufferForAppend) < 0) {
           throw new StoreException("ReadableByteChannel length less than requested size!",
-              StoreErrorCodes.Unknown_Error);
+              StoreErrorCodes.UnknownError);
         }
         byteBufferForAppend.flip();
         while (byteBufferForAppend.hasRemaining()) {
@@ -302,7 +302,7 @@ class LogSegment implements Read, Write {
   int appendFromDirectly(byte[] byteArray, int offset, int length) throws StoreException {
     if (!fileChannel.isOpen()) {
       throw new StoreException("Channel is closed while writing to segment via direct IO",
-          StoreErrorCodes.Channel_Closed);
+          StoreErrorCodes.ChannelClosed);
     }
     validateAppendSize(length);
 
@@ -346,7 +346,7 @@ class LogSegment implements Read, Write {
    */
   void initBufferForAppend() throws StoreException {
     if (byteBufferForAppend != null) {
-      throw new StoreException("ByteBufferForAppend has been initialized.", StoreErrorCodes.Initialization_Error);
+      throw new StoreException("ByteBufferForAppend has been initialized.", StoreErrorCodes.InitializationError);
     }
     byteBufferForAppend = ByteBuffer.allocateDirect(BYTE_BUFFER_SIZE_FOR_APPEND);
     byteBufferForAppendTotalCount.incrementAndGet();
@@ -499,7 +499,7 @@ class LogSegment implements Read, Write {
       if (endOffset < startOffset || endOffset > fileSize) {
         throw new StoreException(new IllegalArgumentException(
             file.getAbsolutePath() + ": EndOffset [" + endOffset + "] outside the file size [" + fileSize + "]"),
-            StoreErrorCodes.Log_End_Offset_Error);
+            StoreErrorCodes.LogEndOffsetError);
       }
       fileChannel.position(endOffset);
       this.endOffset.set(endOffset);

@@ -147,7 +147,7 @@ public class HardDeleter implements Runnable {
             }
           }
         } catch (StoreException e) {
-          if (e.getErrorCode() != StoreErrorCodes.Store_Shutting_Down) {
+          if (e.getErrorCode() != StoreErrorCodes.StoreShuttingDown) {
             logger.error("Caught store exception: ", e);
           } else {
             logger.trace("Caught exception during hard deletes", e);
@@ -241,7 +241,7 @@ public class HardDeleter implements Runnable {
       while (hardDeleteIterator.hasNext()) {
         if (!enabled.get()) {
           throw new StoreException("Aborting hard deletes as store is shutting down",
-              StoreErrorCodes.Store_Shutting_Down);
+              StoreErrorCodes.StoreShuttingDown);
         }
         HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
         BlobReadOptions readOptions = readOptionsIterator.next();
@@ -350,7 +350,7 @@ public class HardDeleter implements Runnable {
           return true;
         }
       } catch (StoreException e) {
-        if (e.getErrorCode() != StoreErrorCodes.Store_Shutting_Down) {
+        if (e.getErrorCode() != StoreErrorCodes.StoreShuttingDown) {
           metrics.hardDeleteExceptionsCount.inc();
         }
         throw e;
@@ -516,8 +516,7 @@ public class HardDeleter implements Runnable {
           default:
             hardDeleteRecoveryRange.clear();
             metrics.hardDeleteIncompleteRecoveryCount.inc();
-            throw new StoreException("Invalid version in cleanup token " + dataDir,
-                StoreErrorCodes.Index_Version_Error);
+            throw new StoreException("Invalid version in cleanup token " + dataDir, StoreErrorCodes.IndexVersionError);
         }
         long crc = crcStream.getValue();
         if (crc != stream.readLong()) {
@@ -525,7 +524,7 @@ public class HardDeleter implements Runnable {
           metrics.hardDeleteIncompleteRecoveryCount.inc();
           throw new StoreException(
               "Crc check does not match for cleanup token file for dataDir " + dataDir + " aborting. ",
-              StoreErrorCodes.Illegal_Index_State);
+              StoreErrorCodes.IllegalIndexState);
         }
         if (config.storeSetFilePermissionEnabled) {
           Files.setPosixFilePermissions(cleanupTokenFile.toPath(), config.storeDataFilePermission);
@@ -533,7 +532,7 @@ public class HardDeleter implements Runnable {
       } catch (IOException e) {
         hardDeleteRecoveryRange.clear();
         metrics.hardDeleteIncompleteRecoveryCount.inc();
-        throw new StoreException("Failed to read cleanup token ", e, StoreErrorCodes.Initialization_Error);
+        throw new StoreException("Failed to read cleanup token ", e, StoreErrorCodes.InitializationError);
       } finally {
         stream.close();
       }
@@ -638,7 +637,7 @@ public class HardDeleter implements Runnable {
       /* First create the readOptionsList */
       for (MessageInfo info : messageInfoList) {
         if (!enabled.get()) {
-          throw new StoreException("Aborting, store is shutting down", StoreErrorCodes.Store_Shutting_Down);
+          throw new StoreException("Aborting, store is shutting down", StoreErrorCodes.StoreShuttingDown);
         }
         try {
           BlobReadOptions readInfo = index.getBlobReadInfo(info.getStoreKey(), getOptions);
@@ -663,7 +662,7 @@ public class HardDeleter implements Runnable {
         while (hardDeleteIterator.hasNext()) {
           if (!enabled.get()) {
             throw new StoreException("Aborting hard deletes as store is shutting down",
-                StoreErrorCodes.Store_Shutting_Down);
+                StoreErrorCodes.StoreShuttingDown);
           }
           HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
           BlobReadOptions readOptions = readOptionsIterator.next();
@@ -694,7 +693,7 @@ public class HardDeleter implements Runnable {
       for (LogWriteInfo logWriteInfo : logWriteInfoList) {
         if (!enabled.get()) {
           throw new StoreException("Aborting hard deletes as store is shutting down",
-              StoreErrorCodes.Store_Shutting_Down);
+              StoreErrorCodes.StoreShuttingDown);
         }
         diskIOScheduler.getSlice(HARD_DELETE_CLEANUP_JOB_NAME, HARD_DELETE_CLEANUP_JOB_NAME, logWriteInfo.size);
         logWriteInfo.logSegment.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);

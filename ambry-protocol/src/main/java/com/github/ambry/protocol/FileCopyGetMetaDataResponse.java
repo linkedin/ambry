@@ -105,7 +105,7 @@ public class FileCopyGetMetaDataResponse extends Response {
     String clientId = Utils.readIntString(stream);
     ServerErrorCode errorCode = ServerErrorCode.values()[stream.readShort()];
 
-    if(errorCode != ServerErrorCode.No_Error) {
+    if (errorCode != ServerErrorCode.NoError) {
       //Setting the number of logfiles to 0 as there are no logfiles to be read.
       return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, 0, new ArrayList<>(), errorCode);
     }

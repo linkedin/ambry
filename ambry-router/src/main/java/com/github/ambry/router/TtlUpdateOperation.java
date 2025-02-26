@@ -220,14 +220,14 @@ class TtlUpdateOperation {
                   RouterErrorCode.UnexpectedInternalError));
         } else {
           ServerErrorCode serverError = ttlUpdateResponse.getError();
-          if (serverError == ServerErrorCode.No_Error || serverError == ServerErrorCode.Blob_Already_Updated) {
+          if (serverError == ServerErrorCode.NoError || serverError == ServerErrorCode.BlobAlreadyUpdated) {
             operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
             if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
               LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
                   replica.getDataNodeId().getDatacenterName());
               routerMetrics.crossColoSuccessCount.inc();
             }
-          } else if (serverError == ServerErrorCode.Disk_Unavailable) {
+          } else if (serverError == ServerErrorCode.DiskUnavailable) {
             LOGGER.debug(
                 "Replica {} returned Disk_Unavailable for a Ttl update request with response correlationId : {} ",
                 replica.getDataNodeId(), ttlUpdateResponse.getCorrelationId());
@@ -239,7 +239,7 @@ class TtlUpdateOperation {
             LOGGER.debug("Replica {} returned an error {} for a Ttl update request with response correlationId : {} ",
                 replica.getDataNodeId(), serverError, ttlUpdateResponse.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(serverError);
-            if (ttlUpdateResponse.getError() == ServerErrorCode.Blob_Authorization_Failure) {
+            if (ttlUpdateResponse.getError() == ServerErrorCode.BlobAuthorizationFailure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               operationCompleted = true;
@@ -319,18 +319,18 @@ class TtlUpdateOperation {
    */
   private RouterErrorCode processServerError(ServerErrorCode serverErrorCode) {
     switch (serverErrorCode) {
-      case Blob_Authorization_Failure:
+      case BlobAuthorizationFailure:
         return RouterErrorCode.BlobAuthorizationFailure;
-      case Blob_Deleted:
+      case BlobDeleted:
         return RouterErrorCode.BlobDeleted;
-      case Blob_Expired:
+      case BlobExpired:
         return RouterErrorCode.BlobExpired;
-      case Blob_Not_Found:
+      case BlobNotFound:
         return RouterErrorCode.BlobDoesNotExist;
-      case Disk_Unavailable:
-      case Replica_Unavailable:
+      case DiskUnavailable:
+      case ReplicaUnavailable:
         return RouterErrorCode.AmbryUnavailable;
-      case Blob_Update_Not_Allowed:
+      case BlobUpdateNotAllowed:
         return RouterErrorCode.BlobUpdateNotAllowed;
       default:
         return RouterErrorCode.UnexpectedInternalError;

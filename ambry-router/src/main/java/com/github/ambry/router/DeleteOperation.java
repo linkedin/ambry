@@ -238,14 +238,14 @@ class DeleteOperation {
                   RouterErrorCode.UnexpectedInternalError));
         } else {
           ServerErrorCode serverError = deleteResponse.getError();
-          if (serverError == ServerErrorCode.No_Error || serverError == ServerErrorCode.Blob_Deleted) {
+          if (serverError == ServerErrorCode.NoError || serverError == ServerErrorCode.BlobDeleted) {
             operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
             if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
               logger.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
                   replica.getDataNodeId().getDatacenterName());
               routerMetrics.crossColoSuccessCount.inc();
             }
-          } else if (serverError == ServerErrorCode.Disk_Unavailable) {
+          } else if (serverError == ServerErrorCode.DiskUnavailable) {
             logger.trace("Replica {} returned Disk_Unavailable for a delete request with correlationId : {} ", replica,
                 deleteRequest.getCorrelationId());
             operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
@@ -257,7 +257,7 @@ class DeleteOperation {
             logger.trace("Replica {} returned an error {} for a delete request with response correlationId : {} ",
                 replica, serverError, deleteRequest.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(serverError);
-            if (serverError == ServerErrorCode.Blob_Authorization_Failure) {
+            if (serverError == ServerErrorCode.BlobAuthorizationFailure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               operationCompleted = true;
@@ -336,14 +336,14 @@ class DeleteOperation {
    */
   private RouterErrorCode processServerError(ServerErrorCode serverErrorCode) {
     switch (serverErrorCode) {
-      case Blob_Authorization_Failure:
+      case BlobAuthorizationFailure:
         return RouterErrorCode.BlobAuthorizationFailure;
-      case Blob_Expired:
+      case BlobExpired:
         return RouterErrorCode.BlobExpired;
-      case Blob_Not_Found:
+      case BlobNotFound:
         return RouterErrorCode.BlobDoesNotExist;
-      case Disk_Unavailable:
-      case Replica_Unavailable:
+      case DiskUnavailable:
+      case ReplicaUnavailable:
         return RouterErrorCode.AmbryUnavailable;
       default:
         return RouterErrorCode.UnexpectedInternalError;

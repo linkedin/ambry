@@ -322,7 +322,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while creating index " + datadir, e,
-          StoreErrorCodes.Index_Creation_Failure);
+          StoreErrorCodes.IndexCreationFailure);
     }
   }
 
@@ -357,7 +357,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       File[] files = getIndexSegmentFilesForLogSegment(dataDir, logSegment.getName());
       if (files == null) {
         throw new StoreException("Could not read index files from directory [" + dataDir + "]",
-            StoreErrorCodes.Index_Creation_Failure);
+            StoreErrorCodes.IndexCreationFailure);
       }
       indexFiles.addAll(Arrays.asList(files));
       logSegment = log.getNextSegment(logSegment);
@@ -451,7 +451,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
         } else if (value != null) {
           throw new StoreException(
               "Illegal message state during recovery. Duplicate PUT record for " + info.getStoreKey(),
-              StoreErrorCodes.Index_Recovery_Error);
+              StoreErrorCodes.IndexRecoveryError);
         } else {
           // create a new entry in the index
           IndexValue newValue = new IndexValue(info.getSize(), runningOffset, IndexValue.FLAGS_DEFAULT_VALUE,
@@ -470,7 +470,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     }
     if (deleteExpectedKeys.size() > 0) {
       throw new StoreException("Deletes were expected for some keys but were not encountered: " + deleteExpectedKeys,
-          StoreErrorCodes.Index_Recovery_Error);
+          StoreErrorCodes.IndexRecoveryError);
     }
     if (recoveryOccurred) {
       metrics.nonzeroMessageRecovery.inc();
@@ -1054,7 +1054,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
    */
   void validateSanityForUndelete(StoreKey key, List<IndexValue> values, short lifeVersion) throws StoreException {
     if (values == null || values.isEmpty()) {
-      throw new StoreException("Id " + key + " not found in " + dataDir, StoreErrorCodes.ID_Not_Found);
+      throw new StoreException("Id " + key + " not found in " + dataDir, StoreErrorCodes.IDNotFound);
     }
     if (!IndexValue.hasLifeVersion(lifeVersion)) {
       validateSanityForUndeleteWithoutLifeVersion(key, values);
@@ -1074,7 +1074,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     IndexValue oldestValue = values.get(values.size() - 1);
     if (!oldestValue.isPut()) {
       throw new StoreException("Id " + key + " requires first value to be a put in index " + dataDir,
-          StoreErrorCodes.ID_Deleted_Permanently);
+          StoreErrorCodes.IDDeletedPermanently);
     }
     if (latestValue.getLifeVersion() == lifeVersion && latestValue.isUndelete()) {
       throw new IdUndeletedStoreException(
@@ -1083,7 +1083,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     if (latestValue.getLifeVersion() >= lifeVersion) {
       throw new StoreException(
           "LifeVersion conflict in index. Id " + key + " LifeVersion: " + latestValue.getLifeVersion()
-              + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+              + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.LifeVersionConflict);
     }
   }
 
@@ -1106,10 +1106,9 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       IndexValue value = values.get(0);
       if (value.isDelete() || value.isTtlUpdate()) {
         throw new StoreException("Id " + key + " is compacted in index " + dataDir,
-            StoreErrorCodes.ID_Deleted_Permanently);
+            StoreErrorCodes.IDDeletedPermanently);
       } else if (value.isPut()) {
-        throw new StoreException("Id " + key + " is not deleted yet in index " + dataDir,
-            StoreErrorCodes.ID_Not_Deleted);
+        throw new StoreException("Id " + key + " is not deleted yet in index " + dataDir, StoreErrorCodes.IDNotDeleted);
       } else {
         throw new IdUndeletedStoreException("Id " + key + " is already undeleted in index " + dataDir,
             value.getLifeVersion());
@@ -1126,15 +1125,15 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     if (!oldestValue.isPut() || !latestValue.isDelete()) {
       throw new StoreException(
           "Id " + key + " requires first value to be a put and last value to be a delete in index " + dataDir,
-          StoreErrorCodes.ID_Not_Deleted);
+          StoreErrorCodes.IDNotDeleted);
     }
     if (latestValue.getOperationTimeInMs() + TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes)
         < time.milliseconds()) {
       throw new StoreException("Id " + key + " already permanently deleted in index " + dataDir,
-          StoreErrorCodes.ID_Deleted_Permanently);
+          StoreErrorCodes.IDDeletedPermanently);
     }
     if (isExpired(latestValue)) {
-      throw new StoreException("Id " + key + " already expired in index " + dataDir, StoreErrorCodes.TTL_Expired);
+      throw new StoreException("Id " + key + " already expired in index " + dataDir, StoreErrorCodes.TTLExpired);
     }
   }
 
@@ -1178,17 +1177,17 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     validateFileSpan(fileSpan, true);
     IndexValue value = findKey(id);
     if (value == null && info == null) {
-      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.IDNotFound);
     } else if (value != null) {
       if (hasLifeVersion) {
         // When this method is invoked in either recovery or replication, delete can follow any index value.
         if ((value.isDelete() && value.getLifeVersion() >= lifeVersion) || (value.getLifeVersion() > lifeVersion)) {
           throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + value.getLifeVersion()
-              + " Delete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+              + " Delete LifeVersion: " + lifeVersion, StoreErrorCodes.LifeVersionConflict);
         }
       } else {
         if (value.isDelete()) {
-          throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+          throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.IDDeleted);
         }
       }
     }
@@ -1198,7 +1197,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       // It is possible that the PUT has been cleaned by compaction or forceDelete by the replication
       if (!hasLifeVersion) {
         throw new StoreException("MessageInfo of delete carries invalid lifeVersion",
-            StoreErrorCodes.Initialization_Error);
+            StoreErrorCodes.InitializationError);
       }
       newValue =
           new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
@@ -1251,16 +1250,16 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     boolean hasLifeVersion = IndexValue.hasLifeVersion(lifeVersion);
     IndexValue value = findKey(id);
     if (value == null && info == null) {
-      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.IDNotFound);
     }
     short retrievedLifeVersion = value == null ? info.getLifeVersion() : value.getLifeVersion();
     if (value != null && value.isDelete()) {
-      throw new StoreException("Id " + id + " deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+      throw new StoreException("Id " + id + " deleted in index " + dataDir, StoreErrorCodes.IDDeleted);
     } else if (value != null && value.isTtlUpdate()) {
-      throw new StoreException("TTL of " + id + " already updated in index" + dataDir, StoreErrorCodes.Already_Updated);
+      throw new StoreException("TTL of " + id + " already updated in index" + dataDir, StoreErrorCodes.AlreadyUpdated);
     } else if (hasLifeVersion && retrievedLifeVersion > lifeVersion) {
       throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + retrievedLifeVersion
-          + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+          + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.LifeVersionConflict);
     }
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue;
@@ -1270,7 +1269,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       // but the TTL update is going to still be placed?
       if (!hasLifeVersion) {
         throw new StoreException("MessageInfo of ttlUpdate carries invalid lifeVersion",
-            StoreErrorCodes.Initialization_Error);
+            StoreErrorCodes.InitializationError);
       }
       newValue =
           new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
@@ -1329,7 +1328,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       //    then we only have U and second D. U in this case, will have no prior records.
       if (!hasLifeVersion) {
         throw new StoreException("MessageInfo of undelete carries invalid lifeVersion " + lifeVersion,
-            StoreErrorCodes.Initialization_Error);
+            StoreErrorCodes.InitializationError);
       }
       newValue =
           new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
@@ -1368,10 +1367,10 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       IndexValue value = findKey(id);
       BlobReadOptions readOptions;
       if (value == null) {
-        throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+        throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.IDNotFound);
       } else if (value.isDelete()) {
         if (!getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
-          throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+          throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.IDDeleted);
         } else {
           if (value.getOperationTimeInMs() + TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes)
               < time.milliseconds()) {
@@ -1381,7 +1380,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
           readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
         }
       } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
-        throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
+        throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTLExpired);
       } else if (value.isUndelete()) {
         readOptions = getUndeletedBlobReadOptions(value, id, indexSegments);
       } else {
@@ -1421,7 +1420,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       // PUT record no longer available. When the PutBlob is compacted or it's force deleted, it throws the ID_Deleted exception.
       throw new StoreException("Did not find PUT index entry for key [" + key
           + "] and the the original offset in value of the DELETE entry was [" + value.getOriginalMessageOffset() + "]",
-          StoreErrorCodes.ID_Deleted);
+          StoreErrorCodes.IDDeleted);
     }
     return readOptions;
   }
@@ -1449,7 +1448,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     } else {
       // PUT record no longer available.
       throw new StoreException("Did not find PUT index entry for key [" + key + "] when there is an undelete entry",
-          StoreErrorCodes.ID_Not_Found);
+          StoreErrorCodes.IDNotFound);
     }
   }
 
@@ -1619,7 +1618,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     }
   }
 
@@ -2715,7 +2714,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     }
     for (File file : filesToCleanup) {
       if (!file.delete()) {
-        throw new StoreException("Could not delete file named " + file, StoreErrorCodes.Unknown_Error);
+        throw new StoreException("Could not delete file named " + file, StoreErrorCodes.UnknownError);
       }
     }
   }
@@ -2740,7 +2739,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
           Offset logEndOffsetBeforeFlush = log.getEndOffset();
           if (logEndOffsetBeforeFlush.compareTo(indexEndOffsetBeforeFlush) < 0) {
             throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than "
-                + "currentEndOffSet of index " + indexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
+                + "currentEndOffSet of index " + indexEndOffsetBeforeFlush, StoreErrorCodes.IllegalIndexState);
           }
 
           if (hardDeleter != null) {
@@ -2760,7 +2759,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
             if (prevInfo.getEndOffset().compareTo(currentLogEndPointer) > 0) {
               String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset()
                   + " greater than the log end offset " + currentLogEndPointer;
-              throw new StoreException(message, StoreErrorCodes.Illegal_Index_State);
+              throw new StoreException(message, StoreErrorCodes.IllegalIndexState);
             }
             prevInfosToWrite.add(prevInfo);
             Map.Entry<Offset, IndexSegment> infoEntry = indexSegments.lowerEntry(prevInfo.getStartOffset());
@@ -2776,7 +2775,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
           currentInfo.writeIndexSegmentToFile(indexEndOffsetBeforeFlush);
         }
       } catch (FileNotFoundException e) {
-        throw new StoreException("File not found while writing index to file", e, StoreErrorCodes.File_Not_Found);
+        throw new StoreException("File not found while writing index to file", e, StoreErrorCodes.FileNotFound);
       } catch (IOException e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(errorCode.toString() + " while persisting index to disk", e, errorCode);

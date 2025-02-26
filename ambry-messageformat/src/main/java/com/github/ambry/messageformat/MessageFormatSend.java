@@ -212,7 +212,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
                 "Sending blob info (blob properties + user metadata) for message relativeOffset : {} " + "size : {}",
                 sendInfoList.get(i).relativeOffset(), sendInfoList.get(i).sizetoSend());
           } else {
-            throw new MessageFormatException("Unknown flag in request " + flag, MessageFormatErrorCodes.IO_Error);
+            throw new MessageFormatException("Unknown flag in request " + flag, MessageFormatErrorCodes.IOError);
           }
           dataFromReadSet.add(readSet.getPrefetchedData(i));
         }
@@ -234,7 +234,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
       }
       if (!(e instanceof MessageFormatException)) {
         logger.error("Error when calculating offsets", e);
-        throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
+        throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IOError);
       } else {
         throw (MessageFormatException) e;
       }
@@ -253,7 +253,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
     if (!isValidHeaderVersion(version)) {
       throw new MessageFormatException(
           "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(
-              indexInReadSet), MessageFormatErrorCodes.Unknown_Format_Version);
+              indexInReadSet), MessageFormatErrorCodes.UnknownFormatVersion);
     }
 
     // read and verify header
@@ -271,7 +271,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
     if (storeKey.compareTo(readSet.getKeyAt(indexInReadSet)) != 0) {
       throw new MessageFormatException(
           "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(indexInReadSet) + " storeId "
-              + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+              + storeKey, MessageFormatErrorCodes.StoreKeyIdMisMatch);
     }
     return headerFormat;
   }

@@ -106,7 +106,6 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
-import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -287,7 +286,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error =
           validateRequest(receivedRequest.getBlobId().getPartition(), RequestOrResponseType.PutRequest, false);
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         logger.error("Validating put request failed with error {} for request {}", error, receivedRequest);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(), error);
       } else {
@@ -299,7 +298,7 @@ public class AmbryRequests implements RequestAPI {
         }
         storeToPut.put(writeSet);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
-            ServerErrorCode.No_Error);
+            ServerErrorCode.NoError);
         metrics.blobSizeInBytes.update(receivedRequest.getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(receivedRequest.getUsermetadata().limit());
         if (notification != null) {
@@ -309,7 +308,7 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       logger.error("Store exception on a put with error code {} for request {}", e.getErrorCode(), receivedRequest, e);
-      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+      if (e.getErrorCode() == StoreErrorCodes.AlreadyExist) {
         metrics.idAlreadyExistError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
         metrics.storeIOError.inc();
@@ -321,7 +320,7 @@ public class AmbryRequests implements RequestAPI {
     } catch (Exception e) {
       logger.error("Unknown exception on a put for request {}", receivedRequest, e);
       response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
-          ServerErrorCode.Unknown_Error);
+          ServerErrorCode.UnknownError);
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
@@ -360,7 +359,7 @@ public class AmbryRequests implements RequestAPI {
       for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
         ServerErrorCode error =
             validateRequest(partitionRequestInfo.getPartition(), RequestOrResponseType.GetRequest, false);
-        if (error != ServerErrorCode.No_Error) {
+        if (error != ServerErrorCode.NoError) {
           logger.error("Validating get request failed for partition {} with error {}",
               partitionRequestInfo.getPartition(), error);
           PartitionResponseInfo partitionResponseInfo =
@@ -385,13 +384,13 @@ public class AmbryRequests implements RequestAPI {
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (StoreException e) {
             boolean logInErrorLevel = false;
-            if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+            if (e.getErrorCode() == StoreErrorCodes.IDNotFound) {
               metrics.idNotFoundError.inc();
-            } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+            } else if (e.getErrorCode() == StoreErrorCodes.TTLExpired) {
               metrics.ttlExpiredError.inc();
-            } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+            } else if (e.getErrorCode() == StoreErrorCodes.IDDeleted) {
               metrics.idDeletedError.inc();
-            } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+            } else if (e.getErrorCode() == StoreErrorCodes.AuthorizationFailure) {
               metrics.getAuthorizationFailure.inc();
             } else {
               metrics.unExpectedStoreGetError.inc();
@@ -410,9 +409,9 @@ public class AmbryRequests implements RequestAPI {
           } catch (MessageFormatException e) {
             logger.error("Message format exception on a get with error code {} for partitionRequestInfo {}",
                 e.getErrorCode(), partitionRequestInfo, e);
-            if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
+            if (e.getErrorCode() == MessageFormatErrorCodes.DataCorrupt) {
               metrics.dataCorruptError.inc();
-            } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
+            } else if (e.getErrorCode() == MessageFormatErrorCodes.UnknownFormatVersion) {
               metrics.unknownFormatError.inc();
             }
             PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
@@ -423,11 +422,10 @@ public class AmbryRequests implements RequestAPI {
       }
       CompositeSend compositeSend = new CompositeSend(messagesToSendList);
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
-          compositeSend, ServerErrorCode.No_Error);
+          compositeSend, ServerErrorCode.NoError);
     } catch (Exception e) {
       logger.error("Unknown exception for request {}", getRequest, e);
-      response =
-          new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Unknown_Error);
+      response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.UnknownError);
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
@@ -463,12 +461,12 @@ public class AmbryRequests implements RequestAPI {
     MessageInfo info = null;
     StoreKey convertedStoreKey = null;
     Store storeToDelete = null;
-    ServerErrorCode serverErrorCode = ServerErrorCode.No_Error;
+    ServerErrorCode serverErrorCode = ServerErrorCode.NoError;
     try {
       convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(deleteRequest.getBlobId())).get(0);
       serverErrorCode =
           validateRequest(deleteRequest.getBlobId().getPartition(), RequestOrResponseType.DeleteRequest, false);
-      if (serverErrorCode != ServerErrorCode.No_Error) {
+      if (serverErrorCode != ServerErrorCode.NoError) {
         logger.error("Validating delete request failed with error {} for request {}", serverErrorCode, deleteRequest);
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
@@ -480,21 +478,21 @@ public class AmbryRequests implements RequestAPI {
         storeToDelete.delete(Collections.singletonList(info));
       }
     } catch (StoreException e) {
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found && deleteRequest.shouldForceDelete()) {
+      if (e.getErrorCode() == StoreErrorCodes.IDNotFound && deleteRequest.shouldForceDelete()) {
         // If frontend forces a delete operation, place a tombstone even though blob is not present
         serverErrorCode = maybeForceDelete(info, storeToDelete);
       } else {
         serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
-      if (serverErrorCode != ServerErrorCode.No_Error) {
+      if (serverErrorCode != ServerErrorCode.NoError) {
         boolean logInErrorLevel = false;
-        if (serverErrorCode == ServerErrorCode.Blob_Not_Found) {
+        if (serverErrorCode == ServerErrorCode.BlobNotFound) {
           metrics.idNotFoundError.inc();
-        } else if (serverErrorCode == ServerErrorCode.Blob_Expired) {
+        } else if (serverErrorCode == ServerErrorCode.BlobExpired) {
           metrics.ttlExpiredError.inc();
-        } else if (serverErrorCode == ServerErrorCode.Blob_Deleted) {
+        } else if (serverErrorCode == ServerErrorCode.BlobDeleted) {
           metrics.idDeletedError.inc();
-        } else if (serverErrorCode == ServerErrorCode.Blob_Authorization_Failure) {
+        } else if (serverErrorCode == ServerErrorCode.BlobAuthorizationFailure) {
           metrics.deleteAuthorizationFailure.inc();
         } else {
           logInErrorLevel = true;
@@ -510,7 +508,7 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (Exception e) {
       logger.error("Unknown exception for delete request {}", deleteRequest, e);
-      serverErrorCode = ServerErrorCode.Unknown_Error;
+      serverErrorCode = ServerErrorCode.UnknownError;
       metrics.unExpectedStoreDeleteError.inc();
     } finally {
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), serverErrorCode);
@@ -520,7 +518,7 @@ public class AmbryRequests implements RequestAPI {
       // Update request metrics.
       RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
       deleteRequest.accept(metricsUpdater);
-      if (serverErrorCode == ServerErrorCode.No_Error) {
+      if (serverErrorCode == ServerErrorCode.NoError) {
         if (notification != null) {
           notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
               Objects.requireNonNull(convertedStoreKey).getID(), BlobReplicaSourceType.PRIMARY);
@@ -548,7 +546,7 @@ public class AmbryRequests implements RequestAPI {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
-    ServerErrorCode operationServerErrorCode = ServerErrorCode.No_Error;
+    ServerErrorCode operationServerErrorCode = ServerErrorCode.NoError;
     List<BatchDeletePartitionResponseInfo> partitionResponseInfoList = new ArrayList<>();
     BatchDeleteResponse response = null;
     for (BatchDeletePartitionRequestInfo batchDeletePartitionRequestInfo : batchDeleteRequest.getPartitionRequestInfoList()) {
@@ -557,7 +555,7 @@ public class AmbryRequests implements RequestAPI {
         ServerErrorCode error =
             validateRequest(batchDeletePartitionRequestInfo.getPartition(), RequestOrResponseType.BatchDeleteRequest,
                 false);
-        if (error != ServerErrorCode.No_Error) {
+        if (error != ServerErrorCode.NoError) {
           logger.error("Validating delete request failed with error {} for request {}", error, batchDeleteRequest);
           List<BlobDeleteStatus> blobsDeleteStatuses = new ArrayList<>();
           for (StoreKey storeKey: batchDeletePartitionRequestInfo.getBlobIds()){
@@ -574,7 +572,7 @@ public class AmbryRequests implements RequestAPI {
         logger.trace("Exception when processing Batch delete request {}", e.toString());
         List<BlobDeleteStatus> blobDeleteStatuses = new ArrayList<>();
         for (StoreKey storeKey : batchDeletePartitionRequestInfo.getBlobIds()){
-          blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)storeKey, ServerErrorCode.Unknown_Error));
+          blobDeleteStatuses.add(new BlobDeleteStatus((BlobId) storeKey, ServerErrorCode.UnknownError));
         }
         partitionResponseInfo = new BatchDeletePartitionResponseInfo(batchDeletePartitionRequestInfo.getPartition(), blobDeleteStatuses);
       } finally {
@@ -622,7 +620,8 @@ public class AmbryRequests implements RequestAPI {
     StoreBatchDeleteInfo storeBatchDeleteInfo = storeToDeleteFrom.batchDelete(infoList);
     List<BlobDeleteStatus> blobDeleteStatuses = new ArrayList<>();
     for (MessageErrorInfo messageErrorInfo : storeBatchDeleteInfo.getMessageErrorInfos()){
-      ServerErrorCode msgInfoServerErrorCode = messageErrorInfo.getError() == null ? ServerErrorCode.No_Error: ErrorMapping.getStoreErrorMapping(messageErrorInfo.getError());
+      ServerErrorCode msgInfoServerErrorCode = messageErrorInfo.getError() == null ? ServerErrorCode.NoError
+          : ErrorMapping.getStoreErrorMapping(messageErrorInfo.getError());
       blobDeleteStatuses.add(new BlobDeleteStatus((BlobId)messageErrorInfo.getMessageInfo().getStoreKey(), msgInfoServerErrorCode));
     }
     if (notification != null) {
@@ -642,14 +641,14 @@ public class AmbryRequests implements RequestAPI {
    * @return the {@Link ServerErrorCode} indicating the ServerErrorCode for the BatchDelete operation.
    */
   private ServerErrorCode getBatchDeleteOperationServerErrorCode(BatchDeletePartitionResponseInfo partitionResponseInfo){
-    ServerErrorCode operationServerErrorCode = ServerErrorCode.No_Error;
+    ServerErrorCode operationServerErrorCode = ServerErrorCode.NoError;
     for (BlobDeleteStatus blobDeleteStatus: partitionResponseInfo.getBlobsDeleteStatus()) {
       // Set operation level error to Bad_Request if any of the blobs fails
       ServerErrorCode error = blobDeleteStatus.getStatus();
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         // Handling for control test when request type is disabled + setting default to Bad_Request for any error.
-        operationServerErrorCode = error == ServerErrorCode.Temporarily_Disabled ? ServerErrorCode.Temporarily_Disabled
-            : ServerErrorCode.Unknown_Error;
+        operationServerErrorCode = error == ServerErrorCode.TemporarilyDisabled ? ServerErrorCode.TemporarilyDisabled
+            : ServerErrorCode.UnknownError;
         break;
       }
     }
@@ -661,25 +660,25 @@ public class AmbryRequests implements RequestAPI {
    */
   private void handleBatchDeleteMetrics(BatchDeletePartitionResponseInfo partitionResponseInfo,
       BatchDeleteRequest batchDeleteRequest, ServerErrorCode operationServerErrorCode) {
-    if (operationServerErrorCode != ServerErrorCode.No_Error) {
+    if (operationServerErrorCode != ServerErrorCode.NoError) {
       metrics.batchDeleteOperationError.inc();
     }
     for (BlobDeleteStatus blobDeleteStatus: partitionResponseInfo.getBlobsDeleteStatus()){
       // Set operation level error to Bad_Request if any of the blobs fails
       ServerErrorCode error = blobDeleteStatus.getStatus();
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         // TODO: BatchDelete level metrics have been added for initial monitoring. Call can be taken later to remove those counters
         boolean logInErrorLevel = false;
-        if (error == ServerErrorCode.Blob_Not_Found) {
+        if (error == ServerErrorCode.BlobNotFound) {
           metrics.idNotFoundError.inc();
           metrics.idNotFoundErrorInBatchDelete.inc();
-        } else if (error == ServerErrorCode.Blob_Expired) {
+        } else if (error == ServerErrorCode.BlobExpired) {
           metrics.ttlExpiredError.inc();
           metrics.ttlExpiredErrorInBatchDelete.inc();
-        } else if (error == ServerErrorCode.Blob_Deleted) {
+        } else if (error == ServerErrorCode.BlobDeleted) {
           metrics.idDeletedError.inc();
           metrics.idDeletedErrorInBatchDelete.inc();
-        } else if (error == ServerErrorCode.Blob_Authorization_Failure) {
+        } else if (error == ServerErrorCode.BlobAuthorizationFailure) {
           metrics.deleteAuthorizationFailure.inc();
           metrics.deleteAuthorizationFailureInBatchDelete.inc();
         } else {
@@ -709,7 +708,7 @@ public class AmbryRequests implements RequestAPI {
       StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(purgeRequest.getBlobId())).get(0);
       ServerErrorCode error =
           validateRequest(purgeRequest.getBlobId().getPartition(), RequestOrResponseType.PurgeRequest, false);
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         logger.error("Validating purge request failed with error {} for request {}", error, purgeRequest);
         response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(), error);
       } else {
@@ -721,7 +720,7 @@ public class AmbryRequests implements RequestAPI {
         Store storeToPurge = storeManager.getStore(purgeRequest.getBlobId().getPartition());
         storeToPurge.purge(Collections.singletonList(info));
         response =
-            new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(), ServerErrorCode.No_Error);
+            new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(), ServerErrorCode.NoError);
         if (notification != null) {
           notification.onBlobReplicaPurged(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
               BlobReplicaSourceType.PRIMARY);
@@ -729,11 +728,11 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       boolean logInErrorLevel = false;
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+      if (e.getErrorCode() == StoreErrorCodes.IDNotFound) {
         metrics.idNotFoundError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Purged) {
+      } else if (e.getErrorCode() == StoreErrorCodes.IDPurged) {
         metrics.idPurgedError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+      } else if (e.getErrorCode() == StoreErrorCodes.AuthorizationFailure) {
         metrics.purgeAuthorizationFailure.inc();
       } else {
         logInErrorLevel = true;
@@ -751,7 +750,7 @@ public class AmbryRequests implements RequestAPI {
     } catch (Exception e) {
       logger.error("Unknown exception for purge request {}", purgeRequest, e);
       response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(),
-          ServerErrorCode.Unknown_Error);
+          ServerErrorCode.UnknownError);
       metrics.unExpectedStorePurgeError.inc();
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
@@ -784,7 +783,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error =
           validateRequest(updateRequest.getBlobId().getPartition(), RequestOrResponseType.TtlUpdateRequest, false);
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         logger.error("Validating TtlUpdateRequest failed with error {} for request {}", error, updateRequest);
         response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(), error);
       } else {
@@ -798,7 +797,7 @@ public class AmbryRequests implements RequestAPI {
         Store store = storeManager.getStore(updateRequest.getBlobId().getPartition());
         store.updateTtl(Collections.singletonList(info));
         response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
-            ServerErrorCode.No_Error);
+            ServerErrorCode.NoError);
         if (notification != null) {
           notification.onBlobReplicaUpdated(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
               BlobReplicaSourceType.PRIMARY, UpdateType.TTL_UPDATE, info);
@@ -806,17 +805,17 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       boolean logInErrorLevel = false;
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+      if (e.getErrorCode() == StoreErrorCodes.IDNotFound) {
         metrics.idNotFoundError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+      } else if (e.getErrorCode() == StoreErrorCodes.TTLExpired) {
         metrics.ttlExpiredError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+      } else if (e.getErrorCode() == StoreErrorCodes.IDDeleted) {
         metrics.idDeletedError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+      } else if (e.getErrorCode() == StoreErrorCodes.AuthorizationFailure) {
         metrics.ttlUpdateAuthorizationFailure.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.Already_Updated) {
+      } else if (e.getErrorCode() == StoreErrorCodes.AlreadyUpdated) {
         metrics.ttlAlreadyUpdatedError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.Update_Not_Allowed) {
+      } else if (e.getErrorCode() == StoreErrorCodes.UpdateNotAllowed) {
         metrics.ttlUpdateRejectedError.inc();
       } else {
         logInErrorLevel = true;
@@ -834,7 +833,7 @@ public class AmbryRequests implements RequestAPI {
     } catch (Exception e) {
       logger.error("Unknown exception for TTL update request {}", updateRequest, e);
       response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
-          ServerErrorCode.Unknown_Error);
+          ServerErrorCode.UnknownError);
       metrics.unExpectedStoreTtlUpdateError.inc();
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
@@ -875,7 +874,7 @@ public class AmbryRequests implements RequestAPI {
         logger.trace("{} Time used to validate metadata request: {}", partitionId,
             (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
-        if (error != ServerErrorCode.No_Error) {
+        if (error != ServerErrorCode.NoError) {
           logger.error("Validating replica metadata request failed with error {} for partition {}", error, partitionId);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(partitionId, replicaType, error,
@@ -957,13 +956,13 @@ public class AmbryRequests implements RequestAPI {
       }
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.No_Error, replicaMetadataResponseList,
+              ServerErrorCode.NoError, replicaMetadataResponseList,
               ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
     } catch (Exception e) {
       logger.error("Unknown exception for request {}", replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.Unknown_Error,
+              ServerErrorCode.UnknownError,
               ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
@@ -1051,14 +1050,14 @@ public class AmbryRequests implements RequestAPI {
     try {
       if (localStoreHasTheKey(replicateBlobRequest)) {
         logger.info("ReplicateBlobRequest replicated Blob {}, local Store has the Key already, do nothing", blobId);
-        errorCode = ServerErrorCode.No_Error;
+        errorCode = ServerErrorCode.NoError;
       } else {
         // get the Blob from the remote replica.
         Pair<ServerErrorCode, GetResponse> getResult = getBlobFromRemoteReplica(replicateBlobRequest);
         errorCode = getResult.getFirst();
         getResponse = getResult.getSecond();
 
-        if (errorCode == ServerErrorCode.No_Error) {
+        if (errorCode == ServerErrorCode.NoError) {
           // getBlobFromRemoteReplicate has checked partitionResponseInfoList's size is 1 and it has one MessageInfo.
           PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
           List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
@@ -1070,7 +1069,7 @@ public class AmbryRequests implements RequestAPI {
           if (output == null) {
             logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", orgMsgInfo,
                 remoteHostName, remoteHostPort, blobId);
-            errorCode = ServerErrorCode.Unknown_Error;
+            errorCode = ServerErrorCode.UnknownError;
           } else {
             // write the message to the local store
             MessageFormatWriteSet writeset =
@@ -1091,9 +1090,9 @@ public class AmbryRequests implements RequestAPI {
             }
             logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName,
                 remoteHostPort);
-            errorCode = ServerErrorCode.No_Error;
+            errorCode = ServerErrorCode.NoError;
           } // if (output == null)
-        } else if (errorCode == ServerErrorCode.Blob_Deleted) {
+        } else if (errorCode == ServerErrorCode.BlobDeleted) {
           if (serverConfig.serverReplicateTombstoneEnabled) {
             // If GetBlob with GetOption.Include_All returns Blob_Deleted.
             // it means the remote peer probably only have a delete tombstone for this blob.
@@ -1104,7 +1103,7 @@ public class AmbryRequests implements RequestAPI {
             errorCode = indexEntryResult.getFirst();
             MessageInfo indexInfo = indexEntryResult.getSecond();
 
-            if (errorCode == ServerErrorCode.No_Error) {
+            if (errorCode == ServerErrorCode.NoError) {
               Store store = storeManager.getStore(blobId.getPartition());
               // if forceDelete fail due to local store has the key, it throws Already_Exist exception
               store.forceDelete(Collections.singletonList(indexInfo));
@@ -1115,9 +1114,9 @@ public class AmbryRequests implements RequestAPI {
         } // if (errorCode == XXX)
       } // if (remoteDataNode.equals(currentNode))
     } catch (StoreException e) { // catch the store write exception
-      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+      if (e.getErrorCode() == StoreErrorCodes.AlreadyExist) {
         logger.info("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
-        errorCode = ServerErrorCode.No_Error;
+        errorCode = ServerErrorCode.NoError;
       } else {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
         errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
@@ -1125,7 +1124,7 @@ public class AmbryRequests implements RequestAPI {
     } catch (Exception e) {
       // localStoreHasTheKey calls getConvertedStoreKeys which may throw Exception
       logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
-      errorCode = ServerErrorCode.Unknown_Error;
+      errorCode = ServerErrorCode.UnknownError;
     } finally {
       if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
         // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
@@ -1148,12 +1147,12 @@ public class AmbryRequests implements RequestAPI {
   }
 
   private ServerErrorCode maybeForceDelete(MessageInfo info, Store store) {
-    ServerErrorCode serverErrorCode = ServerErrorCode.No_Error;
+    ServerErrorCode serverErrorCode = ServerErrorCode.NoError;
     try {
       MessageInfo deleteRecord = new MessageInfo.Builder(info).lifeVersion((short) 0).build();
       store.forceDelete(Collections.singletonList(deleteRecord));
     } catch (StoreException e) {
-      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+      if (e.getErrorCode() == StoreErrorCodes.AlreadyExist) {
         try {
           // Blob might have been replicated while we were force deleting it. Try normal delete now
           store.delete(Collections.singletonList(info));
@@ -1180,7 +1179,7 @@ public class AmbryRequests implements RequestAPI {
     if (remoteDataNode == null) {
       logger.error("ReplicateBlobRequest {} couldn't find the remote host {} {} in the clustermap.", blobId,
           remoteHostName, remoteHostPort);
-      return new Pair(ServerErrorCode.Replica_Unavailable, null);
+      return new Pair(ServerErrorCode.ReplicaUnavailable, null);
     }
 
     // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
@@ -1200,7 +1199,7 @@ public class AmbryRequests implements RequestAPI {
       ChannelOutput channelOutput = connectedChannel.sendAndReceive(blobIndexRequest);
       stream = channelOutput.getInputStream();
       AdminResponseWithContent adminResponse = AdminResponseWithContent.readFrom(stream);
-      if (adminResponse.getError() != ServerErrorCode.No_Error) {
+      if (adminResponse.getError() != ServerErrorCode.NoError) {
         logger.error("ReplicateBlobRequest failed to get tombstone {} from the remote node {} {} {}", blobId,
             remoteHostName, remoteHostPort, adminResponse.getError());
         return new Pair(adminResponse.getError(), null);
@@ -1213,20 +1212,20 @@ public class AmbryRequests implements RequestAPI {
       if (messages == null || messages.size() != 1) {
         logger.error("ReplicateBlobRequest adminRequest for {} from the remote node {} {} return {} entries {}", blobId,
             remoteHostName, remoteHostPort, messages == null ? 0 : messages.size(), messages);
-        return new Pair<>(ServerErrorCode.Unknown_Error, null);
+        return new Pair<>(ServerErrorCode.UnknownError, null);
       }
       MessageInfo info = messages.values().stream().findFirst().get();
       if (info.isDeleted() != true) {
         logger.error("ReplicateBlobRequest adminRequest {} from {} {} returned unexpected entry {}", blobId,
             remoteHostName, remoteHostPort, info);
-        return new Pair<>(ServerErrorCode.Unknown_Error, null);
+        return new Pair<>(ServerErrorCode.UnknownError, null);
       }
 
-      return new Pair(ServerErrorCode.No_Error, info);
+      return new Pair(ServerErrorCode.NoError, info);
     } catch (Exception e) { // catch the getBlob exception
       logger.error("ReplicateBlobRequest getTombStoneFromRemoteReplica {} from the remote node {} hit exception ",
           blobId, remoteHostName, e);
-      return new Pair(ServerErrorCode.Unknown_Error, null);
+      return new Pair(ServerErrorCode.UnknownError, null);
     } finally {
       if (stream != null && stream instanceof NettyByteBufDataInputStream) {
         // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
@@ -1248,7 +1247,7 @@ public class AmbryRequests implements RequestAPI {
     if (remoteDataNode == null) {
       logger.error("ReplicateBlobRequest {} couldn't find the remote host {} {} in the clustermap.", blobId,
           remoteHostName, remoteHostPort);
-      return new Pair(ServerErrorCode.Replica_Unavailable, null);
+      return new Pair(ServerErrorCode.ReplicaUnavailable, null);
     }
 
     // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
@@ -1271,7 +1270,7 @@ public class AmbryRequests implements RequestAPI {
               connectionPoolCheckoutTimeoutMs);
       ChannelOutput channelOutput = connectedChannel.sendAndReceive(getRequest);
       GetResponse getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
-      if (getResponse.getError() != ServerErrorCode.No_Error) {
+      if (getResponse.getError() != ServerErrorCode.NoError) {
         logger.error("ReplicateBlobRequest failed to get blob {} from the remote node {} {} {}", blobId, remoteHostName,
             remoteHostPort, getResponse.getError());
         return new Pair(getResponse.getError(), getResponse);
@@ -1280,12 +1279,12 @@ public class AmbryRequests implements RequestAPI {
           == 0)) {
         logger.error("ReplicateBlobRequest {} returned empty list from the remote node {} {} {}", blobId,
             remoteHostName, remoteHostPort, getResponse.getError());
-        return new Pair(ServerErrorCode.Unknown_Error, getResponse);
+        return new Pair(ServerErrorCode.UnknownError, getResponse);
       }
 
       // only have one partition. And checked at least it has one entry above.
       PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
-      if (partitionResponseInfo.getErrorCode() != ServerErrorCode.No_Error) {
+      if (partitionResponseInfo.getErrorCode() != ServerErrorCode.NoError) {
         // the status can be Blob_Deleted or others
         // Since GetOption is Include_All, even it's deleted on the remote replica, we'll still get the PutBlob.
         // One exception is that because of compaction or other reasons, the PutRecord is gone and it returns Blob_Deleted.
@@ -1298,13 +1297,13 @@ public class AmbryRequests implements RequestAPI {
         logger.error(
             "ReplicateBlobRequest PartitionResponseInfo response from GetRequest {} {} {} {} {} returned null.",
             partitionResponseInfo, messageInfoList, remoteHostName, remoteHostPort, blobId);
-        return new Pair(ServerErrorCode.Blob_Not_Found, getResponse);
+        return new Pair(ServerErrorCode.BlobNotFound, getResponse);
       }
 
-      return new Pair(ServerErrorCode.No_Error, getResponse);
+      return new Pair(ServerErrorCode.NoError, getResponse);
     } catch (Exception e) { // catch the getBlob exception
       logger.error("ReplicateBlobRequest getBlob {} from the remote node {} hit exception ", blobId, remoteHostName, e);
-      return new Pair(ServerErrorCode.Unknown_Error, null);
+      return new Pair(ServerErrorCode.UnknownError, null);
     }
   }
 
@@ -1329,7 +1328,7 @@ public class AmbryRequests implements RequestAPI {
         && replicateBlobRequest.getOperationType() != RequestOrResponseType.DeleteRequest) || (
         replicateBlobRequest.getLifeVersion() != MessageInfo.LIFE_VERSION_FROM_FRONTEND)) {
       logger.error("ReplicateBlobRequest invalid request {}", replicateBlobRequest);
-      completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.Bad_Request, startProcessTime);
+      completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.BadRequest, startProcessTime);
       return;
     }
 
@@ -1337,13 +1336,13 @@ public class AmbryRequests implements RequestAPI {
     DataNodeId remoteDataNode = clusterMap.getDataNodeId(remoteHostName, remoteHostPort);
     if (remoteDataNode != null && remoteDataNode.equals(currentNode)) {
       logger.info("ReplicateBlobRequest this is the source replica, return immediately. {}", replicateBlobRequest);
-      completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.No_Error, startProcessTime);
+      completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.NoError, startProcessTime);
       return;
     }
 
     PartitionId partitionId = blobId.getPartition();
     ServerErrorCode errorCode = validateRequest(partitionId, RequestOrResponseType.ReplicateBlobRequest, false);
-    if (errorCode != ServerErrorCode.No_Error) {
+    if (errorCode != ServerErrorCode.NoError) {
       logger.error("Validating ReplicateBlobRequest request failed with error {} for request {}", errorCode,
           replicateBlobRequest);
       completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
@@ -1363,8 +1362,8 @@ public class AmbryRequests implements RequestAPI {
       logger.trace("ReplicateBlobRequest replicated Blob {}, local Store has the Key", blobId);
     } catch (StoreException e) {
       // store.findKey throws e.getErrorCode() == StoreErrorCodes.ID_Not_Found if it doesn't exist.
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        errorCode = ServerErrorCode.No_Error;
+      if (e.getErrorCode() == StoreErrorCodes.IDNotFound) {
+        errorCode = ServerErrorCode.NoError;
       } else {
         logger.error("ReplicateBlobRequest store.findKey throw exception {} on Blob {},", e.getErrorCode(), blobId);
         errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
@@ -1372,9 +1371,9 @@ public class AmbryRequests implements RequestAPI {
     } catch (Exception e) {
       // getConvertedStoreKeys which may throw Exception
       logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
-      errorCode = ServerErrorCode.Unknown_Error;
+      errorCode = ServerErrorCode.UnknownError;
     }
-    if (errorCode != ServerErrorCode.No_Error) {
+    if (errorCode != ServerErrorCode.NoError) {
       completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
       return;
     }
@@ -1385,7 +1384,7 @@ public class AmbryRequests implements RequestAPI {
         Pair<ServerErrorCode, GetResponse> remoteGetResult = getBlobFromRemoteReplica(replicateBlobRequest);
         errorCode = remoteGetResult.getFirst();
         GetResponse getResponse = remoteGetResult.getSecond();
-        if (errorCode == ServerErrorCode.No_Error) {
+        if (errorCode == ServerErrorCode.NoError) {
           errorCode = repairPutBlob(replicateBlobRequest, blobId, getResponse);
         }
         if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
@@ -1394,7 +1393,7 @@ public class AmbryRequests implements RequestAPI {
         }
       }
       // now repair the TtlUpdate
-      if (errorCode == ServerErrorCode.No_Error) {
+      if (errorCode == ServerErrorCode.NoError) {
         errorCode = repairTtlUpdate(replicateBlobRequest, blobId);
       }
     } else {
@@ -1409,12 +1408,12 @@ public class AmbryRequests implements RequestAPI {
         Pair<ServerErrorCode, GetResponse> remoteGetResult = getBlobFromRemoteReplica(replicateBlobRequest);
         errorCode = remoteGetResult.getFirst();
         GetResponse getResponse = remoteGetResult.getSecond();
-        if (errorCode == ServerErrorCode.No_Error) {
+        if (errorCode == ServerErrorCode.NoError) {
           errorCode = repairPutBlob(replicateBlobRequest, blobId, getResponse);
-          if (errorCode == ServerErrorCode.No_Error) {
+          if (errorCode == ServerErrorCode.NoError) {
             errorCode = repairDeleteRecordToLocalBlob(replicateBlobRequest, blobId);
           }
-        } else if (errorCode == ServerErrorCode.Blob_Deleted || errorCode == ServerErrorCode.Blob_Not_Found) {
+        } else if (errorCode == ServerErrorCode.BlobDeleted || errorCode == ServerErrorCode.BlobNotFound) {
           errorCode = repairTombStoneToLocalStore(replicateBlobRequest, blobId);
         }
         if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
@@ -1444,7 +1443,7 @@ public class AmbryRequests implements RequestAPI {
       if (output == null) {
         logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", remoteMessageInfo,
             remoteHostName, remoteHostPort, convertedBlobId);
-        errorCode = ServerErrorCode.Unknown_Error;
+        errorCode = ServerErrorCode.UnknownError;
       } else {
         // write the message to the local store
         MessageFormatWriteSet writeset =
@@ -1463,12 +1462,12 @@ public class AmbryRequests implements RequestAPI {
         }
         logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", convertedBlobId, remoteHostName,
             remoteHostPort);
-        errorCode = ServerErrorCode.No_Error;
+        errorCode = ServerErrorCode.NoError;
       } // if (output == null)
     } catch (StoreException e) { // catch the store write exception
-      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+      if (e.getErrorCode() == StoreErrorCodes.AlreadyExist) {
         logger.info("ReplicateBlobRequest Blob {} already exists for {}", convertedBlobId, replicateBlobRequest);
-        errorCode = ServerErrorCode.No_Error;
+        errorCode = ServerErrorCode.NoError;
       } else {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", convertedBlobId,
             replicateBlobRequest, e);
@@ -1479,7 +1478,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   private ServerErrorCode repairTtlUpdate(ReplicateBlobRequest replicateBlobRequest, BlobId blobId) {
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode = ServerErrorCode.NoError;
     Store store = storeManager.getStore(blobId.getPartition());
     try {
       MessageInfo updateTtlRecord = new MessageInfo.Builder(blobId, -1, blobId.getAccountId(), blobId.getContainerId(),
@@ -1490,16 +1489,16 @@ public class AmbryRequests implements RequestAPI {
       store.updateTtl(Collections.singletonList(updateTtlRecord));
       logger.info("ReplicateBlobRequest forceUpdateTtl blob {} : {}", blobId, updateTtlRecord);
     } catch (StoreException e) { // catch the store write exception
-      if (e.getErrorCode() == StoreErrorCodes.Already_Updated || e.getErrorCode() == StoreErrorCodes.ID_Deleted
-          || e.getErrorCode() == StoreErrorCodes.ID_Deleted_Permanently) {
+      if (e.getErrorCode() == StoreErrorCodes.AlreadyUpdated || e.getErrorCode() == StoreErrorCodes.IDDeleted
+          || e.getErrorCode() == StoreErrorCodes.IDDeletedPermanently) {
         // If it's already updated or deleted, treat it as a success.
         logger.info("ReplicateBlobRequest updateTtl failed {} on Blob {}, but treat it as a success,", e.getErrorCode(),
             blobId);
-        errorCode = ServerErrorCode.No_Error;
-      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+        errorCode = ServerErrorCode.NoError;
+      } else if (e.getErrorCode() == StoreErrorCodes.TTLExpired) {
         logger.error("ReplicateBlobRequest updateTtl failed {} on Blob {}. Failed to update in time!!!",
             e.getErrorCode(), blobId);
-        errorCode = ServerErrorCode.Blob_Expired;
+        errorCode = ServerErrorCode.BlobExpired;
       } else {
         logger.error("ReplicateBlobRequest updateTtl failed {} on Blob {},", e.getErrorCode(), blobId);
         errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
@@ -1510,7 +1509,7 @@ public class AmbryRequests implements RequestAPI {
 
   private ServerErrorCode repairTombStoneToLocalStore(ReplicateBlobRequest replicateBlobRequest, BlobId blobId) {
     Store store = storeManager.getStore(blobId.getPartition());
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode = ServerErrorCode.NoError;
 
     try {
       metrics.replicateDeleteRecordRate.mark();
@@ -1524,7 +1523,7 @@ public class AmbryRequests implements RequestAPI {
       // Let it fail and retry will go with the regular delete.
       // LOCAL_CONSISTENCY_TODO: add a concurrent test to verify the Already_Exist case
       errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
-      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+      if (e.getErrorCode() == StoreErrorCodes.AlreadyExist) {
         logger.error("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
       } else {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
@@ -1537,7 +1536,7 @@ public class AmbryRequests implements RequestAPI {
   // local has the blob, repair the delete record
   private ServerErrorCode repairDeleteRecordToLocalBlob(ReplicateBlobRequest replicateBlobRequest, BlobId blobId) {
     Store store = storeManager.getStore(blobId.getPartition());
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode = ServerErrorCode.NoError;
 
     try {
       MessageInfo deleteRecord;
@@ -1548,10 +1547,9 @@ public class AmbryRequests implements RequestAPI {
       store.delete(Collections.singletonList(deleteRecord));
       logger.info("forceDelete blob {} : {}", blobId, deleteRecord);
     } catch (StoreException e) { // catch the store write exception
-      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted
-          || e.getErrorCode() == StoreErrorCodes.ID_Deleted_Permanently) {
+      if (e.getErrorCode() == StoreErrorCodes.IDDeleted || e.getErrorCode() == StoreErrorCodes.IDDeletedPermanently) {
         logger.info("ReplicateBlobRequest Blob {} already deleted for {}", blobId, replicateBlobRequest);
-        errorCode = ServerErrorCode.No_Error;
+        errorCode = ServerErrorCode.NoError;
       } else {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
         errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
@@ -1570,7 +1568,7 @@ public class AmbryRequests implements RequestAPI {
     long processingTime = SystemTime.getInstance().milliseconds() - startProcessTime;
     long totalTimeSpent = requestQueueTime + processingTime;
 
-    if (notification != null && errorCode == ServerErrorCode.No_Error) {
+    if (notification != null && errorCode == ServerErrorCode.NoError) {
       notification.onBlobReplicaReplicated(currentNode.getHostname(), currentNode.getPort(),
           replicateBlobRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
     }
@@ -1605,7 +1603,7 @@ public class AmbryRequests implements RequestAPI {
       convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(undeleteRequest.getBlobId())).get(0);
       ServerErrorCode error =
           validateRequest(undeleteRequest.getBlobId().getPartition(), RequestOrResponseType.UndeleteRequest, false);
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         logger.error("Validating undelete request failed with error {} for request {}", error, undeleteRequest);
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), error);
       } else {
@@ -1624,19 +1622,19 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       boolean logInErrorLevel = false;
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+      if (e.getErrorCode() == StoreErrorCodes.IDNotFound) {
         metrics.idNotFoundError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+      } else if (e.getErrorCode() == StoreErrorCodes.TTLExpired) {
         metrics.ttlExpiredError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted_Permanently) {
+      } else if (e.getErrorCode() == StoreErrorCodes.IDDeletedPermanently) {
         metrics.idDeletedError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict) {
+      } else if (e.getErrorCode() == StoreErrorCodes.LifeVersionConflict) {
         metrics.lifeVersionConflictError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Not_Deleted) {
+      } else if (e.getErrorCode() == StoreErrorCodes.IDNotDeleted) {
         metrics.idNotDeletedError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
+      } else if (e.getErrorCode() == StoreErrorCodes.IDUndeleted) {
         metrics.idUndeletedError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+      } else if (e.getErrorCode() == StoreErrorCodes.AuthorizationFailure) {
         metrics.undeleteAuthorizationFailure.inc();
       } else {
         logInErrorLevel = true;
@@ -1649,13 +1647,13 @@ public class AmbryRequests implements RequestAPI {
         logger.trace("Store exception on a undelete with error code {} for request {}", e.getErrorCode(),
             undeleteRequest, e);
       }
-      if (e.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
+      if (e.getErrorCode() == StoreErrorCodes.IDUndeleted) {
         if (e instanceof IdUndeletedStoreException) {
           response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-              ((IdUndeletedStoreException) e).getLifeVersion(), ServerErrorCode.Blob_Already_Undeleted);
+              ((IdUndeletedStoreException) e).getLifeVersion(), ServerErrorCode.BlobAlreadyUndeleted);
         } else {
           response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-              MessageInfo.LIFE_VERSION_FROM_FRONTEND, ServerErrorCode.Blob_Already_Undeleted);
+              MessageInfo.LIFE_VERSION_FROM_FRONTEND, ServerErrorCode.BlobAlreadyUndeleted);
         }
       } else {
         response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
@@ -1664,7 +1662,7 @@ public class AmbryRequests implements RequestAPI {
     } catch (Exception e) {
       logger.error("Unknown exception for undelete request {}", undeleteRequest, e);
       response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-          ServerErrorCode.Unknown_Error);
+          ServerErrorCode.UnknownError);
       metrics.unExpectedStoreUndeleteError.inc();
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
@@ -1697,7 +1695,7 @@ public class AmbryRequests implements RequestAPI {
 
       ServerErrorCode error = validateRequest(fileCopyGetMetaDataRequest.getPartitionId(),
               RequestOrResponseType.FileCopyGetMetaDataRequest, false);
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         logger.error("Validating FileCopyGetMetaDataRequest failed with error {} for request {}",
             error, fileCopyGetMetaDataRequest);
         response = new FileCopyGetMetaDataResponse(
@@ -1708,20 +1706,20 @@ public class AmbryRequests implements RequestAPI {
 
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
-            fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
-            logSegments.size(), logSegments, ServerErrorCode.No_Error);
+            fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), logSegments.size(),
+            logSegments, ServerErrorCode.NoError);
       }
     } catch (Exception e) {
       if (null == fileCopyGetMetaDataRequest) {
         logger.error("Error while deserializing FileCopyGetMetaDataRequest", e);
-        response = new FileCopyGetMetaDataResponse(ServerErrorCode.Unknown_Error);
+        response = new FileCopyGetMetaDataResponse(ServerErrorCode.UnknownError);
       } else {
         logger.error("Error while getting log segment metadata for partition {}",
             fileCopyGetMetaDataRequest.getPartitionId().getId(), e);
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), 0,
-            new ArrayList<>(), ServerErrorCode.Unknown_Error);
+            new ArrayList<>(), ServerErrorCode.UnknownError);
       }
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
@@ -1787,7 +1785,7 @@ public class AmbryRequests implements RequestAPI {
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response,
       NetworkRequest request, Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime,
       long totalTimeSpent, long blobSize, ServerMetrics metrics) throws InterruptedException {
-    if (response.getError() == ServerErrorCode.No_Error) {
+    if (response.getError() == ServerErrorCode.NoError) {
       metrics.markPutBlobRequestRateBySize(blobSize);
       if (blobSize <= ServerMetrics.smallBlob) {
         requestResponseChannel.sendResponse(response, request,
@@ -1815,7 +1813,7 @@ public class AmbryRequests implements RequestAPI {
 
     if (blobSize <= ServerMetrics.smallBlob) {
       if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {
-        if (response.getError() == ServerErrorCode.No_Error) {
+        if (response.getError() == ServerErrorCode.NoError) {
           metrics.markGetBlobRequestRateBySize(blobSize);
 
           requestResponseChannel.sendResponse(response, request,
@@ -1833,7 +1831,7 @@ public class AmbryRequests implements RequestAPI {
       }
     } else if (blobSize <= ServerMetrics.mediumBlob) {
       if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {
-        if (response.getError() == ServerErrorCode.No_Error) {
+        if (response.getError() == ServerErrorCode.NoError) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
@@ -1850,7 +1848,7 @@ public class AmbryRequests implements RequestAPI {
       }
     } else {
       if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {
-        if (response.getError() == ServerErrorCode.No_Error) {
+        if (response.getError() == ServerErrorCode.NoError) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
@@ -1874,7 +1872,7 @@ public class AmbryRequests implements RequestAPI {
    * @param requestType the {@link RequestOrResponseType} being validated.
    * @param skipPartitionAndDiskAvailableCheck whether to skip ({@code true}) conditions check for the availability of
    *                                           partition and disk.
-   * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
+   * @return {@link ServerErrorCode#NoError} error if the partition can be written to, or the corresponding error code
    *         if it cannot.
    */
   protected ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
@@ -1882,15 +1880,15 @@ public class AmbryRequests implements RequestAPI {
     // Check partition is not null
     if (partition == null) {
       metrics.badRequestError.inc();
-      return ServerErrorCode.Bad_Request;
+      return ServerErrorCode.BadRequest;
     }
     // Ensure if the partition can be written to
     if (requestType.equals(RequestOrResponseType.PutRequest)
         && partition.getPartitionState() == PartitionState.READ_ONLY) {
       metrics.partitionReadOnlyError.inc();
-      return ServerErrorCode.Partition_ReadOnly;
+      return ServerErrorCode.PartitionReadOnly;
     }
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   /**
@@ -1929,7 +1927,7 @@ public class AmbryRequests implements RequestAPI {
       logger.info("ReplicateBlobRequest applyTtlUpdate for {} of {} ", blobId, replicateBlobRequest);
     } catch (StoreException e) {
       // The blob may be deleted or updated which is alright
-      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted || e.getErrorCode() == StoreErrorCodes.Already_Updated) {
+      if (e.getErrorCode() == StoreErrorCodes.IDDeleted || e.getErrorCode() == StoreErrorCodes.AlreadyUpdated) {
         logger.info("ReplicateBlobRequest applyTtlUpdate for {}, Key already updated: {}", blobId, e.getErrorCode());
       } else {
         logger.error("ReplicateBlobRequest applyTtlUpdate for {} failed with {}", blobId, e.getErrorCode());
@@ -1953,7 +1951,7 @@ public class AmbryRequests implements RequestAPI {
       logger.info("ReplicateBlobRequest applyDelete for {} of {} ", blobId, replicateBlobRequest);
     } catch (StoreException e) {
       // The blob may be deleted or updated which is alright
-      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted || e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict) {
+      if (e.getErrorCode() == StoreErrorCodes.IDDeleted || e.getErrorCode() == StoreErrorCodes.LifeVersionConflict) {
         logger.info("ReplicateBlobRequest applyDelete for {}, Key already updated: {}", blobId, e.getErrorCode());
       } else {
         logger.error("ReplicateBlobRequest applyDelete for {} failed with {}", blobId, e.getErrorCode());

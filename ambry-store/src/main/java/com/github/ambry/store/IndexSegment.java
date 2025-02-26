@@ -180,7 +180,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
       if (bloomFile.exists() && config.storeIndexRebuildBloomFilterEnabled) {
         if (!bloomFile.delete()) {
-          throw new StoreException("Could not delete bloom file named " + bloomFile, StoreErrorCodes.Unknown_Error);
+          throw new StoreException("Could not delete bloom file named " + bloomFile, StoreErrorCodes.UnknownError);
         }
         logger.info("{} is successfully deleted and will be rebuilt based on index segment", bloomFile);
       }
@@ -199,9 +199,9 @@ class IndexSegment implements Iterable<IndexEntry> {
         try {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {
-          if ((e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
-              || e.getErrorCode() == StoreErrorCodes.Index_Version_Error
-              || e.getErrorCode() == StoreErrorCodes.Index_File_Format_Error)) {
+          if ((e.getErrorCode() == StoreErrorCodes.IndexCreationFailure
+              || e.getErrorCode() == StoreErrorCodes.IndexVersionError
+              || e.getErrorCode() == StoreErrorCodes.IndexFileFormatError)) {
             // As long as it's not io error, we can recover the last index segment file from logs. So
             // we just log the error here and retain the index so far created. subsequent recovery
             // process will add the missed out entries
@@ -219,7 +219,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     } catch (Exception e) {
       throw new StoreException(
           "Index Segment : " + indexFile.getAbsolutePath() + " error while loading index from file", e,
-          StoreErrorCodes.Index_Creation_Failure);
+          StoreErrorCodes.IndexCreationFailure);
     }
   }
 
@@ -428,7 +428,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     try {
       if (sealed.get()) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a sealed index ",
-            StoreErrorCodes.Illegal_Index_Operation);
+            StoreErrorCodes.IllegalIndexOperation);
       }
       logger.trace("IndexSegment {} inserting key - {} value - offset {} size {} ttl {} "
               + "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
@@ -602,7 +602,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       if (safeEndPoint.compareTo(getEndOffset()) > 0) {
         throw new StoreException(
             "SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " + "index segment "
-                + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
+                + getEndOffset(), StoreErrorCodes.IllegalIndexOperation);
       }
       File temp = new File(getFile().getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
@@ -743,14 +743,14 @@ class IndexSegment implements Iterable<IndexEntry> {
   private ByteBuffer checkFileDataIntegrity(File fileToRead) throws StoreException {
     if (!fileToRead.exists()) {
       throw new StoreException("Index segment file " + fileToRead.getAbsolutePath() + " doesn't exist",
-          StoreErrorCodes.File_Not_Found);
+          StoreErrorCodes.FileNotFound);
     }
     ByteBuffer byteBuffer = ByteBuffer.allocate((int) fileToRead.length());
     try (FileInputStream fileInputStream = new FileInputStream(fileToRead)) {
       Utils.readFileToByteBuffer(fileInputStream.getChannel(), 0, byteBuffer);
       if (!checkDataIntegrityInByteBufferWithCRC(byteBuffer)) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
-            StoreErrorCodes.Index_File_Format_Error);
+            StoreErrorCodes.IndexFileFormatError);
       }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
@@ -802,7 +802,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           break;
         default:
           throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " invalid version in index file ",
-              StoreErrorCodes.Index_Version_Error);
+              StoreErrorCodes.IndexVersionError);
       }
       long logEndOffset = stream.readLong();
       if (getVersion() == PersistentIndex.VERSION_0) {
@@ -1241,7 +1241,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(errorCode.toString() + " while trying to get store key", e, errorCode);
       } catch (Throwable t) {
-        throw new StoreException("Unknown error while trying to get store key ", t, StoreErrorCodes.Unknown_Error);
+        throw new StoreException("Unknown error while trying to get store key ", t, StoreErrorCodes.UnknownError);
       }
       return storeKey;
     }
@@ -1352,12 +1352,11 @@ class IndexSegment implements Iterable<IndexEntry> {
             break;
           default:
             throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " unknown version in index file",
-                StoreErrorCodes.Index_Version_Error);
+                StoreErrorCodes.IndexVersionError);
         }
         index = null;
       } catch (FileNotFoundException e) {
-        throw new StoreException("File not found while mapping the segment of index", e,
-            StoreErrorCodes.File_Not_Found);
+        throw new StoreException("File not found while mapping the segment of index", e, StoreErrorCodes.FileNotFound);
       } catch (IOException e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(errorCode.toString() + " while mapping the segment of index", e, errorCode);
@@ -1372,7 +1371,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     private void checkDataIntegrity() throws StoreException {
       if (!checkDataIntegrityInByteBufferWithCRC(serEntries)) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
-            StoreErrorCodes.Index_File_Format_Error);
+            StoreErrorCodes.IndexFileFormatError);
       }
     }
 

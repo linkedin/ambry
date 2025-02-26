@@ -152,7 +152,7 @@ public class StoreCopierTest {
           tgt.get(Collections.singletonList(key), EnumSet.allOf(StoreGetOptions.class));
           fail("Should have failed to get " + key);
         } catch (StoreException e) {
-          assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
+          assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDNotFound, e.getErrorCode());
         }
       }
       // should be able to get the non expired, non deleted entries

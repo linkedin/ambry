@@ -217,7 +217,7 @@ public class BlobValidator implements Closeable {
               "Could not find a data node corresponding to " + config.hostname + ":" + config.port);
         }
         List<ServerErrorCode> validErrorCodes =
-            Arrays.asList(ServerErrorCode.No_Error, ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired);
+            Arrays.asList(ServerErrorCode.NoError, ServerErrorCode.BlobDeleted, ServerErrorCode.BlobExpired);
         Map<BlobId, ServerErrorCode> blobIdToErrorCode =
             validator.validateBlobsOnReplica(dataNodeId, blobIds, config.getOption, clusterMap, storeKeyFactory);
         for (Map.Entry<BlobId, ServerErrorCode> entry : blobIdToErrorCode.entrySet()) {
@@ -414,7 +414,7 @@ public class BlobValidator implements Closeable {
       Pair<ServerErrorCode, BlobAll> response =
           serverAdminTool.getAll(dataNodeId, blobId, getOption, clusterMap, storeKeyFactory);
       ServerErrorCode errorCode = response.getFirst();
-      if (errorCode == ServerErrorCode.No_Error) {
+      if (errorCode == ServerErrorCode.NoError) {
         BlobAll blobAll = response.getSecond();
         ByteBuf buffer = blobAll.getBlobData().content();
         byte[] blobBytes = new byte[buffer.readableBytes()];
@@ -427,10 +427,10 @@ public class BlobValidator implements Closeable {
       }
     } catch (MessageFormatException e) {
       LOGGER.error("Error while deserializing record for {} from {}", blobId, dataNodeId, e);
-      serverResponse = new ServerResponse(ServerErrorCode.Data_Corrupt, null, null, null, null, null);
+      serverResponse = new ServerResponse(ServerErrorCode.DataCorrupt, null, null, null, null, null);
     } catch (Exception e) {
       LOGGER.error("Error while getting record for {} from {}", blobId, dataNodeId, e);
-      serverResponse = new ServerResponse(ServerErrorCode.Unknown_Error, null, null, null, null, null);
+      serverResponse = new ServerResponse(ServerErrorCode.UnknownError, null, null, null, null, null);
     } finally {
       throttler.maybeThrottle(1);
     }
@@ -493,7 +493,7 @@ public class BlobValidator implements Closeable {
       String mismatchDetails = null;
       if (!serverErrorCode.equals(that.serverErrorCode)) {
         mismatchDetails = "ServerErrorCode mismatch: " + serverErrorCode + " v/s " + that.serverErrorCode;
-      } else if (serverErrorCode == ServerErrorCode.No_Error) {
+      } else if (serverErrorCode == ServerErrorCode.NoError) {
         if (!storeKey.equals(that.storeKey)) {
           mismatchDetails = "StoreKey mismatch: " + storeKey + " v/s " + that.storeKey;
         } else {

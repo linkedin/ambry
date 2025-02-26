@@ -226,7 +226,7 @@ class GetManager {
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
             stream -> GetResponse.readFrom(stream, clusterMap), response -> {
               ServerErrorCode serverError = response.getError();
-              if (serverError == ServerErrorCode.No_Error) {
+              if (serverError == ServerErrorCode.NoError) {
                 serverError = response.getPartitionResponseInfoList().get(0).getErrorCode();
               }
               return serverError;

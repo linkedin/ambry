@@ -73,8 +73,6 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1900,7 +1898,7 @@ class PutOperation {
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             ServerErrorCode putError = putResponse.getError();
-            if (putError == ServerErrorCode.No_Error) {
+            if (putError == ServerErrorCode.NoError) {
               if (!verifyCRC()) {
                 logger.error("{}: PutRequest with response correlationId {}, blob id {} has a mismatch in crc {} ",
                     loggingContext, correlationId, chunkBlobId, requestInfo.getReplicaId().getDataNodeId());
@@ -1922,7 +1920,7 @@ class PutOperation {
               processServerError(putResponse.getError());
               isSuccessful = false;
               putRequestFinalState =
-                  putError == ServerErrorCode.Temporarily_Disabled ? TrackedRequestFinalState.REQUEST_DISABLED
+                  putError == ServerErrorCode.TemporarilyDisabled ? TrackedRequestFinalState.REQUEST_DISABLED
                       : TrackedRequestFinalState.FAILURE;
             }
           }

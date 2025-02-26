@@ -301,7 +301,7 @@ class GetBlobInfoOperation extends GetOperation {
   private void processGetBlobInfoResponse(RequestInfo getRequestInfo, GetResponse getResponse)
       throws IOException, MessageFormatException {
     ServerErrorCode getError = getResponse.getError();
-    if (getError == ServerErrorCode.No_Error) {
+    if (getError == ServerErrorCode.NoError) {
       int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
       // Each get request issued by the router is for a single blob.
       if (partitionsInResponse != 1) {
@@ -311,7 +311,7 @@ class GetBlobInfoOperation extends GetOperation {
         // Again, no need to notify the responseHandler.
       } else {
         getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-        if (getError == ServerErrorCode.No_Error) {
+        if (getError == ServerErrorCode.NoError) {
           PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
           int msgsInResponse = partitionResponseInfo.getMessageInfoList().size();
           if (msgsInResponse != 1) {
@@ -334,15 +334,15 @@ class GetBlobInfoOperation extends GetOperation {
           logger.trace("Replica  {} returned error {} with response correlationId {} ",
               getRequestInfo.getReplicaId().getDataNodeId(), getError, getResponse.getCorrelationId());
           RouterErrorCode routerErrorCode = processServerError(getError);
-          if (getError == ServerErrorCode.Disk_Unavailable) {
+          if (getError == ServerErrorCode.DiskUnavailable) {
             operationTracker.onResponse(getRequestInfo.getReplicaId(), TrackedRequestFinalState.DISK_DOWN);
             setOperationException(new RouterException("Server returned: " + getError, routerErrorCode));
             routerMetrics.routerRequestErrorCount.inc();
             routerMetrics.getDataNodeBasedMetrics(
                 getRequestInfo.getReplicaId().getDataNodeId()).getBlobInfoRequestErrorCount.inc();
           } else {
-            if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
-                || getError == ServerErrorCode.Blob_Authorization_Failure) {
+            if (getError == ServerErrorCode.BlobDeleted || getError == ServerErrorCode.BlobExpired
+                || getError == ServerErrorCode.BlobAuthorizationFailure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               operationCompleted = true;
@@ -460,24 +460,24 @@ class GetBlobInfoOperation extends GetOperation {
   private RouterErrorCode processServerError(ServerErrorCode errorCode) {
     RouterErrorCode resolvedRouterErrorCode;
     switch (errorCode) {
-      case Blob_Authorization_Failure:
+      case BlobAuthorizationFailure:
         logger.trace("Requested blob authorization failed");
         resolvedRouterErrorCode = RouterErrorCode.BlobAuthorizationFailure;
         break;
-      case Blob_Deleted:
+      case BlobDeleted:
         logger.trace("Requested blob was deleted");
         resolvedRouterErrorCode = RouterErrorCode.BlobDeleted;
         break;
-      case Blob_Expired:
+      case BlobExpired:
         logger.trace("Requested blob has expired");
         resolvedRouterErrorCode = RouterErrorCode.BlobExpired;
         break;
-      case Blob_Not_Found:
+      case BlobNotFound:
         logger.trace("Requested blob was not found on this server");
         resolvedRouterErrorCode = RouterErrorCode.BlobDoesNotExist;
         break;
-      case Disk_Unavailable:
-      case Replica_Unavailable:
+      case DiskUnavailable:
+      case ReplicaUnavailable:
         logger.trace("Disk or replica on which the requested blob resides is not accessible");
         resolvedRouterErrorCode = RouterErrorCode.AmbryUnavailable;
         break;
