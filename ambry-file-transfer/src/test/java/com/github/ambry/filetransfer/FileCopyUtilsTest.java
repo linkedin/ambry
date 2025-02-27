@@ -1,4 +1,4 @@
-/**
+package com.github.ambry.filetransfer; /**
  * Copyright 2025 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
-import com.github.ambry.filetransfer.FileCopyUtils;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;
