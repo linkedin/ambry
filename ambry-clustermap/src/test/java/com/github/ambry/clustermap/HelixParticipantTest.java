@@ -509,27 +509,27 @@ public class HelixParticipantTest {
             new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     HelixParticipantMetrics metrics = participant.participantMetrics;
     metrics.incStateTransitionMetric("test-1", ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
-    assertNotNull(metrics.partitionTransitionToCount.get("Partition-test-1-from-BOOTSTRAP-to-STANDBY"));
+    assertNotNull(metrics.partitionTransitionToCount.get("State-Transition-Partition-test-1-from-BOOTSTRAP-to-STANDBY"));
 
     assertNull(metrics.partitionTransitionToCount.get(
-        "Partition-test-1-from-" + ReplicaState.STANDBY.name() + "-to-" + ReplicaState.LEADER.name()));
+        "State-Transition-Partition-test-1-from-" + ReplicaState.STANDBY.name() + "-to-" + ReplicaState.LEADER.name()));
 
     metrics.incStateTransitionMetric("test-1", ReplicaState.STANDBY, ReplicaState.LEADER);
     assertNotNull(metrics.partitionTransitionToCount.get(
-        "Partition-test-1-from-" + ReplicaState.STANDBY.name() + "-to-" + ReplicaState.LEADER.name()));
+        "State-Transition-Partition-test-1-from-" + ReplicaState.STANDBY.name() + "-to-" + ReplicaState.LEADER.name()));
 
     metrics.incStateTransitionMetric("test-2", ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
     assertNotNull(metrics.partitionTransitionToCount.get(
-        "Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
+        "State-Transition-Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
 
     metrics.clearStateTransitionMetric("test-1");
     assertNull(metrics.partitionTransitionToCount.get("Partition-test-1-from-BOOTSTRAP-to-STANDBY"));
     assertNotNull(metrics.partitionTransitionToCount.get(
-        "Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
+        "State-Transition-Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
 
     metrics.clearStateTransitionMetric("test-2");
     assertNull(metrics.partitionTransitionToCount.get(
-        "Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
+        "State-Transition-Partition-test-2-from-" + ReplicaState.BOOTSTRAP.name() + "-to-" + ReplicaState.STANDBY.name()));
   }
 
   /**

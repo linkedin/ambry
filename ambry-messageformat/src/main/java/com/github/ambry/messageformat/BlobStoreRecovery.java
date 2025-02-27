@@ -57,7 +57,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         short version = headerVersion.getShort();
         if (!isValidHeaderVersion(version)) {
           throw new MessageFormatException("Version not known while reading message - " + version,
-              MessageFormatErrorCodes.Unknown_Format_Version);
+              MessageFormatErrorCodes.UnknownFormatVersion);
         }
         ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
         header.putShort(version);
@@ -121,12 +121,12 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
       // log in case where we were not able to parse a message. we stop recovery at that point and return the
       // messages that have been recovered so far.
       logger.error("Message format exception while recovering messages", e);
-      throw new StoreException(e, StoreErrorCodes.Log_File_Format_Error);
+      throw new StoreException(e, StoreErrorCodes.LogFileFormatError);
     } catch (IndexOutOfBoundsException e) {
       // log in case where were not able to read a complete message. we stop recovery at that point and return
       // the message that have been recovered so far.
       logger.error("Trying to read more than the available bytes");
-      throw new StoreException(e, StoreErrorCodes.Log_File_Format_Error);
+      throw new StoreException(e, StoreErrorCodes.LogFileFormatError);
     }
     for (MessageInfo messageInfo : messageRecovered) {
       logger.info("Message Recovered key {} size {} ttl {} deleted {} undelete {}", messageInfo.getStoreKey(),

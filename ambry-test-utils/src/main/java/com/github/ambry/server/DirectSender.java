@@ -115,7 +115,7 @@ public class DirectSender implements Runnable {
           // The ByteBuf should also be released if exception happens, but we ignore it since this is test and exception is not expected.
           ((NettyByteBufDataInputStream) putResponseStream).getBuffer().release();
         }
-        Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
+        Assert.assertEquals(response.getError(), ServerErrorCode.NoError);
       }
     } catch (Exception e) {
       Assert.assertTrue(false);

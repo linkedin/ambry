@@ -83,7 +83,7 @@ class Log implements Write {
     File dir = new File(dataDir);
     File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
     if (segmentFiles == null) {
-      throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.File_Not_Found);
+      throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
     } else {
       initialize(getSegmentsToLoad(segmentFiles), config.storeSegmentSizeInBytes, false);
       this.isLogSegmented = isExistingLogSegmented();

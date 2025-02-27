@@ -93,11 +93,11 @@ public class ServerRequestResponseHelperTest {
     RequestOrResponse request = requestResponseHelper.getDecodedRequest(mockRequest);
     assertEquals("Mismatch in request type", request.getRequestType(), RequestOrResponseType.PutRequest);
     // 2. Verify response is formed correctly
-    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
     assertEquals("Mismatch in response type", response.getRequestType(), RequestOrResponseType.PutResponse);
     assertEquals("Mismatch in response correlation id", response.getCorrelationId(), correlationId);
     assertEquals("Mismatch in response client id", response.getClientId(), clientId);
-    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.Retry_After_Backoff);
+    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.RetryAfterBackoff);
     request.release();
     response.release();
   }
@@ -114,11 +114,11 @@ public class ServerRequestResponseHelperTest {
     RequestOrResponse request = requestResponseHelper.getDecodedRequest(mockRequest);
     assertEquals("Mismatch in request type", request.getRequestType(), RequestOrResponseType.GetRequest);
     // 2. Verify response is formed correctly
-    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
     assertEquals("Mismatch in response type", response.getRequestType(), RequestOrResponseType.GetResponse);
     assertEquals("Mismatch in response correlation id", response.getCorrelationId(), correlationId);
     assertEquals("Mismatch in response client id", response.getClientId(), clientId);
-    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.Retry_After_Backoff);
+    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.RetryAfterBackoff);
     request.release();
     response.release();
   }
@@ -134,11 +134,11 @@ public class ServerRequestResponseHelperTest {
     RequestOrResponse request = requestResponseHelper.getDecodedRequest(mockRequest);
     assertEquals("Mismatch in request type", request.getRequestType(), RequestOrResponseType.TtlUpdateRequest);
     // 2. Verify response is formed correctly
-    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
     assertEquals("Mismatch in response type", response.getRequestType(), RequestOrResponseType.TtlUpdateResponse);
     assertEquals("Mismatch in response correlation id", response.getCorrelationId(), correlationId);
     assertEquals("Mismatch in response client id", response.getClientId(), clientId);
-    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.Retry_After_Backoff);
+    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.RetryAfterBackoff);
     request.release();
     response.release();
   }
@@ -152,11 +152,11 @@ public class ServerRequestResponseHelperTest {
     RequestOrResponse request = requestResponseHelper.getDecodedRequest(mockRequest);
     assertEquals("Mismatch in request type", request.getRequestType(), RequestOrResponseType.DeleteRequest);
     // 2. Verify response is formed correctly
-    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
     assertEquals("Mismatch in response type", response.getRequestType(), RequestOrResponseType.DeleteResponse);
     assertEquals("Mismatch in response correlation id", response.getCorrelationId(), correlationId);
     assertEquals("Mismatch in response client id", response.getClientId(), clientId);
-    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.Retry_After_Backoff);
+    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.RetryAfterBackoff);
     request.release();
     response.release();
   }
@@ -174,11 +174,11 @@ public class ServerRequestResponseHelperTest {
     RequestOrResponse request = requestResponseHelper.getDecodedRequest(mockRequest);
     assertEquals("Mismatch in request type", request.getRequestType(), RequestOrResponseType.UndeleteRequest);
     // 2. Verify response is formed correctly
-    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+    Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
     assertEquals("Mismatch in response type", response.getRequestType(), RequestOrResponseType.UndeleteResponse);
     assertEquals("Mismatch in response correlation id", response.getCorrelationId(), correlationId);
     assertEquals("Mismatch in response client id", response.getClientId(), clientId);
-    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.Retry_After_Backoff);
+    assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.RetryAfterBackoff);
     request.release();
     response.release();
   }
@@ -195,11 +195,11 @@ public class ServerRequestResponseHelperTest {
       RequestOrResponse request = requestResponseHelper.getDecodedRequest(mockRequest);
       assertEquals("Mismatch in request type", request.getRequestType(), RequestOrResponseType.AdminRequest);
       // 2. Verify response is formed correctly
-      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
       assertEquals("Mismatch in response type", response.getRequestType(), RequestOrResponseType.AdminResponse);
       assertEquals("Mismatch in response correlation id", response.getCorrelationId(), correlationId);
       assertEquals("Mismatch in response client id", response.getClientId(), clientId);
-      assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.Retry_After_Backoff);
+      assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.RetryAfterBackoff);
       request.release();
       response.release();
     }
@@ -225,11 +225,11 @@ public class ServerRequestResponseHelperTest {
       RequestOrResponse request = requestResponseHelper.getDecodedRequest(mockRequest);
       assertEquals("Mismatch in request type", request.getRequestType(), RequestOrResponseType.ReplicateBlobRequest);
       // 2. Verify response is formed correctly
-      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
       assertEquals("Mismatch in response type", response.getRequestType(), RequestOrResponseType.ReplicateBlobResponse);
       assertEquals("Mismatch in response correlation id", response.getCorrelationId(), correlationId);
       assertEquals("Mismatch in response client id", response.getClientId(), clientId);
-      assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.Retry_After_Backoff);
+      assertEquals("Mismatch in error code", response.getError(), ServerErrorCode.RetryAfterBackoff);
       request.release();
       response.release();
     }

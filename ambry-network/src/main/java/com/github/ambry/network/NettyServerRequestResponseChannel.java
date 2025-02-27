@@ -150,7 +150,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   void rejectRequest(NetworkRequest networkRequest, boolean isExpired) throws InterruptedException {
     try {
       RequestOrResponse request = requestResponseHelper.getDecodedRequest(networkRequest);
-      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.RetryAfterBackoff);
       if (isExpired) {
         http2ServerMetrics.requestResponseChannelDroppedOnExpiryCount.inc();
       } else {

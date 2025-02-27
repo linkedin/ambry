@@ -179,7 +179,7 @@ public class CloudStorageManager implements StoreManager {
      * Vcr nodes serve requests for all partitions from cloud blob store. So assuming that cloud is always available,
      * the local partition status for a vcr node should always be available.
      */
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   /**

@@ -36,7 +36,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -103,7 +102,7 @@ class Verifier implements Runnable {
               channel1.send(getRequest);
               DataInputStream stream = channel1.receive().getInputStream();
               GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-              if (resp.getError() != ServerErrorCode.No_Error) {
+              if (resp.getError() != ServerErrorCode.NoError) {
                 System.out.println(dataNodeId.getHostname() + " " + dataNodeId.getPort() + " " + resp.getError());
                 throw new IllegalStateException();
               } else {
@@ -164,7 +163,7 @@ class Verifier implements Runnable {
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(stream, clusterMap);
-              if (resp.getError() != ServerErrorCode.No_Error) {
+              if (resp.getError() != ServerErrorCode.NoError) {
                 System.out.println("Error after get user metadata " + resp.getError());
                 throw new IllegalStateException();
               } else {
@@ -194,7 +193,7 @@ class Verifier implements Runnable {
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(stream, clusterMap);
               //System.out.println("response from get " + resp.getError());
-              if (resp.getError() != ServerErrorCode.No_Error) {
+              if (resp.getError() != ServerErrorCode.NoError) {
                 System.out.println("Error after get blob " + resp.getError());
                 throw new IllegalStateException();
               } else {
@@ -225,7 +224,7 @@ class Verifier implements Runnable {
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(stream, clusterMap);
-              if (resp.getError() != ServerErrorCode.No_Error) {
+              if (resp.getError() != ServerErrorCode.NoError) {
                 System.out.println("Error after get blob " + resp.getError());
                 throw new IllegalStateException();
               } else {

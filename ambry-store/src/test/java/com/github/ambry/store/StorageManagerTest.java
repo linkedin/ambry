@@ -221,7 +221,7 @@ public class StorageManagerTest {
       storageManager.start();
       fail("Should fail due to disk health");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Initialization_Error, e.getErrorCode());
+      assertEquals(StoreErrorCodes.InitializationError, e.getErrorCode());
     }
   }
 

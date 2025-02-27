@@ -268,19 +268,19 @@ public class IndexTest {
           verifyBlobReadOptions(id, getOptions, null);
         } else if (state.expiredKeys.contains(id)) {
           StoreErrorCodes expectedErrorCode =
-              getOptions.contains(StoreGetOptions.Store_Include_Expired) ? null : StoreErrorCodes.TTL_Expired;
+              getOptions.contains(StoreGetOptions.Store_Include_Expired) ? null : StoreErrorCodes.TTLExpired;
           verifyBlobReadOptions(id, getOptions, expectedErrorCode);
         } else if (state.deletedKeys.contains(id)) {
           StoreErrorCodes expectedErrorCode =
               state.getExpectedValue(id, true) != null && getOptions.contains(StoreGetOptions.Store_Include_Deleted)
-                  ? null : StoreErrorCodes.ID_Deleted;
+                  ? null : StoreErrorCodes.IDDeleted;
           verifyBlobReadOptions(id, getOptions, expectedErrorCode);
         }
       }
     }
     // try to get BlobReadOption for a non existent key
     MockId nonExistentId = state.getUniqueId();
-    verifyBlobReadOptions(nonExistentId, EnumSet.allOf(StoreGetOptions.class), StoreErrorCodes.ID_Not_Found);
+    verifyBlobReadOptions(nonExistentId, EnumSet.allOf(StoreGetOptions.class), StoreErrorCodes.IDNotFound);
   }
 
   /**
@@ -452,7 +452,7 @@ public class IndexTest {
       state.index.markAsDeleted(state.getUniqueId(), fileSpan, state.time.milliseconds());
       fail("Should have failed because ID provided for delete does not exist");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDNotFound, e.getErrorCode());
     }
 
     // ID already deleted
@@ -460,7 +460,7 @@ public class IndexTest {
       state.index.markAsDeleted(state.deletedKeys.iterator().next(), fileSpan, state.time.milliseconds());
       fail("Should have failed because ID provided for delete is already deleted");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
   }
 
@@ -530,7 +530,7 @@ public class IndexTest {
           MessageInfo.LIFE_VERSION_FROM_FRONTEND);
       fail("should not succeed");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.ID_Not_Deleted, e.getErrorCode());
+      assertEquals(StoreErrorCodes.IDNotDeleted, e.getErrorCode());
     }
 
     // Undelete with smaller lifeVersion, should fail
@@ -539,7 +539,7 @@ public class IndexTest {
       state.index.markAsUndeleted(id, fileSpan, null, state.time.milliseconds(), (short) (lifeVersion - 1));
       fail("should not succeed");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Life_Version_Conflict, e.getErrorCode());
+      assertEquals(StoreErrorCodes.LifeVersionConflict, e.getErrorCode());
     }
 
     // Undelete with same lifeVersion, should fail
@@ -548,7 +548,7 @@ public class IndexTest {
       state.index.markAsUndeleted(id, fileSpan, null, state.time.milliseconds(), lifeVersion);
       fail("should not succeed");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Life_Version_Conflict, e.getErrorCode());
+      assertEquals(StoreErrorCodes.LifeVersionConflict, e.getErrorCode());
     }
 
     // Undelete with larger lifeVersion, should succeed
@@ -566,7 +566,7 @@ public class IndexTest {
       state.index.markAsUndeleted(id, fileSpan, null, operationTime, (short) (lifeVersion + 1));
       fail("should not succeed");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.ID_Undeleted, e.getErrorCode());
+      assertEquals(StoreErrorCodes.IDUndeleted, e.getErrorCode());
     }
 
     // Undelete with even larger lifeVersion, should succeed.
@@ -620,7 +620,7 @@ public class IndexTest {
       state.index.markAsUndeleted(state.getUniqueId(), fileSpan, state.time.milliseconds());
       fail("Should have failed because ID provided for undelete does not exist");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDNotFound, e.getErrorCode());
     }
 
     try {
@@ -638,14 +638,14 @@ public class IndexTest {
       state.index.markAsUndeleted(id, fileSpan, state.time.milliseconds());
       fail("Should have failed because ID provided for undelete hasn't be deleted yet");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDNotDeleted, e.getErrorCode());
     }
 
     try {
       state.index.markAsUndeleted(state.undeletedKeys.iterator().next(), fileSpan, state.time.milliseconds());
       fail("Should have failed because ID provided for udneleted is already undeleted.");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Undeleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDUndeleted, e.getErrorCode());
     }
   }
 
@@ -777,7 +777,7 @@ public class IndexTest {
     MockId id = state.logOrder.lastEntry().getValue().getFirst();
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), null);
     state.advanceTime(expiresAtMs - state.time.milliseconds() + TimeUnit.SECONDS.toMillis(1));
-    verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), StoreErrorCodes.TTL_Expired);
+    verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), StoreErrorCodes.TTLExpired);
   }
 
   /**
@@ -1159,16 +1159,16 @@ public class IndexTest {
     // recovery info contains a PUT for a key that already exists
     MessageInfo info = new MessageInfo(state.liveKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
-    doRecoveryFailureTest(info, StoreErrorCodes.Index_Recovery_Error);
+    doRecoveryFailureTest(info, StoreErrorCodes.IndexRecoveryError);
     // recovery info contains a PUT for a key that has been deleted
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
-    doRecoveryFailureTest(info, StoreErrorCodes.Index_Recovery_Error);
+    doRecoveryFailureTest(info, StoreErrorCodes.IndexRecoveryError);
     // recovery info contains a Ttl Update for a key that does not exist and there is no delete info that follows
     MockId nonExistentId = state.getUniqueId();
     info = new MessageInfo(nonExistentId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
         nonExistentId.getAccountId(), nonExistentId.getContainerId(), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.Index_Recovery_Error);
+    doRecoveryFailureTest(info, StoreErrorCodes.IndexRecoveryError);
     // recovery info contains a Ttl Update for a key that is already Ttl updated
     MockId updatedId = null;
     for (MockId id : state.ttlUpdatedKeys) {
@@ -1181,21 +1181,21 @@ public class IndexTest {
     info =
         new MessageInfo(updatedId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, updatedId.getAccountId(),
             updatedId.getContainerId(), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.Already_Updated);
+    doRecoveryFailureTest(info, StoreErrorCodes.AlreadyUpdated);
     // recovery info contains a Ttl Update for a key that is already deleted
     MockId deletedId = state.deletedKeys.iterator().next();
     info =
         new MessageInfo(deletedId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, deletedId.getAccountId(),
             deletedId.getContainerId(), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
+    doRecoveryFailureTest(info, StoreErrorCodes.IDDeleted);
     // recovery info contains a DELETE for a key that has been deleted, with the same lifeVersion
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.Life_Version_Conflict);
+    doRecoveryFailureTest(info, StoreErrorCodes.LifeVersionConflict);
     // recovery info that contains a PUT beyond the end offset of the log segment
     info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
-    doRecoveryFailureTest(info, StoreErrorCodes.Log_End_Offset_Error);
+    doRecoveryFailureTest(info, StoreErrorCodes.LogEndOffsetError);
   }
 
   /**
@@ -1231,7 +1231,7 @@ public class IndexTest {
     // error case - can never have provided an index based token that is contains the offset of the last segment
     token = new StoreFindToken(state.referenceIndex.lastEntry().getValue().firstKey(), state.referenceIndex.lastKey(),
         state.sessionId, state.incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION);
-    doFindEntriesSinceFailureTest(token, StoreErrorCodes.Unknown_Error);
+    doFindEntriesSinceFailureTest(token, StoreErrorCodes.UnknownError);
 
     findEntriesSinceInEmptyIndexTest(false);
     findEntriesSinceTtlUpdateCornerCaseTest();
@@ -1328,7 +1328,7 @@ public class IndexTest {
     StoreFindToken startToken =
         new StoreFindToken(secondRecordFileSpan.getStartOffset(), new UUID(1, 1), state.incarnationId, false, null,
             null, UNINITIALIZED_RESET_KEY_VERSION);
-    doFindEntriesSinceFailureTest(startToken, StoreErrorCodes.Unknown_Error);
+    doFindEntriesSinceFailureTest(startToken, StoreErrorCodes.UnknownError);
 
     UUID oldSessionId = state.sessionId;
     final MockId newId = state.getUniqueId();
@@ -2205,7 +2205,7 @@ public class IndexTest {
       state.index.persistIndex();
       fail("Should have thrown exception since index has entries which log does not have");
     } catch (StoreException e) {
-      assertEquals("StoreException error code mismatch ", StoreErrorCodes.Illegal_Index_State, e.getErrorCode());
+      assertEquals("StoreException error code mismatch ", StoreErrorCodes.IllegalIndexState, e.getErrorCode());
     }
     // append to log so that log and index are in sync with each other
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
@@ -2226,7 +2226,7 @@ public class IndexTest {
       state.index.close(false);
       fail("Should have thrown exception due to I/O error");
     } catch (StoreException e) {
-      assertEquals("StoreException error code mismatch ", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("StoreException error code mismatch ", StoreErrorCodes.UnknownError, e.getErrorCode());
     }
     Mockito.reset(mockLog);
   }

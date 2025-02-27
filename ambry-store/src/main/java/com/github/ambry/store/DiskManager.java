@@ -94,8 +94,8 @@ public class DiskManager {
   // Have a dedicated scheduler for persisting index segments to ensure index segments are always persisted
   private final ScheduledExecutorService indexPersistScheduler;
   private final EnumSet<StoreErrorCodes> recoverableStoreErrorCodes =
-      EnumSet.of(StoreErrorCodes.Log_File_Format_Error, StoreErrorCodes.Index_File_Format_Error,
-          StoreErrorCodes.Log_End_Offset_Error, StoreErrorCodes.Index_Recovery_Error);
+      EnumSet.of(StoreErrorCodes.LogFileFormatError, StoreErrorCodes.IndexFileFormatError,
+          StoreErrorCodes.LogEndOffsetError, StoreErrorCodes.IndexRecoveryError);
 
   private final AtomicBoolean ioErrorCheckerScheduled = new AtomicBoolean(false);
 
@@ -687,7 +687,7 @@ public class DiskManager {
       metrics.diskMountPathFailures.inc();
       diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
       throw new StoreException("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk",
-          StoreErrorCodes.Initialization_Error);
+          StoreErrorCodes.InitializationError);
     }
     return mountPath.exists();
   }
@@ -940,7 +940,7 @@ public class DiskManager {
                 StandardOpenOption.SYNC, StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
         return fileChannel;
       } catch (StoreException e) {
-        if (e.getErrorCode() == StoreErrorCodes.Initialization_Error) {
+        if (e.getErrorCode() == StoreErrorCodes.InitializationError) {
           diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
           logger.error("Exception occurred when checking if the mount is accessible {}", disk.getMountPath(), e);
         }

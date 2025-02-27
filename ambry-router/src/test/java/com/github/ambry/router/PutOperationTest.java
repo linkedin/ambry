@@ -276,7 +276,7 @@ public class PutOperationTest {
     // poll to populate request
     op.poll(requestRegistrationCallback);
     // make 1st request of first chunk encounter Temporarily_Disabled
-    mockServer.setServerErrorForAllRequests(ServerErrorCode.Temporarily_Disabled);
+    mockServer.setServerErrorForAllRequests(ServerErrorCode.TemporarilyDisabled);
     ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
     PutResponse putResponse =
         responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
@@ -288,7 +288,7 @@ public class PutOperationTest {
     Assert.assertEquals("Disabled count should be 1", 1, operationTracker.getDisabledCount());
     Assert.assertEquals("Disabled count should be 0", 0, operationTracker.getFailedCount());
     // make 2nd request of first chunk encounter Replica_Unavailable
-    mockServer.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+    mockServer.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
     responseInfo = getResponseInfo(requestInfos.get(1));
     putResponse =
         responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
@@ -527,16 +527,16 @@ public class PutOperationTest {
     // Second attempts on all node succeed.
     List<ServerErrorCode> serverErrorList = new ArrayList<>();
     // Success on the first host, slipped put
-    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.NoError);
     // Fail on the second host
-    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.UnknownError);
     // Fail on the third host
-    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.UnknownError);
 
     // Success on the second attempts on all hosts
-    serverErrorList.add(ServerErrorCode.No_Error);
-    serverErrorList.add(ServerErrorCode.No_Error);
-    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.NoError);
+    serverErrorList.add(ServerErrorCode.NoError);
+    serverErrorList.add(ServerErrorCode.NoError);
 
     mockServer.setServerErrors(serverErrorList);
 

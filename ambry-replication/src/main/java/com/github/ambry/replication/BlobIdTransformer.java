@@ -140,7 +140,7 @@ public class BlobIdTransformer implements Transformer {
         break;
       default:
         throw new MessageFormatException("Message header version [" + headerVersion + "] not supported",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
     header.verifyHeader();
     return header;

@@ -256,7 +256,7 @@ public class BlobStore implements Store {
   public void start() throws StoreException {
     synchronized (storeWriteLock) {
       if (started) {
-        throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
+        throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
       }
       final Timer.Context context = metrics.storeStartTime.time();
       try {
@@ -267,12 +267,12 @@ public class BlobStore implements Store {
           boolean created = dataFile.mkdir();
           if (!created) {
             throw new StoreException("Failed to create directory for data dir " + dataDir,
-                StoreErrorCodes.Initialization_Error);
+                StoreErrorCodes.InitializationError);
           }
         }
         if (!dataFile.isDirectory() || !dataFile.canRead()) {
           throw new StoreException(dataFile.getAbsolutePath() + " is either not a directory or is not readable",
-              StoreErrorCodes.Initialization_Error);
+              StoreErrorCodes.InitializationError);
         }
 
         // check the file system before we do any file write.
@@ -283,7 +283,7 @@ public class BlobStore implements Store {
         if (!fileLock.tryLock()) {
           throw new StoreException(
               "Failed to acquire lock on file " + dataDir + ". Another process or thread is using this directory.",
-              StoreErrorCodes.Initialization_Error);
+              StoreErrorCodes.InitializationError);
         }
 
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, config);
@@ -328,7 +328,7 @@ public class BlobStore implements Store {
         }
         metrics.storeStartFailure.inc();
         String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
-        throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
+        throw new StoreException(err, e, StoreErrorCodes.InitializationError);
       } finally {
         context.stop();
       }
@@ -400,7 +400,7 @@ public class BlobStore implements Store {
       logger.error("checkIfStoreIsStale " + replicaId.getReplicaPath() + " is stale. ");
       BlobStore.staleBlobCount.getAndIncrement();
       if (config.storeBlockStaleBlobStoreToStart) {
-        throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.Initialization_Error);
+        throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.InitializationError);
       }
     }
   }
@@ -428,7 +428,7 @@ public class BlobStore implements Store {
             throw new StoreException(
                 "GET authorization failure. Key: " + key.getID() + " Actually accountId: " + readInfo.getMessageInfo()
                     .getAccountId() + " Actually containerId: " + readInfo.getMessageInfo().getContainerId(),
-                StoreErrorCodes.Authorization_Failure);
+                StoreErrorCodes.AuthorizationFailure);
           } else {
             logger.warn("GET authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
                 key.getID(), readInfo.getMessageInfo().getAccountId(), readInfo.getMessageInfo().getContainerId());
@@ -469,7 +469,7 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown exception while trying to fetch blobs from store " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     } finally {
       context.stop();
     }
@@ -609,11 +609,11 @@ public class BlobStore implements Store {
         case COLLIDING:
           throw new StoreException(
               "For at least one message in the write set, another blob with same key exists in store",
-              StoreErrorCodes.Already_Exist);
+              StoreErrorCodes.AlreadyExist);
         case SOME_NOT_ALL_DUPLICATE:
           throw new StoreException(
               "At least one message but not all in the write set is identical to an existing entry",
-              StoreErrorCodes.Already_Exist);
+              StoreErrorCodes.AlreadyExist);
         case ALL_DUPLICATE:
           logger.trace("All entries to put already exist in the store, marking operation as successful");
           break;
@@ -629,7 +629,7 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to put blobs to store " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     } finally {
       context.stop();
     }
@@ -679,7 +679,7 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     } finally {
       context.stop();
     }
@@ -719,7 +719,7 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     } finally {
       context.stop();
     }
@@ -744,7 +744,7 @@ public class BlobStore implements Store {
             index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
         if (value != null) {
           throw new StoreException("Cannot force delete id " + info.getStoreKey() + " since the id exists",
-              StoreErrorCodes.Already_Exist);
+              StoreErrorCodes.AlreadyExist);
         }
       }
       synchronized (storeWriteLock) {
@@ -757,7 +757,7 @@ public class BlobStore implements Store {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
             if (value != null) {
               throw new StoreException("Cannot force delete id " + info.getStoreKey() + " since the id exists",
-                  StoreErrorCodes.Already_Exist);
+                  StoreErrorCodes.AlreadyExist);
             }
           }
         }
@@ -796,7 +796,7 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to force delete blobs from store " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     } finally {
       context.stop();
     }
@@ -814,19 +814,19 @@ public class BlobStore implements Store {
       for (MessageInfo info : infosToUpdate) {
         if (info.getExpirationTimeInMs() != Utils.Infinite_Time) {
           throw new StoreException("BlobStore only supports removing the expiration time",
-              StoreErrorCodes.Update_Not_Allowed);
+              StoreErrorCodes.UpdateNotAllowed);
         }
         IndexValue value =
             index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
         if (value == null) {
           throw new StoreException("Cannot update TTL of " + info.getStoreKey() + " since it's not in the index",
-              StoreErrorCodes.ID_Not_Found);
+              StoreErrorCodes.IDNotFound);
         } else if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
           if (config.storeValidateAuthorization) {
             throw new StoreException(
                 "UPDATE authorization failure. Key: " + info.getStoreKey() + " AccountId in store: "
                     + value.getAccountId() + " ContainerId in store: " + value.getContainerId(),
-                StoreErrorCodes.Authorization_Failure);
+                StoreErrorCodes.AuthorizationFailure);
           } else {
             logger.warn("UPDATE authorization failure. Key: {} AccountId in store: {} ContainerId in store: {}",
                 info.getStoreKey(), value.getAccountId(), value.getContainerId());
@@ -835,10 +835,10 @@ public class BlobStore implements Store {
         } else if (value.isDelete()) {
           throw new StoreException(
               "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
-              StoreErrorCodes.ID_Deleted);
+              StoreErrorCodes.IDDeleted);
         } else if (value.isTtlUpdate()) {
           throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
-              StoreErrorCodes.Already_Updated);
+              StoreErrorCodes.AlreadyUpdated);
         } else if (!IndexValue.hasLifeVersion(info.getLifeVersion()) && value.getExpiresAtMs() != Utils.Infinite_Time
             && value.getExpiresAtMs() < info.getOperationTimeMs() + ttlUpdateBufferTimeMs) {
           // When the request is from frontend, make sure it's not too close to expiry date.
@@ -846,7 +846,7 @@ public class BlobStore implements Store {
           throw new StoreException(
               "TTL of " + info.getStoreKey() + " cannot be updated because it is too close to expiry. Op time (ms): "
                   + info.getOperationTimeMs() + ". ExpiresAtMs: " + value.getExpiresAtMs(),
-              StoreErrorCodes.Update_Not_Allowed);
+              StoreErrorCodes.UpdateNotAllowed);
         }
         indexValuesToUpdate.add(value);
         lifeVersions.add(value.getLifeVersion());
@@ -862,10 +862,10 @@ public class BlobStore implements Store {
               if (value.isDelete()) {
                 throw new StoreException(
                     "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
-                    StoreErrorCodes.ID_Deleted);
+                    StoreErrorCodes.IDDeleted);
               } else if (value.isTtlUpdate()) {
                 throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
-                    StoreErrorCodes.Already_Updated);
+                    StoreErrorCodes.AlreadyUpdated);
               }
             }
           }
@@ -912,7 +912,7 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to update ttl of blobs from store " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     } finally {
       context.stop();
     }
@@ -954,7 +954,7 @@ public class BlobStore implements Store {
           throw new StoreException(
               "UNDELETE authorization failure. Key: " + info.getStoreKey() + " Actually accountId: "
                   + latestValue.getAccountId() + "Actually containerId: " + latestValue.getContainerId(),
-              StoreErrorCodes.Authorization_Failure);
+              StoreErrorCodes.AuthorizationFailure);
         } else {
           logger.warn("UNDELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
               info.getStoreKey(), latestValue.getAccountId(), latestValue.getContainerId());
@@ -977,7 +977,7 @@ public class BlobStore implements Store {
               logger.warn("Revised lifeVersion is " + revisedLifeVersion + " last value is " + value);
               throw new StoreException(
                   "Cannot undelete id " + info.getStoreKey() + " since concurrent operation occurs",
-                  StoreErrorCodes.Life_Version_Conflict);
+                  StoreErrorCodes.LifeVersionConflict);
             }
           }
         }
@@ -999,7 +999,7 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to undelete blobs from store " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     } finally {
       context.stop();
     }
@@ -1054,7 +1054,7 @@ public class BlobStore implements Store {
       IndexValue value = index.findKey(key);
       if (value == null) {
         throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
-            StoreErrorCodes.ID_Not_Found);
+            StoreErrorCodes.IDNotFound);
       }
       return fromIndexValue(key, value);
     } catch (StoreException e) {
@@ -1106,7 +1106,7 @@ public class BlobStore implements Store {
       IndexValue value = index.findKey(key);
       if (value == null) {
         throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
-            StoreErrorCodes.ID_Not_Found);
+            StoreErrorCodes.IDNotFound);
       }
       return value.isDelete();
     } finally {
@@ -1676,7 +1676,7 @@ public class BlobStore implements Store {
 
   private void checkStarted() throws StoreException {
     if (!started) {
-      throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
+      throw new StoreException("Store not started", StoreErrorCodes.StoreNotStarted);
     }
   }
 
@@ -1809,7 +1809,7 @@ public class BlobStore implements Store {
       if (value.isDelete()) {
         throw new StoreException(
             "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-            StoreErrorCodes.ID_Deleted);
+            StoreErrorCodes.IDDeleted);
       }
       // value being ttl update is fine, we can just append DELETE to it.
     } else {
@@ -1818,7 +1818,7 @@ public class BlobStore implements Store {
           + value);
       throw new StoreException(
           "Cannot delete id " + info.getStoreKey() + " since there are concurrent operation while delete",
-          StoreErrorCodes.Life_Version_Conflict);
+          StoreErrorCodes.LifeVersionConflict);
     }
   }
 
@@ -1833,13 +1833,13 @@ public class BlobStore implements Store {
     if (value == null) {
       throw new StoreException(
           "BATCH_DELETE: Cannot delete id " + info.getStoreKey() + " because it is not present in the index",
-          StoreErrorCodes.ID_Not_Found);
+          StoreErrorCodes.IDNotFound);
     }
     if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
       String errorStr = "BATCH_DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
           + value.getAccountId() + "Actually containerId: " + value.getContainerId();
       if (config.storeValidateAuthorization) {
-        throw new StoreException(errorStr, StoreErrorCodes.Authorization_Failure);
+        throw new StoreException(errorStr, StoreErrorCodes.AuthorizationFailure);
       } else {
         logger.warn(errorStr);
         metrics.deleteAuthorizationFailureCount.inc();
@@ -1851,7 +1851,7 @@ public class BlobStore implements Store {
       if (value.isDelete()) {
         throw new StoreException(
             "BATCH_DELETE: Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-            StoreErrorCodes.ID_Deleted);
+            StoreErrorCodes.IDDeleted);
       }
       revisedLifeVersion = value.getLifeVersion();
     } else {
@@ -1859,12 +1859,12 @@ public class BlobStore implements Store {
       if (value.isDelete() && value.getLifeVersion() == info.getLifeVersion()) {
         throw new StoreException("BATCH_DELETE: Cannot delete id " + info.getStoreKey()
             + " since it is already deleted in the index with lifeVersion " + value.getLifeVersion() + ".",
-            StoreErrorCodes.ID_Deleted);
+            StoreErrorCodes.IDDeleted);
       }
       if (value.getLifeVersion() > info.getLifeVersion()) {
         throw new StoreException("BATCH_DELETE: Cannot delete id " + info.getStoreKey()
             + " since it has a higher lifeVersion than the message info: " + value.getLifeVersion() + ">"
-            + info.getLifeVersion(), StoreErrorCodes.Life_Version_Conflict);
+            + info.getLifeVersion(), StoreErrorCodes.LifeVersionConflict);
       }
     }
     indexValuesPriorToDelete.add(value);

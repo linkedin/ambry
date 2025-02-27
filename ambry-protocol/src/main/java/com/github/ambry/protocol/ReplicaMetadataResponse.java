@@ -19,8 +19,6 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -83,7 +81,7 @@ public class ReplicaMetadataResponse extends Response {
           ReplicaMetadataResponseInfo.readFrom(stream, helper, clusterMap, versionId);
       replicaMetadataResponseInfoList.add(replicaMetadataResponseInfo);
     }
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       return new ReplicaMetadataResponse(correlationId, clientId, error, versionId);
     } else {
       return new ReplicaMetadataResponse(correlationId, clientId, error, replicaMetadataResponseInfoList, versionId);

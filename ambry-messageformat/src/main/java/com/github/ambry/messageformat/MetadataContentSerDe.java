@@ -21,7 +21,6 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.stream.Collectors;
 
 
 /**
@@ -81,7 +80,7 @@ public class MetadataContentSerDe {
             new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
       default:
         throw new MessageFormatException("Unknown version encountered for MetadataContent: " + version,
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 }

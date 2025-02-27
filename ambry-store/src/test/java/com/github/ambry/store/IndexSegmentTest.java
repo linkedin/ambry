@@ -385,7 +385,7 @@ public class IndexSegmentTest {
       indexSegment.seal();
       fail("should fail");
     } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.File_Not_Found, e.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.FileNotFound, e.getErrorCode());
     }
     // verify that StoreErrorCodes.IOError can be captured when performing memory map
     indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
@@ -409,7 +409,7 @@ public class IndexSegmentTest {
       indexSegment.seal();
       fail("should fail");
     } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.UnknownError, e.getErrorCode());
     }
   }
 
@@ -437,7 +437,7 @@ public class IndexSegmentTest {
       new IndexSegment(indexSegment.getFile(), false, mockStoreKeyFactory, config, metrics, journal, time);
       fail("should fail");
     } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.IndexCreationFailure, e.getErrorCode());
     }
   }
 
@@ -537,7 +537,7 @@ public class IndexSegmentTest {
       new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, storeConfig, metrics, null, time);
       fail("Deletion on unwritable file should fail");
     } catch (StoreException e) {
-      assertEquals("Error code is not expected.", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+      assertEquals("Error code is not expected.", StoreErrorCodes.IndexCreationFailure, e.getErrorCode());
     } finally {
       assertTrue("Could not make writable", tempDir.setWritable(true));
     }
@@ -807,9 +807,9 @@ public class IndexSegmentTest {
       createIndexSegmentFromFile(indexFile, true, journal);
       fail("Should fail as a sealed index file is corrupted");
     } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.IndexCreationFailure, e.getErrorCode());
       StoreException rc = Utils.getRootCause(e, StoreException.class);
-      assertEquals("Mismatch in error code", StoreErrorCodes.Index_File_Format_Error, rc.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.IndexFileFormatError, rc.getErrorCode());
     }
 
     // An unsealed index segment should ignore the corruption since it can be recovered later by log

@@ -150,17 +150,17 @@ public class VcrRequestsTest {
   @Test
   public void validateRequestTest() {
     //test for null partitionid
-    Assert.assertEquals(vcrRequests.validateRequest(null, null, false), ServerErrorCode.Bad_Request);
-    Assert.assertEquals(vcrRequests.validateRequest(null, null, true), ServerErrorCode.Bad_Request);
+    Assert.assertEquals(vcrRequests.validateRequest(null, null, false), ServerErrorCode.BadRequest);
+    Assert.assertEquals(vcrRequests.validateRequest(null, null, true), ServerErrorCode.BadRequest);
 
     //test for unavailable partitionid
     MockPartitionId unavailablePartitionId = new MockPartitionId();
-    Assert.assertEquals(vcrRequests.validateRequest(unavailablePartitionId, null, false), ServerErrorCode.No_Error);
-    Assert.assertEquals(vcrRequests.validateRequest(unavailablePartitionId, null, true), ServerErrorCode.No_Error);
+    Assert.assertEquals(vcrRequests.validateRequest(unavailablePartitionId, null, false), ServerErrorCode.NoError);
+    Assert.assertEquals(vcrRequests.validateRequest(unavailablePartitionId, null, true), ServerErrorCode.NoError);
 
     //test for available partitionid
-    Assert.assertEquals(vcrRequests.validateRequest(availablePartitionId, null, false), ServerErrorCode.No_Error);
-    Assert.assertEquals(vcrRequests.validateRequest(availablePartitionId, null, true), ServerErrorCode.No_Error);
+    Assert.assertEquals(vcrRequests.validateRequest(availablePartitionId, null, false), ServerErrorCode.NoError);
+    Assert.assertEquals(vcrRequests.validateRequest(availablePartitionId, null, true), ServerErrorCode.NoError);
   }
 
   /**

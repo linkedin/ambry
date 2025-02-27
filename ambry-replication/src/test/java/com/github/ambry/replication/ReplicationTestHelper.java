@@ -1172,7 +1172,7 @@ public class ReplicationTestHelper {
     public TransformationOutput transform(Message message) {
       String blobIdStr = message.getMessageInfo().getStoreKey().getID();
       if (errorKeys.contains(blobIdStr)) {
-        return new TransformationOutput(new MessageFormatException("CRC error", MessageFormatErrorCodes.Data_Corrupt));
+        return new TransformationOutput(new MessageFormatException("CRC error", MessageFormatErrorCodes.DataCorrupt));
       }
       return new TransformationOutput(message);
     }

@@ -15,6 +15,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.FileCopyConfig;
+import com.github.ambry.store.FileStoreException.FileStoreErrorCode;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Utils;
@@ -30,13 +31,11 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
-import com.github.ambry.store.FileStoreException.FileStoreErrorCode;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -183,8 +182,7 @@ class FileStore implements LogSegmentStore {
       // return file chunk buffer read
       return StoreFileChunk.from(buf);
     }  catch (FileNotFoundException e) {
-      throw new StoreException("File not found while reading chunk for FileCopy", e,
-          StoreErrorCodes.File_Not_Found);
+      throw new StoreException("File not found while reading chunk for FileCopy", e, StoreErrorCodes.FileNotFound);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + "while reading chunk for FileCopy", e, errorCode);

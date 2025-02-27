@@ -183,7 +183,7 @@ public class TtlUpdateManagerTest {
   public void metadataChunkUpdatedLastTest() throws Exception {
     // configure failure for the metadata chunk
     serverLayout.getMockServers()
-        .forEach(mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(0), ServerErrorCode.Unknown_Error));
+        .forEach(mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(0), ServerErrorCode.UnknownError));
     executeOpAndVerifyWithInfinity(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false,
         blobIds.subList(1, blobIds.size()));
   }
@@ -218,7 +218,7 @@ public class TtlUpdateManagerTest {
     // configure failure for one of the blobs
     serverLayout.getMockServers()
         .forEach(
-            mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(BLOBS_COUNT / 2), ServerErrorCode.Unknown_Error));
+            mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(BLOBS_COUNT / 2), ServerErrorCode.UnknownError));
     executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false, false, false);
   }
 
@@ -229,23 +229,23 @@ public class TtlUpdateManagerTest {
   @Test
   public void individualErrorCodesTest() throws Exception {
     Map<ServerErrorCode, RouterErrorCode> errorCodeMap = new HashMap<>();
-    errorCodeMap.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
-    errorCodeMap.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
+    errorCodeMap.put(ServerErrorCode.BlobDeleted, RouterErrorCode.BlobDeleted);
+    errorCodeMap.put(ServerErrorCode.BlobExpired, RouterErrorCode.BlobExpired);
     // In production, disk_unavailable usually means disk is bad with I/O errors. For now, the only way to fix this is
     // to replace disk and relies on replication to restore data. If all replicas return disk unavailable (should be
     // extremely rare in real world), it means blob is no long present and it's should be ok to return BlobDoesNotExist.
     // But for simplicity, we will return AmbryUnavailable. Once disks are replaced, we will begin to return
     // BlobDoesNotExist.
-    errorCodeMap.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
-    errorCodeMap.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
-    errorCodeMap.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
-    errorCodeMap.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
+    errorCodeMap.put(ServerErrorCode.DiskUnavailable, RouterErrorCode.AmbryUnavailable);
+    errorCodeMap.put(ServerErrorCode.ReplicaUnavailable, RouterErrorCode.AmbryUnavailable);
+    errorCodeMap.put(ServerErrorCode.BlobUpdateNotAllowed, RouterErrorCode.BlobUpdateNotAllowed);
+    errorCodeMap.put(ServerErrorCode.BlobAuthorizationFailure, RouterErrorCode.BlobAuthorizationFailure);
     for (ServerErrorCode errorCode : ServerErrorCode.values()) {
-      if (errorCode == ServerErrorCode.No_Error || errorCode == ServerErrorCode.Blob_Already_Updated) {
+      if (errorCode == ServerErrorCode.NoError || errorCode == ServerErrorCode.BlobAlreadyUpdated) {
         continue;
       }
       ArrayList<ServerErrorCode> serverErrorCodes =
-          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
+          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IOError));
       // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
       serverErrorCodes.set(3, errorCode);
       serverErrorCodes.set(5, errorCode);
@@ -267,18 +267,18 @@ public class TtlUpdateManagerTest {
     LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
 
     // test 4 codes
-    codesToSetAndTest.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
-    codesToSetAndTest.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-    codesToSetAndTest.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
-    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.BlobDeleted, RouterErrorCode.BlobDeleted);
+    codesToSetAndTest.put(ServerErrorCode.BlobExpired, RouterErrorCode.BlobExpired);
+    codesToSetAndTest.put(ServerErrorCode.BlobUpdateNotAllowed, RouterErrorCode.BlobUpdateNotAllowed);
+    codesToSetAndTest.put(ServerErrorCode.DiskUnavailable, RouterErrorCode.AmbryUnavailable);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
 
     // test another 4 codes
     codesToSetAndTest.clear();
-    codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
-    codesToSetAndTest.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
-    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
-    codesToSetAndTest.put(ServerErrorCode.IO_Error, RouterErrorCode.UnexpectedInternalError);
+    codesToSetAndTest.put(ServerErrorCode.BlobAuthorizationFailure, RouterErrorCode.BlobAuthorizationFailure);
+    codesToSetAndTest.put(ServerErrorCode.BlobUpdateNotAllowed, RouterErrorCode.BlobUpdateNotAllowed);
+    codesToSetAndTest.put(ServerErrorCode.DiskUnavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.IOError, RouterErrorCode.UnexpectedInternalError);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
   }
 
@@ -290,8 +290,8 @@ public class TtlUpdateManagerTest {
   public void fixedCountSuccessfulResponseTest() throws Exception {
     for (int i = 0; i <= DEFAULT_SUCCESS_TARGET; i++) {
       boolean shouldSucceed = i == DEFAULT_SUCCESS_TARGET;
-      doFixedCountSuccessfulResponseTest(i, shouldSucceed, ServerErrorCode.No_Error);
-      doFixedCountSuccessfulResponseTest(i, shouldSucceed, ServerErrorCode.Blob_Already_Updated);
+      doFixedCountSuccessfulResponseTest(i, shouldSucceed, ServerErrorCode.NoError);
+      doFixedCountSuccessfulResponseTest(i, shouldSucceed, ServerErrorCode.BlobAlreadyUpdated);
     }
   }
 
@@ -345,7 +345,7 @@ public class TtlUpdateManagerTest {
   public void testOrigDcUnavailability() throws Exception {
     // Default all replicas to return not found.
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
     // Set 1 replica to disk unavailable originating dc
@@ -355,9 +355,9 @@ public class TtlUpdateManagerTest {
         serversInLocalDc.add(mockServer);
       }
     });
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.DiskUnavailable);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
     executeOpAndVerify(blobIds, RouterErrorCode.AmbryUnavailable, false, true, true, false, false);
   }
 
@@ -369,7 +369,7 @@ public class TtlUpdateManagerTest {
   public void testOrigDcNotFound() throws Exception {
     // Default all replicas to return IO error.
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IOError);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
     // Set 1 not found from bootstrap, 2 not found from standby in originating dc
@@ -379,9 +379,9 @@ public class TtlUpdateManagerTest {
         serversInLocalDc.add(mockServer);
       }
     });
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
 
     executeOpAndVerify(blobIds, RouterErrorCode.BlobDoesNotExist, false, true, true, false, false);
   }
@@ -394,7 +394,7 @@ public class TtlUpdateManagerTest {
   public void testErrorPrecedenceWithOrigDcUnavailability() throws Exception {
     // Default all replicas to return not found.
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
     // Set 1 not found from bootstrap, 2 not found from standby in originating dc
@@ -414,15 +414,15 @@ public class TtlUpdateManagerTest {
           .get();
       partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
     }
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
 
     // Set two remote servers to return Blob_Update_Not_Allowed
     List<MockServer> serversInRemoteDc = new ArrayList<>(serverLayout.getMockServers());
     serversInRemoteDc.removeAll(serversInLocalDc);
-    serversInRemoteDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Update_Not_Allowed);
-    serversInRemoteDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Update_Not_Allowed);
+    serversInRemoteDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobUpdateNotAllowed);
+    serversInRemoteDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobUpdateNotAllowed);
 
     executeOpAndVerify(blobIds, RouterErrorCode.BlobUpdateNotAllowed, false, true, true, false, false);
   }
@@ -434,7 +434,7 @@ public class TtlUpdateManagerTest {
   @Test
   public void testOrigDcSuccess() throws Exception {
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
     // Set 1 not found from bootstrap, 2 not found from standby in originating dc
@@ -454,9 +454,9 @@ public class TtlUpdateManagerTest {
           .get();
       partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
     }
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.No_Error);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.NoError);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.NoError);
     executeOpAndVerify(blobIds, null, false, true, true, false, false);
   }
 
@@ -626,7 +626,7 @@ public class TtlUpdateManagerTest {
     if (successfulResponsesCount > serversInLocalDc.size()) {
       throw new IllegalArgumentException(successfulResponsesCount + " > num servers: " + serverCount);
     }
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
     if (successfulResponsesCount > 0) {
       for (int i = 0; i < successfulResponsesCount; i++) {
@@ -635,7 +635,7 @@ public class TtlUpdateManagerTest {
       // Set error code from other local dc servers as Disk_Unavailable since it is not practical that we get 1 found
       // and 2 not found from healthy local dc servers.
       for (int i = successfulResponsesCount; i < serversInLocalDc.size(); i++) {
-        serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
+        serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.DiskUnavailable);
       }
     }
     RouterErrorCode expectedErrorCode =
@@ -657,8 +657,7 @@ public class TtlUpdateManagerTest {
     if (codesToSetAndTest.size() * 2 > serverCount) {
       throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
     }
-    List<ServerErrorCode> serverErrorCodes =
-        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
+    List<ServerErrorCode> serverErrorCodes = new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IOError));
     List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
     // fill in the array with all the error codes that need resolution and knock them off one by one
     // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
@@ -676,8 +675,8 @@ public class TtlUpdateManagerTest {
       setServerErrorCodes(shuffled, serverLayout);
       executeOpAndVerify(blobIds, expected.get(i), false, true, true, false, false);
       if (i * 2 + 1 < serverErrorCodes.size()) {
-        serverErrorCodes.set(i * 2, ServerErrorCode.IO_Error);
-        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IO_Error);
+        serverErrorCodes.set(i * 2, ServerErrorCode.IOError);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IOError);
       }
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);

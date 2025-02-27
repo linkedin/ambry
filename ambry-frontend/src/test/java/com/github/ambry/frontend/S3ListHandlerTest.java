@@ -37,10 +37,13 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
+import java.io.UnsupportedEncodingException;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
@@ -53,6 +56,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
@@ -115,6 +119,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3ListHandler.handle(request, restResponseChannel, futureResult::done);
@@ -152,6 +157,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
     restResponseChannel = new MockRestResponseChannel();
     futureResult = new FutureResult<>();
     s3ListHandler.handle(request, restResponseChannel, futureResult::done);
@@ -211,6 +217,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3ListHandler.handle(request, restResponseChannel, futureResult::done);
@@ -242,6 +249,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
     restResponseChannel = new MockRestResponseChannel();
     futureResult = new FutureResult<>();
     s3ListHandler.handle(request, restResponseChannel, futureResult::done);
@@ -259,6 +267,49 @@ public class S3ListHandlerTest {
   }
 
   @Test
+  public void testListObjectsWithoutPrefix() throws Exception {
+    // 1. Put a named blob
+    String PREFIX = "directory-name";
+    String KEY_NAME = PREFIX + SLASH + "key_name";
+    String request_path =
+        NAMED_BLOB_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + KEY_NAME;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
+    byte[] content = TestUtils.getRandomBytes(1024);
+    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, request_path, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> putResult = new FutureResult<>();
+    namedBlobPutHandler.handle(request, restResponseChannel, putResult::done);
+    putResult.get();
+
+    // 2. Get list of blobs by sending matching s3 request
+    String s3_list_request_uri = S3_PREFIX + SLASH + account.getName() + SLASH + container.getName();
+    request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(REST_METHOD, request.getRestMethod());
+    restResponseChannel = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3ListHandler.handle(request, restResponseChannel, futureResult::done);
+
+    // 3. Verify results
+    ReadableStreamChannel readableStreamChannel = futureResult.get();
+    ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
+    ListBucketResult listBucketResult = xmlMapper.readValue(byteBuffer.array(), ListBucketResult.class);
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("Mismatch in content type", XML_CONTENT_TYPE, restResponseChannel.getHeader(Headers.CONTENT_TYPE));
+    Contents contents = listBucketResult.getContents().get(0);
+    assertEquals("Mismatch in key name", KEY_NAME, contents.getKey());
+    assertEquals("Mismatch in key count", 1, listBucketResult.getKeyCount());
+  }
+
+  @Test
   public void listObjectsV2EmptyResultTest() throws Exception {
     // Use a prefix that does not match any blobs.
     String prefix = "nonexistent/";
@@ -269,6 +320,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, listUri, new JSONObject(), null);
     listRequest.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(listRequest, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    listRequest.setArg(REST_METHOD, listRequest.getRestMethod());
     RestResponseChannel listResponse = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3ListHandler.handle(listRequest, listResponse, futureResult::done);
@@ -325,6 +377,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3ListRequestUri, new JSONObject(), null);
     listRequest.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(listRequest, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    listRequest.setArg(REST_METHOD, listRequest.getRestMethod());
     RestResponseChannel listResponse = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3ListHandler.handle(listRequest, listResponse, futureResult::done);
@@ -351,6 +404,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3ListRequestUri2, new JSONObject(), null);
     listRequest2.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(listRequest2, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    listRequest2.setArg(REST_METHOD, listRequest2.getRestMethod());
     listResponse = new MockRestResponseChannel();
     futureResult = new FutureResult<>();
     s3ListHandler.handle(listRequest2, listResponse, futureResult::done);
@@ -372,6 +426,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3ListRequestUri3, new JSONObject(), null);
     listRequest3.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(listRequest3, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    listRequest3.setArg(REST_METHOD, listRequest3.getRestMethod());
     listResponse = new MockRestResponseChannel();
     futureResult = new FutureResult<>();
     s3ListHandler.handle(listRequest3, listResponse, futureResult::done);
@@ -425,6 +480,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, listUri, new JSONObject(), null);
     listRequest.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(listRequest, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    listRequest.setArg(REST_METHOD, listRequest.getRestMethod());
     RestResponseChannel listResponse = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3ListHandler.handle(listRequest, listResponse, futureResult::done);
@@ -462,6 +518,7 @@ public class S3ListHandlerTest {
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, listUri2, new JSONObject(), null);
     listRequest2.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(listRequest2, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    listRequest2.setArg(REST_METHOD, listRequest2.getRestMethod());
     listResponse = new MockRestResponseChannel();
     futureResult = new FutureResult<>();
     s3ListHandler.handle(listRequest2, listResponse, futureResult::done);

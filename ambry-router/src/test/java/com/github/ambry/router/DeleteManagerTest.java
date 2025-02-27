@@ -156,7 +156,7 @@ public class DeleteManagerTest {
    */
   @Test
   public void testBasicDeletion() throws Exception {
-    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null,
+    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.NoError, 9), serverLayout, null,
         deleteErrorCodeChecker);
   }
 
@@ -166,7 +166,7 @@ public class DeleteManagerTest {
    */
   @Test
   public void testBadCallback() throws Exception {
-    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null,
+    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.NoError, 9), serverLayout, null,
         new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
@@ -224,8 +224,8 @@ public class DeleteManagerTest {
   @Test
   public void testBlobExpired() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Replica_Unavailable);
-    serverErrorCodes[5] = ServerErrorCode.Blob_Expired;
+    Arrays.fill(serverErrorCodes, ServerErrorCode.ReplicaUnavailable);
+    serverErrorCodes[5] = ServerErrorCode.BlobExpired;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobExpired, deleteErrorCodeChecker,
         localDc);
   }
@@ -258,8 +258,8 @@ public class DeleteManagerTest {
   @Test
   public void testBlobAuthorizationFailure() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[0] = ServerErrorCode.Blob_Authorization_Failure;
+    Arrays.fill(serverErrorCodes, ServerErrorCode.BlobNotFound);
+    serverErrorCodes[0] = ServerErrorCode.BlobAuthorizationFailure;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobAuthorizationFailure,
         deleteErrorCodeChecker, localDc);
   }
@@ -274,13 +274,13 @@ public class DeleteManagerTest {
   public void testBlobAuthorizationFailureOverrideAll() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
 
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
-    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
-    serverErrorCodes[2] = ServerErrorCode.IO_Error;
-    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
-    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
-    serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
+    Arrays.fill(serverErrorCodes, ServerErrorCode.BlobNotFound);
+    serverErrorCodes[0] = ServerErrorCode.BlobNotFound;
+    serverErrorCodes[1] = ServerErrorCode.DataCorrupt;
+    serverErrorCodes[2] = ServerErrorCode.IOError;
+    serverErrorCodes[3] = ServerErrorCode.PartitionUnknown;
+    serverErrorCodes[4] = ServerErrorCode.DiskUnavailable;
+    serverErrorCodes[5] = ServerErrorCode.BlobAuthorizationFailure;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobAuthorizationFailure,
         deleteErrorCodeChecker, localDc);
   }
@@ -293,9 +293,9 @@ public class DeleteManagerTest {
   public void routerErrorCodeResolutionFirstSetTest() throws Exception {
     LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
     // test 4 codes
-    codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
-    codesToSetAndTest.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.BlobAuthorizationFailure, RouterErrorCode.BlobAuthorizationFailure);
+    codesToSetAndTest.put(ServerErrorCode.BlobExpired, RouterErrorCode.BlobExpired);
+    codesToSetAndTest.put(ServerErrorCode.DiskUnavailable, RouterErrorCode.AmbryUnavailable);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
   }
 
@@ -306,10 +306,10 @@ public class DeleteManagerTest {
   @Test
   public void routerErrorCodeResolutionSecondSetTest() throws Exception {
     LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
-    codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
-    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
-    codesToSetAndTest.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
-    codesToSetAndTest.put(ServerErrorCode.Partition_Unknown, RouterErrorCode.UnexpectedInternalError);
+    codesToSetAndTest.put(ServerErrorCode.BlobAuthorizationFailure, RouterErrorCode.BlobAuthorizationFailure);
+    codesToSetAndTest.put(ServerErrorCode.DiskUnavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.ReplicaUnavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.PartitionUnknown, RouterErrorCode.UnexpectedInternalError);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
   }
 
@@ -319,13 +319,13 @@ public class DeleteManagerTest {
   @Test
   public void testVariousServerErrorCode() throws Exception {
     HashMap<ServerErrorCode, RouterErrorCode> map = new HashMap<>();
-    map.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-    map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
-    map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
-    map.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
-    map.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
+    map.put(ServerErrorCode.BlobExpired, RouterErrorCode.BlobExpired);
+    map.put(ServerErrorCode.BlobNotFound, RouterErrorCode.BlobDoesNotExist);
+    map.put(ServerErrorCode.DiskUnavailable, RouterErrorCode.AmbryUnavailable);
+    map.put(ServerErrorCode.ReplicaUnavailable, RouterErrorCode.AmbryUnavailable);
+    map.put(ServerErrorCode.BlobAuthorizationFailure, RouterErrorCode.BlobAuthorizationFailure);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
-      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted
+      if (serverErrorCode != ServerErrorCode.NoError && serverErrorCode != ServerErrorCode.BlobDeleted
           && !map.containsKey(serverErrorCode)) {
         map.put(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
       }
@@ -347,8 +347,8 @@ public class DeleteManagerTest {
   @Test
   public void testBlobNotFoundWithLastResponseNotBlobNotFound() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[8] = ServerErrorCode.IO_Error;
+    Arrays.fill(serverErrorCodes, ServerErrorCode.BlobNotFound);
+    serverErrorCodes[8] = ServerErrorCode.IOError;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
         deleteErrorCodeChecker, localDc);
   }
@@ -356,7 +356,7 @@ public class DeleteManagerTest {
   @Test
   public void testBlobNotFoundReturnedWhenAllReplicasReturnNotFound() throws Exception {
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
     RouterErrorCode expectedErrorCode = RouterErrorCode.BlobDoesNotExist;
     FutureResult<Void> future = new FutureResult<>();
@@ -398,7 +398,7 @@ public class DeleteManagerTest {
 
     // Default all replicas to return not found.
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
     // Set 1 not-found from bootstrap, 1 notFound from standby and 1 success from standby in originating dc
@@ -408,9 +408,9 @@ public class DeleteManagerTest {
         .findFirst()
         .get();
     partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.NoError);
 
     // Verify that final error is Ambry unavailable since one of the replica is in bootstrap state.
     deleteErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
@@ -444,13 +444,13 @@ public class DeleteManagerTest {
 
     // Default all replicas to return IO error which has higher precedence than NotFound.
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IOError);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
     // Set NotFound error from all originating DC replicas.
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
 
     // Verify that final error is BlobDoesNotExist.
     deleteErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
@@ -485,7 +485,7 @@ public class DeleteManagerTest {
 
     // Default all replicas to return not found.
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
 
     // Set 1 not-found from bootstrap, 1 notFound from standby and 1 success from standby in originating dc
@@ -495,9 +495,9 @@ public class DeleteManagerTest {
         .findFirst()
         .get();
     partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.NoError);
 
     // Set one server to return Authorization failure
     MockServer serverInRemoteDc = serverLayout.getMockServers()
@@ -505,7 +505,7 @@ public class DeleteManagerTest {
         .filter(mockServer -> !mockServer.getDataCenter().equals(originatingDcName))
         .findAny()
         .get();
-    serverInRemoteDc.setServerErrorForAllRequests(ServerErrorCode.Blob_Authorization_Failure);
+    serverInRemoteDc.setServerErrorForAllRequests(ServerErrorCode.BlobAuthorizationFailure);
 
     // Verify that final error is BlobAuthorizationFailure since it is higher precedence than unavailability.
     deleteErrorCodeChecker.testAndAssert(RouterErrorCode.BlobAuthorizationFailure);
@@ -536,10 +536,10 @@ public class DeleteManagerTest {
       }
     });
     int serverCount = serverLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, serverLayout);
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.No_Error);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.NoError);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.NoError);
     deleteErrorCodeChecker.testAndAssert(null);
   }
 
@@ -585,9 +585,9 @@ public class DeleteManagerTest {
   @Test
   public void testBlobNotFoundWithTwoBlobDeleted() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.IO_Error);
-    serverErrorCodes[5] = ServerErrorCode.Blob_Deleted;
-    serverErrorCodes[8] = ServerErrorCode.Blob_Deleted;
+    Arrays.fill(serverErrorCodes, ServerErrorCode.IOError);
+    serverErrorCodes[5] = ServerErrorCode.BlobDeleted;
+    serverErrorCodes[8] = ServerErrorCode.BlobDeleted;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, null, deleteErrorCodeChecker, localDc);
   }
 
@@ -599,8 +599,8 @@ public class DeleteManagerTest {
   @Test
   public void testSingleBlobDeletedReturned() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Unknown_Error);
-    serverErrorCodes[7] = ServerErrorCode.Blob_Deleted;
+    Arrays.fill(serverErrorCodes, ServerErrorCode.UnknownError);
+    serverErrorCodes[7] = ServerErrorCode.BlobDeleted;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.UnexpectedInternalError,
         deleteErrorCodeChecker, localDc);
   }
@@ -614,15 +614,15 @@ public class DeleteManagerTest {
   @Test
   public void testVariousServerErrorCodes() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
-    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
-    serverErrorCodes[2] = ServerErrorCode.IO_Error;
-    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
-    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
-    serverErrorCodes[5] = ServerErrorCode.No_Error;
-    serverErrorCodes[6] = ServerErrorCode.Data_Corrupt;
-    serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
-    serverErrorCodes[8] = ServerErrorCode.Disk_Unavailable;
+    serverErrorCodes[0] = ServerErrorCode.BlobNotFound;
+    serverErrorCodes[1] = ServerErrorCode.DataCorrupt;
+    serverErrorCodes[2] = ServerErrorCode.IOError;
+    serverErrorCodes[3] = ServerErrorCode.PartitionUnknown;
+    serverErrorCodes[4] = ServerErrorCode.DiskUnavailable;
+    serverErrorCodes[5] = ServerErrorCode.NoError;
+    serverErrorCodes[6] = ServerErrorCode.DataCorrupt;
+    serverErrorCodes[7] = ServerErrorCode.UnknownError;
+    serverErrorCodes[8] = ServerErrorCode.DiskUnavailable;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.AmbryUnavailable,
         deleteErrorCodeChecker, localDc);
   }
@@ -647,15 +647,15 @@ public class DeleteManagerTest {
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
         new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
-    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
-    serverErrorCodes[2] = ServerErrorCode.IO_Error;
-    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
-    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
-    serverErrorCodes[5] = ServerErrorCode.No_Error;
-    serverErrorCodes[6] = ServerErrorCode.Data_Corrupt;
-    serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
-    serverErrorCodes[8] = ServerErrorCode.Disk_Unavailable;
+    serverErrorCodes[0] = ServerErrorCode.BlobNotFound;
+    serverErrorCodes[1] = ServerErrorCode.DataCorrupt;
+    serverErrorCodes[2] = ServerErrorCode.IOError;
+    serverErrorCodes[3] = ServerErrorCode.PartitionUnknown;
+    serverErrorCodes[4] = ServerErrorCode.DiskUnavailable;
+    serverErrorCodes[5] = ServerErrorCode.NoError;
+    serverErrorCodes[6] = ServerErrorCode.DataCorrupt;
+    serverErrorCodes[7] = ServerErrorCode.UnknownError;
+    serverErrorCodes[8] = ServerErrorCode.DiskUnavailable;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.AmbryUnavailable,
         deleteErrorCodeChecker, localDc);
   }
@@ -669,7 +669,7 @@ public class DeleteManagerTest {
   @Test
   public void testResponseTimeout() throws Exception {
     setServerResponse(false);
-    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
+    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.NoError, 9), serverLayout,
         RouterErrorCode.OperationTimedOut, new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
@@ -692,7 +692,7 @@ public class DeleteManagerTest {
   @Test
   public void testSelectorError() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
+    Arrays.fill(serverErrorCodes, ServerErrorCode.NoError);
     HashMap<MockSelectorState, RouterErrorCode> errorCodeHashMap = new HashMap<>();
     errorCodeHashMap.put(MockSelectorState.DisconnectOnSend, RouterErrorCode.OperationTimedOut);
     errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnAllPoll, RouterErrorCode.OperationTimedOut);
@@ -723,7 +723,7 @@ public class DeleteManagerTest {
   @Test
   public void testRouterClosedDuringOperation() throws Exception {
     setServerResponse(false);
-    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
+    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.NoError, 9), serverLayout,
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
@@ -756,9 +756,9 @@ public class DeleteManagerTest {
             BlobId.BlobDataType.DATACHUNK);
     blobIdString = blobId.getID();
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.IO_Error);
-    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
-    serverErrorCodes[1] = ServerErrorCode.Blob_Not_Found;
+    Arrays.fill(serverErrorCodes, ServerErrorCode.IOError);
+    serverErrorCodes[0] = ServerErrorCode.BlobNotFound;
+    serverErrorCodes[1] = ServerErrorCode.BlobNotFound;
     // The first two responses are blob not found and they are from the local dc and originating dc.
     // So even if the rest of servers returns No_Error, router will not send any requests to them.
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
@@ -833,7 +833,7 @@ public class DeleteManagerTest {
       throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
     }
     List<ServerErrorCode> serverErrorCodes =
-        new ArrayList<>(Collections.nCopies(serverLayout.getMockServers().size(), ServerErrorCode.IO_Error));
+        new ArrayList<>(Collections.nCopies(serverLayout.getMockServers().size(), ServerErrorCode.IOError));
     List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
     // fill in the array with all the error codes that need resolution and knock them off one by one
     // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
@@ -851,8 +851,8 @@ public class DeleteManagerTest {
       setServerErrorCodes(shuffled, serverLayout);
       deleteErrorCodeChecker.testAndAssert(expected.get(i));
       if (i * 2 + 1 < serverErrorCodes.size()) {
-        serverErrorCodes.set(i * 2, ServerErrorCode.IO_Error);
-        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IO_Error);
+        serverErrorCodes.set(i * 2, ServerErrorCode.IOError);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IOError);
       }
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);

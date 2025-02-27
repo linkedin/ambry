@@ -50,17 +50,17 @@ public class ResponseHandler {
    */
   private void onServerEvent(ReplicaId replicaId, ServerErrorCode errorCode) {
     switch (errorCode) {
-      case IO_Error:
-      case Disk_Unavailable:
+      case IOError:
+      case DiskUnavailable:
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Error);
         break;
-      case Partition_ReadOnly:
+      case PartitionReadOnly:
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Partition_ReadOnly);
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Replica_Available);
         break;
-      case Temporarily_Disabled:
-      case Replica_Unavailable:
+      case TemporarilyDisabled:
+      case ReplicaUnavailable:
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Replica_Unavailable);
         break;

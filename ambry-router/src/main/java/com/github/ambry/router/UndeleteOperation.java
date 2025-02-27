@@ -219,7 +219,7 @@ public class UndeleteOperation {
                   RouterErrorCode.UnexpectedInternalError));
         } else {
           ServerErrorCode serverError = undeleteResponse.getError();
-          if (serverError == ServerErrorCode.No_Error || (serverError == ServerErrorCode.Blob_Already_Undeleted
+          if (serverError == ServerErrorCode.NoError || (serverError == ServerErrorCode.BlobAlreadyUndeleted
               // LIFE_VERSION_FROM_FRONTEND is an invalid lifeVersion
               && undeleteResponse.getLifeVersion() != MessageInfo.LIFE_VERSION_FROM_FRONTEND)) {
             if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
@@ -246,7 +246,7 @@ public class UndeleteOperation {
                 operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
               }
             }
-          } else if (serverError == ServerErrorCode.Blob_Not_Deleted && !verifyLifeVersion) {
+          } else if (serverError == ServerErrorCode.BlobNotDeleted && !verifyLifeVersion) {
             LOGGER.trace(
                 "Replica {} returned Blob_Not_Deleted for an undelete request with correlationId : {}, don't verify life version",
                 replica, undeleteRequest.getCorrelationId());
@@ -256,7 +256,7 @@ public class UndeleteOperation {
               routerMetrics.crossColoSuccessCount.inc();
             }
             operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
-          } else if (serverError == ServerErrorCode.Disk_Unavailable) {
+          } else if (serverError == ServerErrorCode.DiskUnavailable) {
             LOGGER.trace("Replica {} returned Disk_Unavailable for an undelete request with correlationId : {} ",
                 replica, undeleteRequest.getCorrelationId());
             operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
@@ -268,7 +268,7 @@ public class UndeleteOperation {
             LOGGER.trace("Replica {} returned an error {} for an undelete request with response correlationId : {} ",
                 replica, serverError, undeleteRequest.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(serverError);
-            if (serverError == ServerErrorCode.Blob_Authorization_Failure) {
+            if (serverError == ServerErrorCode.BlobAuthorizationFailure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               operationCompleted = true;
@@ -347,24 +347,24 @@ public class UndeleteOperation {
    */
   private RouterErrorCode processServerError(ServerErrorCode serverErrorCode) {
     switch (serverErrorCode) {
-      case Blob_Authorization_Failure:
+      case BlobAuthorizationFailure:
         return RouterErrorCode.BlobAuthorizationFailure;
-      case Blob_Deleted:
+      case BlobDeleted:
         return RouterErrorCode.BlobDeleted;
-      case Blob_Expired:
+      case BlobExpired:
         return RouterErrorCode.BlobExpired;
-      case Blob_Not_Found:
+      case BlobNotFound:
         return RouterErrorCode.BlobDoesNotExist;
-      case Disk_Unavailable:
-      case Replica_Unavailable:
+      case DiskUnavailable:
+      case ReplicaUnavailable:
         return RouterErrorCode.AmbryUnavailable;
-      case Blob_Update_Not_Allowed:
+      case BlobUpdateNotAllowed:
         return RouterErrorCode.BlobUpdateNotAllowed;
-      case Blob_Not_Deleted:
+      case BlobNotDeleted:
         return RouterErrorCode.BlobNotDeleted;
-      case Blob_Already_Undeleted:
+      case BlobAlreadyUndeleted:
         return RouterErrorCode.BlobUndeleted;
-      case Blob_Life_Version_Conflict:
+      case BlobLifeVersionConflict:
         return RouterErrorCode.LifeVersionConflict;
       default:
         return RouterErrorCode.UnexpectedInternalError;

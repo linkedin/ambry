@@ -87,9 +87,9 @@ public class VcrRequests extends AmbryRequests {
     // 1. Check partition is null
     if (partition == null) {
       metrics.badRequestError.inc();
-      return ServerErrorCode.Bad_Request;
+      return ServerErrorCode.BadRequest;
     }
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   @Override

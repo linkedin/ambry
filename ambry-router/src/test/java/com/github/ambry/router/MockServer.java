@@ -133,9 +133,9 @@ class MockServer {
     RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
     LinkedList<ServerErrorCode> errorsByType = serverErrorsByType.get(type);
     ServerErrorCode serverError =
-        hardError != null ? hardError : errorsByType.size() > 0 ? errorsByType.poll() : ServerErrorCode.No_Error;
-    if (serverError == ServerErrorCode.No_Error) {
-      serverError = serverErrors.size() > 0 ? serverErrors.poll() : ServerErrorCode.No_Error;
+        hardError != null ? hardError : errorsByType.size() > 0 ? errorsByType.poll() : ServerErrorCode.NoError;
+    if (serverError == ServerErrorCode.NoError) {
+      serverError = serverErrors.size() > 0 ? serverErrors.poll() : ServerErrorCode.NoError;
     }
     RequestOrResponse response;
     requestCounts.computeIfAbsent(type, k -> new LongAdder()).increment();
@@ -180,7 +180,7 @@ class MockServer {
    * @throws IOException if there was an error constructing the response.
    */
   PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError) throws IOException {
-    if (putError == ServerErrorCode.No_Error) {
+    if (putError == ServerErrorCode.NoError) {
       updateBlobMap(putRequest);
     } else {
       // we have to read the put request out so that the blob in put request can be released.
@@ -200,10 +200,10 @@ class MockServer {
    */
   GetResponse makeGetResponse(GetRequest getRequest, ServerErrorCode getError) throws IOException {
     GetResponse getResponse;
-    if (getError == ServerErrorCode.No_Error) {
+    if (getError == ServerErrorCode.NoError) {
       List<PartitionRequestInfo> infos = getRequest.getPartitionInfoList();
       if (infos.size() != 1 || infos.get(0).getBlobIds().size() != 1) {
-        getError = ServerErrorCode.Unknown_Error;
+        getError = ServerErrorCode.UnknownError;
       }
     }
 
@@ -219,22 +219,22 @@ class MockServer {
     if (!getErrorOnDataBlobOnly || isDataBlob) {
       // getError could be at the server level or the partition level. For partition level errors,
       // set it in the partitionResponseInfo
-      if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired
-          || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found
-          || getError == ServerErrorCode.Blob_Authorization_Failure || getError == ServerErrorCode.Disk_Unavailable) {
+      if (getError == ServerErrorCode.NoError || getError == ServerErrorCode.BlobExpired
+          || getError == ServerErrorCode.BlobDeleted || getError == ServerErrorCode.BlobNotFound
+          || getError == ServerErrorCode.BlobAuthorizationFailure || getError == ServerErrorCode.DiskUnavailable) {
         partitionError = getError;
-        serverError = ServerErrorCode.No_Error;
+        serverError = ServerErrorCode.NoError;
       } else {
         serverError = getError;
         // does not matter - this will not be checked if serverError is not No_Error.
-        partitionError = ServerErrorCode.No_Error;
+        partitionError = ServerErrorCode.NoError;
       }
     } else {
-      serverError = ServerErrorCode.No_Error;
-      partitionError = ServerErrorCode.No_Error;
+      serverError = ServerErrorCode.NoError;
+      partitionError = ServerErrorCode.NoError;
     }
 
-    if (serverError == ServerErrorCode.No_Error) {
+    if (serverError == ServerErrorCode.NoError) {
       int byteBufferSize;
       ByteBuffer byteBuffer;
       StoreKey key = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0);
@@ -244,7 +244,7 @@ class MockServer {
       StoredBlob blob = blobs.get(key.getID());
       ServerErrorCode processedError = errorForGet(key.getID(), blob, getRequest);
       MessageMetadata msgMetadata = null;
-      if (processedError == ServerErrorCode.No_Error) {
+      if (processedError == ServerErrorCode.NoError) {
         ByteBuffer buf = blobs.get(key.getID()).serializedSentPutRequest.duplicate();
         // read off the size
         buf.getLong();
@@ -386,33 +386,33 @@ class MockServer {
           default:
             throw new IOException("GetRequest flag is not supported: " + getRequest.getMessageFormatFlag());
         }
-      } else if (processedError == ServerErrorCode.Blob_Deleted) {
-        if (partitionError == ServerErrorCode.No_Error) {
-          partitionError = ServerErrorCode.Blob_Deleted;
+      } else if (processedError == ServerErrorCode.BlobDeleted) {
+        if (partitionError == ServerErrorCode.NoError) {
+          partitionError = ServerErrorCode.BlobDeleted;
         }
         byteBuffer = ByteBuffer.allocate(0);
         byteBufferSize = 0;
-      } else if (processedError == ServerErrorCode.Blob_Expired) {
-        if (partitionError == ServerErrorCode.No_Error) {
-          partitionError = ServerErrorCode.Blob_Expired;
+      } else if (processedError == ServerErrorCode.BlobExpired) {
+        if (partitionError == ServerErrorCode.NoError) {
+          partitionError = ServerErrorCode.BlobExpired;
         }
         byteBuffer = ByteBuffer.allocate(0);
         byteBufferSize = 0;
-      } else if (processedError == ServerErrorCode.Blob_Authorization_Failure) {
-        if (partitionError == ServerErrorCode.No_Error) {
-          partitionError = ServerErrorCode.Blob_Authorization_Failure;
+      } else if (processedError == ServerErrorCode.BlobAuthorizationFailure) {
+        if (partitionError == ServerErrorCode.NoError) {
+          partitionError = ServerErrorCode.BlobAuthorizationFailure;
         }
         byteBuffer = ByteBuffer.allocate(0);
         byteBufferSize = 0;
-      } else if (processedError == ServerErrorCode.Replica_Unavailable) {
-        if (partitionError == ServerErrorCode.No_Error) {
-          partitionError = ServerErrorCode.Replica_Unavailable;
+      } else if (processedError == ServerErrorCode.ReplicaUnavailable) {
+        if (partitionError == ServerErrorCode.NoError) {
+          partitionError = ServerErrorCode.ReplicaUnavailable;
         }
         byteBuffer = ByteBuffer.allocate(0);
         byteBufferSize = 0;
       } else {
-        if (partitionError == ServerErrorCode.No_Error) {
-          partitionError = ServerErrorCode.Blob_Not_Found;
+        if (partitionError == ServerErrorCode.NoError) {
+          partitionError = ServerErrorCode.BlobNotFound;
         }
         byteBuffer = ByteBuffer.allocate(0);
         byteBufferSize = 0;
@@ -423,14 +423,14 @@ class MockServer {
       List<MessageInfo> messageInfoList = new ArrayList<>();
       List<MessageMetadata> messageMetadataList = new ArrayList<>();
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
-      if (partitionError == ServerErrorCode.No_Error) {
+      if (partitionError == ServerErrorCode.NoError) {
         messageInfoList.add(
             new MessageInfo(key, byteBufferSize, false, blob.isTtlUpdated(), blob.isUndeleted(), blob.expiresAt, null,
                 accountId, containerId, operationTimeMs, blob.lifeVersion));
         messageMetadataList.add(msgMetadata);
       }
       PartitionResponseInfo partitionResponseInfo =
-          partitionError == ServerErrorCode.No_Error ? new PartitionResponseInfo(
+          partitionError == ServerErrorCode.NoError ? new PartitionResponseInfo(
               getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList, messageMetadataList)
               : new PartitionResponseInfo(getRequest.getPartitionInfoList().get(0).getPartition(), partitionError);
       partitionResponseInfoList.add(partitionResponseInfo);
@@ -444,15 +444,15 @@ class MockServer {
   }
 
   private ServerErrorCode errorForGet(String blobId, StoredBlob blob, GetRequest getRequest) {
-    ServerErrorCode retCode = errorCodeForBlobs.getOrDefault(blobId, ServerErrorCode.No_Error);
+    ServerErrorCode retCode = errorCodeForBlobs.getOrDefault(blobId, ServerErrorCode.NoError);
     if (blob == null) {
-      retCode = ServerErrorCode.Blob_Not_Found;
+      retCode = ServerErrorCode.BlobNotFound;
     } else if (blob.isDeleted() && !getRequest.getGetOption().equals(GetOption.Include_All)
         && !getRequest.getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
-      retCode = ServerErrorCode.Blob_Deleted;
+      retCode = ServerErrorCode.BlobDeleted;
     } else if (blob.hasExpired() && !getRequest.getGetOption().equals(GetOption.Include_All)
         && !getRequest.getGetOption().equals(GetOption.Include_Expired_Blobs)) {
-      retCode = ServerErrorCode.Blob_Expired;
+      retCode = ServerErrorCode.BlobExpired;
     }
     return retCode;
   }
@@ -465,10 +465,10 @@ class MockServer {
    * @return the constructed {@link DeleteResponse}
    */
   DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) {
-    if (deleteError == ServerErrorCode.No_Error) {
-      deleteError = errorCodeForBlobs.getOrDefault(deleteRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+    if (deleteError == ServerErrorCode.NoError) {
+      deleteError = errorCodeForBlobs.getOrDefault(deleteRequest.getBlobId().getID(), ServerErrorCode.NoError);
     }
-    if (deleteError == ServerErrorCode.No_Error) {
+    if (deleteError == ServerErrorCode.NoError) {
       updateBlobMap(deleteRequest);
     }
     return new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), deleteError);
@@ -482,10 +482,10 @@ class MockServer {
    * @return the constructed {@link TtlUpdateResponse}
    */
   private TtlUpdateResponse makeTtlUpdateResponse(TtlUpdateRequest ttlUpdateRequest, ServerErrorCode ttlUpdateError) {
-    if (ttlUpdateError == ServerErrorCode.No_Error) {
-      ttlUpdateError = errorCodeForBlobs.getOrDefault(ttlUpdateRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+    if (ttlUpdateError == ServerErrorCode.NoError) {
+      ttlUpdateError = errorCodeForBlobs.getOrDefault(ttlUpdateRequest.getBlobId().getID(), ServerErrorCode.NoError);
     }
-    if (ttlUpdateError == ServerErrorCode.No_Error) {
+    if (ttlUpdateError == ServerErrorCode.NoError) {
       ttlUpdateError = updateBlobMap(ttlUpdateRequest);
     }
     return new TtlUpdateResponse(ttlUpdateRequest.getCorrelationId(), ttlUpdateRequest.getClientId(), ttlUpdateError);
@@ -499,13 +499,13 @@ class MockServer {
    * @return the constructed {@link UndeleteResponse}
    */
   private UndeleteResponse makeUndeleteResponse(UndeleteRequest undeleteRequest, ServerErrorCode undeleteError) {
-    if (undeleteError == ServerErrorCode.No_Error) {
-      undeleteError = errorCodeForBlobs.getOrDefault(undeleteRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+    if (undeleteError == ServerErrorCode.NoError) {
+      undeleteError = errorCodeForBlobs.getOrDefault(undeleteRequest.getBlobId().getID(), ServerErrorCode.NoError);
     }
-    if (undeleteError == ServerErrorCode.No_Error) {
+    if (undeleteError == ServerErrorCode.NoError) {
       undeleteError = updateBlobMap(undeleteRequest);
     }
-    if (undeleteError == ServerErrorCode.No_Error || undeleteError == ServerErrorCode.Blob_Already_Undeleted) {
+    if (undeleteError == ServerErrorCode.NoError || undeleteError == ServerErrorCode.BlobAlreadyUndeleted) {
       short lifeVersion = blobs.get(undeleteRequest.getBlobId().getID()).lifeVersion;
       return new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion,
           undeleteError);
@@ -522,11 +522,11 @@ class MockServer {
    */
   ReplicateBlobResponse makeReplicateBlobResponse(ReplicateBlobRequest replicateBlobRequest,
       ServerErrorCode replicateBlobError) {
-    if (replicateBlobError == ServerErrorCode.No_Error) {
+    if (replicateBlobError == ServerErrorCode.NoError) {
       replicateBlobError =
-          errorCodeForBlobs.getOrDefault(replicateBlobRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+          errorCodeForBlobs.getOrDefault(replicateBlobRequest.getBlobId().getID(), ServerErrorCode.NoError);
     }
-    if (replicateBlobError == ServerErrorCode.No_Error) {
+    if (replicateBlobError == ServerErrorCode.NoError) {
       updateBlobMap(replicateBlobRequest);
     }
     return new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
@@ -590,18 +590,18 @@ class MockServer {
    * @param ttlUpdateRequest the {@link TtlUpdateRequest} that needs to be processed
    */
   private ServerErrorCode updateBlobMap(TtlUpdateRequest ttlUpdateRequest) {
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode = ServerErrorCode.NoError;
     StoredBlob blob = blobs.get(ttlUpdateRequest.getBlobId().getID());
     if (blob != null && !blob.isDeleted() && !blob.hasExpired() && !blob.isTtlUpdated()) {
       blob.updateExpiry(ttlUpdateRequest.getExpiresAtMs());
     } else if (blob == null) {
-      errorCode = ServerErrorCode.Blob_Not_Found;
+      errorCode = ServerErrorCode.BlobNotFound;
     } else if (blob.isDeleted()) {
-      errorCode = ServerErrorCode.Blob_Deleted;
+      errorCode = ServerErrorCode.BlobDeleted;
     } else if (blob.hasExpired()) {
-      errorCode = ServerErrorCode.Blob_Expired;
+      errorCode = ServerErrorCode.BlobExpired;
     } else if (blob.isTtlUpdated()) {
-      errorCode = ServerErrorCode.Blob_Already_Updated;
+      errorCode = ServerErrorCode.BlobAlreadyUpdated;
     } else {
       throw new IllegalStateException("Could not recognize blob state");
     }
@@ -613,16 +613,16 @@ class MockServer {
    * @param undeleteRequest the {@link TtlUpdateRequest} that needs to be processed
    */
   private ServerErrorCode updateBlobMap(UndeleteRequest undeleteRequest) {
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode = ServerErrorCode.NoError;
     StoredBlob blob = blobs.get(undeleteRequest.getBlobId().getID());
     if (blob == null) {
-      errorCode = ServerErrorCode.Blob_Not_Found;
+      errorCode = ServerErrorCode.BlobNotFound;
     } else if (blob.isUndeleted()) {
-      errorCode = ServerErrorCode.Blob_Already_Undeleted;
+      errorCode = ServerErrorCode.BlobAlreadyUndeleted;
     } else if (!blob.isDeleted()) {
-      errorCode = ServerErrorCode.Blob_Not_Deleted;
+      errorCode = ServerErrorCode.BlobNotDeleted;
     } else if (blob.hasExpired()) {
-      errorCode = ServerErrorCode.Blob_Expired;
+      errorCode = ServerErrorCode.BlobExpired;
     } else {
       blob.updateLifeVersion();
     }
@@ -683,7 +683,7 @@ class MockServer {
 
   /**
    * Clear the error for subsequent requests. That is all responses from this point onwards will be successful
-   * ({@link ServerErrorCode#No_Error}) until/unless another set error method is invoked.
+   * ({@link ServerErrorCode#NoError}) until/unless another set error method is invoked.
    */
   public void resetServerErrors() {
     this.serverErrors.clear();
