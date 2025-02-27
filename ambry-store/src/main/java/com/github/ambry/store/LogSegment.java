@@ -214,6 +214,12 @@ class LogSegment implements Read, Write {
     return new DirectIOBufferedExecutor(bufferSize);
   }
 
+  /**
+   * Truncate the log segment file to the given offset. If the endOffset is already set, then this operation
+   * should be illegal.
+   * @param offset
+   * @throws IOException
+   */
   void truncateTo(long offset) throws IOException {
     long currentFileSize = sizeInBytes();
     if (currentFileSize < offset) {

@@ -273,7 +273,6 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       }
 
       if (recovery != null) {
-        metrics.initializeRecoveryMetrics(recoveryFromPartialLogSegmentCounter);
         recover(recovery);
       }
       //Journal should only include the index entry which belongs to the last log segment to make sure it only prevents the last log segment
@@ -506,7 +505,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
    * from the given {@link com.github.ambry.store.MessageStoreRecovery.RecoveryResult}.
    * If there is no exception in the result, then continue.
    * If partial recovery is not enable, or the log segment is not the last log segment, don't continue;
-   * If there are too many bytes in the remaining file, don't continue;
+   * If there are too many bytes in the remainiikng file, don't continue;
    * @param logSegmentToRecover
    * @param recoveryResult
    * @throws StoreException
@@ -532,6 +531,8 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     logger.info("Index: {} Partial LogSegment recovery, log segment {} has valid message until {}, the file size is {}",
         dataDir, logSegmentToRecover.getName(), startOffsetForBrokenMessage, endOffset);
     recoveryFromPartialLogSegmentCounter.incrementAndGet();
+    // Since we use fallocate --keep-size to preallocate log segment file, we can truncate log segment file here
+    // It will only change the logical file size, not the preallocated disk space.
     logSegmentToRecover.truncateTo(startOffsetForBrokenMessage);
   }
 

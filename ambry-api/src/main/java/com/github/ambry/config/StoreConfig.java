@@ -636,10 +636,18 @@ public class StoreConfig {
   public static final String storeRemoveDirectoryAndRestartBlobStoreName =
       "store.remove.directory.and.restart.blob.store";
 
+  /**
+   * True to enable partial log segment recovery. If in the last log segment, there are invalid messages, then as long
+   * as these invalid messages are smaller than the given threshold, we should continue recovery and truncate the file.
+   */
   @Config(storeEnablePartialLogSegmentRecoveryName)
   public final boolean storeEnablePartialLogSegmentRecovery;
   public static final String storeEnablePartialLogSegmentRecoveryName = "store.enable.partial.log.segment.recovery";
 
+  /**
+   * The threshold for partial log segment recovery. If there are more bytes in the remaining log segment than the given
+   * threshold, then don't recover. The default value is 5MB, which is a bit larger than the largest put blob.
+   */
   @Config(storePartialLogSegmentRecoveryRemainingDataSizeThresholdName)
   public final long storePartialLogSegmentRecoveryRemainingDataSizeThreshold;
   public static final String storePartialLogSegmentRecoveryRemainingDataSizeThresholdName =
