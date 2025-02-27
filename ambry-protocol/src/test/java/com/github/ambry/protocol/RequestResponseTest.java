@@ -822,7 +822,7 @@ public class RequestResponseTest {
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
 
     FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-        logInfoList, ServerErrorCode.No_Error);
+        logInfoList, ServerErrorCode.NoError);
 
     DataInputStream requestStream1 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response1 = FileCopyGetMetaDataResponse.readFrom(requestStream1);
@@ -857,7 +857,7 @@ public class RequestResponseTest {
     response.release();
 
     response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-        logInfoList, ServerErrorCode.IO_Error);
+        logInfoList, ServerErrorCode.IOError);
     DataInputStream requestStream2 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response2 = FileCopyGetMetaDataResponse.readFrom(requestStream2);
     Assert.assertEquals(ServerErrorCode.IOError, response2.getError());
@@ -918,7 +918,7 @@ public class RequestResponseTest {
     DataInputStream fileStream = new DataInputStream(new ByteBufferInputStream(byteBuf.nioBuffer()));
 
     FileCopyGetChunkResponse response = new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1",
-        ServerErrorCode.No_Error, new MockPartitionId(), "file1", fileStream, 0L, fileSize, false);
+        ServerErrorCode.NoError, new MockPartitionId(), "file1", fileStream, 0L, fileSize, false);
     DataInputStream responseStream = serAndPrepForRead(response, -1, false);
     FileCopyGetChunkResponse deserialisedResponse = FileCopyGetChunkResponse.readFrom(responseStream, new MockClusterMap());
 
@@ -926,7 +926,7 @@ public class RequestResponseTest {
     Assert.assertEquals(0L, deserialisedResponse.getStartOffset());
     Assert.assertEquals(fileSize, deserialisedResponse.getChunkSizeInBytes());
     Assert.assertEquals(111, deserialisedResponse.getCorrelationId());
-    Assert.assertEquals(ServerErrorCode.No_Error, deserialisedResponse.getError());
+    Assert.assertEquals(ServerErrorCode.NoError, deserialisedResponse.getError());
     Assert.assertEquals(0, deserialisedResponse.getPartitionId().getId());
     Assert.assertEquals("0", deserialisedResponse.getPartitionId().toPathString());
     Assert.assertEquals(requestVersionToUse, deserialisedResponse.getVersionId());
@@ -943,7 +943,7 @@ public class RequestResponseTest {
     }
     try {
       // Sending null partition id. Expected to throw exception.
-      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.No_Error, null, "file1",
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, null, "file1",
           fileStream, 0L, fileSize, false);
       Assert.fail("Should have failed");
     } catch (NullPointerException e) {
@@ -951,7 +951,7 @@ public class RequestResponseTest {
     }
     try {
       // Sending empty file name. Expected to throw exception.
-      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.No_Error, new MockPartitionId(), "",
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(), "",
           fileStream, 0L, fileSize, false);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e) {
@@ -959,7 +959,7 @@ public class RequestResponseTest {
     }
     try {
       // Sending null file stream. Expected to throw exception.
-      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.No_Error, new MockPartitionId(),
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(),
           "file1", null, 0L, fileSize, false);
       Assert.fail("Should have failed");
     } catch (NullPointerException e) {
@@ -967,7 +967,7 @@ public class RequestResponseTest {
     }
     try {
       // Sending negative start offset. Expected to throw exception.
-      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.No_Error, new MockPartitionId(),
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(),
           "file1", fileStream, -1, fileSize, false);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e) {
@@ -975,7 +975,7 @@ public class RequestResponseTest {
     }
     try {
       // Sending negative chunk size. Expected to throw exception.
-      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.No_Error, new MockPartitionId(),
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(),
           "file1", fileStream, 0L, -1, false);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e) {

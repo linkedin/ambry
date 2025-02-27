@@ -217,7 +217,7 @@ public class FileCopyGetChunkResponse extends Response {
     String clientId = Utils.readIntString(chunkResponseStream);
 
     ServerErrorCode errorCode = ServerErrorCode.values()[chunkResponseStream.readShort()];
-    if(errorCode != ServerErrorCode.No_Error){
+    if(errorCode != ServerErrorCode.NoError){
       return new FileCopyGetChunkResponse(correlationId, clientId, errorCode);
     }
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(chunkResponseStream);
