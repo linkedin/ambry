@@ -118,7 +118,6 @@ import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1713,7 +1712,7 @@ public class AmbryRequests implements RequestAPI {
             fileCopyGetMetaDataRequest.getPartitionId()).getLogSegmentMetadataFiles(false);
 
         response = new FileCopyGetMetaDataResponse(
-            FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+            FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
             logSegments.size(), logSegments, ServerErrorCode.No_Error);
       }
@@ -1725,7 +1724,7 @@ public class AmbryRequests implements RequestAPI {
         logger.error("Error while getting log segment metadata for partition {}",
             fileCopyGetMetaDataRequest.getPartitionId().getId(), e);
         response = new FileCopyGetMetaDataResponse(
-            FileCopyGetMetaDataResponse.File_Copy_Protocol_Metadata_Response_Version_V1,
+            FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), 0,
             new ArrayList<>(), ServerErrorCode.Unknown_Error);
       }

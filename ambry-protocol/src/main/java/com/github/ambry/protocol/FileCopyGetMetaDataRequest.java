@@ -40,12 +40,17 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
   /**
    * The version of the request.
    */
-  public static final short File_Metadata_Request_Version_V1 = 1;
+  public static final short FILE_METADATA_REQUEST_VERSION_V_1 = 1;
+
+  /**
+   * The current version of the response.
+   */
+  static short CURRENT_VERSION = FILE_METADATA_REQUEST_VERSION_V_1;
 
   /**
    * The size of the hostname field in bytes.
    */
-  private static final int HostName_Field_Size_In_Bytes = 4;
+  private static final int HOST_NAME_FIELD_SIZE_IN_BYTES = 4;
 
   /**
    * Constructor for FileCopyGetMetaDataRequest
@@ -125,7 +130,7 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
    */
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + HostName_Field_Size_In_Bytes + hostName.length() + partitionId.getBytes().length;
+    return super.sizeInBytes() + HOST_NAME_FIELD_SIZE_IN_BYTES + hostName.length() + partitionId.getBytes().length;
   }
 
   /**
@@ -142,7 +147,7 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
    * Validate the version of the request.
    */
   static void validateVersion(short version) {
-    if (version != File_Metadata_Request_Version_V1) {
+    if (version != CURRENT_VERSION) {
       throw new IllegalArgumentException("Unknown version for FileMetadataRequest: " + version);
     }
   }
