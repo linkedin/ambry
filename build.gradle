@@ -358,6 +358,9 @@ project (':ambry-file-transfer') {
         compile project(':ambry-commons')
         compile project(':ambry-store')
         compile project(':ambry-prioritization')
+        compile project(':ambry-clustermap')
+        testCompile project(':ambry-test-utils')
+        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
 }
 
@@ -633,6 +636,7 @@ project(':ambry-all') {
         compile project(':ambry-test-utils')
         compile project(':ambry-quota')
         compile project(':ambry-vcr')
+        compile project(':ambry-file-transfer')
     }
 }
 
