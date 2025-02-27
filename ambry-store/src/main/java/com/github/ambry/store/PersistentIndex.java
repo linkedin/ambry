@@ -77,6 +77,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
   static final short VERSION_4 = 4;
   static short CURRENT_VERSION = VERSION_4;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
+  private static final AtomicInteger recoveryFromPartialLogSegmentCounter = new AtomicInteger(0);
 
   static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
     @Override
@@ -272,6 +273,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       }
 
       if (recovery != null) {
+        metrics.initializeRecoveryMetrics(recoveryFromPartialLogSegmentCounter);
         recover(recovery);
       }
       //Journal should only include the index entry which belongs to the last log segment to make sure it only prevents the last log segment
@@ -499,6 +501,17 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     }
   }
 
+  /**
+   * Maybe try to recover from partial log segment. Calling this method to see if we should continue recovering messages
+   * from the given {@link com.github.ambry.store.MessageStoreRecovery.RecoveryResult}.
+   * If there is no exception in the result, then continue.
+   * If partial recovery is not enable, or the log segment is not the last log segment, don't continue;
+   * If there are too many bytes in the remaining file, don't continue;
+   * @param logSegmentToRecover
+   * @param recoveryResult
+   * @throws StoreException
+   * @throws IOException
+   */
   private void maybePerformaPartialRecovery(LogSegment logSegmentToRecover,
       MessageStoreRecovery.RecoveryResult recoveryResult) throws StoreException, IOException {
     // There is no exception, then partial recovery is not necessary
@@ -516,6 +529,9 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     if (remainingDataSize > config.storePartialLogSegmentRecoveryRemainingDataSizeThreshold) {
       throw recoveryResult.recoveryException;
     }
+    logger.info("Index: {} Partial LogSegment recovery, log segment {} has valid message until {}, the file size is {}",
+        dataDir, logSegmentToRecover.getName(), startOffsetForBrokenMessage, endOffset);
+    recoveryFromPartialLogSegmentCounter.incrementAndGet();
     logSegmentToRecover.truncateTo(startOffsetForBrokenMessage);
   }
 

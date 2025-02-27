@@ -104,9 +104,7 @@ public class IndexTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{false, PersistentIndex.VERSION_2, false}, {true, PersistentIndex.VERSION_2, false},
-            {true, PersistentIndex.VERSION_3, true}, {true, PersistentIndex.VERSION_3, false},
-            {true, PersistentIndex.VERSION_4, true}, {true, PersistentIndex.VERSION_4, false}});
+        new Object[][]{{false, PersistentIndex.VERSION_2, false}, {true, PersistentIndex.VERSION_2, false}, {true, PersistentIndex.VERSION_3, true}, {true, PersistentIndex.VERSION_3, false}, {true, PersistentIndex.VERSION_4, true}, {true, PersistentIndex.VERSION_4, false}});
   }
 
   /**
@@ -1081,23 +1079,7 @@ public class IndexTest {
     assumeTrue(isLogSegmented);
     Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> lastIndexSegmentEntry = state.referenceIndex.lastEntry();
     long lastModifiedTimeForLastIndexSegment = state.lastModifiedTimesInSecs.get(lastIndexSegmentEntry.getKey());
-    List<IndexEntry> activeSegmentEntries = new ArrayList<>();
-    for (Map.Entry<MockId, TreeSet<IndexValue>> entry : lastIndexSegmentEntry.getValue().entrySet()) {
-      StoreKey key = entry.getKey();
-      for (IndexValue value : entry.getValue()) {
-        activeSegmentEntries.add(new IndexEntry(key, value));
-      }
-    }
-    activeSegmentEntries.sort((e1, e2) -> e1.getValue().getOffset().compareTo(e2.getValue().getOffset()));
-    List<MessageInfo> activeSegmentInfos = new ArrayList<>();
-    for (IndexEntry entry : activeSegmentEntries) {
-      StoreKey key = entry.getKey();
-      IndexValue value = entry.getValue();
-      activeSegmentInfos.add(
-          new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
-              value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
-              value.getLifeVersion()));
-    }
+    List<MessageInfo> activeSegmentInfos = getMessagesFromIndexSegmentEntryInOrder(lastIndexSegmentEntry);
 
     Offset endOffset = state.index.getCurrentEndOffset();
     // Write everything to disk
@@ -1144,6 +1126,123 @@ public class IndexTest {
       assertEquals("Number of index values doesn't match for key " + key, indexValues.size(),
           indexValuesFromSegment.size());
       assertEquals("IndexValues don't match", indexValues, indexValuesFromSegment);
+    }
+  }
+
+  @Test
+  public void partialRecoveryWithLastLogSegment() throws Exception {
+    assumeTrue(isLogSegmented);
+    // Make sure that we started with a new index segment
+    // Write everything to disk
+    IndexSegment lastIndexSegment = state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset());
+    while (true) {
+      state.addPutEntries(1, PUT_RECORD_SIZE, -1);
+      if (state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset()) != lastIndexSegment) {
+        // if this is the case, we already have 1 put entry
+        // Add another 3 entries
+        state.addPutEntries(3, PUT_RECORD_SIZE, -1);
+        break;
+      }
+    }
+    Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> lastIndexSegmentEntry = state.referenceIndex.lastEntry();
+    List<MessageInfo> activeSegmentInfos = getMessagesFromIndexSegmentEntryInOrder(lastIndexSegmentEntry);
+
+    Offset endOffset = state.index.getCurrentEndOffset();
+    lastIndexSegment = state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset());
+    // Write everything to disk
+    state.index.close(false);
+
+    // Now remove the last index segment file, this would force a recovery
+    File indexFile = lastIndexSegment.getFile();
+    indexFile.delete();
+
+    // Return RecoveryResult with an exception
+    final List<MessageInfo> recoveryMessages =
+        new ArrayList<>(activeSegmentInfos.subList(0, activeSegmentInfos.size() - 1));
+    MessageInfo lastMessage = activeSegmentInfos.get(activeSegmentInfos.size() - 1);
+    long lastMessageSize = lastMessage.getSize();
+    long recoveryOffset = endOffset.getOffset() - lastMessageSize;
+
+    state.recovery = (read, startOffset, eoffset, factory) -> new MessageStoreRecovery.RecoveryResult(recoveryMessages,
+        new StoreException(new IndexOutOfBoundsException(), StoreErrorCodes.LogFileFormatError), recoveryOffset);
+
+    // Case 1, we haven't enable the partial log segment recovery, it should fail
+    try {
+      state.reloadLog(true);
+      fail("Should fail due to exception in recovery");
+    } catch (StoreException ex) {
+      Assert.assertEquals(StoreErrorCodes.LogFileFormatError, ex.getErrorCode());
+      Assert.assertTrue(ex.getCause() instanceof IndexOutOfBoundsException);
+    }
+
+    // Case 2, enable partial log segment recovery, but the threshold is not smaller than the last message size
+    state.properties.setProperty(StoreConfig.storeEnablePartialLogSegmentRecoveryName, "true");
+    state.properties.setProperty(StoreConfig.storePartialLogSegmentRecoveryRemainingDataSizeThresholdName,
+        String.valueOf(lastMessageSize / 2));
+    try {
+      state.reloadLog(true);
+      fail("Should fail due to threshold being too low for recovery");
+    } catch (StoreException ex) {
+      Assert.assertEquals(StoreErrorCodes.LogFileFormatError, ex.getErrorCode());
+      Assert.assertTrue(ex.getCause() instanceof IndexOutOfBoundsException);
+    }
+
+    // Case 3. enable partial log segment recovery and the threshold is high enough for last message
+    state.properties.setProperty(StoreConfig.storePartialLogSegmentRecoveryRemainingDataSizeThresholdName,
+        String.valueOf(lastMessageSize * 2));
+    state.reloadLog(true);
+
+    // Make sure all the recovered messages are valid in the state
+    recoveryMessages.forEach(this::checkRecoveryInfoEquivalence);
+
+    IndexSegment recoveredIndexSegment = state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset());
+    assertEquals("End offset doesn't match", recoveryOffset, recoveredIndexSegment.getEndOffset().getOffset());
+    assertEquals("Number of index entries doesn't match", recoveryMessages.size(),
+        recoveredIndexSegment.getNumberOfItems());
+    for (Map.Entry<MockId, TreeSet<IndexValue>> keyAndValues : lastIndexSegmentEntry.getValue().entrySet()) {
+      MockId key = keyAndValues.getKey();
+      TreeSet<IndexValue> indexValues = keyAndValues.getValue();
+      NavigableSet<IndexValue> indexValuesFromSegment = recoveredIndexSegment.find(key);
+      if (key.equals(lastMessage.getStoreKey())) {
+        assertNull(indexValuesFromSegment);
+      } else {
+        assertNotNull(indexValuesFromSegment);
+        assertEquals("Number of index values doesn't match for key " + key, indexValues.size(),
+            indexValuesFromSegment.size());
+        assertEquals("IndexValues don't match", indexValues, indexValuesFromSegment);
+      }
+    }
+
+    File logSegmentFile = state.log.getLastSegment().getView().getFirst();
+    Assert.assertEquals(recoveryOffset, logSegmentFile.length());
+  }
+
+  @Test
+  public void partialRecoveryWithFirstLogSegment() throws Exception {
+    assumeTrue(isLogSegmented);
+    final AtomicInteger returnTracker = new AtomicInteger(0);
+    state.recovery = (read, startOffset, endOffset, factory) -> {
+      switch (returnTracker.getAndIncrement()) {
+        case 0:
+          return new MessageStoreRecovery.RecoveryResult(Collections.singletonList(
+              new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
+                  Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time)),
+              new StoreException(new IndexOutOfBoundsException(), StoreErrorCodes.LogFileFormatError), PUT_RECORD_SIZE);
+        default:
+          return new MessageStoreRecovery.RecoveryResult(Collections.emptyList(), null, endOffset);
+      }
+    };
+
+    // Enable partial log segment recovery, and have a huge threshold to make sure the threshold is not an issue
+    state.properties.setProperty(StoreConfig.storeEnablePartialLogSegmentRecoveryName, "true");
+    state.properties.setProperty(StoreConfig.storePartialLogSegmentRecoveryRemainingDataSizeThresholdName,
+        String.valueOf(100 * 1024 * 1024 * 1024));
+    try {
+      state.reloadLog(true);
+      fail("Should fail due to first log segment");
+    } catch (StoreException ex) {
+      Assert.assertEquals(StoreErrorCodes.LogFileFormatError, ex.getErrorCode());
+      Assert.assertTrue(ex.getCause() instanceof IndexOutOfBoundsException);
     }
   }
 
@@ -2482,6 +2581,27 @@ public class IndexTest {
         assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
       }
     }
+  }
+
+  private List<MessageInfo> getMessagesFromIndexSegmentEntryInOrder(
+      Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> indexSegmentEntry) {
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    for (Map.Entry<MockId, TreeSet<IndexValue>> entry : indexSegmentEntry.getValue().entrySet()) {
+      StoreKey key = entry.getKey();
+      for (IndexValue value : entry.getValue()) {
+        indexEntries.add(new IndexEntry(key, value));
+      }
+    }
+    indexEntries.sort((e1, e2) -> e1.getValue().getOffset().compareTo(e2.getValue().getOffset()));
+    List<MessageInfo> messageInfos = new ArrayList<>();
+    for (IndexEntry entry : indexEntries) {
+      StoreKey key = entry.getKey();
+      IndexValue value = entry.getValue();
+      messageInfos.add(new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
+          value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
+          value.getLifeVersion()));
+    }
+    return messageInfos;
   }
 
   /**
