@@ -919,7 +919,7 @@ public class RequestResponseTest {
 
     FileCopyGetChunkResponse response = new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1",
         ServerErrorCode.No_Error, new MockPartitionId(), "file1", fileStream, 0L, fileSize, false);
-    DataInputStream responseStream = serAndPrepForRead(response, -1, true);
+    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
     FileCopyGetChunkResponse deserialisedResponse = FileCopyGetChunkResponse.readFrom(responseStream, new MockClusterMap());
 
     Assert.assertEquals("file1", deserialisedResponse.getFileName());
