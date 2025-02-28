@@ -290,7 +290,7 @@ public class DiskSpaceAllocatorTest {
       alloc.initializePool(Collections.emptyList());
       fail("Expected StoreException");
     } catch (StoreException e) {
-      assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
+      assertEquals("Wrong error code", StoreErrorCodes.InitializationError, e.getErrorCode());
     }
     // Should still allow allocation of non-pooled files even after init failure.
     File f2 = allocateAndVerify(storeId0, "file1", 5, false);
@@ -640,7 +640,7 @@ public class DiskSpaceAllocatorTest {
       alloc.initializePool(Arrays.asList(requirements));
       fail("Expected StoreException");
     } catch (StoreException e) {
-      assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
+      assertEquals("Wrong error code", StoreErrorCodes.InitializationError, e.getErrorCode());
     } finally {
       if (restrictRead) {
         assertTrue("Could not make readable again", directoryToRestrict.setReadable(true));

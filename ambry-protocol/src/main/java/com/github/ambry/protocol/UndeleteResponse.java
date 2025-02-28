@@ -37,21 +37,21 @@ public class UndeleteResponse extends Response {
    */
   public UndeleteResponse(int correlationId, String clientId, ServerErrorCode error) {
     super(RequestOrResponseType.UndeleteResponse, UNDELETE_RESPONSE_VERSION_1, correlationId, clientId, error);
-    if (error == ServerErrorCode.No_Error || error == ServerErrorCode.Blob_Already_Undeleted) {
+    if (error == ServerErrorCode.NoError || error == ServerErrorCode.BlobAlreadyUndeleted) {
       throw new IllegalArgumentException("NoError is not a valid error code");
     }
     this.lifeVersion = INVALID_LIFE_VERSION;
   }
 
   /**
-   * Constructs a {@link UndeleteResponse} with a valid lifeVersion. The error code will be set to {@link ServerErrorCode#No_Error}.
+   * Constructs a {@link UndeleteResponse} with a valid lifeVersion. The error code will be set to {@link ServerErrorCode#NoError}.
    * @param correlationId correlationId of the undelete response.
    * @param clientId clientId of the undelete response.
    * @param lifeVersion a valid lifeVersion to return to client.
    */
   public UndeleteResponse(int correlationId, String clientId, short lifeVersion) {
     super(RequestOrResponseType.UndeleteResponse, UNDELETE_RESPONSE_VERSION_1, correlationId, clientId,
-        ServerErrorCode.No_Error);
+        ServerErrorCode.NoError);
     if (lifeVersion == INVALID_LIFE_VERSION) {
       throw new IllegalArgumentException("Invalid life version " + lifeVersion);
     }
@@ -59,7 +59,7 @@ public class UndeleteResponse extends Response {
   }
 
   /**
-   * Constructs a {@link UndeleteResponse} with a valid lifeVersion. The error code will be set to {@link ServerErrorCode#No_Error}.
+   * Constructs a {@link UndeleteResponse} with a valid lifeVersion. The error code will be set to {@link ServerErrorCode#NoError}.
    * @param correlationId correlationId of the undelete response.
    * @param clientId clientId of the undelete response.
    * @param lifeVersion a valid lifeVersion to return to client.

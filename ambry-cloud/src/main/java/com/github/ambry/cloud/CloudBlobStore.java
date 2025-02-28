@@ -13,8 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.storage.blob.models.BlobErrorCode;
-import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -26,9 +24,9 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.protocol.BatchDeletePartitionResponseInfo;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
@@ -250,7 +248,7 @@ public class CloudBlobStore implements Store {
     } catch (CloudStorageException e) {
       switch (e.getStatusCode()) {
         case HttpStatus.SC_NOT_FOUND:
-          throw new StoreException(e.getMessage(), StoreErrorCodes.ID_Not_Found);
+          throw new StoreException(e.getMessage(), StoreErrorCodes.IDNotFound);
         default:
           throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
       }
@@ -279,7 +277,7 @@ public class CloudBlobStore implements Store {
             .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
             .collect(Collectors.toSet());
         throw new StoreException("Some of the keys were missing in the cloud metadata store: " + missingBlobs,
-            StoreErrorCodes.ID_Not_Found);
+            StoreErrorCodes.IDNotFound);
       }
       long currentTimeStamp = System.currentTimeMillis();
       // Validate cloud meta data, may throw StoreException with ID_Deleted, TTL_Expired and Authorization_Failure
@@ -338,7 +336,7 @@ public class CloudBlobStore implements Store {
                   .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
                   .collect(Collectors.toSet());
               throw new StoreException("Some of the keys were missing in the cloud metadata store: " + missingBlobs,
-                  StoreErrorCodes.ID_Not_Found);
+                  StoreErrorCodes.IDNotFound);
             }
 
             // Validate cloud meta data, may throw StoreException with ID_Deleted, TTL_Expired and Authorization_Failure
@@ -559,7 +557,7 @@ public class CloudBlobStore implements Store {
         // If put is coming from vcr, then findMissingKeys might have reported a key to be missing even though the blob
         // was uploaded.
         throw new StoreException(String.format("Another blob with same key %s exists in store", blobId.getID()),
-            StoreErrorCodes.Already_Exist);
+            StoreErrorCodes.AlreadyExist);
       }
     } else {
       vcrMetrics.blobUploadSkippedCount.inc();
@@ -568,7 +566,7 @@ public class CloudBlobStore implements Store {
       if (isVcr && !isExpiringSoon(messageInfo) && !messageInfo.isDeleted()) {
         throw new StoreException(
             String.format("Another blob with same key %s exists in store", messageInfo.getStoreKey().getID()),
-            StoreErrorCodes.Already_Exist);
+            StoreErrorCodes.AlreadyExist);
       }
     }
   }
@@ -632,7 +630,7 @@ public class CloudBlobStore implements Store {
             // was uploaded.
             throw new CompletionException(
                 new StoreException(String.format("Another blob with same key %s exists in store", blobId.getID()),
-                    StoreErrorCodes.Already_Exist));
+                    StoreErrorCodes.AlreadyExist));
           } else {
             return null;
           }
@@ -644,7 +642,7 @@ public class CloudBlobStore implements Store {
       if (isVcr && !isExpiringSoon(messageInfo) && !messageInfo.isDeleted()) {
         return FutureUtils.completedExceptionally(new StoreException(
             String.format("Another blob with same key %s exists in store", messageInfo.getStoreKey().getID()),
-            StoreErrorCodes.Already_Exist));
+            StoreErrorCodes.AlreadyExist));
       }
       return CompletableFuture.completedFuture(null);
     } catch (IOException e) {
@@ -727,6 +725,11 @@ public class CloudBlobStore implements Store {
   }
 
   @Override
+  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void purge(List<MessageInfo> infosToPurge) throws StoreException {
     throw new UnsupportedOperationException("Method not supported");
   }
@@ -796,7 +799,7 @@ public class CloudBlobStore implements Store {
     // This means that we definitely saw this delete for the same or smaller life version before.
     return FutureUtils.completedExceptionally(new CloudStorageException("Error updating blob metadata",
         new StoreException("Cannot delete id " + blobId.getID() + " since it is already marked as deleted in cloud.",
-            StoreErrorCodes.ID_Deleted)));
+            StoreErrorCodes.IDDeleted)));
   }
 
   /**
@@ -843,7 +846,7 @@ public class CloudBlobStore implements Store {
           });
     }
     return FutureUtils.completedExceptionally(
-        new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted));
+        new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.IDUndeleted));
   }
 
   /**
@@ -864,7 +867,7 @@ public class CloudBlobStore implements Store {
         if (msgInfo.getExpirationTimeInMs() != Utils.Infinite_Time) {
           return FutureUtils.completedExceptionally(
               new StoreException("CloudBlobStore only supports removing the expiration time",
-                  StoreErrorCodes.Update_Not_Allowed));
+                  StoreErrorCodes.UpdateNotAllowed));
         }
         if (msgInfo.isTtlUpdated()) {
           // TODO: Add retries similar to synchronous operation
@@ -917,7 +920,7 @@ public class CloudBlobStore implements Store {
       return (StoreException) cse.getCause();
     }
     StoreErrorCodes errorCode =
-        (cse.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
+        (cse.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.IDNotFound : StoreErrorCodes.IOError;
     return new StoreException(cse, errorCode);
   }
 
@@ -945,11 +948,11 @@ public class CloudBlobStore implements Store {
     for (String key : cloudBlobMetadataMap.keySet()) {
       if (isBlobDeleted(cloudBlobMetadataMap.get(key)) && !storeGetOptions.contains(
           StoreGetOptions.Store_Include_Deleted)) {
-        throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.ID_Deleted);
+        throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.IDDeleted);
       }
       if (isBlobExpired(cloudBlobMetadataMap.get(key), currentTimestamp) && !storeGetOptions.contains(
           StoreGetOptions.Store_Include_Expired)) {
-        throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTL_Expired);
+        throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTLExpired);
       }
     }
     validateAccountAndContainer(cloudBlobMetadataMap, ids);
@@ -970,7 +973,7 @@ public class CloudBlobStore implements Store {
         if (storeConfig.storeValidateAuthorization) {
           throw new StoreException("GET authorization failure. Key: " + key.getID() + " Actual accountId: "
               + cloudBlobMetadata.getAccountId() + " Actual containerId: " + cloudBlobMetadata.getAccountId(),
-              StoreErrorCodes.Authorization_Failure);
+              StoreErrorCodes.AuthorizationFailure);
         } else {
           logger.warn("GET authorization failure. Key: {} Actually accountId: {} Actually containerId: {}", key.getID(),
               cloudBlobMetadata.getAccountId(), cloudBlobMetadata.getContainerId());
@@ -1002,7 +1005,7 @@ public class CloudBlobStore implements Store {
       // This is a delete request from frontend
       if (metadata.isDeleted()) {
         throw new StoreException("Cannot delete id " + key.getID() + " since it is already marked as deleted in cloud.",
-            StoreErrorCodes.ID_Deleted);
+            StoreErrorCodes.IDDeleted);
       }
       // this is delete request from frontend, we use life version only for validation.
       updateFields.remove(FIELD_LIFE_VERSION);
@@ -1030,12 +1033,12 @@ public class CloudBlobStore implements Store {
     }
     if (metadata.isDeleted()) {
       throw new StoreException("Cannot update TTL of " + key.getID() + " since it is already deleted in the index.",
-          StoreErrorCodes.ID_Deleted);
+          StoreErrorCodes.IDDeleted);
     } else if (metadata.getExpirationTime() != Utils.Infinite_Time
         && metadata.getExpirationTime() < now + ttlUpdateBufferTimeMs) {
       throw new StoreException(
           "TTL of " + key.getID() + " cannot be updated because it is too close to expiry. Minimum Op time (ms): " + now
-              + ". ExpiresAtMs: " + metadata.getExpirationTime(), StoreErrorCodes.Update_Not_Allowed);
+              + ". ExpiresAtMs: " + metadata.getExpirationTime(), StoreErrorCodes.UpdateNotAllowed);
     }
     return true;
   }
@@ -1060,15 +1063,15 @@ public class CloudBlobStore implements Store {
       return metadata.getLifeVersion() < requestedLifeVersion;
     }
     if (metadata.isExpired()) {
-      throw new StoreException("Id " + key + " already expired in cloud ", StoreErrorCodes.TTL_Expired);
+      throw new StoreException("Id " + key + " already expired in cloud ", StoreErrorCodes.TTLExpired);
     } else if (metadata.isUndeleted()) {
-      throw new StoreException("Id " + key + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted);
+      throw new StoreException("Id " + key + " is already undeleted in cloud", StoreErrorCodes.IDUndeleted);
     } else if (!metadata.isDeleted()) {
-      throw new StoreException("Id " + key + " is not deleted yet in cloud ", StoreErrorCodes.ID_Not_Deleted);
+      throw new StoreException("Id " + key + " is not deleted yet in cloud ", StoreErrorCodes.IDNotDeleted);
     } else if (metadata.getDeletionTime() + TimeUnit.MINUTES.toMillis(storeConfig.storeDeletedMessageRetentionMinutes)
         < System.currentTimeMillis()) {
       throw new StoreException("Id " + key + " already permanently deleted in cloud ",
-          StoreErrorCodes.ID_Deleted_Permanently);
+          StoreErrorCodes.IDDeletedPermanently);
     }
     // Update life version to appropriate value for frontend requests.
     updateFields.put(FIELD_LIFE_VERSION, metadata.getLifeVersion() + 1);

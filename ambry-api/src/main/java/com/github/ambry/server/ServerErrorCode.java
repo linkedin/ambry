@@ -19,27 +19,29 @@ package com.github.ambry.server;
  * The order of these enums should not be changed since their relative position goes into the serialized form of
  * requests/responses
  */
+//@formatter:off
 public enum ServerErrorCode {
-  No_Error,
-  IO_Error,
-  Blob_Not_Found,
-  Blob_Deleted,
-  Blob_Expired,
-  Blob_Already_Exists,
-  Data_Corrupt,
-  Partition_Unknown,
-  Disk_Unavailable,
-  Partition_ReadOnly,
-  Unknown_Error,
-  Temporarily_Disabled,
-  Bad_Request,
-  Retry_After_Backoff,
-  Blob_Already_Updated,
-  Blob_Update_Not_Allowed,
-  Replica_Unavailable,
-  Blob_Authorization_Failure,
-  Blob_Life_Version_Conflict,
-  Blob_Not_Deleted,
-  Blob_Already_Undeleted,
-  Blob_Deleted_Permanently
+  NoError,
+  IOError,
+  BlobNotFound,
+  BlobDeleted,
+  BlobExpired,
+  BlobAlreadyExists,
+  DataCorrupt,
+  PartitionUnknown,
+  DiskUnavailable,
+  PartitionReadOnly,
+  UnknownError,
+  TemporarilyDisabled,
+  BadRequest,
+  RetryAfterBackoff,
+  BlobAlreadyUpdated,
+  BlobUpdateNotAllowed,
+  ReplicaUnavailable,
+  BlobAuthorizationFailure,
+  BlobLifeVersionConflict,
+  BlobNotDeleted,
+  BlobAlreadyUndeleted,
+  BlobDeletedPermanently
 }
+//@formatter:on

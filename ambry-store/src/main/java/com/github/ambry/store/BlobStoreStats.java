@@ -325,7 +325,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       long expiryReferenceTime, FileSpan fileSpanUnderCompaction) throws StoreException {
     if (!enabled.get()) {
       throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
-          StoreErrorCodes.Store_Shutting_Down);
+          StoreErrorCodes.StoreShuttingDown);
     }
     logger.info("Getting valid data size by log segment at time range {} for {}", timeRange, storeId);
     Pair<Long, NavigableMap<LogSegmentName, Long>> retValue = null;
@@ -424,7 +424,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   Map<Short, Map<Short, ContainerStorageStats>> getContainerStorageStats(long referenceTimeInMs) throws StoreException {
     if (!enabled.get()) {
       throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
-          StoreErrorCodes.Store_Shutting_Down);
+          StoreErrorCodes.StoreShuttingDown);
     }
     Map<Short, Map<Short, Long>> validSizeMap = null;
     Map<Short, Map<Short, Long>> physicalUsageMap = null;
@@ -586,7 +586,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       if (!enabled.get()) {
         throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
-            StoreErrorCodes.Store_Shutting_Down);
+            StoreErrorCodes.StoreShuttingDown);
       }
       long indexSegmentStartProcessTimeMs = time.milliseconds();
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
@@ -644,7 +644,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       if (!enabled.get()) {
         throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
-            StoreErrorCodes.Store_Shutting_Down);
+            StoreErrorCodes.StoreShuttingDown);
       }
       long indexSegmentStartProcessTimeMs = time.milliseconds();
       LogSegmentName logSegmentName = indexSegment.getLogSegmentName();
@@ -1292,7 +1292,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           validDataSize.set(getValidSize(new TimeRange(now - logSegmentForecastOffsetMs, getBucketSpanTimeInMs())));
         }
       } catch (StoreException e) {
-        if (e.getErrorCode().equals(StoreErrorCodes.Store_Shutting_Down)) {
+        if (e.getErrorCode().equals(StoreErrorCodes.StoreShuttingDown)) {
           logger.info("Store is currently shutting down on store: {}", storeId);
           return;
         }

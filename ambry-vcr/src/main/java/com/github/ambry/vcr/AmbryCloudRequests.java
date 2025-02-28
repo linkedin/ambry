@@ -107,7 +107,7 @@ public class AmbryCloudRequests extends AmbryRequests {
     try {
       ServerErrorCode error =
           validateRequest(receivedRequest.getBlobId().getPartition(), RequestOrResponseType.PutRequest, false);
-      if (error != ServerErrorCode.No_Error) {
+      if (error != ServerErrorCode.NoError) {
         logger.error("Validating put request failed with error {} for request {}", error, receivedRequest);
         requestResponseChannel.sendResponse(
             new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(), error), request, null);
@@ -129,11 +129,11 @@ public class AmbryCloudRequests extends AmbryRequests {
             } else {
               logger.error("Unknown exception on a put for request {}", receivedRequest, ex);
               response.set(new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
-                  ServerErrorCode.Unknown_Error));
+                  ServerErrorCode.UnknownError));
             }
           } else {
             response.set(new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
-                ServerErrorCode.No_Error));
+                ServerErrorCode.NoError));
           }
 
           try {
@@ -147,7 +147,7 @@ public class AmbryCloudRequests extends AmbryRequests {
       logger.error("Unknown exception on a put for request {}", receivedRequest, e);
       requestResponseChannel.sendResponse(
           new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
-              ServerErrorCode.Unknown_Error), request, null);
+              ServerErrorCode.UnknownError), request, null);
     }
   }
 
@@ -168,12 +168,12 @@ public class AmbryCloudRequests extends AmbryRequests {
     if (getRequest.getPartitionInfoList().size() > 1) {
       logger.error("Invalid number of messages in GET request received from Frontend {}", getRequest);
       response.set(
-          new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Bad_Request));
+          new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.BadRequest));
     }
     PartitionRequestInfo partitionRequestInfo = getRequest.getPartitionInfoList().iterator().next();
     ServerErrorCode error =
         validateRequest(partitionRequestInfo.getPartition(), RequestOrResponseType.GetRequest, false);
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       logger.error("Validating get request failed for partition {} with error {}", partitionRequestInfo.getPartition(),
           error);
       // Send Response
@@ -199,7 +199,7 @@ public class AmbryCloudRequests extends AmbryRequests {
               } else {
                 logger.error("Unknown exception for request {}", getRequest, ex);
                 response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                    ServerErrorCode.Unknown_Error));
+                    ServerErrorCode.UnknownError));
               }
             } else {
               MessageFormatSend blobsToSend;
@@ -210,10 +210,10 @@ public class AmbryCloudRequests extends AmbryRequests {
                     new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo(),
                         blobsToSend.getMessageMetadataList());
                 response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                    Collections.singletonList(partitionResponseInfo), blobsToSend, ServerErrorCode.No_Error));
+                    Collections.singletonList(partitionResponseInfo), blobsToSend, ServerErrorCode.NoError));
               } catch (IOException e) {
                 response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                    ServerErrorCode.Unknown_Error));
+                    ServerErrorCode.UnknownError));
               } catch (MessageFormatException ex) {
                 response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
                     ErrorMapping.getMessageFormatErrorMapping(ex.getErrorCode())));
@@ -246,7 +246,7 @@ public class AmbryCloudRequests extends AmbryRequests {
 
     ServerErrorCode error =
         validateRequest(deleteRequest.getBlobId().getPartition(), RequestOrResponseType.DeleteRequest, false);
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
       // Send Response
       requestResponseChannel.sendResponse(
@@ -270,11 +270,11 @@ public class AmbryCloudRequests extends AmbryRequests {
           } else {
             logger.error("Unknown exception for delete request {}", deleteRequest, ex);
             response.set(new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
-                ServerErrorCode.Unknown_Error));
+                ServerErrorCode.UnknownError));
           }
         } else {
           response.set(new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
-              ServerErrorCode.No_Error));
+              ServerErrorCode.NoError));
         }
         try {
           requestResponseChannel.sendResponse(response.get(), request, null);
@@ -288,6 +288,11 @@ public class AmbryCloudRequests extends AmbryRequests {
   @Override
   public void handlePurgeRequest(NetworkRequest request) {
     throw new UnsupportedOperationException("Purge is not supported in cloud yet.");
+  }
+
+  @Override
+  public void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws InterruptedException, IOException {
+    throw new UnsupportedOperationException("FileCopyGetMetaDataRequest is not supported in cloud yet.");
   }
 
   @Override
@@ -309,7 +314,7 @@ public class AmbryCloudRequests extends AmbryRequests {
 
     ServerErrorCode error =
         validateRequest(updateRequest.getBlobId().getPartition(), RequestOrResponseType.TtlUpdateRequest, false);
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       logger.error("Validating TtlUpdateRequest failed with error {} for request {}", error, updateRequest);
       // Send Response
       requestResponseChannel.sendResponse(
@@ -333,11 +338,11 @@ public class AmbryCloudRequests extends AmbryRequests {
           } else {
             logger.error("Unknown exception for TTL update request{}", updateRequest, ex);
             response.set(new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
-                ServerErrorCode.Unknown_Error));
+                ServerErrorCode.UnknownError));
           }
         } else {
           response.set(new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
-              ServerErrorCode.No_Error));
+              ServerErrorCode.NoError));
         }
         try {
           requestResponseChannel.sendResponse(response.get(), request, null);
@@ -367,7 +372,7 @@ public class AmbryCloudRequests extends AmbryRequests {
 
     ServerErrorCode error =
         validateRequest(undeleteRequest.getBlobId().getPartition(), RequestOrResponseType.UndeleteRequest, false);
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       logger.error("Validating undelete request failed with error {} for request {}", error, undeleteRequest);
       response.set(new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), error));
     } else {
@@ -385,13 +390,13 @@ public class AmbryCloudRequests extends AmbryRequests {
             logger.error("Store exception on a undelete with error code {} for request {}",
                 ((StoreException) ex).getErrorCode(), undeleteRequest, ex);
             StoreException storeException = (StoreException) ex;
-            if (storeException.getErrorCode() == StoreErrorCodes.ID_Undeleted) {
+            if (storeException.getErrorCode() == StoreErrorCodes.IDUndeleted) {
               if (ex instanceof IdUndeletedStoreException) {
                 response.set(new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-                    ((IdUndeletedStoreException) ex).getLifeVersion(), ServerErrorCode.Blob_Already_Undeleted));
+                    ((IdUndeletedStoreException) ex).getLifeVersion(), ServerErrorCode.BlobAlreadyUndeleted));
               } else {
                 response.set(new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-                    MessageInfo.LIFE_VERSION_FROM_FRONTEND, ServerErrorCode.Blob_Already_Undeleted));
+                    MessageInfo.LIFE_VERSION_FROM_FRONTEND, ServerErrorCode.BlobAlreadyUndeleted));
               }
             } else {
               logger.error("Unknown exception for undelete request{}", undeleteRequest, ex);
@@ -401,7 +406,7 @@ public class AmbryCloudRequests extends AmbryRequests {
           } else {
             logger.error("Unknown exception for undelete request{}", undeleteRequest, ex);
             response.set(new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
-                ServerErrorCode.Unknown_Error));
+                ServerErrorCode.UnknownError));
           }
         } else {
           response.set(

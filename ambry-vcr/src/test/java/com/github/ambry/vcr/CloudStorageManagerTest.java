@@ -160,7 +160,7 @@ public class CloudStorageManagerTest {
     //try checkLocalPartitionStatus for a partition that doesn't exist
     Assert.assertEquals(
         cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId(ReplicaType.DISK_BACKED)),
-        ServerErrorCode.No_Error);
+        ServerErrorCode.NoError);
 
     //add and start a replica to the store
     Assert.assertTrue(cloudStorageManager.addBlobStore(mockReplicaId));
@@ -168,20 +168,20 @@ public class CloudStorageManagerTest {
     //try checkLocalPartitionStatus for an added replica
     Assert.assertEquals(
         cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId(ReplicaType.DISK_BACKED)),
-        ServerErrorCode.No_Error);
+        ServerErrorCode.NoError);
 
     //stop a replica on the store
     Assert.assertTrue("Failed in stopping replica", cloudStorageManager.shutdownBlobStore(partitionId));
 
     //try checkLocalPartitionStatus for a stopped replica (stopped blob store)
     Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, mockReplicaId),
-        ServerErrorCode.No_Error);
+        ServerErrorCode.NoError);
 
     //try checkLocalPartitionStatus for a removed replica
     Assert.assertTrue(cloudStorageManager.removeBlobStore(partitionId));
     Assert.assertEquals(
         cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId(ReplicaType.DISK_BACKED)),
-        ServerErrorCode.No_Error);
+        ServerErrorCode.NoError);
   }
 
   /**

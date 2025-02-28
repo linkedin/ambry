@@ -242,7 +242,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
         return IVRecord_Format_V1.deserializeIVRecord(inputStream);
       default:
         throw new MessageFormatException("IVRecord version not supported",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -261,7 +261,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
         return KeyRecord_Format_V1.deserializeKeyRecord(inputStream);
       default:
         throw new MessageFormatException("KeyRecord version not supported",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 

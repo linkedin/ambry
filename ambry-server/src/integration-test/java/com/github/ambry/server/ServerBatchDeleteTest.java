@@ -44,7 +44,6 @@ import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -122,7 +121,7 @@ public class ServerBatchDeleteTest {
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), Unpooled.wrappedBuffer(data),
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey));
     PutResponse response0 = PutResponse.readFrom(channel.sendAndReceive(putRequest0).getInputStream());
-    Assert.assertEquals(ServerErrorCode.No_Error, response0.getError());
+    Assert.assertEquals(ServerErrorCode.NoError, response0.getError());
   }
 
 
@@ -226,16 +225,18 @@ public class ServerBatchDeleteTest {
     }
     List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = getBatchDeletePartitionRequestInfoList();
     BatchDeleteResponse batchDeleteResponse = deleteBlobs(batchDeletePartitionRequestInfoList, channel);
-    Assert.assertEquals(ServerErrorCode.No_Error, batchDeleteResponse.getError());
+    Assert.assertEquals(ServerErrorCode.NoError, batchDeleteResponse.getError());
 
     // check if blobs are deleted by doing get operation on those blobs
     for (int i = 0; i < 3; i++) {
       GetResponse getResponse = getBlob(blobIdList1.get(i), channel);
-      Assert.assertEquals(ServerErrorCode.Blob_Deleted, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert.assertEquals(ServerErrorCode.BlobDeleted,
+          getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
     }
     for (int i = 0; i < 2; i++) {
       GetResponse getResponse = getBlob(blobIdList2.get(i), channel);
-      Assert.assertEquals(ServerErrorCode.Blob_Deleted, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert.assertEquals(ServerErrorCode.BlobDeleted,
+          getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
     }
     channel.disconnect();
   }
@@ -259,16 +260,18 @@ public class ServerBatchDeleteTest {
     }
     List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = getBatchDeletePartitionRequestInfoList();
     BatchDeleteResponse batchDeleteResponse = deleteBlobs(batchDeletePartitionRequestInfoList, channel);
-    Assert.assertEquals(ServerErrorCode.Unknown_Error, batchDeleteResponse.getError());
+    Assert.assertEquals(ServerErrorCode.UnknownError, batchDeleteResponse.getError());
 
     // check if blobs are deleted by doing get operation on those blobs
     for (int i = 0; i < 3; i++) {
       GetResponse getResponse = getBlob(blobIdList1.get(i), channel);
-      Assert.assertEquals(ServerErrorCode.Blob_Deleted, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert.assertEquals(ServerErrorCode.BlobDeleted,
+          getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
     }
     for (int i = 0; i < 2; i++) {
       GetResponse getResponse = getBlob(blobIdList2.get(i), channel);
-      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert.assertEquals(ServerErrorCode.BlobNotFound,
+          getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
     }
     channel.disconnect();
   }
@@ -289,15 +292,17 @@ public class ServerBatchDeleteTest {
     channel.connect();
     List<BatchDeletePartitionRequestInfo> batchDeletePartitionRequestInfoList = getBatchDeletePartitionRequestInfoList();
     BatchDeleteResponse batchDeleteResponse = deleteBlobs(batchDeletePartitionRequestInfoList, channel);
-    Assert.assertEquals(ServerErrorCode.Unknown_Error, batchDeleteResponse.getError());
+    Assert.assertEquals(ServerErrorCode.UnknownError, batchDeleteResponse.getError());
     // check if blobs are deleted by doing get operation on those blobs
     for (int i = 0; i < 3; i++) {
       GetResponse getResponse = getBlob(blobIdList1.get(i), channel);
-      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert.assertEquals(ServerErrorCode.BlobNotFound,
+          getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
     }
     for (int i = 0; i < 2; i++) {
       GetResponse getResponse = getBlob(blobIdList2.get(i), channel);
-      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert.assertEquals(ServerErrorCode.BlobNotFound,
+          getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
     }
     channel.disconnect();
   }

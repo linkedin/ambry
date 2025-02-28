@@ -481,7 +481,7 @@ public class LogTest {
       CHANNEL_APPENDER.append(mockLog, buffer);
       fail("Should fail because log segment instantiation encounters FileNotFound exception");
     } catch (StoreException e) {
-      assertEquals("Mismatch in store error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("Mismatch in store error code", StoreErrorCodes.UnknownError, e.getErrorCode());
       assertEquals(
           "The number of unallocated segments should decrease because exception occurred when freeing the segment",
           initialUnallocatedSegments - 1, mockLog.getRemainingUnallocatedSegments());
@@ -495,7 +495,7 @@ public class LogTest {
       CHANNEL_APPENDER.append(mockLog, buffer);
       fail("Should fail because log segment instantiation encounters FileNotFound exception");
     } catch (StoreException e) {
-      assertEquals("Mismatch in store error code", StoreErrorCodes.File_Not_Found, e.getErrorCode());
+      assertEquals("Mismatch in store error code", StoreErrorCodes.FileNotFound, e.getErrorCode());
       // Note that the number should be initialUnallocatedSegments - 1 because in previous test the segment with exception
       // didn't get freed due to exception in diskSpaceAllocator.free().
       assertEquals(

@@ -72,6 +72,11 @@ public class RestUtils {
   public static final String OBJECT_LOCK_PARAM = "object-lock";
   // Default number of keys that are returned in named blob or s3 api list response.
   public static final int DEFAULT_MAX_KEY_VALUE = 1000;
+  public static final String LIST_TYPE_VERSION_2 = "2";
+  public static final String LIST_TYPE = "list-type";
+  public static final String PREFIX_PARAM_NAME = "prefix";
+  public static final int LIST_REQUEST_SEGMENTS = 3;
+  public static final String EMPTY_PREFIX = "";
 
   /**
    * prefix for all Ambry specific heaeders
@@ -371,6 +376,11 @@ public class RestUtils {
      * Boolean field set to "true" for ignoring containers when fetching accounts information via GET /accounts API.
      */
     public static final String IGNORE_CONTAINERS = "x-ambry-ignore-containers";
+
+    /**
+     * Boolean field set to "true" for only local DB lookups via GET /accounts API.
+     */
+    public final static String LOCAL_GET = "x-ambry-local-get";
   }
 
   public static final class TrackingHeaders {
@@ -522,6 +532,11 @@ public class RestUtils {
      * content-length header
      */
     public static final String CONTENT_RANGE_LENGTH = KEY_PREFIX + "content-range-length";
+
+    /**
+     * Rest method for the rest request
+     */
+    public static final String REST_METHOD = KEY_PREFIX + "rest-method";
   }
 
   /**
@@ -975,6 +990,52 @@ public class RestUtils {
    */
   public static boolean isS3Request(RestRequest restRequest) {
     return restRequest != null && restRequest.getArgs().containsKey(S3_REQUEST);
+  }
+
+  /**
+   * Checks if the request corresponds to the list object V2 type.
+   *
+   * @param args The request parameters in a map.
+   * @return true if the request is of type list object V2, false otherwise.
+   * @throws RestServiceException if there is an issue with the request.
+   */
+  public static boolean isListObjectV2Request(Map<String, Object> args) throws RestServiceException {
+    return LIST_TYPE_VERSION_2.equals(RestUtils.getHeader(args, LIST_TYPE, false));
+  }
+
+  /**
+   * Determines whether the request is for a list object, using the provided path and arguments.
+   *
+   * @param path The request path.
+   * @param args The request parameters in a map.
+   * @return true if the request is for a list object (GET method and path length 3), false otherwise.
+   * @throws RestServiceException if there is an issue with the request.
+   */
+  public static boolean isListObjectRequest(String path, Map<String, Object> args) throws RestServiceException {
+    boolean isListObjectRequest = false;
+    String splitPath[] = splitPath(path);
+    String restMethod = getHeader(args, InternalKeys.REST_METHOD, false);
+    // list objects without a prefix, add empty prefix in the args
+    if (!args.containsKey(OBJECT_LOCK_PARAM) && restMethod != null) {
+      if (restMethod.equals(RestMethod.GET.toString()) && splitPath.length == LIST_REQUEST_SEGMENTS) {
+        if(!args.containsKey(PREFIX_PARAM_NAME)) {
+          args.put(PREFIX_PARAM_NAME, EMPTY_PREFIX);
+        }
+        isListObjectRequest = true;
+      }
+    }
+    return isListObjectRequest;
+  }
+
+  /**
+   * Splits the provided path into its components, handling potential leading slashes.
+   *
+   * @param path The request path.
+   * @return An array of path segments.
+   */
+  public static String[] splitPath(String path) {
+    path = path.startsWith("/") ? path.substring(1) : path;
+    return path.split("/", 4);
   }
 
   /**

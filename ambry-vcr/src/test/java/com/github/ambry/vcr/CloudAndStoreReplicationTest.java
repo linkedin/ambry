@@ -310,7 +310,7 @@ public class CloudAndStoreReplicationTest {
         GetResponse.readFrom(channel.receive().getInputStream(), recoveryCluster.getClusterMap());
 
     for (PartitionResponseInfo partitionResponseInfo : getResponse.getPartitionResponseInfoList()) {
-      Assert.assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
+      Assert.assertEquals("Error in getting the recovered blobs", ServerErrorCode.NoError,
           partitionResponseInfo.getErrorCode());
       int cloudStoreSizeDifference;
       if (BlobPropertiesSerDe.CURRENT_VERSION <= BlobPropertiesSerDe.VERSION_4) {

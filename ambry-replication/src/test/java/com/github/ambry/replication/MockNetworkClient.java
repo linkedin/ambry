@@ -53,8 +53,8 @@ public class MockNetworkClient implements NetworkClient {
   private final Map<Integer, RequestInfo> correlationIdToRequestInfos = new HashMap<>();
 
   private volatile NetworkClientErrorCode expectedNetworkClientErrorCode = null;
-  private volatile ServerErrorCode expectedReplicaMetadataResponseError = ServerErrorCode.No_Error;
-  private volatile ServerErrorCode expectedGetResponseError = ServerErrorCode.No_Error;
+  private volatile ServerErrorCode expectedReplicaMetadataResponseError = ServerErrorCode.NoError;
+  private volatile ServerErrorCode expectedGetResponseError = ServerErrorCode.NoError;
   private volatile boolean shouldReturnResponseForDroppedRequests = true;
   private Runnable sendAndPoolCallback = null;
   final AtomicInteger numGetRequest = new AtomicInteger();
@@ -131,7 +131,7 @@ public class MockNetworkClient implements NetworkClient {
           if (requestInfo.getRequest()
               .getRequestOrResponseType()
               .equals(RequestOrResponseType.ReplicaMetadataRequest.name())) {
-            if (expectedReplicaMetadataResponseError == ServerErrorCode.No_Error) {
+            if (expectedReplicaMetadataResponseError == ServerErrorCode.NoError) {
               responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
             } else {
               DataInputStream dis = new NettyByteBufDataInputStream(Unpooled.wrappedBuffer(bytes));
@@ -148,7 +148,7 @@ public class MockNetworkClient implements NetworkClient {
               .getRequestOrResponseType()
               .equals(RequestOrResponseType.GetRequest.name())) {
             numGetRequest.incrementAndGet();
-            if (expectedGetResponseError == ServerErrorCode.No_Error) {
+            if (expectedGetResponseError == ServerErrorCode.NoError) {
               responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
             } else {
               DataInputStream dis = new NettyByteBufDataInputStream(Unpooled.wrappedBuffer(bytes));

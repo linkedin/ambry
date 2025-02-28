@@ -51,13 +51,13 @@ import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.ForceDeleteAdminRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
-import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.tools.util.ToolRequestResponseUtil;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -66,7 +66,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import java.io.Closeable;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -304,7 +303,7 @@ public class ServerAdminTool implements Closeable {
         BlobId blobId = new BlobId(config.blobId, clusterMap);
         Pair<ServerErrorCode, BlobProperties> bpResponse =
             serverAdminTool.getBlobProperties(dataNodeId, blobId, config.getOption, clusterMap);
-        if (bpResponse.getFirst() == ServerErrorCode.No_Error) {
+        if (bpResponse.getFirst() == ServerErrorCode.NoError) {
           LOGGER.info("Blob properties for {} from {}: {}", blobId, dataNodeId, bpResponse.getSecond());
         } else {
           LOGGER.error("Failed to get blob properties for {} from {} with option {}. Error code is {}", blobId,
@@ -315,7 +314,7 @@ public class ServerAdminTool implements Closeable {
         blobId = new BlobId(config.blobId, clusterMap);
         Pair<ServerErrorCode, ByteBuffer> umResponse =
             serverAdminTool.getUserMetadata(dataNodeId, blobId, config.getOption, clusterMap);
-        if (umResponse.getFirst() == ServerErrorCode.No_Error) {
+        if (umResponse.getFirst() == ServerErrorCode.NoError) {
           writeBufferToFile(umResponse.getSecond(), outputFileStream);
           LOGGER.info("User metadata for {} from {} written to {}", blobId, dataNodeId, config.dataOutputFilePath);
         } else {
@@ -327,7 +326,7 @@ public class ServerAdminTool implements Closeable {
         blobId = new BlobId(config.blobId, clusterMap);
         Pair<ServerErrorCode, BlobData> bResponse =
             serverAdminTool.getBlob(dataNodeId, blobId, config.getOption, clusterMap);
-        if (bResponse.getFirst() == ServerErrorCode.No_Error) {
+        if (bResponse.getFirst() == ServerErrorCode.NoError) {
           LOGGER.info("Blob type of {} from {} is {}", blobId, dataNodeId, bResponse.getSecond().getBlobType());
           ByteBuf buffer = bResponse.getSecond().content();
           try {
@@ -344,7 +343,7 @@ public class ServerAdminTool implements Closeable {
       case BlobIndex:
         blobId = new BlobId(config.blobId, clusterMap);
         Pair<ServerErrorCode, String> biResponse = serverAdminTool.getBlobIndex(dataNodeId, blobId);
-        if (biResponse.getFirst() == ServerErrorCode.No_Error) {
+        if (biResponse.getFirst() == ServerErrorCode.NoError) {
           LOGGER.info("Blob index values of {} from {} is {}", blobId, dataNodeId, biResponse.getSecond());
         } else {
           LOGGER.error("Failed to get blob index values for {} from {}. Error code is {}", blobId, dataNodeId,
@@ -355,7 +354,7 @@ public class ServerAdminTool implements Closeable {
         blobId = new BlobId(config.blobId, clusterMap);
         short lifeVersion = config.lifeVersion;
         ServerErrorCode errorCode = serverAdminTool.forceDeleteBlob(dataNodeId, blobId, lifeVersion);
-        if (errorCode == ServerErrorCode.No_Error) {
+        if (errorCode == ServerErrorCode.NoError) {
           LOGGER.info("Force delete {} {} from {} is successful.", blobId, lifeVersion, dataNodeId);
         } else {
           LOGGER.error("Failed to run force delete {} {} from {}. Error code is {}", blobId, lifeVersion, dataNodeId,
@@ -367,7 +366,7 @@ public class ServerAdminTool implements Closeable {
           for (String partitionIdStr : config.partitionIds) {
             PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
             errorCode = serverAdminTool.triggerCompaction(dataNodeId, partitionId);
-            if (errorCode == ServerErrorCode.No_Error) {
+            if (errorCode == ServerErrorCode.NoError) {
               LOGGER.info("Compaction has been triggered for {} on {}", partitionId, dataNodeId);
             } else {
               LOGGER.error("From {}, received server error code {} for trigger compaction request on {}", dataNodeId,
@@ -414,7 +413,7 @@ public class ServerAdminTool implements Closeable {
             Pair<ServerErrorCode, Boolean> response =
                 serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes,
                     config.numReplicasCaughtUpPerPartition);
-            if (response.getFirst() == ServerErrorCode.No_Error) {
+            if (response.getFirst() == ServerErrorCode.NoError) {
               LOGGER.info("Replicas are {} within {} bytes for {}", response.getSecond() ? "" : "NOT",
                   config.acceptableLagInBytes, partitionId);
             } else {
@@ -426,7 +425,7 @@ public class ServerAdminTool implements Closeable {
           Pair<ServerErrorCode, Boolean> response =
               serverAdminTool.isCaughtUp(dataNodeId, null, config.acceptableLagInBytes,
                   config.numReplicasCaughtUpPerPartition);
-          if (response.getFirst() == ServerErrorCode.No_Error) {
+          if (response.getFirst() == ServerErrorCode.NoError) {
             LOGGER.info("Replicas are {} within {} bytes for all partitions", response.getSecond() ? "" : "NOT",
                 config.acceptableLagInBytes);
           } else {
@@ -519,7 +518,7 @@ public class ServerAdminTool implements Closeable {
   private static void sendRequestControlRequest(ServerAdminTool serverAdminTool, DataNodeId dataNodeId,
       PartitionId partitionId, RequestOrResponseType toControl, boolean enable) throws IOException, TimeoutException {
     ServerErrorCode errorCode = serverAdminTool.controlRequest(dataNodeId, partitionId, toControl, enable);
-    if (errorCode == ServerErrorCode.No_Error) {
+    if (errorCode == ServerErrorCode.NoError) {
       LOGGER.info("{} enable state has been set to {} for {} on {}", toControl, enable, partitionId, dataNodeId);
     } else {
       LOGGER.error("From {}, received server error code {} for request to set enable state {} for {} on {}", dataNodeId,
@@ -541,7 +540,7 @@ public class ServerAdminTool implements Closeable {
   private static void sendReplicationControlRequest(ServerAdminTool serverAdminTool, DataNodeId dataNodeId,
       PartitionId partitionId, List<String> origins, boolean enable) throws IOException, TimeoutException {
     ServerErrorCode errorCode = serverAdminTool.controlReplication(dataNodeId, partitionId, origins, enable);
-    if (errorCode == ServerErrorCode.No_Error) {
+    if (errorCode == ServerErrorCode.NoError) {
       LOGGER.info("Enable state of replication from {} has been set to {} for {} on {}",
           origins.isEmpty() ? "all DCs" : origins, enable, partitionId == null ? "all partitions" : partitionId,
           dataNodeId);
@@ -569,7 +568,7 @@ public class ServerAdminTool implements Closeable {
     ServerErrorCode errorCode =
         serverAdminTool.controlBlobStore(dataNodeId, partitionId, numReplicasCaughtUpPerPartition,
             storeControlRequestType);
-    if (errorCode == ServerErrorCode.No_Error) {
+    if (errorCode == ServerErrorCode.NoError) {
       LOGGER.info("{} control request has been performed for {} on {}", storeControlRequestType, partitionId,
           dataNodeId);
     } else {
@@ -696,7 +695,7 @@ public class ServerAdminTool implements Closeable {
     response.release();
     ServerErrorCode errorCode = adminResponse.getError();
     String content = "";
-    if (errorCode == ServerErrorCode.No_Error) {
+    if (errorCode == ServerErrorCode.NoError) {
       content = new String(adminResponse.getContent());
     }
     return new Pair<>(errorCode, content);
@@ -821,7 +820,7 @@ public class ServerAdminTool implements Closeable {
    *                                        (per partition). The min of this value or the total count of replicas - 1 is
    *                                        considered.
    * @return the {@link ServerErrorCode} and the catchup status that is returned if the error code is
-   *          {@link ServerErrorCode#No_Error}, otherwise {@code false}.
+   *          {@link ServerErrorCode#NoError}, otherwise {@code false}.
    * @throws IOException
    * @throws TimeoutException
    */
@@ -837,7 +836,7 @@ public class ServerAdminTool implements Closeable {
         CatchupStatusAdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
     response.release();
     return new Pair<>(adminResponse.getError(),
-        adminResponse.getError() == ServerErrorCode.No_Error && adminResponse.isCaughtUp());
+        adminResponse.getError() == ServerErrorCode.NoError && adminResponse.isCaughtUp());
   }
 
   /**
@@ -862,13 +861,7 @@ public class ServerAdminTool implements Closeable {
     GetRequest getRequest =
         new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, flags, partitionRequestInfos, getOption);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, getRequest);
-    InputStream serverResponseStream = new NettyByteBufDataInputStream(response.content());
-    GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
-    ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-    ServerErrorCode errorCode =
-        partitionErrorCode == ServerErrorCode.No_Error ? getResponse.getError() : partitionErrorCode;
-    InputStream stream = errorCode == ServerErrorCode.No_Error ? getResponse.getInputStream() : null;
-    return new Pair<>(new Pair<>(errorCode, stream), response);
+    return new Pair<>(ToolRequestResponseUtil.decodeGetResponse(response, clusterMap).getFirst(), response);
   }
 
   /**
@@ -881,7 +874,7 @@ public class ServerAdminTool implements Closeable {
    */
   private ResponseInfo sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId,
       SendWithCorrelationId request) throws TimeoutException {
-    ReplicaId replicaId = getReplicaFromNode(dataNodeId, partitionId);
+    ReplicaId replicaId = ToolRequestResponseUtil.getReplicaFromNode(dataNodeId, partitionId, clusterMap);
     String hostname = dataNodeId.getHostname();
     Port port = dataNodeId.getPortToConnectTo();
     String identifier = hostname + ":" + port.getPort();
@@ -908,28 +901,5 @@ public class ServerAdminTool implements Closeable {
           identifier + ": Encountered error while trying to send request - " + responseInfo.getError());
     }
     return responseInfo;
-  }
-
-  /**
-   * Get replica of given {@link PartitionId} from given {@link DataNodeId}. If partitionId is null, it returns any
-   * replica on the certain node.
-   * @param dataNodeId the {@link DataNodeId} on which replica resides.
-   * @param partitionId the {@link PartitionId} which replica belongs to.
-   * @return {@link ReplicaId} from given node.
-   */
-  private ReplicaId getReplicaFromNode(DataNodeId dataNodeId, PartitionId partitionId) {
-    ReplicaId replicaToReturn = null;
-    if (partitionId != null) {
-      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
-        if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())) {
-          replicaToReturn = replicaId;
-          break;
-        }
-      }
-    } else {
-      // pick any replica on this node
-      replicaToReturn = clusterMap.getReplicaIds(dataNodeId).get(0);
-    }
-    return replicaToReturn;
   }
 }

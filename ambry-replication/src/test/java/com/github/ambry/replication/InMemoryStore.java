@@ -23,6 +23,7 @@ import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
@@ -245,13 +246,13 @@ public class InMemoryStore implements Store {
         MessageInfo latestInfo = getMergedMessageInfo(info.getStoreKey(), messageInfos);
         if (latestInfo == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
-              StoreErrorCodes.ID_Not_Found);
+              StoreErrorCodes.IDNotFound);
         }
         if (lifeVersion == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
           if (latestInfo.isDeleted()) {
             throw new StoreException(
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-                StoreErrorCodes.ID_Deleted);
+                StoreErrorCodes.IDDeleted);
           }
           lifeVersion = latestInfo.getLifeVersion();
         } else {
@@ -259,7 +260,7 @@ public class InMemoryStore implements Store {
               latestInfo.getLifeVersion() > info.getLifeVersion())) {
             throw new StoreException(
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-                StoreErrorCodes.Life_Version_Conflict);
+                StoreErrorCodes.LifeVersionConflict);
           }
           lifeVersion = info.getLifeVersion();
         }
@@ -277,7 +278,7 @@ public class InMemoryStore implements Store {
       writeSet.writeTo(log);
       messageInfos.addAll(infosToDelete);
     } catch (Exception e) {
-      throw (e instanceof StoreException ? (StoreException) e : new StoreException(e, StoreErrorCodes.Unknown_Error));
+      throw (e instanceof StoreException ? (StoreException) e : new StoreException(e, StoreErrorCodes.UnknownError));
     }
   }
 
@@ -299,19 +300,19 @@ public class InMemoryStore implements Store {
       for (MessageInfo info : infos) {
         if (info.getExpirationTimeInMs() != Utils.Infinite_Time) {
           throw new StoreException("BlobStore only supports removing the expiration time",
-              StoreErrorCodes.Update_Not_Allowed);
+              StoreErrorCodes.UpdateNotAllowed);
         }
         MessageInfo latestInfo = getMergedMessageInfo(info.getStoreKey(), messageInfos);
         if (latestInfo == null) {
           throw new StoreException("Cannot update TTL of " + info.getStoreKey() + " since it's not in the index",
-              StoreErrorCodes.ID_Not_Found);
+              StoreErrorCodes.IDNotFound);
         } else if (latestInfo.isDeleted()) {
           throw new StoreException(
               "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
-              StoreErrorCodes.ID_Deleted);
+              StoreErrorCodes.IDDeleted);
         } else if (latestInfo.isTtlUpdated()) {
           throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
-              StoreErrorCodes.Already_Updated);
+              StoreErrorCodes.AlreadyUpdated);
         }
         short lifeVersion = latestInfo.getLifeVersion();
         MessageFormatInputStream stream =
@@ -328,7 +329,7 @@ public class InMemoryStore implements Store {
       writeSet.writeTo(log);
       messageInfos.addAll(infosToUpdate);
     } catch (Exception e) {
-      throw (e instanceof StoreException ? (StoreException) e : new StoreException(e, StoreErrorCodes.Unknown_Error));
+      throw (e instanceof StoreException ? (StoreException) e : new StoreException(e, StoreErrorCodes.UnknownError));
     }
   }
 
@@ -337,14 +338,14 @@ public class InMemoryStore implements Store {
     StoreKey key = info.getStoreKey();
     MessageInfo deleteInfo = getMessageInfo(key, messageInfos, true, false, false);
     if (info.getLifeVersion() == -1 && deleteInfo == null) {
-      throw new StoreException("Key " + key + " not delete yet", StoreErrorCodes.ID_Not_Deleted);
+      throw new StoreException("Key " + key + " not delete yet", StoreErrorCodes.IDNotDeleted);
     }
     short lifeVersion = info.getLifeVersion();
     MessageInfo latestInfo = deleteInfo;
     if (info.getLifeVersion() == MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
       if (deleteInfo == null) {
         throw new StoreException("Id " + key + " requires first value to be a put and last value to be a delete",
-            StoreErrorCodes.ID_Not_Deleted);
+            StoreErrorCodes.IDNotDeleted);
       }
       lifeVersion = (short) (deleteInfo.getLifeVersion() + 1);
     } else {
@@ -366,7 +367,7 @@ public class InMemoryStore implements Store {
       return lifeVersion;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to undelete blobs from store", e,
-          StoreErrorCodes.Unknown_Error);
+          StoreErrorCodes.UnknownError);
     }
   }
 
@@ -422,7 +423,7 @@ public class InMemoryStore implements Store {
     MessageInfo info = getMergedMessageInfo(key, messageInfos);
     if (info == null) {
       throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
-          StoreErrorCodes.ID_Not_Found);
+          StoreErrorCodes.IDNotFound);
     }
     return info;
   }
@@ -500,6 +501,11 @@ public class InMemoryStore implements Store {
 
   @Override
   public StoreBatchDeleteInfo batchDelete(List<MessageInfo> infos) throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
     throw new UnsupportedOperationException("Method not supported");
   }
 }

@@ -232,7 +232,7 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
       metrics.unExpectedAdminOperationError.inc();
       response =
-          new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), ServerErrorCode.Unknown_Error);
+          new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), ServerErrorCode.UnknownError);
       switch (adminRequest.getType()) {
         case CatchupStatus:
           response = new CatchupStatusAdminResponse(false, response);
@@ -240,11 +240,11 @@ public class AmbryServerRequests extends AmbryRequests {
         case HealthCheck:
         case BlobIndex:
           response = new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(),
-              ServerErrorCode.Unknown_Error);
+              ServerErrorCode.UnknownError);
           break;
         case ForceDelete:
           response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(),
-              ServerErrorCode.Unknown_Error);
+              ServerErrorCode.UnknownError);
           break;
       }
     } finally {
@@ -270,10 +270,10 @@ public class AmbryServerRequests extends AmbryRequests {
    */
   private AdminResponse handleTriggerCompactionRequest(AdminRequest adminRequest) {
     ServerErrorCode error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
     } else if (!storeManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
-      error = ServerErrorCode.Unknown_Error;
+      error = ServerErrorCode.UnknownError;
       logger.error("Triggering compaction failed for {}. Check if admin trigger is enabled for compaction",
           adminRequest);
     }
@@ -295,16 +295,16 @@ public class AmbryServerRequests extends AmbryRequests {
     Collection<PartitionId> partitionIds;
     if (!requestsDisableInfo.containsKey(toControl)) {
       metrics.badRequestError.inc();
-      error = ServerErrorCode.Bad_Request;
+      error = ServerErrorCode.BadRequest;
     } else {
-      error = ServerErrorCode.No_Error;
+      error = ServerErrorCode.NoError;
       if (controlRequest.getPartitionId() != null) {
         error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
         partitionIds = Collections.singletonList(controlRequest.getPartitionId());
       } else {
         partitionIds = storeManager.getLocalPartitions();
       }
-      if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+      if (!error.equals(ServerErrorCode.PartitionUnknown)) {
         controlRequestForPartitions(EnumSet.of(toControl), partitionIds, controlRequest.shouldEnable());
         for (PartitionId partitionId : partitionIds) {
           logger.info("Enable state for {} on {} is {}", toControl, partitionId,
@@ -325,7 +325,7 @@ public class AmbryServerRequests extends AmbryRequests {
   private AdminResponse handleReplicationControlRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
     Collection<PartitionId> partitionIds;
-    ServerErrorCode error = ServerErrorCode.No_Error;
+    ServerErrorCode error = ServerErrorCode.NoError;
     ReplicationControlAdminRequest replControlRequest =
         ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
     if (replControlRequest.getPartitionId() != null) {
@@ -334,14 +334,14 @@ public class AmbryServerRequests extends AmbryRequests {
     } else {
       partitionIds = storeManager.getLocalPartitions();
     }
-    if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+    if (!error.equals(ServerErrorCode.PartitionUnknown)) {
       if (replicationEngine.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
           replControlRequest.shouldEnable())) {
-        error = ServerErrorCode.No_Error;
+        error = ServerErrorCode.NoError;
       } else {
         logger.error("Could not set enable status for replication of {} from {} to {}. Check partition validity and"
             + " origins list", partitionIds, replControlRequest.getOrigins(), replControlRequest.shouldEnable());
-        error = ServerErrorCode.Bad_Request;
+        error = ServerErrorCode.BadRequest;
       }
     }
     return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
@@ -357,13 +357,13 @@ public class AmbryServerRequests extends AmbryRequests {
   private AdminResponse handleCatchupStatusRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
     Collection<PartitionId> partitionIds;
-    ServerErrorCode error = ServerErrorCode.No_Error;
+    ServerErrorCode error = ServerErrorCode.NoError;
     boolean isCaughtUp = false;
     CatchupStatusAdminRequest catchupStatusRequest = CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
     if (catchupStatusRequest.getAcceptableLagInBytes() < 0) {
-      error = ServerErrorCode.Bad_Request;
+      error = ServerErrorCode.BadRequest;
     } else if (catchupStatusRequest.getNumReplicasCaughtUpPerPartition() <= 0) {
-      error = ServerErrorCode.Bad_Request;
+      error = ServerErrorCode.BadRequest;
     } else {
       if (catchupStatusRequest.getPartitionId() != null) {
         error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
@@ -371,8 +371,8 @@ public class AmbryServerRequests extends AmbryRequests {
       } else {
         partitionIds = storeManager.getLocalPartitions();
       }
-      if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-        error = ServerErrorCode.No_Error;
+      if (!error.equals(ServerErrorCode.PartitionUnknown)) {
+        error = ServerErrorCode.NoError;
         isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes(),
             catchupStatusRequest.getNumReplicasCaughtUpPerPartition());
       }
@@ -420,7 +420,7 @@ public class AmbryServerRequests extends AmbryRequests {
               "NetworkRequest type not supported: " + blobStoreControlAdminRequest.getStoreControlAction());
       }
     } else {
-      error = ServerErrorCode.Bad_Request;
+      error = ServerErrorCode.BadRequest;
       logger.debug("The partition Id should not be null.");
     }
     return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
@@ -497,7 +497,7 @@ public class AmbryServerRequests extends AmbryRequests {
     contentJSON.put("unstablePartitions", unstablePartitions);
 
     byte[] content = contentJSON.toString().getBytes(StandardCharsets.UTF_8);
-    ServerErrorCode error = ServerErrorCode.No_Error;
+    ServerErrorCode error = ServerErrorCode.NoError;
     return new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(), error, content);
   }
 
@@ -516,7 +516,7 @@ public class AmbryServerRequests extends AmbryRequests {
       blobIndexAdminRequest = BlobIndexAdminRequest.readFrom(requestStream, adminRequest, storeKeyFactory);
     } catch (Exception e) {
       logger.error("Failed to deserialize BlobIndexAdminRequest", e);
-      return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Bad_Request, null);
+      return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.BadRequest, null);
     }
 
     BlobId blobId = (BlobId) blobIndexAdminRequest.getStoreKey();
@@ -525,13 +525,13 @@ public class AmbryServerRequests extends AmbryRequests {
       Store store = storeManager.getStore(partitionId);
       if (store == null) {
         logger.error("BlobId {}'s partition[{}] doesn't exist or stopped in this host", blobId, partitionId.getId());
-        return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Replica_Unavailable, null);
+        return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.ReplicaUnavailable, null);
       }
 
       Map<String, MessageInfo> messages = store.findAllMessageInfosForKey(blobId);
       // Serialize with JSON
       String json = objectMapper.writeValueAsString(messages);
-      return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, json.getBytes());
+      return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.NoError, json.getBytes());
     } catch (StoreException e) {
       logger.error("Failed to find all message infos for given key {}", blobId, e);
       errorMessage = e.getMessage();
@@ -542,7 +542,7 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.error("Unexpected error when handleBlobIndexRequest", e);
       errorMessage = e.getMessage();
     }
-    return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Unknown_Error,
+    return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.UnknownError,
         errorMessage.getBytes());
   }
 
@@ -558,7 +558,7 @@ public class AmbryServerRequests extends AmbryRequests {
     // check if the force delete request is enabled.
     if (!serverConfig.serverHandleForceDeleteRequestEnabled) {
       logger.error("ForceDelete request is disabled");
-      return new AdminResponse(correlationId, clientId, ServerErrorCode.Bad_Request);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
     }
 
     ForceDeleteAdminRequest forceDeleteAdminRequest;
@@ -566,7 +566,7 @@ public class AmbryServerRequests extends AmbryRequests {
       forceDeleteAdminRequest = ForceDeleteAdminRequest.readFrom(requestStream, adminRequest, storeKeyFactory);
     } catch (Exception e) {
       logger.error("Failed to deserialize ForceDeleteAdminRequest", e);
-      return new AdminResponse(correlationId, clientId, ServerErrorCode.Bad_Request);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
     }
 
     StoreKey storeKey = forceDeleteAdminRequest.getStoreKey();
@@ -582,22 +582,22 @@ public class AmbryServerRequests extends AmbryRequests {
       if (store == null) {
         logger.error("ForceDeleteAdminRequest BlobId {}'s partition[{}] doesn't exist or stopped in this host", blobId,
             partitionId.getId());
-        return new AdminResponse(correlationId, clientId, ServerErrorCode.Replica_Unavailable);
+        return new AdminResponse(correlationId, clientId, ServerErrorCode.ReplicaUnavailable);
       }
       // MessageInfo.size is supposed to be DeleteMessageFormatInputStream.size(). store.forceDelete will recalculate it.
       MessageInfo info = new MessageInfo(storeKey, 0, accountId, containerId, operationTimeMs, lifeVersion);
 
       store.forceDelete(Collections.singletonList(info));
-      return new AdminResponse(correlationId, clientId, ServerErrorCode.No_Error);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.NoError);
     } catch (StoreException e) {
       logger.error("ForceDeleteAdminRequest failed to execute on given key {}", blobId, e);
-      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
-        return new AdminResponse(correlationId, clientId, Blob_Already_Exists);
+      if (e.getErrorCode() == StoreErrorCodes.AlreadyExist) {
+        return new AdminResponse(correlationId, clientId, BlobAlreadyExists);
       }
     } catch (Exception e) {
       logger.error("ForceDeleteAdminRequest Unexpected error when handleForceDeleteRequest", e);
     }
-    return new AdminResponse(correlationId, clientId, ServerErrorCode.Unknown_Error);
+    return new AdminResponse(correlationId, clientId, ServerErrorCode.UnknownError);
   }
 
   /**
@@ -607,7 +607,7 @@ public class AmbryServerRequests extends AmbryRequests {
    */
   private ServerErrorCode handleStartStoreRequest(PartitionId partitionId) {
     ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, true);
-    if (!error.equals(ServerErrorCode.No_Error)) {
+    if (!error.equals(ServerErrorCode.NoError)) {
       logger.debug("Validate request fails for {} with error code {} when trying to start store", partitionId, error);
       return error;
     }
@@ -616,7 +616,7 @@ public class AmbryServerRequests extends AmbryRequests {
     controlRequestForPartitions(EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest), partitionIds, false);
     if (!storeManager.startBlobStore(partitionId)) {
       logger.error("Starting BlobStore fails on {}", partitionId);
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     // 2. add replica to replication manager if needed
     if (replicationEngine instanceof ReplicationManager) {
@@ -632,7 +632,7 @@ public class AmbryServerRequests extends AmbryRequests {
             RequestOrResponseType.TtlUpdateRequest), partitionIds, true);
     if (!replicationEngine.controlReplicationForPartitions(partitionIds, Collections.emptyList(), true)) {
       logger.error("Could not enable replication on {}", partitionIds);
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     // 4. reset partition state if it's in error state (will trigger state transition)
     boolean isLocalStoreInErrorState =
@@ -642,7 +642,7 @@ public class AmbryServerRequests extends AmbryRequests {
     if (isLocalStoreInErrorState && clusterParticipant != null) {
       if (!clusterParticipant.resetPartitionState(partitionId.toPathString())) {
         logger.error("Failed to reset partition {}", partitionId);
-        return ServerErrorCode.Unknown_Error;
+        return ServerErrorCode.UnknownError;
       }
     }
     // 5. remove replica from stopped list (if Helix is adopted)
@@ -651,15 +651,15 @@ public class AmbryServerRequests extends AmbryRequests {
     if (!failToUpdateList.isEmpty() && clusterParticipant != null) {
       logger.error("Fail to remove BlobStore(s) {} from stopped list after start operation completed",
           failToUpdateList.toArray());
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     // 6. enable compaction on this store
     if (!storeManager.controlCompactionForBlobStore(partitionId, true)) {
       logger.error("Enable compaction fails on given BlobStore {}", partitionId);
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     logger.info("Store is successfully started and functional for partition: {}", partitionId);
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   /**
@@ -671,29 +671,29 @@ public class AmbryServerRequests extends AmbryRequests {
    */
   private ServerErrorCode handleStopStoreRequest(PartitionId partitionId, short numReplicasCaughtUpPerPartition) {
     ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, false);
-    if (!error.equals(ServerErrorCode.No_Error)) {
+    if (!error.equals(ServerErrorCode.NoError)) {
       logger.debug("Validate request fails for {} with error code {} when trying to stop store", partitionId, error);
       return error;
     }
     if (numReplicasCaughtUpPerPartition < 0) {
       logger.debug("The number of replicas to catch up should not be less than zero {}",
           numReplicasCaughtUpPerPartition);
-      return ServerErrorCode.Bad_Request;
+      return ServerErrorCode.BadRequest;
     }
     if (!storeManager.controlCompactionForBlobStore(partitionId, false)) {
       logger.error("Disable compaction fails on given BlobStore {}", partitionId);
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
     controlRequestForPartitions(EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
         RequestOrResponseType.TtlUpdateRequest), partitionIds, false);
     if (!replicationEngine.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(), false)) {
       logger.error("Could not disable replication on {}", partitionIds);
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     if (!isRemoteLagLesserOrEqual(partitionIds, 0, numReplicasCaughtUpPerPartition)) {
       logger.debug("Catchup not done on {}", partitionIds);
-      return Retry_After_Backoff;
+      return RetryAfterBackoff;
     }
     controlRequestForPartitions(
         EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest), partitionIds,
@@ -706,7 +706,7 @@ public class AmbryServerRequests extends AmbryRequests {
       if (!failToUpdateList.isEmpty() && clusterParticipant != null) {
         logger.error("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
             failToUpdateList.toArray());
-        error = ServerErrorCode.Unknown_Error;
+        error = ServerErrorCode.UnknownError;
       }
       // After store is shut down and stopped state is updated, we also need to temporarily disable this replica if Helix
       // is adopted. The intention here is to force Helix to re-elect a new leader replica if necessary.
@@ -719,7 +719,7 @@ public class AmbryServerRequests extends AmbryRequests {
         clusterParticipant.setReplicaDisabledState(storeManager.getReplica(partitionId.toPathString()), true);
       }
     } else {
-      error = ServerErrorCode.Unknown_Error;
+      error = ServerErrorCode.UnknownError;
       logger.error("Shutting down BlobStore fails on {}", partitionId);
     }
     return error;
@@ -731,27 +731,27 @@ public class AmbryServerRequests extends AmbryRequests {
    * @return {@link ServerErrorCode} represents result of handling admin request.
    */
   private ServerErrorCode handleAddStoreRequest(PartitionId partitionId) {
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode = ServerErrorCode.NoError;
     ReplicaId replicaToAdd = clusterMap.getBootstrapReplica(partitionId.toPathString(), currentNode);
     if (replicaToAdd == null) {
       logger.error("No new replica found for {} in cluster map", partitionId);
-      return ServerErrorCode.Replica_Unavailable;
+      return ServerErrorCode.ReplicaUnavailable;
     }
     // Attempt to add store into storage manager. If store already exists, fail adding store request.
     if (!storeManager.addBlobStore(replicaToAdd)) {
       logger.error("Failed to add {} into storage manager", partitionId);
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     // Attempt to add replica into replication manager. If replica already exists, fail adding replica request
     if (!((ReplicationManager) replicationEngine).addReplica(replicaToAdd)) {
       logger.error("Failed to add {} into replication manager", partitionId);
-      return ServerErrorCode.Unknown_Error;
+      return ServerErrorCode.UnknownError;
     }
     // Attempt to add replica into stats manager. If replica already exists, fail adding replica request
     if (statsManager.addReplica(replicaToAdd)) {
       logger.info("{} is successfully added into storage manager, replication manager and stats manager.", partitionId);
     } else {
-      errorCode = ServerErrorCode.Unknown_Error;
+      errorCode = ServerErrorCode.UnknownError;
       logger.error("Failed to add {} into stats manager", partitionId);
     }
     return errorCode;
@@ -763,11 +763,11 @@ public class AmbryServerRequests extends AmbryRequests {
    * @return {@link ServerErrorCode} represents result of handling admin request.
    */
   private ServerErrorCode handleRemoveStoreRequest(PartitionId partitionId) throws StoreException, IOException {
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode = ServerErrorCode.NoError;
     ReplicaId replicaId = storeManager.getReplica(partitionId.toPathString());
     if (replicaId == null) {
       logger.error("{} doesn't exist on current node", partitionId);
-      return ServerErrorCode.Partition_Unknown;
+      return ServerErrorCode.PartitionUnknown;
     }
     // Attempt to remove replica from stats manager. If replica doesn't exist, log info but don't fail the request
     statsManager.removeReplica(replicaId);
@@ -783,7 +783,7 @@ public class AmbryServerRequests extends AmbryRequests {
         replicaStatusDelegate.unmarkStopped(Collections.singletonList(replicaId));
       }
     } else {
-      errorCode = ServerErrorCode.Unknown_Error;
+      errorCode = ServerErrorCode.UnknownError;
     }
     return errorCode;
   }
@@ -794,14 +794,14 @@ public class AmbryServerRequests extends AmbryRequests {
    * @param requestType the {@link RequestOrResponseType} being validated.
    * @param skipPartitionAndDiskAvailableCheck whether to skip ({@code true}) conditions check for the availability of
    *                                           partition and disk.
-   * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
+   * @return {@link ServerErrorCode#NoError} error if the partition can be written to, or the corresponding error code
    *         if it cannot.
    */
   @Override
   protected ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
       boolean skipPartitionAndDiskAvailableCheck) {
     ServerErrorCode errorCode = super.validateRequest(partition, requestType, skipPartitionAndDiskAvailableCheck);
-    if (errorCode != ServerErrorCode.No_Error) {
+    if (errorCode != ServerErrorCode.NoError) {
       return errorCode;
     }
     if (!skipPartitionAndDiskAvailableCheck) {
@@ -809,19 +809,19 @@ public class AmbryServerRequests extends AmbryRequests {
       ReplicaId localReplica = storeManager.getReplica(partition.toPathString());
       if (localReplica != null && localReplica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
         metrics.diskUnavailableError.inc();
-        return ServerErrorCode.Disk_Unavailable;
+        return ServerErrorCode.DiskUnavailable;
       }
       // Check if partition exists on this node and that the store for this partition is available
       errorCode = storeManager.checkLocalPartitionStatus(partition, localReplica);
       switch (errorCode) {
-        case Disk_Unavailable:
+        case DiskUnavailable:
           metrics.diskUnavailableError.inc();
           localReplica.markDiskDown();
           return errorCode;
-        case Replica_Unavailable:
+        case ReplicaUnavailable:
           metrics.replicaUnavailableError.inc();
           return errorCode;
-        case Partition_Unknown:
+        case PartitionUnknown:
           metrics.partitionUnknownError.inc();
           return errorCode;
       }
@@ -830,14 +830,14 @@ public class AmbryServerRequests extends AmbryRequests {
     if (requestType.equals(RequestOrResponseType.PutRequest)
         && partition.getPartitionState() == PartitionState.READ_ONLY) {
       metrics.partitionReadOnlyError.inc();
-      return ServerErrorCode.Partition_ReadOnly;
+      return ServerErrorCode.PartitionReadOnly;
     }
     // Ensure the request is enabled.
     if (!isRequestEnabled(requestType, partition)) {
       metrics.temporarilyDisabledError.inc();
-      return ServerErrorCode.Temporarily_Disabled;
+      return ServerErrorCode.TemporarilyDisabled;
     }
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   /**

@@ -21,7 +21,6 @@ import com.github.ambry.store.MessageInfo;
 import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,7 +49,7 @@ public class PartitionResponseInfo {
 
   public PartitionResponseInfo(PartitionId partitionId, List<MessageInfo> messageInfoList,
       List<MessageMetadata> messageMetadataList) {
-    this(partitionId, messageInfoList, messageMetadataList, ServerErrorCode.No_Error, GetResponse.getCurrentVersion());
+    this(partitionId, messageInfoList, messageMetadataList, ServerErrorCode.NoError, GetResponse.getCurrentVersion());
   }
 
   public PartitionResponseInfo(PartitionId partitionId, ServerErrorCode errorCode) {
@@ -80,11 +79,11 @@ public class PartitionResponseInfo {
         MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(stream, map,
             getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       return new PartitionResponseInfo(partitionId, new ArrayList<>(), new ArrayList<>(), error, getResponseVersion);
     } else {
       return new PartitionResponseInfo(partitionId, messageInfoAndMetadataList.getMessageInfoList(),
-          messageInfoAndMetadataList.getMessageMetadataList(), ServerErrorCode.No_Error, getResponseVersion);
+          messageInfoAndMetadataList.getMessageMetadataList(), ServerErrorCode.NoError, getResponseVersion);
     }
   }
 

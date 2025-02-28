@@ -59,7 +59,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
-      GetOption option) {
+      GetOption option, boolean localGet) {
     CompletableFuture<NamedBlobRecord> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
@@ -93,6 +93,10 @@ public class TestNamedBlobDb implements NamedBlobDb {
     if (!allRecords.containsKey(accountName) || !allRecords.get(accountName).containsKey(containerName)) {
       future.complete(new Page<>(entries, nextContinuationToken));
       return future;
+    }
+
+    if (blobNamePrefix == null) {
+      blobNamePrefix = "";
     }
 
     TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> allNamedBlobsInContainer =

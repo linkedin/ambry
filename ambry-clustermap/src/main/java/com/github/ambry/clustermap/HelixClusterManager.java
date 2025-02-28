@@ -836,7 +836,6 @@ public class HelixClusterManager implements ClusterMap {
         bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
             ReplicaSealStatus.NOT_SEALED);
         logger.info("Created bootstrap replica {} for Partition {}", bootstrapReplica, partitionIdStr);
-
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
@@ -1443,6 +1442,22 @@ public class HelixClusterManager implements ClusterMap {
         }
       }
       return count;
+    }
+
+    /**
+     * @return the count of partition that are on this host and sealed.
+     */
+    long getOnHostPartitionSealedCount() {
+      if (!instanceNameToAmbryDataNode.containsKey(selfInstanceName)) {
+        // Frontend nodes
+        return 0L;
+      }
+      AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(selfInstanceName);
+      Map<String, AmbryReplica> replicas = ambryDataNodeToAmbryReplicas.get(dataNode);
+      if (replicas == null) {
+        return 0L;
+      }
+      return replicas.values().stream().filter(AmbryReplica::isSealed).count();
     }
 
     /**
@@ -2343,7 +2358,8 @@ public class HelixClusterManager implements ClusterMap {
     List<String> liveInstances = allInstances.stream()
         .map(instanceNameToAmbryDataNode::get)
         .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
-        .map(ClusterMapUtils::getInstanceName).collect(Collectors.toList());
+        .map(ClusterMapUtils::getInstanceName)
+        .collect(Collectors.toList());
     List<String> unavailableInstances = allInstances.stream()
         .map(instanceNameToAmbryDataNode::get)
         .filter(dn -> dn.getState() == HardwareState.UNAVAILABLE)

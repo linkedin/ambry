@@ -163,7 +163,7 @@ public class DiskSpaceAllocator {
       metrics.diskSpaceAllocatorInitFailureCount.inc();
       poolState = PoolState.NOT_INVENTORIED;
       throw new StoreException("Exception while initializing DiskSpaceAllocator pool", e,
-          StoreErrorCodes.Initialization_Error);
+          StoreErrorCodes.InitializationError);
     } finally {
       long elapsedTime = System.currentTimeMillis() - startTime;
       logger.info("initializePool took {} ms", elapsedTime);

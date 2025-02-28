@@ -82,7 +82,7 @@ public class MessageFormatRecordTest {
         format.verifyHeader();
         Assert.assertEquals(true, false);
       } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
       }
     }
 
@@ -105,7 +105,7 @@ public class MessageFormatRecordTest {
         format.verifyHeader();
         fail("Corrupt header verification should have failed");
       } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
       }
     }
 
@@ -129,7 +129,7 @@ public class MessageFormatRecordTest {
         format.verifyHeader();
         fail("Corrupt header verification should have failed");
       } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
       }
     }
 
@@ -151,7 +151,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlobEncryptionKey(new ByteBufferInputStream(output));
       fail("Encryption key record deserialization should have failed for corrupt data");
     } catch (MessageFormatException e) {
-      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
     }
 
     // Test usermetadata V1 record
@@ -171,7 +171,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
       Assert.assertEquals(true, false);
     } catch (MessageFormatException e) {
-      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
     }
 
     // Test blob record V1
@@ -200,7 +200,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData));
       Assert.assertEquals(true, false);
     } catch (MessageFormatException e) {
-      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
     }
   }
 
@@ -266,7 +266,7 @@ public class MessageFormatRecordTest {
         MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
         fail("Deserialization of BlobProperties should have failed ");
       } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
       }
     }
 
@@ -448,7 +448,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecord));
       fail("Deserialization of a corrupt update record V1 should have failed ");
     } catch (MessageFormatException e) {
-      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
     }
   }
 
@@ -483,7 +483,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecord));
       fail("Deserialization of a corrupt update record V2 should have failed ");
     } catch (MessageFormatException e) {
-      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
     }
   }
 
@@ -551,7 +551,7 @@ public class MessageFormatRecordTest {
         MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecordBuf));
         fail("Deserialization of a corrupt update record V3 should have failed ");
       } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.DataCorrupt);
       }
     }
   }
@@ -722,7 +722,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob));
       fail("Failed to detect corruption of blob record");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.DataCorrupt, e.getErrorCode());
     }
   }
 
@@ -884,7 +884,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       fail("Failed to detect corruption of Blob record version ");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Unknown_Format_Version, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.UnknownFormatVersion, e.getErrorCode());
     }
 
     // case 2: corrupt blob type
@@ -897,7 +897,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       fail("Failed to detect corruption of blob type");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.DataCorrupt, e.getErrorCode());
     }
 
     //case 3: corrupt part of metadata content
@@ -911,7 +911,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       fail("Failed to detect corruption of metadata content");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.DataCorrupt, e.getErrorCode());
     }
   }
 
@@ -925,7 +925,7 @@ public class MessageFormatRecordTest {
     short version = stream.readShort();
     if (!isValidHeaderVersion(version)) {
       throw new MessageFormatException("Version not known while reading message - " + version,
-          MessageFormatErrorCodes.Unknown_Format_Version);
+          MessageFormatErrorCodes.UnknownFormatVersion);
     }
     byte[] bytes = new byte[getHeaderSizeForVersion(version)];
     Utils.readBytesFromStream(stream, bytes, Short.BYTES, bytes.length - Short.BYTES);

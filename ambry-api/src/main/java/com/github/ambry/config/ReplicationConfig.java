@@ -197,6 +197,14 @@ public class ReplicationConfig {
   public final boolean replicationTrackPerDatacenterLagFromLocal;
 
   /**
+   * If true, register metrics that track replication bytes rate for each remote replica, from which we are replicating
+   * in replica thread.
+   */
+  @Config("replication.track.per.replica.replication.bytes")
+  @Default("false")
+  public final boolean replicationTrackPerReplicaReplicationBytes;
+
+  /**
    * The version of metadata request to be used for replication.
    */
   @Config("replication.metadata.request.version")
@@ -395,6 +403,8 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
     replicationTrackPerDatacenterLagFromLocal =
         verifiableProperties.getBoolean("replication.track.per.datacenter.lag.from.local", true);
+    replicationTrackPerReplicaReplicationBytes =
+        verifiableProperties.getBoolean("replication.track.per.replica.replication.bytes", false);
     replicaMetadataRequestVersion =
         verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);

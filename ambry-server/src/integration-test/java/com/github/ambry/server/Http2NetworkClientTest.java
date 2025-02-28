@@ -173,7 +173,7 @@ public class Http2NetworkClientTest {
 
     DataInputStream dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
     PutResponse putResponse = PutResponse.readFrom(dis);
-    assertEquals("No error expected.", ServerErrorCode.No_Error, putResponse.getError());
+    assertEquals("No error expected.", ServerErrorCode.NoError, putResponse.getError());
     responseInfos.get(0).release();
 
     // Get the blob
@@ -236,7 +236,7 @@ public class Http2NetworkClientTest {
     assertEquals("Should be only one response", 1, responseInfos.size());
     dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
     DeleteResponse deleteResponse = DeleteResponse.readFrom(dis);
-    assertEquals("No error expected", ServerErrorCode.No_Error, deleteResponse.getError());
+    assertEquals("No error expected", ServerErrorCode.NoError, deleteResponse.getError());
     responseInfos.get(0).release();
   }
 
@@ -277,7 +277,7 @@ public class Http2NetworkClientTest {
     }
     NettyByteBufDataInputStream dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
     DeleteResponse deleteResponse = DeleteResponse.readFrom(dis);
-    assertEquals("Should receive blob_not_found error", ServerErrorCode.Blob_Not_Found, deleteResponse.getError());
+    assertEquals("Should receive blob_not_found error", ServerErrorCode.BlobNotFound, deleteResponse.getError());
     responseInfos.get(0).release();
 
     // Delete a non-existent blob with enabling force delete. We should not receive any error
@@ -298,7 +298,7 @@ public class Http2NetworkClientTest {
     }
     dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
     deleteResponse = DeleteResponse.readFrom(dis);
-    assertEquals("Should not receive any error", ServerErrorCode.No_Error, deleteResponse.getError());
+    assertEquals("Should not receive any error", ServerErrorCode.NoError, deleteResponse.getError());
     responseInfos.get(0).release();
   }
 

@@ -337,7 +337,7 @@ class BlobStoreCompactor {
         diskMetrics.diskCompactionErrorDueToDiskFailureCount.inc();
         logger.error("Compaction of store {} failed due to disk issue.", dataDir);
       }
-      throw new StoreException("Exception during compaction", e, StoreErrorCodes.Unknown_Error);
+      throw new StoreException("Exception during compaction", e, StoreErrorCodes.UnknownError);
     } finally {
       compactionInProgress.set(false);
       runningLatch.countDown();
@@ -982,13 +982,13 @@ class BlobStoreCompactor {
                 if (valueFromTgtIdx.isUndelete()) {
                   throw new StoreException(
                       "Id " + srcIndexEntry.getKey() + " already has undelete " + valueFromTgtIdx + " in index "
-                          + dataDir, StoreErrorCodes.ID_Undeleted);
+                          + dataDir, StoreErrorCodes.IDUndeleted);
                 }
                 // Undelete would increase the life version
                 if (valueFromTgtIdx.getLifeVersion() >= srcValue.getLifeVersion()) {
                   throw new StoreException(
                       "Id " + srcIndexEntry.getKey() + " has bad lifeversion " + valueFromTgtIdx + " in index "
-                          + dataDir, StoreErrorCodes.Life_Version_Conflict);
+                          + dataDir, StoreErrorCodes.LifeVersionConflict);
                 }
               }
               IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
@@ -1011,7 +1011,7 @@ class BlobStoreCompactor {
               }
             } else if (valueFromTgtIdx != null) {
               throw new StoreException("Cannot insert duplicate PUT entry for " + srcIndexEntry.getKey(),
-                  StoreErrorCodes.Unknown_Error);
+                  StoreErrorCodes.UnknownError);
             } else {
               // Add a PUT IndexValue with the same info (especially same lifeVersion).
               IndexValue tgtValue =
@@ -1072,11 +1072,11 @@ class BlobStoreCompactor {
         // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
         if (!file.delete()) {
           throw new StoreException("Could not delete segment file: " + file.getAbsolutePath(),
-              StoreErrorCodes.Unknown_Error);
+              StoreErrorCodes.UnknownError);
         }
       }
     } else {
-      throw new StoreException("Could not list temp files in directory: " + dataDir, StoreErrorCodes.Unknown_Error);
+      throw new StoreException("Could not list temp files in directory: " + dataDir, StoreErrorCodes.UnknownError);
     }
   }
 
@@ -1145,7 +1145,7 @@ class BlobStoreCompactor {
       logger.debug("Renaming {} to {}", from, to);
       if (!from.renameTo(to)) {
         // TODO: change error code
-        throw new StoreException("Failed to rename " + from + " to " + to, StoreErrorCodes.Unknown_Error);
+        throw new StoreException("Failed to rename " + from + " to " + to, StoreErrorCodes.UnknownError);
       }
     }
   }

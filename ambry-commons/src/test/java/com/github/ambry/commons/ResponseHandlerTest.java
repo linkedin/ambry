@@ -176,23 +176,23 @@ public class ResponseHandlerTest {
     expectedEventTypes.put(new IOException(), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
     expectedEventTypes.put(new ConnectionPoolTimeoutException(""),
         new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
-    expectedEventTypes.put(ServerErrorCode.IO_Error,
+    expectedEventTypes.put(ServerErrorCode.IOError,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
-    expectedEventTypes.put(ServerErrorCode.Disk_Unavailable,
+    expectedEventTypes.put(ServerErrorCode.DiskUnavailable,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
-    expectedEventTypes.put(ServerErrorCode.Partition_ReadOnly,
+    expectedEventTypes.put(ServerErrorCode.PartitionReadOnly,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
             ReplicaEventType.Partition_ReadOnly, ReplicaEventType.Replica_Available});
-    expectedEventTypes.put(ServerErrorCode.Replica_Unavailable,
+    expectedEventTypes.put(ServerErrorCode.ReplicaUnavailable,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
             ReplicaEventType.Replica_Unavailable});
-    expectedEventTypes.put(ServerErrorCode.Temporarily_Disabled,
+    expectedEventTypes.put(ServerErrorCode.TemporarilyDisabled,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
             ReplicaEventType.Replica_Unavailable});
-    expectedEventTypes.put(ServerErrorCode.Unknown_Error,
+    expectedEventTypes.put(ServerErrorCode.UnknownError,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
             ReplicaEventType.Replica_Available});
-    expectedEventTypes.put(ServerErrorCode.No_Error,
+    expectedEventTypes.put(ServerErrorCode.NoError,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
             ReplicaEventType.Replica_Available});
     expectedEventTypes.put(NetworkClientErrorCode.NetworkError, new ReplicaEventType[]{ReplicaEventType.Node_Timeout});

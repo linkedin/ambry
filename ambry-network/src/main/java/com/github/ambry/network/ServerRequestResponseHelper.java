@@ -19,6 +19,8 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.FileCopyGetMetaDataRequest;
+import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PurgeRequest;
@@ -96,6 +98,9 @@ public class ServerRequestResponseHelper {
         case PurgeRequest:
           request = PurgeRequest.readFrom(dis, clusterMap);
           break;
+        case FileCopyGetMetaDataRequest:
+          request = FileCopyGetMetaDataRequest.readFrom(dis, clusterMap);
+          break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
@@ -152,6 +157,9 @@ public class ServerRequestResponseHelper {
         break;
       case PurgeRequest:
         response = new PurgeResponse(request.getCorrelationId(), request.getClientId(), serverErrorCode);
+        break;
+      case FileCopyGetMetaDataRequest:
+        response = new FileCopyGetMetaDataResponse(request.getCorrelationId(), request.getClientId(), serverErrorCode);
         break;
       default:
         throw new UnsupportedOperationException("Request type not supported");

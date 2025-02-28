@@ -108,7 +108,7 @@ public class MessageFormatRecord {
         return MessageHeader_Format_V3.getHeaderSize();
       default:
         throw new MessageFormatException("Unknown header version: " + headerVersion,
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -130,7 +130,7 @@ public class MessageFormatRecord {
         return new MessageHeader_Format_V3(input);
       default:
         throw new MessageFormatException("Unknown header version: " + headerVersion,
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -151,7 +151,7 @@ public class MessageFormatRecord {
             BlobProperties_Format_V1.deserializeBlobPropertiesRecord(crcStream));
       default:
         throw new MessageFormatException("blob property version " + version + " not supported",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -168,7 +168,7 @@ public class MessageFormatRecord {
         return Update_Format_V3.deserialize(crcStream);
       default:
         throw new MessageFormatException("update record version not supported: " + version,
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -187,7 +187,7 @@ public class MessageFormatRecord {
             BlobEncryptionKey_Format_V1.deserializeBlobEncryptionKeyRecord(crcStream));
       default:
         throw new MessageFormatException("blob encryption key record version not supported",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -206,7 +206,7 @@ public class MessageFormatRecord {
             UserMetadata_Format_V1.deserializeUserMetadataRecord(crcStream));
       default:
         throw new MessageFormatException("metadata version not supported",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -236,7 +236,7 @@ public class MessageFormatRecord {
       case Blob_Version_V3:
         return new DeserializedBlob(Blob_Version_V3, Blob_Format_V3.deserializeBlobRecord(crcStream));
       default:
-        throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.Unknown_Format_Version);
+        throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.UnknownFormatVersion);
     }
   }
 
@@ -288,7 +288,7 @@ public class MessageFormatRecord {
         break;
       default:
         throw new MessageFormatException("Message header version not supported",
-            MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.UnknownFormatVersion);
     }
     header.verifyHeader();
     StoreKey storeKey = storeKeyFactory.getStoreKey(inputStream);
@@ -499,7 +499,7 @@ public class MessageFormatRecord {
       if (totalSize <= 0) {
         throw new MessageFormatException(
             "checkHeaderConstraints - totalSize " + totalSize + " needs to be greater than 0",
-            MessageFormatErrorCodes.Header_Constraint_Error);
+            MessageFormatErrorCodes.HeaderConstraintError);
       }
 
       if (blobPropertiesRecordRelativeOffset > 0 && (
@@ -510,7 +510,7 @@ public class MessageFormatRecord {
                 + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
                 + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
                 + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
-                + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+                + blobRecordRelativeOffset, MessageFormatErrorCodes.HeaderConstraintError);
       }
 
       if (updateRecordRelativeOffset > 0 && (
@@ -521,7 +521,7 @@ public class MessageFormatRecord {
             + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
             + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
             + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
-            + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+            + blobRecordRelativeOffset, MessageFormatErrorCodes.HeaderConstraintError);
       }
     }
 
@@ -626,7 +626,7 @@ public class MessageFormatRecord {
       CRC32 crc = new CRC32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
       if (crc.getValue() != getCrc()) {
-        throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.DataCorrupt);
       }
     }
   }
@@ -737,7 +737,7 @@ public class MessageFormatRecord {
       if (totalSize <= 0) {
         throw new MessageFormatException(
             "checkHeaderConstraints - totalSize " + totalSize + " needs to be greater than 0",
-            MessageFormatErrorCodes.Header_Constraint_Error);
+            MessageFormatErrorCodes.HeaderConstraintError);
       }
 
       if (blobPropertiesRecordRelativeOffset > 0 && (
@@ -748,7 +748,7 @@ public class MessageFormatRecord {
                 + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
                 + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
                 + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
-                + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+                + blobRecordRelativeOffset, MessageFormatErrorCodes.HeaderConstraintError);
       }
 
       if (updateRecordRelativeOffset > 0 && (
@@ -761,7 +761,7 @@ public class MessageFormatRecord {
             + blobEncryptionKeyRecordRelativeOffset + " blobPropertiesRecordRelativeOffset "
             + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
             + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
-            + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+            + blobRecordRelativeOffset, MessageFormatErrorCodes.HeaderConstraintError);
       }
     }
 
@@ -876,7 +876,7 @@ public class MessageFormatRecord {
       CRC32 crc = new CRC32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
       if (crc.getValue() != getCrc()) {
-        throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.DataCorrupt);
       }
     }
   }
@@ -995,13 +995,13 @@ public class MessageFormatRecord {
       if (totalSize <= 0) {
         throw new MessageFormatException(
             "checkHeaderConstraints - totalSize " + totalSize + " needs to be greater than 0",
-            MessageFormatErrorCodes.Header_Constraint_Error);
+            MessageFormatErrorCodes.HeaderConstraintError);
       }
 
       if (lifeVersion < 0) {
         throw new MessageFormatException(
             "checkHeaderConstraints - lifeVersion " + lifeVersion + " needs to be greater than or equal to 0",
-            MessageFormatErrorCodes.Header_Constraint_Error);
+            MessageFormatErrorCodes.HeaderConstraintError);
       }
 
       if (blobPropertiesRecordRelativeOffset > 0 && (
@@ -1012,7 +1012,7 @@ public class MessageFormatRecord {
                 + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
                 + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
                 + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
-                + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+                + blobRecordRelativeOffset, MessageFormatErrorCodes.HeaderConstraintError);
       }
 
       if (updateRecordRelativeOffset > 0 && (
@@ -1025,7 +1025,7 @@ public class MessageFormatRecord {
             + blobEncryptionKeyRecordRelativeOffset + " blobPropertiesRecordRelativeOffset "
             + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
             + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
-            + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+            + blobRecordRelativeOffset, MessageFormatErrorCodes.HeaderConstraintError);
       }
     }
 
@@ -1140,7 +1140,7 @@ public class MessageFormatRecord {
       CRC32 crc = new CRC32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
       if (crc.getValue() != getCrc()) {
-        throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.DataCorrupt);
       }
     }
   }
@@ -1186,13 +1186,13 @@ public class MessageFormatRecord {
         if (actualCRC != expectedCRC) {
           logger.error("corrupt data while parsing blob properties Expected CRC {} Actual CRC {}", expectedCRC,
               actualCRC);
-          throw new MessageFormatException("Blob property data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+          throw new MessageFormatException("Blob property data is corrupt", MessageFormatErrorCodes.DataCorrupt);
         }
         return properties;
       } catch (Exception e) {
         logger.error("Blob property failed to be parsed. Data may be corrupt with exception {}", e);
         throw new MessageFormatException("Blob property failed to be parsed. Data may be corrupt",
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
     }
   }
@@ -1237,7 +1237,7 @@ public class MessageFormatRecord {
       if (actualCRC != expectedCRC) {
         throw new MessageFormatException(
             "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       return new UpdateRecord(UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time, new DeleteSubRecord());
     }
@@ -1293,7 +1293,7 @@ public class MessageFormatRecord {
       if (actualCRC != expectedCRC) {
         throw new MessageFormatException(
             "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       return new UpdateRecord(accountId, containerId, updateTimeInMs, new DeleteSubRecord());
     }
@@ -1410,7 +1410,7 @@ public class MessageFormatRecord {
       if (actualCRC != expectedCRC) {
         throw new MessageFormatException(
             "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       return updateRecord;
     }
@@ -1429,7 +1429,7 @@ public class MessageFormatRecord {
           return Delete_Sub_Format_V1.deserialize(inputStream);
         default:
           throw new MessageFormatException("delete record version not supported: " + version,
-              MessageFormatErrorCodes.Unknown_Format_Version);
+              MessageFormatErrorCodes.UnknownFormatVersion);
       }
     }
 
@@ -1447,7 +1447,7 @@ public class MessageFormatRecord {
           return Undelete_Sub_Format_V1.deserialize(inputStream);
         default:
           throw new MessageFormatException("undelete record version not supported: " + version,
-              MessageFormatErrorCodes.Unknown_Format_Version);
+              MessageFormatErrorCodes.UnknownFormatVersion);
       }
     }
 
@@ -1465,7 +1465,7 @@ public class MessageFormatRecord {
           return Ttl_Update_Sub_Format_V1.deserialize(inputStream);
         default:
           throw new MessageFormatException("ttl update record version not supported: " + version,
-              MessageFormatErrorCodes.Unknown_Format_Version);
+              MessageFormatErrorCodes.UnknownFormatVersion);
       }
     }
   }
@@ -1594,7 +1594,7 @@ public class MessageFormatRecord {
       if (actualCRC != expectedCRC) {
         logger.error("corrupt data while parsing blob key record, expected CRC {} Actual CRC {}", expectedCRC,
             actualCRC);
-        throw new MessageFormatException("Blob Key is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("Blob Key is corrupt", MessageFormatErrorCodes.DataCorrupt);
       }
       return blobEncryptionKey;
     }
@@ -1643,7 +1643,7 @@ public class MessageFormatRecord {
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
         logger.error("corrupt data while parsing user metadata Expected CRC {} Actual CRC {}", expectedCRC, actualCRC);
-        throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.DataCorrupt);
       }
       return ByteBuffer.wrap(userMetadaBuffer);
     }
@@ -1690,7 +1690,7 @@ public class MessageFormatRecord {
       if (crc != streamCrc) {
         logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
         throw new MessageFormatException("corrupt data while parsing blob content",
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       return new BlobData(BlobType.DataBlob, dataSize, byteBuf);
     }
@@ -1735,7 +1735,7 @@ public class MessageFormatRecord {
       if (blobTypeOrdinal >= BlobType.values().length) {
         logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
         throw new MessageFormatException("corrupt data while parsing blob content",
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       BlobType blobContentType = BlobType.values()[blobTypeOrdinal];
       long dataSize = dataStream.readLong();
@@ -1748,7 +1748,7 @@ public class MessageFormatRecord {
       if (crc != streamCrc) {
         logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
         throw new MessageFormatException("corrupt data while parsing blob content",
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       return new BlobData(blobContentType, dataSize, byteBuf);
     }
@@ -1801,7 +1801,7 @@ public class MessageFormatRecord {
       if (blobTypeOrdinal >= BlobType.values().length) {
         logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
         throw new MessageFormatException("corrupt data while parsing blob content",
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       BlobType blobContentType = BlobType.values()[blobTypeOrdinal];
 
@@ -1819,7 +1819,7 @@ public class MessageFormatRecord {
       if (crc != streamCrc) {
         logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
         throw new MessageFormatException("corrupt data while parsing blob content",
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
 
       return new BlobData(blobContentType, dataSize, byteBuf, isCompressed);

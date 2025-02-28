@@ -208,7 +208,7 @@ class RepairRequestsSender implements Runnable {
               ResponseInfo resInfo = responses.get(0);
               ReplicateBlobResponse res = (ReplicateBlobResponse) resInfo.getResponse();
               ReplicateBlobRequest req = (ReplicateBlobRequest) resInfo.getRequestInfo().getRequest();
-              if (res.getError() == ServerErrorCode.No_Error) {
+              if (res.getError() == ServerErrorCode.NoError) {
                 RepairRequestRecord.OperationType type;
                 if (req.getOperationType() == RequestOrResponseType.TtlUpdateRequest) {
                   type = RepairRequestRecord.OperationType.TtlUpdateRequest;
@@ -219,7 +219,7 @@ class RepairRequestsSender implements Runnable {
                 metrics.repairSenderSuccessHandleCount.inc();
                 logger.info("RepairRequests Sender: Repaired {}", req);
               } else if ((req.getOperationType() == RequestOrResponseType.TtlUpdateRequest) && (
-                  res.getError() == ServerErrorCode.Blob_Not_Found || res.getError() == ServerErrorCode.Blob_Expired)) {
+                  res.getError() == ServerErrorCode.BlobNotFound || res.getError() == ServerErrorCode.BlobExpired)) {
                 // Ideally we may need create alert if we cannot repair the requests in timely matter.
                 metrics.repairSenderTtlUpdateTooLateCount.inc();
                 logger.error("RepairRequests Sender: it's too late to updateTTL {} response {}", req, res);

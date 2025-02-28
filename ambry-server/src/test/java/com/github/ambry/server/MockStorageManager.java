@@ -273,7 +273,7 @@ class MockStorageManager extends StorageManager {
         messageWriteSetReceived = new MessageFormatWriteSet(stream, infoList, false);
       } catch (Exception e) {
         throw new StoreException("Unknown error while trying to undelete blobs from store", e,
-            StoreErrorCodes.Unknown_Error);
+            StoreErrorCodes.UnknownError);
       }
       throwExceptionIfRequired();
       checkValidityOfIds(messageWriteSetReceived.getMessageSetInfo()
@@ -296,7 +296,7 @@ class MockStorageManager extends StorageManager {
 
     @Override
     public MessageInfo findKey(StoreKey key) throws StoreException {
-      throw new StoreException("doesn't exist", StoreErrorCodes.ID_Not_Found);
+      throw new StoreException("doesn't exist", StoreErrorCodes.IDNotFound);
     }
 
     @Override
@@ -395,7 +395,7 @@ class MockStorageManager extends StorageManager {
     private void checkValidityOfIds(Collection<? extends StoreKey> ids) throws StoreException {
       for (StoreKey id : ids) {
         if (!validKeysInStore.contains(id)) {
-          throw new StoreException("Not a valid key.", StoreErrorCodes.ID_Not_Found);
+          throw new StoreException("Not a valid key.", StoreErrorCodes.IDNotFound);
         }
       }
     }

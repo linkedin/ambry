@@ -24,7 +24,6 @@ import com.github.ambry.store.MessageInfo;
 import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 
 
@@ -69,7 +68,7 @@ public class ReplicaMetadataResponseInfo {
         getMessageInfoAndMetadataListSerDeVersion(replicaMetadataResponseVersion));
     messageInfoListSize = messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize();
     this.token = findToken;
-    this.errorCode = ServerErrorCode.No_Error;
+    this.errorCode = ServerErrorCode.NoError;
     messageInfoList.forEach(info -> totalSizeOfAllMessages += info.getSize());
     responseVersion = replicaMetadataResponseVersion;
   }
@@ -120,7 +119,7 @@ public class ReplicaMetadataResponseInfo {
       replicaType = ReplicaType.DISK_BACKED;
     }
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    if (error != ServerErrorCode.No_Error) {
+    if (error != ServerErrorCode.NoError) {
       return new ReplicaMetadataResponseInfo(partitionId, replicaType, error, replicaMetadataResponseVersion);
     } else {
       FindTokenFactory findTokenFactory = helper.getFindTokenFactoryFromReplicaType(replicaType);
@@ -140,7 +139,7 @@ public class ReplicaMetadataResponseInfo {
       buf.writeShort((short) replicaType.ordinal());
     }
     buf.writeShort((short) errorCode.ordinal());
-    if (errorCode == ServerErrorCode.No_Error) {
+    if (errorCode == ServerErrorCode.NoError) {
       buf.writeBytes(token.toBytes());
       messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(buf);
       buf.writeLong(remoteReplicaLagInBytes);
@@ -169,7 +168,7 @@ public class ReplicaMetadataResponseInfo {
     sb.append(partitionId);
     sb.append(replicaType.name());
     sb.append(" ServerErrorCode=").append(errorCode);
-    if (errorCode == ServerErrorCode.No_Error) {
+    if (errorCode == ServerErrorCode.NoError) {
       List<MessageInfo> messageInfos = messageInfoAndMetadataListSerde.getMessageInfoList();
       sb.append(" Token=").append(token);
       sb.append(" MessagesTotalSize=").append(totalSizeOfAllMessages);

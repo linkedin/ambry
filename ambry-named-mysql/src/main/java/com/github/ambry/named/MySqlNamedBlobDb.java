@@ -378,9 +378,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
-      GetOption option) {
-    TransactionStateTracker transactionStateTracker =
-        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+      GetOption option, boolean localGet) {
+    TransactionStateTracker transactionStateTracker = null;
+    if (!localGet) {
+      transactionStateTracker =
+          new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+    }
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
       NamedBlobRecord record =
@@ -715,10 +718,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp deletionTime = resultSet.getTimestamp(4);
           long blobSize = resultSet.getLong(5);
           Timestamp modifiedTime = resultSet.getTimestamp(6);
-
           entries.add(
               new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version,
-                  blobSize, timestampToMs(modifiedTime)));
+                  blobSize, timestampToMs(modifiedTime), false));
         }
         return new Page<>(entries, nextContinuationToken);
       }

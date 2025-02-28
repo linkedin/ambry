@@ -67,6 +67,11 @@ public class VcrRequests extends AmbryRequests {
   }
 
   @Override
+  public void handleFileCopyGetMetaDataRequest(NetworkRequest request) throws IOException, InterruptedException {
+    throw new UnsupportedOperationException("Request type not supported");
+  }
+
+  @Override
   public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
@@ -82,9 +87,9 @@ public class VcrRequests extends AmbryRequests {
     // 1. Check partition is null
     if (partition == null) {
       metrics.badRequestError.inc();
-      return ServerErrorCode.Bad_Request;
+      return ServerErrorCode.BadRequest;
     }
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   @Override

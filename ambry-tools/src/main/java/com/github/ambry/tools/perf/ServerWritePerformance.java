@@ -40,7 +40,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.Unpooled;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.ByteBuffer;
@@ -361,7 +360,7 @@ public class ServerWritePerformance {
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);
             PutResponse putResponse = PutResponse.readFrom(channel.receive().getInputStream());
-            if (putResponse.getError() != ServerErrorCode.No_Error) {
+            if (putResponse.getError() != ServerErrorCode.NoError) {
               throw new UnexpectedException("error " + putResponse.getError());
             }
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTime;
