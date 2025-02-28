@@ -15,10 +15,12 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.Objects;
 
 
 /**
@@ -70,16 +72,33 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
    * @param startOffset The start offset of the chunk.
    * @param sizeInBytes The size of the chunk in bytes.
    */
-  public FileCopyGetChunkRequest( short versionId, int correlationId,
+  public FileCopyGetChunkRequest(short versionId, int correlationId,
       String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
     super(RequestOrResponseType.FileCopyGetChunkRequest, versionId, correlationId, clientId);
-    if(partitionId == null || fileName.isEmpty() || startOffset < 0 || sizeInBytes <= 0){
-      throw new IllegalArgumentException("PartitionId, FileName, StartOffset or SizeInBytes cannot be null or negative");
-    }
+    validateRequest(versionId, partitionId, fileName, startOffset, sizeInBytes);
+
     this.partitionId = partitionId;
     this.fileName = fileName;
     this.startOffset = startOffset;
     this.chunkLengthInBytes = sizeInBytes;
+  }
+
+  private void validateRequest(short versionId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
+    validateVersion(versionId);
+    Objects.requireNonNull(partitionId, "PartitionId cannot be null");
+    Objects.requireNonNull(fileName, "FileName cannot be null");
+    Objects.requireNonNull(startOffset, "StartOffset cannot be null");
+    Objects.requireNonNull(sizeInBytes, "SizeInBytes cannot be null");
+
+    if (!fileName.endsWith("_log") && !fileName.endsWith("_index") && !fileName.endsWith("_bloom")) {
+      throw new IllegalArgumentException("Invalid file name: " + fileName);
+    }
+    if (startOffset < 0) {
+      throw new IllegalArgumentException("Invalid start offset: " + startOffset);
+    }
+    if (sizeInBytes <= 0) {
+      throw new IllegalArgumentException("Invalid size in bytes: " + sizeInBytes);
+    }
   }
 
   /**

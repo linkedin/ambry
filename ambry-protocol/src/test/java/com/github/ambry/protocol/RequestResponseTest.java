@@ -868,11 +868,11 @@ public class RequestResponseTest {
   public void doFileCopyChunkRequestTest() throws IOException {
     short requestVersionToUse = FileCopyGetChunkRequest.CURRENT_VERSION;
     FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
-        new MockPartitionId(), "file1", 1000, 100);
+        new MockPartitionId(), "0_0_log", 1000, 100);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     FileCopyGetChunkRequest deserialisedRequest = FileCopyGetChunkRequest.readFrom(requestStream, new MockClusterMap());
 
-    Assert.assertEquals("file1", deserialisedRequest.getFileName());
+    Assert.assertEquals("0_0_log", deserialisedRequest.getFileName());
     Assert.assertEquals(100, deserialisedRequest.getChunkLengthInBytes());
     Assert.assertEquals(0, deserialisedRequest.getPartitionId().getId());
     Assert.assertEquals("0", deserialisedRequest.getPartitionId().toPathString());
@@ -882,39 +882,72 @@ public class RequestResponseTest {
     request.release();
 
     try {
-      // Sending null partition id. Expected to throw exception.
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", null, "file1", 1000, 0);
+      // Sending CURRENT_VERSION + 1 as version. Expected to throw exception.
+      new FileCopyGetChunkRequest((short) (FileCopyGetChunkRequest.CURRENT_VERSION + 1),
+          111, "id1", new MockPartitionId(), "0_0_log", 1000, 100);
       Assert.fail("Should have failed");
-    } catch (IllegalArgumentException e){
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null partition id. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", null, "0_0_log", 1000, 100);
+      Assert.fail("Should have failed");
+    } catch (NullPointerException e){
       //expected
     }
     try {
       // Sending empty file name. Expected to throw exception.
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "", 1000, 0);
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "", 1000, 100);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
     try {
       // Sending negative start offset. Expected to throw exception.
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "file1", -1, 0);
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", -1, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
     try {
       // Sending negative chunk size. Expected to throw exception.
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "file1", 1000, -1);
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", 1000, -1);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
     try {
       // Sending 0 chunk size. Expected to throw exception.
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "file1", 1000, 0);
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", 1000, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
+    }
+    try {
+      // Sending filename "some_random_file". Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "some_random_file", 1000, 100);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+    try {
+      // Sending request for logsegment `0_0_log`. Not expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", 1000, 100);
+    } catch (IllegalArgumentException e){
+      Assert.fail("Not expected to fail");
+    }
+    try {
+      // Sending request for logsegment `0_0_bloom`. Not expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_bloom", 1000, 100);
+    } catch (IllegalArgumentException e){
+      Assert.fail("Not expected to fail");
+    }
+    try {
+      // Sending request for logsegment `0_0_index`. Not expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_index", 1000, 100);
+    } catch (IllegalArgumentException e){
+      Assert.fail("Not expected to fail");
     }
   }
 

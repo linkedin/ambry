@@ -1759,35 +1759,27 @@ public class AmbryRequests implements RequestAPI {
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
 
-    StoreFileChunk chunkResponse = null;
+    StoreFileChunk chunkResponse;
     FileCopyGetChunkRequest fileCopyGetChunkRequest = null;
     FileCopyGetChunkResponse response = null;
     try {
-      fileCopyGetChunkRequest =
-          FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+      fileCopyGetChunkRequest = FileCopyGetChunkRequest.readFrom(
+          new DataInputStream(request.getInputStream()), clusterMap);
 
-      ServerErrorCode error = validateRequest(fileCopyGetChunkRequest, RequestOrResponseType.FileCopyGetMetaDataRequest);
-      if (error != ServerErrorCode.NoError) {
-        logger.error("Validating FileCopyGetChunkRequest failed with error {} for request {}",
-            error, fileCopyGetChunkRequest);
-        response = new FileCopyGetChunkResponse(
-            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), error);
-      } else {
-        LogSegmentStore fileStore = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId());
-        if (null == fileStore) {
-          logger.error("FileStore is not available for partition {}", fileCopyGetChunkRequest.getPartitionId().getId());
-          throw new StoreException("FileStore is not available for partition " +
-              fileCopyGetChunkRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
-        }
-        chunkResponse = fileStore.getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(),
-            fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes());
-        response = new FileCopyGetChunkResponse(
-            FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
-            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
-            ServerErrorCode.NoError, fileCopyGetChunkRequest.getPartitionId(),
-            fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
-            fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
+      LogSegmentStore fileStore = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId());
+      if (null == fileStore) {
+        logger.error("FileStore is not available for partition {}", fileCopyGetChunkRequest.getPartitionId().getId());
+        throw new StoreException("FileStore is not available for partition " +
+            fileCopyGetChunkRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
       }
+      chunkResponse = fileStore.getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(),
+          fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes());
+      response = new FileCopyGetChunkResponse(
+          FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
+          fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
+          ServerErrorCode.NoError, fileCopyGetChunkRequest.getPartitionId(),
+          fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
+          fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
     } catch (Exception e) {
       if (null == fileCopyGetChunkRequest) {
         logger.error("Error while deserializing FileCopyGetChunkRequest", e);
@@ -1966,36 +1958,6 @@ public class AmbryRequests implements RequestAPI {
         && partition.getPartitionState() == PartitionState.READ_ONLY) {
       metrics.partitionReadOnlyError.inc();
       return ServerErrorCode.PartitionReadOnly;
-    }
-    return ServerErrorCode.NoError;
-  }
-
-  protected ServerErrorCode validateRequest(RequestOrResponse request, RequestOrResponseType requestType) {
-    if (requestType.equals(RequestOrResponseType.FileCopyGetChunkRequest)) {
-      if (!(request instanceof FileCopyGetChunkRequest)) {
-        logger.error("Request is not an instance of FileCopyGetChunkRequest");
-        return ServerErrorCode.BadRequest;
-      }
-      final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
-      final String BLOOM_FILE_NAME_SUFFIX = "bloom";
-      final String LOG_FILE_NAME_SUFFIX = "log";
-      FileCopyGetChunkRequest fileCopyGetChunkRequest = (FileCopyGetChunkRequest) request;
-
-      if (!fileCopyGetChunkRequest.getFileName().endsWith(INDEX_SEGMENT_FILE_NAME_SUFFIX)
-          && !fileCopyGetChunkRequest.getFileName().endsWith(BLOOM_FILE_NAME_SUFFIX)
-          && !fileCopyGetChunkRequest.getFileName().endsWith(LOG_FILE_NAME_SUFFIX)) {
-        logger.error("FileCopyGetChunkRequest file name is not valid");
-        return ServerErrorCode.BadRequest;
-      }
-
-      if (fileCopyGetChunkRequest.getChunkLengthInBytes() <= 0) {
-        logger.error("FileCopyGetChunkRequest chunk length is not valid");
-        return ServerErrorCode.BadRequest;
-      }
-      if (fileCopyGetChunkRequest.getStartOffset() < 0) {
-        logger.error("FileCopyGetChunkRequest start offset is not valid");
-        return ServerErrorCode.BadRequest;
-      }
     }
     return ServerErrorCode.NoError;
   }
