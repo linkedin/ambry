@@ -13,6 +13,7 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -36,7 +37,7 @@ public class FileCopyUtilsTest {
    * Test if no LEADER replica is found in the given datacenter.
    */
   @Test
-  public void testGetPeerForFileCopyFound() {
+  public void testGetPeerForFileCopyWithLeaderNotFound() {
     MockPartitionId partitionId = new MockPartitionId(123456, "RANDOM_PARTITION_CLASS");
     ReplicaId replicaId = FileCopyUtils.getPeerForFileCopy(partitionId, "datacenter");
     assertNull(replicaId);
@@ -44,10 +45,10 @@ public class FileCopyUtilsTest {
 
   /**
    * Test for {@link FileCopyUtils#getPeerForFileCopy(PartitionId, String)}
-   * Test if a LEADER replica is found in the given datacenter.
+   * Test if a LEADER replica is found in the given datacenter and it is healthy
    */
   @Test
-  public void testGetPeerForFileCopyWithLeader() {
+  public void testGetPeerForFileCopyWithLeaderFoundAndAvailable() {
     List<String> mountPaths = new ArrayList<>();
     mountPaths.add("/tmp/1");
     mountPaths.add("/tmp/2");
@@ -64,5 +65,34 @@ public class FileCopyUtilsTest {
     PartitionId leaderPartition =
         replicaId.getPartitionId().getReplicaIdsByState(ReplicaState.LEADER, "peerDatacenter").get(0).getPartitionId();
     assertEquals(partitionId, leaderPartition);
+    assertFalse(replicaId.isDown());
+  }
+
+  /**
+   * Test for {@link FileCopyUtils#getPeerForFileCopy(PartitionId, String)}
+   * Test if a LEADER replica is found in the given datacenter and it is not healthy
+   * we do not get any replica
+   */
+  @Test
+  public void testGetPeerForFileCopyWithLeaderFoundAndUnAvailable() {
+    List<String> mountPaths = new ArrayList<>();
+    mountPaths.add("/tmp/1");
+    mountPaths.add("/tmp/2");
+    Port port = new Port(1, PortType.PLAINTEXT);
+
+    MockDataNodeId dataNodeId =
+        new MockDataNodeId("peerNode", Collections.singletonList(port), mountPaths, "peerDatacenter");
+
+    PartitionId partitionId =
+        new MockPartitionId(100, MockClusterMap.DEFAULT_PARTITION_CLASS, Collections.singletonList(dataNodeId), 0);
+    // Get Healthy Leader replica first
+    ReplicaId replicaId = FileCopyUtils.getPeerForFileCopy(partitionId, "peerDatacenter");
+    assertNotNull(replicaId);
+    // Mark replica as unhealthy
+    replicaId.markDiskDown();
+
+    // we should not get any replica now as leader is unhealthy
+    replicaId = FileCopyUtils.getPeerForFileCopy(partitionId, "peerDatacenter");
+    assertNull(replicaId);
   }
 }

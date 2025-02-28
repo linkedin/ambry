@@ -17,6 +17,8 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import java.util.List;
+import java.util.Objects;
+import javax.annotation.Nonnull;
 
 
 public class FileCopyUtils {
@@ -27,11 +29,15 @@ public class FileCopyUtils {
    * @param datacenterName the name of the datacenter.
    * @return the peer replica in the given datacenter for file copy.
    */
-  static public ReplicaId getPeerForFileCopy(PartitionId partitionId, String datacenterName) {
+  static public ReplicaId getPeerForFileCopy(@Nonnull PartitionId partitionId, @Nonnull String datacenterName) {
+    Objects.requireNonNull(partitionId, "partitionId must not be null");
+    Objects.requireNonNull(datacenterName, "datacenterName must not be null");
+
     List<? extends ReplicaId> replicaIds = partitionId.getReplicaIdsByState(ReplicaState.LEADER, datacenterName);
     if (replicaIds.isEmpty()) {
       return null;
     }
-    return replicaIds.get(0);
+    ReplicaId leaderReplicaId = replicaIds.get(0);
+    return leaderReplicaId.isDown() ? null : leaderReplicaId;
   }
 }
