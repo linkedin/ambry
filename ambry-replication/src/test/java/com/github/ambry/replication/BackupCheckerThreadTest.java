@@ -227,7 +227,7 @@ public class BackupCheckerThreadTest extends ReplicationTestHelper {
             .getHostname() + "/missingKeys", record.filePath);
         Assert.assertEquals(EnumSet.of(MessageInfoType.PUT), record.acceptableLocalBlobStates);
         Assert.assertEquals(EnumSet.of(MessageInfoType.PUT), record.remoteBlobState);
-        Assert.assertEquals(StoreErrorCodes.ID_Not_Found, record.storeErrorCodes);
+        Assert.assertEquals(StoreErrorCodes.IDNotFound, record.storeErrorCodes);
       }
     }
     Assert.assertEquals(0, mockNetworkClient.numGetRequest.get());

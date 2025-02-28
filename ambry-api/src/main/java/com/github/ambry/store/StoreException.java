@@ -49,6 +49,6 @@ public class StoreException extends Exception {
    */
   public static StoreErrorCodes resolveErrorCode(Throwable t) {
     return Objects.equals(t.getMessage(), StoreException.IO_ERROR_STR) || Objects.equals(t.getMessage(),
-        StoreException.INTERNAL_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+        StoreException.INTERNAL_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.UnknownError;
   }
 }

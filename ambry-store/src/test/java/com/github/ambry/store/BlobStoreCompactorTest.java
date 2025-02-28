@@ -1758,7 +1758,7 @@ public class BlobStoreCompactorTest {
         state.index.getBlobReadInfo(id, EnumSet.allOf(StoreGetOptions.class));
         fail("Should not be able to GET " + id);
       } catch (StoreException e) {
-        assertEquals(id + " failed with error code " + e.getErrorCode(), StoreErrorCodes.ID_Deleted, e.getErrorCode());
+        assertEquals(id + " failed with error code " + e.getErrorCode(), StoreErrorCodes.IDDeleted, e.getErrorCode());
       }
     }
 
@@ -3416,7 +3416,7 @@ public class BlobStoreCompactorTest {
       compactor.compact(details, bundleReadBuffer);
       fail("Should fail with duplicate put");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals(StoreErrorCodes.UnknownError, e.getErrorCode());
       assertTrue(e.getMessage().contains("duplicate PUT"));
     }
     compactor.close(0);
@@ -4119,9 +4119,9 @@ public class BlobStoreCompactorTest {
           state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
           fail("Should not be able to GET " + id);
         } catch (StoreException e) {
-          StoreErrorCodes expectedErrorCode = compactedDeletes.contains(id) ? StoreErrorCodes.ID_Not_Found
-              : state.deletedKeys.contains(id) ? StoreErrorCodes.ID_Deleted
-                  : shouldBeCompacted ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.TTL_Expired;
+          StoreErrorCodes expectedErrorCode = compactedDeletes.contains(id) ? StoreErrorCodes.IDNotFound
+              : state.deletedKeys.contains(id) ? StoreErrorCodes.IDDeleted
+                  : shouldBeCompacted ? StoreErrorCodes.IDNotFound : StoreErrorCodes.TTLExpired;
           assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
         }
         try {
@@ -4135,8 +4135,8 @@ public class BlobStoreCompactorTest {
           }
         } catch (StoreException e) {
           assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
-          StoreErrorCodes expectedErrorCode = compactedDeletes.contains(id) ? StoreErrorCodes.ID_Not_Found
-              : state.deletedKeys.contains(id) ? StoreErrorCodes.ID_Deleted : StoreErrorCodes.ID_Not_Found;
+          StoreErrorCodes expectedErrorCode = compactedDeletes.contains(id) ? StoreErrorCodes.IDNotFound
+              : state.deletedKeys.contains(id) ? StoreErrorCodes.IDDeleted : StoreErrorCodes.IDNotFound;
           assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
         }
       } else if (state.deletedKeys.contains(id)) {
@@ -4148,7 +4148,7 @@ public class BlobStoreCompactorTest {
           fail("Should not be able to GET " + id);
         } catch (StoreException e) {
           StoreErrorCodes expectedErrorCode =
-              compactedDeletes.contains(id) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.ID_Deleted;
+              compactedDeletes.contains(id) ? StoreErrorCodes.IDNotFound : StoreErrorCodes.IDDeleted;
           if (expectedErrorCode != e.getErrorCode()) {
             assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
           }
@@ -4165,7 +4165,7 @@ public class BlobStoreCompactorTest {
         } catch (StoreException e) {
           assertTrue("Blob for " + id + " should have been retrieved", shouldBeAbsent);
           StoreErrorCodes expectedErrorCode =
-              compactedDeletes.contains(id) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.ID_Deleted;
+              compactedDeletes.contains(id) ? StoreErrorCodes.IDNotFound : StoreErrorCodes.IDDeleted;
           assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
         }
       }

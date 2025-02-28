@@ -784,7 +784,7 @@ public class GetBlobOperationTest {
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
     correlationIdToGetOperation.clear();
     for (MockServer server : mockServerLayout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
     }
     op.poll(requestRegistrationCallback);
     time.sleep(routerConfig.routerRequestTimeoutMs + 1);
@@ -838,7 +838,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op = createOperation(routerConfig, null);
     correlationIdToGetOperation.clear();
     for (MockServer server : mockServerLayout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
     }
     op.poll(requestRegistrationCallback);
     time.sleep(routerConfig.routerRequestTimeoutMs + 1);
@@ -877,7 +877,7 @@ public class GetBlobOperationTest {
 
     // Default all replicas to return not found.
     int serverCount = mockServerLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, mockServerLayout);
 
     // Set 1 not found from bootstrap, 2 not found from standby in originating dc
@@ -894,9 +894,9 @@ public class GetBlobOperationTest {
         .findFirst()
         .get();
     partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
 
     getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
   }
@@ -959,7 +959,7 @@ public class GetBlobOperationTest {
       // LEADER should return DELETED
       ReplicaId leaderReplica = localReplicas.get(0);
       mockServerLayout.getMockServer(leaderReplica.getDataNodeId().getHostname(),
-          leaderReplica.getDataNodeId().getPort()).setServerErrorForAllRequests(ServerErrorCode.Blob_Deleted);
+          leaderReplica.getDataNodeId().getPort()).setServerErrorForAllRequests(ServerErrorCode.BlobDeleted);
 
       // For remote DC, let's bring down all the replicas
       partitionId.replicaIds.stream()
@@ -984,7 +984,7 @@ public class GetBlobOperationTest {
 
     // Default all replicas to return not found.
     int serverCount = mockServerLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IOError);
     setServerErrorCodes(serverErrorCodes, mockServerLayout);
 
     // Set 3 not found from standby in originating dc
@@ -994,9 +994,9 @@ public class GetBlobOperationTest {
         serversInLocalDc.add(mockServer);
       }
     });
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
 
     getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
   }
@@ -1011,7 +1011,7 @@ public class GetBlobOperationTest {
 
     // Default all replicas to return not found.
     int serverCount = mockServerLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, mockServerLayout);
 
     // Set 1 not found from bootstrap, 2 not found from standby in originating dc
@@ -1028,15 +1028,15 @@ public class GetBlobOperationTest {
         .findFirst()
         .get();
     partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
 
     // Set two remote servers to return BlobExpired
     List<MockServer> serversInRemoteDc = new ArrayList<>(mockServerLayout.getMockServers());
     serversInRemoteDc.removeAll(serversInLocalDc);
-    serversInRemoteDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Expired);
-    serversInRemoteDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Expired);
+    serversInRemoteDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobExpired);
+    serversInRemoteDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobExpired);
 
     getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobExpired);
   }
@@ -1051,7 +1051,7 @@ public class GetBlobOperationTest {
 
     // Default all replicas to return not found.
     int serverCount = mockServerLayout.getMockServers().size();
-    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.BlobNotFound);
     setServerErrorCodes(serverErrorCodes, mockServerLayout);
 
     // Set 1 success and rest not found in originating dc
@@ -1068,9 +1068,9 @@ public class GetBlobOperationTest {
         .findFirst()
         .get();
     partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
-    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.NoError);
 
     getErrorCodeChecker.testAndAssert(null);
   }
@@ -1116,7 +1116,7 @@ public class GetBlobOperationTest {
     correlationIdToGetOperation.clear();
     // all return Blob_Not_Found
     for (MockServer server : mockServerLayout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
     }
     op.poll(requestRegistrationCallback);
 
@@ -1190,7 +1190,7 @@ public class GetBlobOperationTest {
     correlationIdToGetOperation.clear();
     // all return Blob_Not_Found
     for (MockServer server : mockServerLayout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
     }
     op.poll(requestRegistrationCallback);
 
@@ -1282,7 +1282,7 @@ public class GetBlobOperationTest {
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     try {
       for (MockServer server : mockServerLayout.getMockServers()) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
       GetBlobOperation op = createOperationAndComplete(null);
       assertFailureAndCheckErrorCode(op, RouterErrorCode.AmbryUnavailable);
@@ -1305,7 +1305,7 @@ public class GetBlobOperationTest {
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     try {
       for (MockServer server : mockServerLayout.getMockServers()) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
       long retryCountBefore = routerMetrics.getBlobRetryCount.getCount();
       GetBlobOperation op = createOperation(routerConfig, null);
@@ -1345,8 +1345,8 @@ public class GetBlobOperationTest {
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     try {
       List<ServerErrorCode> errorCodes = new ArrayList<>();
-      errorCodes.add(ServerErrorCode.Replica_Unavailable); // First get return unavailable
-      errorCodes.add(ServerErrorCode.No_Error); // Second get return no_error
+      errorCodes.add(ServerErrorCode.ReplicaUnavailable); // First get return unavailable
+      errorCodes.add(ServerErrorCode.NoError); // Second get return no_error
       for (MockServer server : mockServerLayout.getMockServers()) {
         server.setServerErrors(errorCodes);
       }
@@ -1421,7 +1421,7 @@ public class GetBlobOperationTest {
       // For all the blobs, return unavailable
       for (MockServer server : mockServerLayout.getMockServers()) {
         for (BlobId blobId : blobIds) {
-          server.setErrorCodeForBlob(blobId.getID(), ServerErrorCode.Replica_Unavailable);
+          server.setErrorCodeForBlob(blobId.getID(), ServerErrorCode.ReplicaUnavailable);
         }
       }
       options = new GetBlobOptionsInternal(
@@ -1507,7 +1507,7 @@ public class GetBlobOperationTest {
   @Test
   public void testBlobNotFoundCase() throws Exception {
     doPut();
-    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.Blob_Not_Found, replicasCount), mockServerLayout,
+    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.BlobNotFound, replicasCount), mockServerLayout,
         RouterErrorCode.BlobDoesNotExist, new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
@@ -1530,12 +1530,12 @@ public class GetBlobOperationTest {
   public void testErrorPrecedenceWithSpecialCase() throws Exception {
     doPut();
     Map<ServerErrorCode, RouterErrorCode> serverErrorToRouterError = new HashMap<>();
-    serverErrorToRouterError.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
-    serverErrorToRouterError.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-    serverErrorToRouterError.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
+    serverErrorToRouterError.put(ServerErrorCode.BlobDeleted, RouterErrorCode.BlobDeleted);
+    serverErrorToRouterError.put(ServerErrorCode.BlobExpired, RouterErrorCode.BlobExpired);
+    serverErrorToRouterError.put(ServerErrorCode.BlobAuthorizationFailure, RouterErrorCode.BlobAuthorizationFailure);
     for (Map.Entry<ServerErrorCode, RouterErrorCode> entry : serverErrorToRouterError.entrySet()) {
       Map<ServerErrorCode, Integer> errorCounts = new HashMap<>();
-      errorCounts.put(ServerErrorCode.Replica_Unavailable, replicasCount - 1);
+      errorCounts.put(ServerErrorCode.ReplicaUnavailable, replicasCount - 1);
       errorCounts.put(entry.getKey(), 1);
       testWithErrorCodes(errorCounts, mockServerLayout, entry.getValue(), getErrorCodeChecker);
     }
@@ -1555,14 +1555,14 @@ public class GetBlobOperationTest {
         .collect(Collectors.toList());
     mockServerLayout.getMockServers().forEach(s -> {
       if (!localDcServers.contains(s)) {
-        s.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+        s.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
       }
     });
     for (int i = 0; i < 3; ++i) {
       if (i < 2) {
-        localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
+        localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.DiskUnavailable);
       } else {
-        localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+        localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
       }
     }
     getErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
@@ -1602,15 +1602,15 @@ public class GetBlobOperationTest {
   public void testAuthorizationFailureOverrideAll() throws Exception {
     doPut();
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
-    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
-    serverErrorCodes[2] = ServerErrorCode.IO_Error;
-    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
-    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
-    serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
-    serverErrorCodes[6] = ServerErrorCode.Unknown_Error;
-    serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
-    serverErrorCodes[8] = ServerErrorCode.Blob_Authorization_Failure;
+    serverErrorCodes[0] = ServerErrorCode.BlobNotFound;
+    serverErrorCodes[1] = ServerErrorCode.DataCorrupt;
+    serverErrorCodes[2] = ServerErrorCode.IOError;
+    serverErrorCodes[3] = ServerErrorCode.PartitionUnknown;
+    serverErrorCodes[4] = ServerErrorCode.DiskUnavailable;
+    serverErrorCodes[5] = ServerErrorCode.BlobAuthorizationFailure;
+    serverErrorCodes[6] = ServerErrorCode.UnknownError;
+    serverErrorCodes[7] = ServerErrorCode.UnknownError;
+    serverErrorCodes[8] = ServerErrorCode.BlobAuthorizationFailure;
     Map<ServerErrorCode, Integer> errorCounts = new HashMap<>();
     for (int i = 0; i < 9; i++) {
       if (!errorCounts.containsKey(serverErrorCodes[i])) {
@@ -1658,15 +1658,15 @@ public class GetBlobOperationTest {
     doPut();
     // set the status to various server level errors (remove all partition level errors or non errors)
     EnumSet<ServerErrorCode> serverErrors = EnumSet.complementOf(
-        EnumSet.of(ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired, ServerErrorCode.No_Error,
-            ServerErrorCode.Blob_Authorization_Failure, ServerErrorCode.Blob_Not_Found));
+        EnumSet.of(ServerErrorCode.BlobDeleted, ServerErrorCode.BlobExpired, ServerErrorCode.NoError,
+            ServerErrorCode.BlobAuthorizationFailure, ServerErrorCode.BlobNotFound));
     for (ServerErrorCode serverErrorCode : serverErrors) {
       mockServerLayout.getMockServers().forEach(server -> server.setServerErrorForAllRequests(serverErrorCode));
       GetBlobOperation op = createOperationAndComplete(null);
       RouterErrorCode expectedRouterError;
       switch (serverErrorCode) {
-        case Replica_Unavailable:
-        case Disk_Unavailable:
+        case ReplicaUnavailable:
+        case DiskUnavailable:
           // Even if all the disks are unavailable (which should be extremely rare), we will return AmbryUnavailable.
           // Once the disks are back up, we will return BlobNotFound.
           expectedRouterError = RouterErrorCode.AmbryUnavailable;
@@ -1738,10 +1738,10 @@ public class GetBlobOperationTest {
     // set the status to various server level or partition level errors (not Blob_Deleted or Blob_Expired - as they
     // are final), except for one of the servers in the datacenter where the put happened (we do this as puts only go
     // to the local dc, whereas gets go cross colo).
-    serverErrors.remove(ServerErrorCode.Blob_Deleted);
-    serverErrors.remove(ServerErrorCode.Blob_Expired);
-    serverErrors.remove(ServerErrorCode.No_Error);
-    serverErrors.remove(ServerErrorCode.Blob_Authorization_Failure);
+    serverErrors.remove(ServerErrorCode.BlobDeleted);
+    serverErrors.remove(ServerErrorCode.BlobExpired);
+    serverErrors.remove(ServerErrorCode.NoError);
+    serverErrors.remove(ServerErrorCode.BlobAuthorizationFailure);
     boolean goodServerMarked = false;
     boolean notFoundSetInOriginalDC = false;
     for (MockServer mockServer : mockServers) {
@@ -1749,14 +1749,14 @@ public class GetBlobOperationTest {
       // make sure in the original dc, we don't set Blob_Not_Found twice.
       if (mockServer.getDataCenter().equals(dcWherePutHappened)) {
         if (!goodServerMarked) {
-          mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
+          mockServer.setServerErrorForAllRequests(ServerErrorCode.NoError);
           goodServerMarked = true;
         } else {
           if (!notFoundSetInOriginalDC) {
             mockServer.setServerErrorForAllRequests(code);
-            notFoundSetInOriginalDC = code == ServerErrorCode.Blob_Not_Found;
+            notFoundSetInOriginalDC = code == ServerErrorCode.BlobNotFound;
           } else {
-            while (code == ServerErrorCode.Blob_Not_Found) {
+            while (code == ServerErrorCode.BlobNotFound) {
               code = serverErrors.get(random.nextInt(serverErrors.size()));
             }
             mockServer.setServerErrorForAllRequests(code);
@@ -1806,7 +1806,7 @@ public class GetBlobOperationTest {
   @Test
   public void testDataChunkFailure() throws Exception {
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
-      if (serverErrorCode != ServerErrorCode.No_Error) {
+      if (serverErrorCode != ServerErrorCode.NoError) {
         testDataChunkError(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
       }
     }
@@ -2596,7 +2596,7 @@ public class GetBlobOperationTest {
     GetRequest getRequest =
         new GetRequest(1, "assertBlobReadSuccess", MessageFormatFlags.All, Collections.singletonList(requestInfo),
             GetOption.None);
-    GetResponse getResponse = server.makeGetResponse(getRequest, ServerErrorCode.No_Error);
+    GetResponse getResponse = server.makeGetResponse(getRequest, ServerErrorCode.NoError);
     getRequest.release();
 
     // simulating server sending response over the wire

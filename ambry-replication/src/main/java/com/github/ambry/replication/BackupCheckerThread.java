@@ -227,7 +227,7 @@ public class BackupCheckerThread extends ReplicaThread {
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
       List<RemoteReplicaInfo> replicas, DataNodeId server, List<StoreKey> storeKeysConversionLog) {
     IntStream.range(0, response.getReplicaMetadataResponseInfoList().size())
-        .filter(i -> response.getReplicaMetadataResponseInfoList().get(i).getError() == ServerErrorCode.No_Error)
+        .filter(i -> response.getReplicaMetadataResponseInfoList().get(i).getError() == ServerErrorCode.NoError)
         .forEach(i -> {
           ReplicaMetadataResponseInfo metadata = response.getReplicaMetadataResponseInfoList().get(i);
           RemoteReplicaInfo replica = replicas.get(i);
@@ -295,7 +295,7 @@ public class BackupCheckerThread extends ReplicaThread {
     remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
     remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
     // reset stored metadata response for this replica so that we send next request for metadata
-    remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+    remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.NoError));
     logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 

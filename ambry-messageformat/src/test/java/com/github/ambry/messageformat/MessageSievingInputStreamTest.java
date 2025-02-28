@@ -989,7 +989,7 @@ public class MessageSievingInputStreamTest {
     sievedStream.read(headerVersion, 0, Version_Field_Size_In_Bytes);
     short version = ByteBuffer.wrap(headerVersion).getShort();
     if (!isValidHeaderVersion(version)) {
-      throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.Data_Corrupt);
+      throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.DataCorrupt);
     }
     int headerSize = getHeaderSizeForVersion(version);
     byte[] headerArr = new byte[headerSize];
@@ -1085,7 +1085,7 @@ class ValidatingKeyConvertingTransformer implements Transformer {
       short version = headerVersion.getShort();
       if (!isValidHeaderVersion(version)) {
         throw new MessageFormatException("Header version not supported " + version,
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       int headerSize = getHeaderSizeForVersion(version);
       ByteBuffer headerBuffer = ByteBuffer.allocate(headerSize);

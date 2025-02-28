@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
@@ -23,6 +24,7 @@ import org.apache.helix.ControllerChangeListener;
 import org.apache.helix.CurrentStateChangeListener;
 import org.apache.helix.ExternalViewChangeListener;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.HelixConstants;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerProperties;
@@ -54,6 +56,7 @@ import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.apache.zookeeper.Watcher;
 
 
 public class MockHelixManagerFactory extends HelixFactory {
@@ -87,7 +90,7 @@ public class MockHelixManagerFactory extends HelixFactory {
    */
   @Override
   public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-      String zkAddr) {
+      String zkAddr, ClusterMapConfig clusterMapConfig) {
     return getHelixManager(instanceType);
   }
 
@@ -106,11 +109,11 @@ public class MockHelixManagerFactory extends HelixFactory {
 
   @Override
   public HelixManager getZkHelixManagerAndConnect(String clusterName, String instanceName, InstanceType instanceType,
-      String zkAddr) throws Exception {
+      String zkAddr, ClusterMapConfig clusterMapConfig) throws Exception {
     if (overrideGetHelixManager) {
       return mockHelixManager;
     }
-    return super.getZkHelixManagerAndConnect(clusterName, instanceName, instanceType, zkAddr);
+    return super.getZkHelixManagerAndConnect(clusterName, instanceName, instanceType, zkAddr, clusterMapConfig);
   }
 
   /**
@@ -189,6 +192,11 @@ public class MockHelixManagerFactory extends HelixFactory {
     }
 
     @Override
+    public Optional<String> getSessionIdIfLead() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void connect() throws Exception {
       if (beBad) {
         throw new IOException("Being bad");
@@ -205,6 +213,12 @@ public class MockHelixManagerFactory extends HelixFactory {
     @Override
     public void disconnect() {
       isConnected = false;
+    }
+
+    @Override
+    public void addListener(Object o, PropertyKey propertyKey, HelixConstants.ChangeType changeType,
+        Watcher.Event.EventType[] eventTypes) {
+      throw new IllegalStateException("Not implemented");
     }
 
     String getStateModelDef() {
@@ -307,6 +321,12 @@ public class MockHelixManagerFactory extends HelixFactory {
     @Override
     public void addCurrentStateChangeListener(CurrentStateChangeListener listener, String instanceName,
         String sessionId) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addTaskCurrentStateChangeListener(org.apache.helix.api.listeners.CurrentStateChangeListener listener,
+        String instanceName, String sessionId) throws Exception {
       throw new IllegalStateException("Not implemented");
     }
 

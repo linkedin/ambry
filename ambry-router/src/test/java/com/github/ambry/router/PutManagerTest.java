@@ -573,7 +573,7 @@ public class PutManagerTest {
       String host = dataNodeId.getHostname();
       int port = dataNodeId.getPort();
       MockServer server = mockServerLayout.getMockServer(host, port);
-      server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
+      server.setServerErrorForAllRequests(ServerErrorCode.UnknownError);
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
     submitPutsAndAssertFailure(expectedException, true, false, true);
@@ -599,7 +599,7 @@ public class PutManagerTest {
         String host = dataNodeIds.get(i).getHostname();
         int port = dataNodeIds.get(i).getPort();
         MockServer server = mockServerLayout.getMockServer(host, port);
-        server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
+        server.setServerErrorForAllRequests(ServerErrorCode.UnknownError);
       }
     }
     submitPutsAndAssertSuccess(true);
@@ -620,7 +620,7 @@ public class PutManagerTest {
         String host = dataNodeIds.get(i).getHostname();
         int port = dataNodeIds.get(i).getPort();
         MockServer server = mockServerLayout.getMockServer(host, port);
-        server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
+        server.setServerErrorForAllRequests(ServerErrorCode.UnknownError);
       }
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
@@ -644,8 +644,8 @@ public class PutManagerTest {
     // so we set the errors in such a way that the first request received by every node fails.
     // Note: The assumption is that there are 3 nodes per DC.
     List<ServerErrorCode> serverErrorList = new ArrayList<>();
-    serverErrorList.add(ServerErrorCode.Unknown_Error);
-    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.UnknownError);
+    serverErrorList.add(ServerErrorCode.NoError);
     for (DataNodeId dataNodeId : dataNodeIds) {
       MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
       server.setServerErrors(serverErrorList);
@@ -667,9 +667,9 @@ public class PutManagerTest {
     // but later ones fail. With 3 nodes, all partitions will come from the same nodes,
     // so we set the errors in such a way that the first request received by every node succeeds and later ones fail.
     List<ServerErrorCode> serverErrorList = new ArrayList<>();
-    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.NoError);
     for (int i = 0; i < 5; i++) {
-      serverErrorList.add(ServerErrorCode.Unknown_Error);
+      serverErrorList.add(ServerErrorCode.UnknownError);
     }
     for (DataNodeId dataNodeId : dataNodeIds) {
       MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());

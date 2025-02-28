@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,6 +30,7 @@ import org.apache.helix.AccessOption;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.HelixConstants;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerProperties;
@@ -62,6 +64,7 @@ import org.apache.helix.spectator.RoutingTableProvider;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.apache.zookeeper.Watcher;
 
 import static org.mockito.Mockito.*;
 
@@ -180,6 +183,12 @@ class MockHelixManager implements HelixManager {
     }
     helixPropertyStore.stop();
     helixPropertyStore.close();
+  }
+
+  @Override
+  public void addListener(Object o, PropertyKey propertyKey, HelixConstants.ChangeType changeType,
+      Watcher.Event.EventType[] eventTypes) {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
@@ -371,6 +380,12 @@ class MockHelixManager implements HelixManager {
   }
 
   @Override
+  public void addTaskCurrentStateChangeListener(CurrentStateChangeListener listener, String instanceName,
+      String sessionId) throws Exception {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void addCustomizedStateRootChangeListener(CustomizedStateRootChangeListener listener, String instanceName)
       throws Exception {
     throw new IllegalStateException("Not implemented");
@@ -486,6 +501,11 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public Long getSessionStartTime() {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public Optional<String> getSessionIdIfLead() {
     throw new IllegalStateException("Not implemented");
   }
 

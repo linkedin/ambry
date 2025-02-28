@@ -39,6 +39,7 @@ public class StoreMetrics {
   public final Timer deleteResponse;
 
   public final Timer batchDeleteResponse;
+  public final Timer fileCopyGetMetadataResponse;
   public final Timer ttlUpdateResponse;
   public final Timer undeleteResponse;
   public final Timer findEntriesSinceResponse;
@@ -153,6 +154,7 @@ public class StoreMetrics {
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
     batchDeleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreBatchDeleteResponse"));
+    fileCopyGetMetadataResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFileCopyGetMetadataResponse"));
     ttlUpdateResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreTtlUpdateResponse"));
     undeleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreUndeleteResponse"));
     findEntriesSinceResponse =

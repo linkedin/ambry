@@ -679,7 +679,7 @@ public class MessageFormatSendTest {
       MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
       Assert.fail("Exception is expected");
     } catch (MessageFormatException e) {
-      Assert.assertTrue(e.getErrorCode() == MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+      Assert.assertTrue(e.getErrorCode() == MessageFormatErrorCodes.StoreKeyIdMisMatch);
     }
   }
 

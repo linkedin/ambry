@@ -18,6 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3BatchDeleteHandler;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
@@ -55,7 +56,6 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.frontend.DatasetVersionPath.*;
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
@@ -113,6 +113,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
   private S3DeleteHandler s3DeleteHandler;
+  private S3BatchDeleteHandler s3BatchDeleteHandler;
   private S3ListHandler s3ListHandler;
   private S3PutHandler s3PutHandler;
   private S3HeadHandler s3HeadHandler;
@@ -217,7 +218,8 @@ class FrontendRestRequestService implements RestRequestService {
             clusterMap, quotaManager);
 
     namedBlobListHandler =
-        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
+        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics,
+            frontendConfig);
     namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
         accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager, accountService,
         deleteBlobHandler);
@@ -240,7 +242,8 @@ class FrontendRestRequestService implements RestRequestService {
         new S3MultipartUploadHandler(securityService, frontendMetrics, accountAndContainerInjector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, frontendMetrics);
-    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
+    s3BatchDeleteHandler = new S3BatchDeleteHandler(deleteBlobHandler, frontendMetrics);
+    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, s3BatchDeleteHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
     s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
     s3GetHandler =
@@ -542,6 +545,7 @@ class FrontendRestRequestService implements RestRequestService {
       securityService.preProcessRequest(restRequest, FrontendUtils.buildCallback(preProcessingMetrics, r -> {
         RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
         restRequest.setArg(REQUEST_PATH, requestPath);
+        restRequest.setArg(REST_METHOD, restRequest.getRestMethod());
         routingAction.accept(requestPath);
       }, restRequest.getUri(), logger, errorCallback));
     } catch (Exception e) {

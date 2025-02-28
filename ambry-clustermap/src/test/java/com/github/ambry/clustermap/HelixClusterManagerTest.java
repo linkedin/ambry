@@ -1470,43 +1470,43 @@ public class HelixClusterManagerTest {
     // Initial state: only disk is down; Server event: Replica_Unavailable; Expected result: disk becomes available again and replica becomes down
     mockServerEventsAndVerify(clusterManager, clusterMapConfig,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Up},
-        ServerErrorCode.Replica_Unavailable,
+        ServerErrorCode.ReplicaUnavailable,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
 
     // Initial state: only disk is down; Server event: Temporarily_Disabled; Expected result: disk becomes available again and replica becomes down
     mockServerEventsAndVerify(clusterManager, clusterMapConfig,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Up},
-        ServerErrorCode.Temporarily_Disabled,
+        ServerErrorCode.TemporarilyDisabled,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
 
     // Initial state: disk and replica are down; Server event: Replica_Unavailable; Expected result: disk becomes available again
     mockServerEventsAndVerify(clusterManager, clusterMapConfig,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
-        ServerErrorCode.Replica_Unavailable,
+        ServerErrorCode.ReplicaUnavailable,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
 
     // Initial state: disk and replica are down; Server event: Temporarily_Disabled; Expected result: disk becomes available again
     mockServerEventsAndVerify(clusterManager, clusterMapConfig,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
-        ServerErrorCode.Temporarily_Disabled,
+        ServerErrorCode.TemporarilyDisabled,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
 
     // Initial state: disk and replica are down; Server event: Partition_ReadOnly; Expected result: disk and replica become available again
     mockServerEventsAndVerify(clusterManager, clusterMapConfig,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
-        ServerErrorCode.Partition_ReadOnly,
+        ServerErrorCode.PartitionReadOnly,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Up});
 
     // Initial state: everything is up; Server event: IO_Error; Expected result: disk and replica become unavailable
     mockServerEventsAndVerify(clusterManager, clusterMapConfig,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Up},
-        ServerErrorCode.IO_Error,
+        ServerErrorCode.IOError,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down});
 
     // Initial state: everything is up; Server event: Disk_Unavailable; Expected result: disk and replica become unavailable
     mockServerEventsAndVerify(clusterManager, clusterMapConfig,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Up},
-        ServerErrorCode.Disk_Unavailable,
+        ServerErrorCode.DiskUnavailable,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down});
   }
 
@@ -2353,7 +2353,7 @@ public class HelixClusterManagerTest {
 
     @Override
     HelixManager buildZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-        String zkAddr) {
+        String zkAddr, ClusterMapConfig clusterMapConfig1) {
       if (!helixCluster.getZkAddrs().contains(zkAddr)) {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }

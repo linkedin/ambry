@@ -107,7 +107,7 @@ class DumpDataHelper {
                 + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
         totalRecordSize += header.getMessageSize() + buffer.capacity();
       } else {
-        throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
+        throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IOError);
       }
       // read blob id
       InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());

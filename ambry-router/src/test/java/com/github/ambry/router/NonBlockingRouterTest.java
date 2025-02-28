@@ -819,13 +819,13 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // All put operations make one request to each local server as there are 3 servers overall in the local DC.
       // Set the state of the mock servers so that they return success for the first 2 requests in order to succeed
       // the first two chunks.
-      serverErrorList.add(ServerErrorCode.No_Error);
-      serverErrorList.add(ServerErrorCode.No_Error);
+      serverErrorList.add(ServerErrorCode.NoError);
+      serverErrorList.add(ServerErrorCode.NoError);
       // fail requests for third and fourth data chunks including the slipped put attempts:
-      serverErrorList.add(ServerErrorCode.Unknown_Error);
-      serverErrorList.add(ServerErrorCode.Unknown_Error);
-      serverErrorList.add(ServerErrorCode.Unknown_Error);
-      serverErrorList.add(ServerErrorCode.Unknown_Error);
+      serverErrorList.add(ServerErrorCode.UnknownError);
+      serverErrorList.add(ServerErrorCode.UnknownError);
+      serverErrorList.add(ServerErrorCode.UnknownError);
+      serverErrorList.add(ServerErrorCode.UnknownError);
       // all subsequent requests (no more puts, but there will be deletes) will succeed.
       for (DataNodeId dataNodeId : dataNodeIds) {
         MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
@@ -862,7 +862,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
    */
   @Test
   public void testSuccessfulPutDataChunkDeleteCase1() throws Exception {
-    testSuccessfulPutDataChunkDelete(ServerErrorCode.Blob_Not_Found);
+    testSuccessfulPutDataChunkDelete(ServerErrorCode.BlobNotFound);
   }
 
   /**
@@ -871,7 +871,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
    */
   @Test
   public void testSuccessfulPutDataChunkDeleteCase2() throws Exception {
-    testSuccessfulPutDataChunkDelete(ServerErrorCode.Replica_Unavailable);
+    testSuccessfulPutDataChunkDelete(ServerErrorCode.ReplicaUnavailable);
   }
 
   public void testSuccessfulPutDataChunkDelete(ServerErrorCode backgroundDeletorError) throws Exception {
@@ -914,8 +914,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       List<ServerErrorCode> serverErrorList = new ArrayList<>();
       List<ServerErrorCode> deleteErrorList = new ArrayList<>();
       for (int i = 0; i < NUM_MAX_ATTEMPTS; i++) {
-        serverErrorList.add(ServerErrorCode.Unknown_Error);
-        serverErrorList.add(ServerErrorCode.No_Error);
+        serverErrorList.add(ServerErrorCode.UnknownError);
+        serverErrorList.add(ServerErrorCode.NoError);
         deleteErrorList.add(backgroundDeletorError);
       }
 
@@ -1248,12 +1248,12 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
-      testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
-      testsAndExpected.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
-      testsAndExpected.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-      testsAndExpected.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
-      testsAndExpected.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
-      testsAndExpected.put(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError);
+      testsAndExpected.put(ServerErrorCode.BlobNotFound, RouterErrorCode.BlobDoesNotExist);
+      testsAndExpected.put(ServerErrorCode.BlobDeleted, RouterErrorCode.BlobDeleted);
+      testsAndExpected.put(ServerErrorCode.BlobExpired, RouterErrorCode.BlobExpired);
+      testsAndExpected.put(ServerErrorCode.DiskUnavailable, RouterErrorCode.AmbryUnavailable);
+      testsAndExpected.put(ServerErrorCode.ReplicaUnavailable, RouterErrorCode.AmbryUnavailable);
+      testsAndExpected.put(ServerErrorCode.UnknownError, RouterErrorCode.UnexpectedInternalError);
       // note that this test makes all nodes return same server error code.
       for (Map.Entry<ServerErrorCode, RouterErrorCode> testAndExpected : testsAndExpected.entrySet()) {
         layout.getMockServers()
@@ -1295,7 +1295,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       String blobIdCheck =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null, expectedError -> {
+      testWithErrorCodes(Collections.singletonMap(ServerErrorCode.NoError, 9), serverLayout, null, expectedError -> {
         final CountDownLatch callbackCalled = new CountDownLatch(1);
         router.updateBlobTtl(null, blobId, null, Utils.Infinite_Time, (result, exception) -> {
           callbackCalled.countDown();
@@ -1339,7 +1339,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // set error status for all the local replica. read from the remote replica, it should fail
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
       try {
@@ -1360,7 +1360,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         }
       }
@@ -1370,7 +1370,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // set unavailable to all local replicas. So router.getBlob will get the Blob from remote replicas.
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
       GetBlobResult remoteGetBlobResult =
@@ -1417,7 +1417,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         }
       }
@@ -1427,7 +1427,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // set unavailable to all local replicas. So router.getBlob will get the Blob from remote replicas.
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
       router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
@@ -1473,7 +1473,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         }
       }
@@ -1483,7 +1483,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // set unavailable to all local replicas. So router.getBlob will get the Blob from remote replicas.
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
       GetBlobResult remoteGetBlobResult =
@@ -1549,10 +1549,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Blob_Already_Exists);
+            server.setServerErrorForAllRequests(ServerErrorCode.BlobAlreadyExists);
           }
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
 
@@ -1593,13 +1593,13 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         } else {
           if (remoteDataNode == null) {
             remoteDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         }
       }
@@ -1611,7 +1611,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
             .equals(remoteDataNode.getPort())) {
           server.setServerErrorForAllRequests(null);
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
 
@@ -1647,7 +1647,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // Except for source host, all other replicas are down.
       layout.getMockServers()
-          .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable));
+          .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable));
       DataNodeId sourceDataNode = null;
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
@@ -1696,7 +1696,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // set error status for all the local replica. read from the remote replica, it should fail
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
 
@@ -1719,7 +1719,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         }
       }
@@ -1737,7 +1737,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // set unavailable to all local replicas. So router.getBlob will get the Blob from remote replicas.
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
       GetBlobResult remoteGetBlobResult =
@@ -1884,7 +1884,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         @Override
         public void onEvent(ReplicaId replicaId, Object e) {
           if (e instanceof ServerErrorCode) {
-            if (e == ServerErrorCode.No_Error) {
+            if (e == ServerErrorCode.NoError) {
               successfulResponseCount.incrementAndGet();
             } else {
               invalidResponse.set(true);
@@ -1907,7 +1907,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
       router.close();
       for (MockServer mockServer : mockServerLayout.getMockServers()) {
-        mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
+        mockServer.setServerErrorForAllRequests(ServerErrorCode.NoError);
       }
 
       SocketNetworkClient networkClient =
@@ -2332,22 +2332,22 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   @Test
   public void testRouterMetadataCacheBlobDoesNotExistOnGetCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist, true);
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.BlobNotFound, RouterErrorCode.BlobDoesNotExist, true);
   }
 
   @Test
   public void testRouterMetadataCacheBlobDeletedOnGetCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted, true);
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.BlobDeleted, RouterErrorCode.BlobDeleted, true);
   }
 
   @Test
   public void testRouterMetadataCacheBlobExpiredOnGetCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired, true);
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.BlobExpired, RouterErrorCode.BlobExpired, true);
   }
 
   @Test
   public void testRouterMetadataCacheUnexpectedInternalErrorOnGetCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError,
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.UnknownError, RouterErrorCode.UnexpectedInternalError,
         false);
   }
 
@@ -2399,13 +2399,13 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   @Test
   public void testRouterMetadataCacheUnexpectedInternalErrorOnDeleteCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.Unknown_Error,
+    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.UnknownError,
         RouterErrorCode.UnexpectedInternalError);
   }
 
   @Test
   public void testRouterMetadataCacheBlobDoesNotExistOnDeleteCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
+    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.BlobNotFound, RouterErrorCode.BlobDoesNotExist);
   }
 
   /**
@@ -2423,10 +2423,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
-      testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
+      testsAndExpected.put(ServerErrorCode.BlobNotFound, RouterErrorCode.BlobDoesNotExist);
 
       layout.getMockServers()
-          .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
+          .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound));
       TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future = router.updateBlobTtl(null, blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.BlobDoesNotExist);
@@ -2568,7 +2568,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         if (sourceDataNode == null) {
           sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
     }
@@ -2590,7 +2590,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // simulate Replica_Unavailable for all local replicas. Then verify ttl from the remote replica
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
     }
     try {
@@ -2694,7 +2694,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         }
       }
@@ -2703,7 +2703,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // simulate Replica_Unavailable for all local replicas. Then verify ttl from the remote replica
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
       assertTtl(router, Collections.singleton(compositeBlobId), Utils.Infinite_Time);
@@ -2748,10 +2748,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           if (sourceDataNode == null) {
             sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
           } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+            server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
           }
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+          server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
         }
       }
       try {
@@ -2791,7 +2791,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // for the three local replicas, two replicas return Blob_Not_Found due to host swap.
       DataNodeId sourceDataNode = null;
       List<ServerErrorCode> serverErrors = new ArrayList<>();
-      serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first TtlUpdate Request
+      serverErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first TtlUpdate Request
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
           // local DC, return NO_ERROR for one replica,
@@ -2809,7 +2809,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       for (MockServer server : layout.getMockServers()) {
         if (server.getHostName().equals(sourceDataNode.getHostname()) && server.getHostPort()
             .equals(sourceDataNode.getPort())) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
       assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
@@ -2845,15 +2845,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       boolean oneSuccess = false;
       boolean oneDiskUnavailable = false;
       List<ServerErrorCode> serverErrors = new ArrayList<>();
-      serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first TtlUpdate Request
-      serverErrors.add(ServerErrorCode.Unknown_Error); // return Unknown_Error for the ReplicateBlob Request
+      serverErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first TtlUpdate Request
+      serverErrors.add(ServerErrorCode.UnknownError); // return Unknown_Error for the ReplicateBlob Request
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
           // local DC, return NO_ERROR for one replica and Disk unavailable for another replica.
           if (!oneSuccess) {
             oneSuccess = true;
           } else if (!oneDiskUnavailable) {
-            server.setServerErrors(Arrays.asList(ServerErrorCode.Disk_Unavailable, ServerErrorCode.Unknown_Error));
+            server.setServerErrors(Arrays.asList(ServerErrorCode.DiskUnavailable, ServerErrorCode.UnknownError));
             oneDiskUnavailable = true;
           } else {
             server.setServerErrors(serverErrors);
@@ -2898,9 +2898,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // set error status for all the replicas except one local replica
       boolean oneSuccess = false;
       List<ServerErrorCode> serverErrors = new ArrayList<>();
-      serverErrors.add(ServerErrorCode.Blob_Not_Found); // for the first TtlUpdate request
-      serverErrors.add(ServerErrorCode.No_Error); // for the ReplicateBlob request
-      serverErrors.add(ServerErrorCode.Replica_Unavailable); // for the TtlUpdate retry
+      serverErrors.add(ServerErrorCode.BlobNotFound); // for the first TtlUpdate request
+      serverErrors.add(ServerErrorCode.NoError); // for the ReplicateBlob request
+      serverErrors.add(ServerErrorCode.ReplicaUnavailable); // for the TtlUpdate retry
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
           // local DC, return NO_ERROR for one replica,
@@ -2944,7 +2944,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       }
 
@@ -2983,14 +2983,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // set two local replicas Replica_Unavailable.
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> serverErrors = new ArrayList<>();
-    serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+    serverErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first Delete Request
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica,
         if (sourceDataNode == null) {
           sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       } else {
         server.setServerErrors(serverErrors);
@@ -3013,7 +3013,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // simulate Replica_Unavailable for all local replicas. Then verify delete from the remote replica
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
     }
     try {
@@ -3107,14 +3107,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // set two replicas Replica_Unavailable. Leave one local replica available as the source of the ReplicationBlob
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> serverErrors = new ArrayList<>();
-    serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+    serverErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first Delete Request
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica,
         if (sourceDataNode == null) {
           sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       } else {
         server.setServerErrors(serverErrors);
@@ -3125,7 +3125,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // simulate Replica_Unavailable for all local replicas. Then verify delete from the remote replica
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
     }
     try {
@@ -3163,10 +3163,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> localServerErrors = new ArrayList<>();
     List<ServerErrorCode> remoteServerErrors = new ArrayList<>();
-    localServerErrors.add(ServerErrorCode.Replica_Unavailable); // return Replica_Unavailable for the first Delete
-    localServerErrors.add(ServerErrorCode.Unknown_Error);  // return Unknown_Error for the ReplicateBlob Request
-    remoteServerErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
-    remoteServerErrors.add(ServerErrorCode.Unknown_Error);  // return Unknown_Error for the ReplicateBlob Request
+    localServerErrors.add(ServerErrorCode.ReplicaUnavailable); // return Replica_Unavailable for the first Delete
+    localServerErrors.add(ServerErrorCode.UnknownError);  // return Unknown_Error for the ReplicateBlob Request
+    remoteServerErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first Delete Request
+    remoteServerErrors.add(ServerErrorCode.UnknownError);  // return Unknown_Error for the ReplicateBlob Request
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica,
@@ -3256,12 +3256,12 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> localServerErrors = new ArrayList<>();
     List<ServerErrorCode> remoteServerErrors = new ArrayList<>();
-    localServerErrors.add(ServerErrorCode.Replica_Unavailable); // return Replica_Unavailable for the first Delete
+    localServerErrors.add(ServerErrorCode.ReplicaUnavailable); // return Replica_Unavailable for the first Delete
     localServerErrors.add(
-        ServerErrorCode.Blob_Authorization_Failure); // return Blob_Authorization_Failure for the ReplicateBlob Request
-    remoteServerErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+        ServerErrorCode.BlobAuthorizationFailure); // return Blob_Authorization_Failure for the ReplicateBlob Request
+    remoteServerErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first Delete Request
     remoteServerErrors.add(
-        ServerErrorCode.Blob_Authorization_Failure); // return Blob_Authorization_Failure for the ReplicateBlob Request
+        ServerErrorCode.BlobAuthorizationFailure); // return Blob_Authorization_Failure for the ReplicateBlob Request
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica,
@@ -3314,7 +3314,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // for the three local replicas, two replicas return Blob_Not_Found due to host swap.
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> serverErrors = new ArrayList<>();
-    serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+    serverErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first Delete Request
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica,
@@ -3337,7 +3337,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     for (MockServer server : layout.getMockServers()) {
       if (server.getHostName().equals(sourceDataNode.getHostname()) && server.getHostPort()
           .equals(sourceDataNode.getPort())) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
     }
     try {
@@ -3405,9 +3405,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // set error status for all the replicas except one local replica
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> serverErrors = new ArrayList<>();
-    serverErrors.add(ServerErrorCode.Blob_Not_Found);       // for the first Delete request
-    serverErrors.add(ServerErrorCode.No_Error);             // for the ReplicateBlob request
-    serverErrors.add(ServerErrorCode.Replica_Unavailable);  // for the Delete retry
+    serverErrors.add(ServerErrorCode.BlobNotFound);       // for the first Delete request
+    serverErrors.add(ServerErrorCode.NoError);             // for the ReplicateBlob request
+    serverErrors.add(ServerErrorCode.ReplicaUnavailable);  // for the Delete retry
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica,
@@ -3417,7 +3417,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           server.setServerErrors(serverErrors);
         }
       } else {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
     }
 
@@ -3492,7 +3492,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     for (MockServer server : layout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+      server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
     }
 
     try {
@@ -3549,15 +3549,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // two local replicas are unavailable. Remote replica doesn't have the Blob.
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> serverErrors = new ArrayList<>();
-    serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
-    serverErrors.add(ServerErrorCode.Blob_Deleted); // source PutBlob is compacted, replication fails with Blob_Deleted.
+    serverErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first Delete Request
+    serverErrors.add(ServerErrorCode.BlobDeleted); // source PutBlob is compacted, replication fails with Blob_Deleted.
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica. This replica will be the source replica of the ReplicateBlob.
         if (sourceDataNode == null) {
           sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       } else {
         server.setServerErrors(serverErrors);
@@ -3624,25 +3624,25 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // There are 2 chunks for this blob.
       // All put operations make one request to each local server as there are 3 servers overall in the local DC.
       // Set the state of the mock servers so that they return success for the first request/chunk.
-      sourceServerError.add(ServerErrorCode.No_Error);
+      sourceServerError.add(ServerErrorCode.NoError);
       // fail requests for the second data chunk including the slipped put attempts.
-      sourceServerError.add(ServerErrorCode.Unknown_Error); // second data chunk
-      sourceServerError.add(ServerErrorCode.Unknown_Error); // slipped chunk
+      sourceServerError.add(ServerErrorCode.UnknownError); // second data chunk
+      sourceServerError.add(ServerErrorCode.UnknownError); // slipped chunk
       // all subsequent requests including delete will succeed on the source server.
 
       // For all the other two local servers
-      otherServerError.add(ServerErrorCode.No_Error);      // Put for the first data chunk
-      otherServerError.add(ServerErrorCode.Unknown_Error); // second data chunk
-      otherServerError.add(ServerErrorCode.Unknown_Error); // slipped chunk
+      otherServerError.add(ServerErrorCode.NoError);      // Put for the first data chunk
+      otherServerError.add(ServerErrorCode.UnknownError); // second data chunk
+      otherServerError.add(ServerErrorCode.UnknownError); // slipped chunk
       // also it fails the background deletion with Unknown_Error
-      otherServerError.add(ServerErrorCode.Unknown_Error); // delete 1st blob
-      otherServerError.add(ServerErrorCode.Unknown_Error); // delete 2nd blob
-      otherServerError.add(ServerErrorCode.Unknown_Error); // delete 3rd blob
+      otherServerError.add(ServerErrorCode.UnknownError); // delete 1st blob
+      otherServerError.add(ServerErrorCode.UnknownError); // delete 2nd blob
+      otherServerError.add(ServerErrorCode.UnknownError); // delete 3rd blob
 
       // For the remote servers. Won't receive PutRequest. The following errors are for deletion
-      remoteServerError.add(ServerErrorCode.Unknown_Error); // delete 1st blob
-      remoteServerError.add(ServerErrorCode.Unknown_Error); // delete 2nd blob
-      remoteServerError.add(ServerErrorCode.Unknown_Error); // delete 3rd blob
+      remoteServerError.add(ServerErrorCode.UnknownError); // delete 1st blob
+      remoteServerError.add(ServerErrorCode.UnknownError); // delete 2nd blob
+      remoteServerError.add(ServerErrorCode.UnknownError); // delete 3rd blob
 
       DataNodeId sourceDataNode = null;
       String localDcName = "DC3";
@@ -3725,14 +3725,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // set two local replicas Replica_Unavailable.
     DataNodeId sourceDataNode = null;
     List<ServerErrorCode> serverErrors = new ArrayList<>();
-    serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+    serverErrors.add(ServerErrorCode.BlobNotFound); // return NOT_FOUND for the first Delete Request
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         // local DC, return NO_ERROR for one replica,
         if (sourceDataNode == null) {
           sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
         } else {
-          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
         }
       } else {
         server.setServerErrors(serverErrors);
@@ -3743,7 +3743,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // simulate Replica_Unavailable for all local replicas. Then verify delete from the remote replica
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable);
       }
     }
     try {
@@ -3779,9 +3779,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
         localServers.add(server);
-        server.setServerErrors(Collections.singletonList(ServerErrorCode.Replica_Unavailable));
+        server.setServerErrors(Collections.singletonList(ServerErrorCode.ReplicaUnavailable));
       } else {
-        server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+        server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound);
       }
     }
     // After set server errors, we would see
@@ -3831,10 +3831,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       if (server.getDataCenter().equals(localDcName)) {
         localServers.add(server);
         server.setServerErrorForAllRequests(
-            ServerErrorCode.Replica_Unavailable); // originating replicas rejects all delete requests
+            ServerErrorCode.ReplicaUnavailable); // originating replicas rejects all delete requests
       } else {
         server.setServerErrors(Collections.singletonList(
-            ServerErrorCode.Blob_Not_Found)); // remote replicas reject first delete request, but accept force delete
+            ServerErrorCode.BlobNotFound)); // remote replicas reject first delete request, but accept force delete
         remoteServers.add(server);
       }
     }
@@ -3889,7 +3889,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
 
     for (MockServer server : layout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable); // replicas rejects all delete requests
+      server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable); // replicas rejects all delete requests
     }
 
     long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
@@ -3925,7 +3925,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
 
     for (MockServer server : layout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable); // replicas rejects all delete requests
+      server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable); // replicas rejects all delete requests
     }
 
     long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();
@@ -3961,11 +3961,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     boolean setSuccess = false;
     for (MockServer server : layout.getMockServers()) {
       if (!setSuccess) {
-        server.setServerErrorForAllRequests(ServerErrorCode.No_Error); // one replica to return success
+        server.setServerErrorForAllRequests(ServerErrorCode.NoError); // one replica to return success
         setSuccess = true;
       } else {
-        server.setServerErrorForAllRequests(
-            ServerErrorCode.Replica_Unavailable); // replicas rejects all delete requests
+        server.setServerErrorForAllRequests(ServerErrorCode.ReplicaUnavailable); // replicas rejects all delete requests
       }
     }
     // We have only one success, and we disabled ODR and offline repair, however, we shouldn't do force delete
@@ -4001,7 +4000,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         Utils.getRandomShort(TestUtils.RANDOM), partition, false, BlobId.BlobDataType.DATACHUNK).getID();
 
     for (MockServer server : layout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found); // replicas returns not found
+      server.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound); // replicas returns not found
     }
 
     long forceDeleteCountBefore = routerMetrics.forceDeleteBlobCount.getCount();

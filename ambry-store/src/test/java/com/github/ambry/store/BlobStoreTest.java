@@ -48,6 +48,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,7 +82,6 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONObject;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -91,6 +91,7 @@ import sun.nio.ch.FileChannelImpl;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.ReplicaState.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static com.github.ambry.store.StoreTestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
@@ -327,7 +328,7 @@ public class BlobStoreTest {
 
   private final String storeId = TestUtils.getRandomString(10);
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
-  private final DiskSpaceAllocator diskSpaceAllocator = StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR;
+  private final DiskSpaceAllocator diskSpaceAllocator = DEFAULT_DISK_SPACE_ALLOCATOR;
   private final Properties properties = new Properties();
   private final long expiresAtMs;
   // TODO: make these final once again once compactor is ready and the hack to clear state is removed
@@ -363,7 +364,7 @@ public class BlobStoreTest {
     this.isLogSegmented = isLogSegmented;
     this.enableIndexDirectMemoryUsageMetric = enableIndexDirectMemoryUsageMetric;
     properties.put("store.enable.index.direct.memory.usage.metric", Boolean.toString(enableIndexDirectMemoryUsageMetric));
-    tempDir = StoreTestUtils.createTempDirectory("storeDir-" + storeId);
+    tempDir = createTempDirectory("storeDir-" + storeId);
     tempDirStr = tempDir.getAbsolutePath();
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     long bufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
@@ -388,7 +389,7 @@ public class BlobStoreTest {
       // verify that the index object was removed from the metrics.
       assertFalse(storeMetrics.indexes.containsKey(store.getReplicaId().getPartitionId().toString()));
     }
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", cleanDirectory(tempDir, true));
     generatedKeys.clear();
     allKeys.clear();
     idsByLogSegment.clear();
@@ -418,7 +419,7 @@ public class BlobStoreTest {
     properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(true));
     //Setup threshold test properties, replicaId, mock write status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
     when(replicaStatusDelegate.unseal(any())).thenReturn(true);
     when(replicaStatusDelegate.partialSeal(any())).thenReturn(true);
@@ -504,13 +505,13 @@ public class BlobStoreTest {
   @Test
   public void multiReplicaStatusDelegatesTest() throws Exception {
     Set<ReplicaId> sealedReplicas1 = new HashSet<>();
-    ReplicaStatusDelegate mockDelegate1 = Mockito.mock(ReplicaStatusDelegate.class);
+    ReplicaStatusDelegate mockDelegate1 = mock(ReplicaStatusDelegate.class);
     doAnswer(invocation -> {
       sealedReplicas1.add(invocation.getArgument(0));
       return true;
     }).when(mockDelegate1).seal(any());
     Set<ReplicaId> sealedReplicas2 = new HashSet<>();
-    ReplicaStatusDelegate mockDelegate2 = Mockito.mock(ReplicaStatusDelegate.class);
+    ReplicaStatusDelegate mockDelegate2 = mock(ReplicaStatusDelegate.class);
     doAnswer(invocation -> {
       sealedReplicas2.add(invocation.getArgument(0));
       return true;
@@ -540,7 +541,7 @@ public class BlobStoreTest {
         .when(mockDelegate2)
         .getSealedReplicas();
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     reloadStore(defaultConfig, replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
     // make the replica sealed
     put(4, (long) (SEGMENT_CAPACITY * 0.8), Utils.Infinite_Time);
@@ -587,7 +588,7 @@ public class BlobStoreTest {
     enableIndexDirectMemoryUsageMetric = false;
 
     // attempt to start when store is already started fails
-    verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
+    verifyStartupFailure(store, StoreErrorCodes.StoreAlreadyStarted);
 
     String nonExistentDir = new File(tempDir, TestUtils.getRandomString(10)).getAbsolutePath();
 
@@ -596,7 +597,7 @@ public class BlobStoreTest {
 
     BlobStore blobStore = createBlobStore(getMockReplicaId(badPath));
 
-    verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
+    verifyStartupFailure(blobStore, StoreErrorCodes.InitializationError);
 
     ReplicaId replicaIdWithNonExistentDir = getMockReplicaId(nonExistentDir);
 
@@ -610,28 +611,28 @@ public class BlobStoreTest {
     blobStore = createBlobStore(replicaIdWithNonExistentDir);
     blobStore.start();
     BlobStore secondStore = createBlobStore(replicaIdWithNonExistentDir);
-    verifyStartupFailure(secondStore, StoreErrorCodes.Initialization_Error);
+    verifyStartupFailure(secondStore, StoreErrorCodes.InitializationError);
     blobStore.shutdown();
 
     // fail if directory is not readable
     assertTrue("Could not set readable state to false", createdDir.setReadable(false));
-    verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
+    verifyStartupFailure(blobStore, StoreErrorCodes.InitializationError);
 
     assertTrue("Could not set readable state to true", createdDir.setReadable(true));
-    assertTrue("Directory could not be deleted", StoreTestUtils.cleanDirectory(createdDir, true));
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
 
     // fail if provided path is not a directory
     File file = new File(tempDir, TestUtils.getRandomString(10));
     assertTrue("Test file could not be created", file.createNewFile());
     file.deleteOnExit();
     blobStore = createBlobStore(getMockReplicaId(file.getAbsolutePath()));
-    verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
+    verifyStartupFailure(blobStore, StoreErrorCodes.InitializationError);
   }
 
   @Test
   public void storeStartupTests2() throws IOException, StoreException {
     if (!isLogSegmented) {
-      verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
+      verifyStartupFailure(store, StoreErrorCodes.StoreAlreadyStarted);
       return;
     }
 
@@ -683,7 +684,7 @@ public class BlobStoreTest {
     MockMessageStoreHardDelete hd = (MockMessageStoreHardDelete) hardDelete;
     for (MockId id : deletedKeys) {
       // cannot get without StoreGetOptions
-      verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
+      verifyGetFailure(id, StoreErrorCodes.IDDeleted);
 
       // with StoreGetOptions.Store_Include_Deleted
       storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
@@ -696,7 +697,7 @@ public class BlobStoreTest {
 
     for (MockId id : expiredKeys) {
       // cannot get without StoreGetOptions
-      verifyGetFailure(id, StoreErrorCodes.TTL_Expired);
+      verifyGetFailure(id, StoreErrorCodes.TTLExpired);
 
       storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Expired));
       checkStoreInfo(storeInfo, Collections.singleton(id));
@@ -710,7 +711,7 @@ public class BlobStoreTest {
     delete(addedId);
 
     // non existent ID has to fail
-    verifyGetFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    verifyGetFailure(getUniqueId(), StoreErrorCodes.IDNotFound);
 
     // Verify the partition failure
     final String newPartitionString = "newPartitionId";
@@ -856,13 +857,13 @@ public class BlobStoreTest {
         try {
           future.get(1, TimeUnit.SECONDS);
           // one future is successful.
-          verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
+          verifyGetFailure(id, StoreErrorCodes.IDDeleted);
           successCount++;
         } catch (ExecutionException e) {
           // all the others fail.
           failedCount++;
           assertTrue(e.getCause() instanceof StoreException);
-          assertEquals(StoreErrorCodes.Already_Exist, ((StoreException) e.getCause()).getErrorCode());
+          assertEquals(StoreErrorCodes.AlreadyExist, ((StoreException) e.getCause()).getErrorCode());
         }
       }
       // one is successful, all the others fails.
@@ -904,7 +905,7 @@ public class BlobStoreTest {
         } catch (ExecutionException e) {
           failedCount++;
           assertTrue(e.getCause() instanceof StoreException);
-          assertEquals(StoreErrorCodes.ID_Deleted, ((StoreException) e.getCause()).getErrorCode());
+          assertEquals(StoreErrorCodes.IDDeleted, ((StoreException) e.getCause()).getErrorCode());
         }
       }
 
@@ -948,7 +949,7 @@ public class BlobStoreTest {
         } catch (ExecutionException e) {
           failedCount++;
           assertTrue(e.getCause() instanceof StoreException);
-          assertEquals(StoreErrorCodes.Unknown_Error, ((StoreException) e.getCause()).getErrorCode());
+          assertEquals(StoreErrorCodes.UnknownError, ((StoreException) e.getCause()).getErrorCode());
         }
       }
 
@@ -987,7 +988,7 @@ public class BlobStoreTest {
         fail("Should fail with ID_NOT_FOUND error");
       } catch (Exception e) {
         assertTrue(e.getCause() instanceof StoreException);
-        assertEquals(StoreErrorCodes.ID_Not_Found, ((StoreException) e.getCause()).getErrorCode());
+        assertEquals(StoreErrorCodes.IDNotFound, ((StoreException) e.getCause()).getErrorCode());
       }
     } finally {
       executorService.shutdownNow();
@@ -1018,7 +1019,7 @@ public class BlobStoreTest {
 
       StoreBatchDeleteInfo storeBatchDeleteInfo = batchDeleteFuture.get();
       for (MessageErrorInfo messageErrorInfo: storeBatchDeleteInfo.getMessageErrorInfos()){
-        assertEquals(StoreErrorCodes.ID_Not_Found, messageErrorInfo.getError());
+        assertEquals(StoreErrorCodes.IDNotFound, messageErrorInfo.getError());
       }
 
     } finally {
@@ -1076,7 +1077,7 @@ public class BlobStoreTest {
         } catch (ExecutionException e) {
           failedCount++;
           assertTrue(e.getCause() instanceof StoreException);
-          assertEquals(StoreErrorCodes.Already_Updated, ((StoreException) e.getCause()).getErrorCode());
+          assertEquals(StoreErrorCodes.AlreadyUpdated, ((StoreException) e.getCause()).getErrorCode());
         }
       }
 
@@ -1143,7 +1144,7 @@ public class BlobStoreTest {
         } catch (ExecutionException e) {
           failedCount++;
           assertTrue(e.getCause() instanceof StoreException);
-          assertEquals(StoreErrorCodes.ID_Undeleted, ((StoreException) e.getCause()).getErrorCode());
+          assertEquals(StoreErrorCodes.IDUndeleted, ((StoreException) e.getCause()).getErrorCode());
         }
       }
 
@@ -1281,10 +1282,10 @@ public class BlobStoreTest {
     store = new MockBlobStore(replicaId, config, null, storeMetrics, mockBlobStoreStats);
     try {
       store.start();
-      Assert.fail("Shouldn't be successful.");
+      fail("Shouldn't be successful.");
     } catch (StoreException e) {
-      Assert.assertEquals(StoreErrorCodes.Initialization_Error, e.getErrorCode());
-      Assert.assertTrue(e.getMessage().contains("stale"));
+      assertEquals(StoreErrorCodes.InitializationError, e.getErrorCode());
+      assertTrue(e.getMessage().contains("stale"));
     }
 
     // config.storeStaleBlockBootup is false
@@ -1335,7 +1336,7 @@ public class BlobStoreTest {
       store.updateTtl(Collections.singletonList(info));
       fail("Should not ttl update again");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Already_Updated);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.AlreadyUpdated);
     }
     delete(addedId);
 
@@ -1369,7 +1370,7 @@ public class BlobStoreTest {
       store.delete(Collections.singletonList(info));
       fail("Should not delete");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.LifeVersionConflict);
     }
 
     info = new MessageInfo(addedId, DELETE_RECORD_SIZE, true, false, false, Utils.Infinite_Time, null,
@@ -1391,7 +1392,7 @@ public class BlobStoreTest {
       store.delete(Collections.singletonList(info));
       fail("Should not delete");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.IDDeleted);
     }
 
     // delete with the smaller lifeVersion, should fail with life_version_conflict
@@ -1401,7 +1402,7 @@ public class BlobStoreTest {
       store.delete(Collections.singletonList(info));
       fail("Should not delete");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.LifeVersionConflict);
     }
 
     // delete with larger lifeVersion, should succeed.
@@ -1447,7 +1448,7 @@ public class BlobStoreTest {
       store.undelete(info);
       fail("Should not succeed");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Deleted);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.IDNotDeleted);
     }
 
     // Undelete with smaller lifeVersion, should fail
@@ -1457,7 +1458,7 @@ public class BlobStoreTest {
       store.undelete(info);
       fail("Should not succeed");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.LifeVersionConflict);
     }
 
     // Undelete with same lifeVersion, should fail
@@ -1467,7 +1468,7 @@ public class BlobStoreTest {
       store.undelete(info);
       fail("Should not succeed");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.Life_Version_Conflict);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.LifeVersionConflict);
     }
 
     // Undelete with larger lifeVersion, should succeed.
@@ -1487,7 +1488,7 @@ public class BlobStoreTest {
       store.undelete(info);
       fail("Should not succeed");
     } catch (StoreException e) {
-      assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Undeleted);
+      assertEquals(e.getErrorCode(), StoreErrorCodes.IDUndeleted);
       assertTrue(e instanceof IdUndeletedStoreException);
     }
 
@@ -1545,7 +1546,7 @@ public class BlobStoreTest {
       store.index.journal.removeSpecificValueInJournal(offset);
       store.index.journal.addEntry(offset, storeKeyFromJournal, random.nextLong());
     }
-    verifyPutFailure(mockId, StoreErrorCodes.Already_Exist);
+    verifyPutFailure(mockId, StoreErrorCodes.AlreadyExist);
 
     // duplicates
     MockId id = getUniqueId();
@@ -1570,9 +1571,9 @@ public class BlobStoreTest {
   @Test
   public void deleteErrorCasesTest() throws StoreException {
     // ID that is already deleted
-    verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
+    verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.IDDeleted);
     // ID that does not exist
-    verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    verifyDeleteFailure(getUniqueId(), StoreErrorCodes.IDNotFound);
     MockId id = getUniqueId();
     MessageInfo info =
         new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds());
@@ -1593,10 +1594,10 @@ public class BlobStoreTest {
     // IDs which are already deleted
     Iterator<MockId> deletedKeysIterator = deletedKeys.iterator();
     List<MockId> idsAlreadyDeleted = new ArrayList<>(Arrays.asList(deletedKeysIterator.next(), deletedKeysIterator.next()));
-    verifyBatchDeleteSameFailure(idsAlreadyDeleted, StoreErrorCodes.ID_Deleted);
+    verifyBatchDeleteSameFailure(idsAlreadyDeleted, StoreErrorCodes.IDDeleted);
 
     // IDs that do not exist
-    verifyBatchDeleteSameFailure(Arrays.asList(getUniqueId(), getUniqueId()), StoreErrorCodes.ID_Not_Found);
+    verifyBatchDeleteSameFailure(Arrays.asList(getUniqueId(), getUniqueId()), StoreErrorCodes.IDNotFound);
 
     // Duplicate ids in input should fail
     MockId id = getUniqueId();
@@ -1623,20 +1624,20 @@ public class BlobStoreTest {
       }
     }
     assertNotNull("Should get a live id that are not undeleted", id);
-    verifyUndeleteFailure(id, StoreErrorCodes.ID_Not_Deleted);
+    verifyUndeleteFailure(id, StoreErrorCodes.IDNotDeleted);
 
     // id already undeleted
-    verifyUndeleteFailure(undeletedKeys.iterator().next(), StoreErrorCodes.ID_Undeleted);
+    verifyUndeleteFailure(undeletedKeys.iterator().next(), StoreErrorCodes.IDUndeleted);
 
     // id already deleted permanently
-    verifyUndeleteFailure(deletedAndShouldBeCompactedKeys.iterator().next(), StoreErrorCodes.ID_Deleted_Permanently);
+    verifyUndeleteFailure(deletedAndShouldBeCompactedKeys.iterator().next(), StoreErrorCodes.IDDeletedPermanently);
 
     // id already expired
     id = put(1, PUT_RECORD_SIZE, time.seconds()).get(0);
-    verifyUndeleteFailure(id, StoreErrorCodes.ID_Not_Deleted);
+    verifyUndeleteFailure(id, StoreErrorCodes.IDNotDeleted);
     delete(id);
     time.sleep(2 * Time.MsPerSec);
-    verifyUndeleteFailure(id, StoreErrorCodes.TTL_Expired);
+    verifyUndeleteFailure(id, StoreErrorCodes.TTLExpired);
   }
 
   /**
@@ -1649,7 +1650,7 @@ public class BlobStoreTest {
     for (int i = 0; i < accountIds.length; i++) {
       MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
       delete(new MockId(mockId.getID(), mockId.getAccountId(), mockId.getContainerId()));
-      verifyDeleteFailure(mockId, StoreErrorCodes.ID_Deleted);
+      verifyDeleteFailure(mockId, StoreErrorCodes.IDDeleted);
     }
   }
 
@@ -1665,7 +1666,7 @@ public class BlobStoreTest {
         mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyDeleteFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
-          StoreErrorCodes.Authorization_Failure);
+          StoreErrorCodes.AuthorizationFailure);
     }
   }
 
@@ -1680,7 +1681,7 @@ public class BlobStoreTest {
     for (int i = 0; i < accountIds.length; i++) {
       MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
       batchDelete(Collections.singletonList(new MockId(mockId.getID(), mockId.getAccountId(), mockId.getContainerId())));
-      verifyBatchDeleteSameFailure(Collections.singletonList(mockId), StoreErrorCodes.ID_Deleted);
+      verifyBatchDeleteSameFailure(Collections.singletonList(mockId), StoreErrorCodes.IDDeleted);
     }
   }
 
@@ -1696,8 +1697,149 @@ public class BlobStoreTest {
         mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyBatchDeleteSameFailure(Collections.singletonList(new MockId(mockId.getID(), accountIds[i], containerIds[i])),
-          StoreErrorCodes.Authorization_Failure);
+          StoreErrorCodes.AuthorizationFailure);
     }
+  }
+
+  /**
+   * Test {@link BlobStore#getLogSegmentMetadataFiles} for default test store.
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void testGetLogSegmentMetadataFilesForDefaultTestStore() throws StoreException, IOException {
+    // Arrange
+    final BlobStore blobStore = createAndStartBlobStore();
+
+    // Passing includeActiveSegment = false should return 0 log segments
+    List<LogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(false);
+    assertEquals("Expecting 0 log segments", 0, storeLogInfos.size());
+
+    // Act
+    // Passing includeActiveSegment = true should return 1 log segment
+    // Local Store creates one single log segment with name ""
+    storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
+    assertEquals("Expecting 0 log segments", 1, storeLogInfos.size());
+
+    // Assert
+    if (this.isLogSegmented) {
+      // When Store Log is segmented, store creates one single log segment with name "0_0"
+      assertEquals("Expecting the name of log segment = '0_0'",
+          "0_0", storeLogInfos.get(0).getLogSegment().getFileName());
+    } else {
+      // When Store Log is not segmented, store creates one single log segment with name ""
+      assertTrue("Expecting the name of log segment = ''",
+          storeLogInfos.get(0).getLogSegment().getFileName().isEmpty());
+    }
+    assertEquals("Expecting 0 index files", 0, storeLogInfos.get(0).getIndexSegments().size());
+    assertEquals("Expecting 0 bloom files", 0, storeLogInfos.get(0).getBloomFilters().size());
+  }
+
+  /**
+   * Test {@link BlobStore#getLogSegmentMetadataFiles} for a store by adding new log segments.
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void testGetLogSegmentMetadataFilesAfterAddingNewLogSegments() throws StoreException, IOException {
+    if (!this.isLogSegmented) {
+      // This test is only applicable when the log is segmented
+      return;
+    }
+    // Arrange
+    final BlobStore blobStore = createAndStartBlobStore();
+
+    long totalLogSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
+    LogSegment loadedSegment = getLogSegment(LogSegmentName.fromPositionAndGeneration(totalLogSegments, 0),
+        SEGMENT_CAPACITY, true);
+    List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
+
+    final Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        createStoreConfig(SEGMENT_CAPACITY, true),
+        null, true, segmentsToLoad, Collections.EMPTY_LIST.iterator(), null);
+    blobStore.setLog(log);
+
+    for (int i = 1; i < totalLogSegments; i++) {
+      LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
+      LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+      blobStore.getLog().addSegment(segment, true);
+
+      Path indexFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_index");
+      Files.copy(Paths.get(tempDir + "/0_0_18_index"), indexFilePath);
+
+      Path bloomFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_bloom");
+      Files.copy(Paths.get(tempDir + "/0_0_18_bloom"), bloomFilePath);
+    }
+
+    // Act
+    final List<LogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
+
+    // Assert
+    assertEquals("Expecting " + totalLogSegments + " log segments", totalLogSegments, storeLogInfos.size());
+
+    for (int i = 0; i < totalLogSegments - 1; i++) {
+      LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i + 1, 0);
+      assertEquals("Expecting the name of log segment = " + segmentName,
+          segmentName.toString(), storeLogInfos.get(i).getLogSegment().getFileName());
+
+      assertEquals("Expecting 1 index file for log segment =" + segmentName,
+          1, storeLogInfos.get(i).getIndexSegments().size());
+      assertEquals("Expecting name of index file for log segment =" + segmentName,
+          segmentName + "_index", storeLogInfos.get(i).getIndexSegments().get(0).getFileName());
+
+      assertEquals("Expecting 1 bloom file for log segment =" + segmentName,
+          1, storeLogInfos.get(i).getBloomFilters().size());
+      assertEquals("Expecting name of bloom file for log segment =" + segmentName,
+          segmentName + "_bloom", storeLogInfos.get(i).getBloomFilters().get(0).getFileName());
+    }
+  }
+
+  /**
+   * A test util method to create and start a BlobStore.
+   * @throws StoreException
+   * @throws IOException
+   */
+  private BlobStore createAndStartBlobStore() throws StoreException, IOException {
+    store.shutdown();
+    File testDir = createTempDirectory("testStoreDir-" + storeId);
+    testDir.deleteOnExit();
+    MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    BlobStore blobStore = createBlobStore(testReplica);
+    blobStore.start();
+
+    assertTrue("Store should start successfully", blobStore.isStarted());
+    return blobStore;
+  }
+
+  /**
+   * A test util method to get a log segment for a given logSegmentName.
+   * @param name the name of the log segment.
+   * @param capacityInBytes the capacity of the log segment.
+   * @param writeHeader whether to write the header or not.
+   * @return the created {@link BlobStore}.
+   */
+  private LogSegment getLogSegment(LogSegmentName name, long capacityInBytes, boolean writeHeader)
+      throws IOException, StoreException {
+    File file = create(tempDir, name.toFilename());
+    return new LogSegment(name, file, capacityInBytes, createStoreConfig(capacityInBytes, true),
+        Mockito.mock(StoreMetrics.class), writeHeader);
+  }
+
+  /**
+   * A test util method to create a temporary directory.
+   * @param dir the parent directory.
+   * @param filename the name of the file.
+   * @return the created temporary directory.
+   * @throws IOException
+   */
+  private File create(File dir, String filename) throws IOException {
+    File file = new File(dir, filename);
+    if (file.exists()) {
+      assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
+    }
+    assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
+    file.deleteOnExit();
+    return file;
   }
 
   /**
@@ -1728,7 +1870,7 @@ public class BlobStoreTest {
         mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyGetFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
-          StoreErrorCodes.Authorization_Failure);
+          StoreErrorCodes.AuthorizationFailure);
     }
   }
 
@@ -1739,11 +1881,11 @@ public class BlobStoreTest {
   @Test
   public void ttlUpdateErrorCasesTest() throws Exception {
     // ID that does not exist
-    verifyTtlUpdateFailure(getUniqueId(), Utils.Infinite_Time, StoreErrorCodes.ID_Not_Found);
+    verifyTtlUpdateFailure(getUniqueId(), Utils.Infinite_Time, StoreErrorCodes.IDNotFound);
     // ID that has expired
     MockId expiredId = null;
     for (MockId expired : expiredKeys) {
-      verifyTtlUpdateFailure(expired, Utils.Infinite_Time, StoreErrorCodes.Update_Not_Allowed);
+      verifyTtlUpdateFailure(expired, Utils.Infinite_Time, StoreErrorCodes.UpdateNotAllowed);
       expiredId = expired;
     }
     // If the ttl update request comes from replication, then it should succeed
@@ -1757,16 +1899,16 @@ public class BlobStoreTest {
     // ID that is already updated
     for (MockId ttlUpdated : ttlUpdatedKeys) {
       if (!deletedKeys.contains(ttlUpdated)) {
-        verifyTtlUpdateFailure(ttlUpdated, Utils.Infinite_Time, StoreErrorCodes.Already_Updated);
+        verifyTtlUpdateFailure(ttlUpdated, Utils.Infinite_Time, StoreErrorCodes.AlreadyUpdated);
       }
     }
     // ID that is already deleted
     for (MockId deleted : deletedKeys) {
-      verifyTtlUpdateFailure(deleted, Utils.Infinite_Time, StoreErrorCodes.ID_Deleted);
+      verifyTtlUpdateFailure(deleted, Utils.Infinite_Time, StoreErrorCodes.IDDeleted);
     }
     // Attempt to set expiry time to anything other than infinity
     MockId id = getIdToTtlUpdate(liveKeys);
-    verifyTtlUpdateFailure(id, time.milliseconds() + 5, StoreErrorCodes.Update_Not_Allowed);
+    verifyTtlUpdateFailure(id, time.milliseconds() + 5, StoreErrorCodes.UpdateNotAllowed);
     // authorization failure
     ttlUpdateAuthorizationFailureTest();
     // duplicates
@@ -1808,7 +1950,7 @@ public class BlobStoreTest {
       MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
       delete(new MockId(mockId.getID(), mockId.getAccountId(), mockId.getContainerId()));
       undelete(new MockId(mockId.getID(), mockId.getAccountId(), mockId.getContainerId()));
-      verifyUndeleteFailure(mockId, StoreErrorCodes.ID_Undeleted);
+      verifyUndeleteFailure(mockId, StoreErrorCodes.IDUndeleted);
     }
   }
 
@@ -1827,7 +1969,7 @@ public class BlobStoreTest {
         mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyUndeleteFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
-          StoreErrorCodes.Authorization_Failure);
+          StoreErrorCodes.AuthorizationFailure);
     }
   }
 
@@ -1860,7 +2002,7 @@ public class BlobStoreTest {
       putWithKeysAndCrcs(mockIdList, crcList);
       fail("Put should fail if some keys exist, but some do not");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals(StoreErrorCodes.AlreadyExist, e.getErrorCode());
     }
     assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
 
@@ -1871,7 +2013,7 @@ public class BlobStoreTest {
       putWithKeysAndCrcs(mockIdList, crcList);
       fail("Put should fail if some keys exist, but some do not");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals(StoreErrorCodes.AlreadyExist, e.getErrorCode());
     }
     assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
 
@@ -1883,7 +2025,7 @@ public class BlobStoreTest {
       putWithKeysAndCrcs(mockIdList, crcList);
       fail("Put should fail if some keys exist, but some do not");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals(StoreErrorCodes.AlreadyExist, e.getErrorCode());
       assertEquals("State should be SOME_NOT_ALL_DUPLICATE instead of COLLIDING",
           "At least one message but not all in the write set is identical to an existing entry", e.getMessage());
     }
@@ -1897,7 +2039,7 @@ public class BlobStoreTest {
       putWithKeysAndCrcs(mockIdList, crcList);
       fail("Put should fail if some keys exist, but some do not");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals(StoreErrorCodes.AlreadyExist, e.getErrorCode());
     }
     assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
 
@@ -1908,7 +2050,7 @@ public class BlobStoreTest {
       putWithKeysAndCrcs(mockIdList, crcList);
       fail("Put should fail if some keys exist, but some do not");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals(StoreErrorCodes.AlreadyExist, e.getErrorCode());
     }
     assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
 
@@ -1999,7 +2141,7 @@ public class BlobStoreTest {
       store.isKeyDeleted(getUniqueId());
       fail("Getting the deleted state of a non existent key should have failed");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDNotFound, e.getErrorCode());
     }
   }
 
@@ -2122,7 +2264,7 @@ public class BlobStoreTest {
     properties.put("store.io.error.count.to.trigger.shutdown", "3");
     MetricRegistry registry = new MetricRegistry();
     storeMetrics = new StoreMetrics(registry);
-    StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
+    StoreKeyFactory mockStoreKeyFactory = spy(STORE_KEY_FACTORY);
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
             storeStatsScheduler, null, diskIOScheduler, diskSpaceAllocator, storeMetrics, storeMetrics,
@@ -2162,7 +2304,7 @@ public class BlobStoreTest {
       testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
       fail("should throw exception");
     } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.UnknownError, e.getErrorCode());
     }
     assertEquals("Mismatch in error count", 2, testStore2.getErrorCount().get());
 
@@ -2172,19 +2314,19 @@ public class BlobStoreTest {
       testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
       fail("should throw exception");
     } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.UnknownError, e.getErrorCode());
     }
     doThrow(new InternalError("Unknown exception")).when(mockStoreKeyFactory).getStoreKey(any(DataInputStream.class));
     try {
       testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
       fail("should throw exception");
     } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("Mismatch in error code", StoreErrorCodes.UnknownError, e.getErrorCode());
     }
     assertEquals("Mismatch in error count", 2, testStore2.getErrorCount().get());
 
     // verify error count would be reset after successful Get operation
-    Mockito.reset(mockStoreKeyFactory);
+    reset(mockStoreKeyFactory);
     StoreInfo storeInfo = testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
     assertNotNull(storeInfo);
     assertEquals("Error count should not be reset before reading bytes", 2, testStore2.getErrorCount().get());
@@ -2273,7 +2415,7 @@ public class BlobStoreTest {
     HelixFactory mockHelixFactory = new HelixFactory() {
       @Override
       public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-          String zkAddr) {
+          String zkAddr, ClusterMapConfig clusterMapConfig1) {
         return mockHelixManager;
       }
     };
@@ -2337,8 +2479,8 @@ public class BlobStoreTest {
   public void deleteStoreFilesTest() throws Exception {
     store.shutdown();
     // create test store directory
-    File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
-    File reserveDir = StoreTestUtils.createTempDirectory("reserve-pool");
+    File storeDir = createTempDirectory("store-" + storeId);
+    File reserveDir = createTempDirectory("reserve-pool");
     reserveDir.deleteOnExit();
     DiskSpaceAllocator diskAllocator =
         new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
@@ -2406,9 +2548,9 @@ public class BlobStoreTest {
   @Test
   public void inBootstrapAndCompleteBootstrapTest() throws Exception {
     store.shutdown();
-    File testDir = StoreTestUtils.createTempDirectory("testStoreDir-" + storeId);
+    File testDir = createTempDirectory("testStoreDir-" + storeId);
     testDir.deleteOnExit();
-    StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
     BlobStore blobStore = createBlobStore(testReplica);
     blobStore.start();
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
@@ -2426,9 +2568,9 @@ public class BlobStoreTest {
   @Test
   public void inDecommissionTest() throws Exception {
     store.shutdown();
-    File testDir = StoreTestUtils.createTempDirectory("testStoreDir-" + storeId);
+    File testDir = createTempDirectory("testStoreDir-" + storeId);
     testDir.deleteOnExit();
-    StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
     BlobStore blobStore = createBlobStore(testReplica);
     blobStore.start();
     assertFalse("Store should not be in decommission state because there is no decommission file",
@@ -2452,15 +2594,15 @@ public class BlobStoreTest {
   public void resolveStoreInitialStateTest() throws Exception {
     store.shutdown();
     properties.setProperty(StoreConfig.storeReplicaStatusDelegateEnableName, "true");
-    File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
-    File reserveDir = StoreTestUtils.createTempDirectory("reserve-pool");
+    File storeDir = createTempDirectory("store-" + storeId);
+    File reserveDir = createTempDirectory("reserve-pool");
     reserveDir.deleteOnExit();
     DiskSpaceAllocator diskAllocator =
         new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
     storeMetrics = new StoreMetrics(registry);
-    ClusterParticipant dynamicParticipant = Mockito.mock(ClusterParticipant.class);
+    ClusterParticipant dynamicParticipant = mock(ClusterParticipant.class);
     when(dynamicParticipant.supportsStateChanges()).thenReturn(true);
     ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(dynamicParticipant);
     BlobStore testStore =
@@ -2485,11 +2627,11 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     int storeUnsealPercentage = config.storePartialWriteEnableSizeThresholdPercentage
         - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     storeMetrics = new StoreMetrics(new MetricRegistry());
     BlobStore testStore =
         createBlobStore(replicaId, config, Collections.singletonList(mockReplicaStatusDelegate), storeMetrics);
-    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+    PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
     testStore.index = mockPersistentIndex;
     // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
     // and replica is not sealed then seal should be attempted.
@@ -2605,12 +2747,12 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     int storeUnsealPercentage = config.storePartialWriteEnableSizeThresholdPercentage
         - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     List<ReplicaStatusDelegate> replicaStatusDelegates =
         Arrays.asList(mockReplicaStatusDelegate1, mockReplicaStatusDelegate2);
     storeMetrics = new StoreMetrics(new MetricRegistry());
     BlobStore testStore = createBlobStore(replicaId, config, replicaStatusDelegates, storeMetrics);
-    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+    PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
     testStore.index = mockPersistentIndex;
     // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
     // then replica seal status should be resolved as ReplicaSealStatus#Sealed.
@@ -2697,8 +2839,8 @@ public class BlobStoreTest {
    */
   @Test
   public void testResolveReplicaSealStatusFromLogSize() {
-    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
-    StoreTestUtils.MockReplicaId replicaId = (StoreTestUtils.MockReplicaId) store.getReplicaId();
+    PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
+    MockReplicaId replicaId = (MockReplicaId) store.getReplicaId();
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
     store.index = mockPersistentIndex;
     // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
@@ -2706,17 +2848,17 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
     // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
@@ -2724,7 +2866,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
     // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
@@ -2732,7 +2874,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
     // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
@@ -2740,7 +2882,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
 
     // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
     // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
@@ -2748,7 +2890,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
     // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
@@ -2756,7 +2898,7 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
     // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
@@ -2764,38 +2906,38 @@ public class BlobStoreTest {
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     long readWritePercentageLimit = config.storePartialWriteEnableSizeThresholdPercentage - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
 
     replicaId.setSealedState(ReplicaSealStatus.SEALED);
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
-    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+    assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
   }
 
   /**
@@ -2808,8 +2950,8 @@ public class BlobStoreTest {
     MockId id = getUniqueId();
 
     // Blob doesn't exist. Both delete and get fail with ID_Not_Found.
-    verifyDeleteFailure(id, StoreErrorCodes.ID_Not_Found);
-    verifyGetFailure(id, StoreErrorCodes.ID_Not_Found);
+    verifyDeleteFailure(id, StoreErrorCodes.IDNotFound);
+    verifyGetFailure(id, StoreErrorCodes.IDNotFound);
 
     // force delete this Blob ID.
     // If the request is from frontend and lifeVersion is LIFE_VERSION_FROM_FRONTEND, it should fail.
@@ -2820,7 +2962,7 @@ public class BlobStoreTest {
       store.forceDelete(Collections.singletonList(info));
       fail("Store FORCE DELETE should have failed");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.UnknownError, e.getErrorCode());
     }
     // If the request is from replication and lifeVersion is valid, it should succeed.
     short lifeVersion = 0; // shouldn't be LIFE_VERSION_FROM_FRONTEND. It is supposed to get from replication
@@ -2836,25 +2978,25 @@ public class BlobStoreTest {
       store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
       fail("Should not be able to GET " + id);
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
     // with StoreGetOptions.Store_Include_Deleted. When PutBlob is compacted or doesn't exists, it throws ID_Deleted.
     try {
       store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
       fail("Should not be able to GET " + id);
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
     // with all StoreGetOptions. When PutBlob is compacted or doesn't exists, it throws ID_Deleted.
     try {
       store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
       fail("Should not be able to GET " + id);
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
 
     // ttlUpdate from the frontend should fail with ID_Deleted
-    verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.ID_Deleted);
+    verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.IDDeleted);
     // ttlUpdate from the replication fails with ID_Deleted
     short newLifeVersion = 2;
     info = new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null, id.getAccountId(),
@@ -2863,11 +3005,11 @@ public class BlobStoreTest {
       store.updateTtl(Collections.singletonList(info));
       fail("Store TTL UPDATE should have failed");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
 
     // undelete from the frontend should fail with ID_Deleted_Permanently
-    verifyUndeleteFailure(id, StoreErrorCodes.ID_Deleted_Permanently);
+    verifyUndeleteFailure(id, StoreErrorCodes.IDDeletedPermanently);
     // undelete from the replication also fails with ID_Deleted_Permanently
     info = new MessageInfo(id, UNDELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
         newLifeVersion);
@@ -2875,11 +3017,11 @@ public class BlobStoreTest {
       store.undelete(info);
       fail("Store UNDELETE should have failed for key " + id);
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted_Permanently, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeletedPermanently, e.getErrorCode());
     }
 
     // deletion from the frontend should fail with ID_Deleted
-    verifyDeleteFailure(id, StoreErrorCodes.ID_Deleted);
+    verifyDeleteFailure(id, StoreErrorCodes.IDDeleted);
     // deletion from the replication with the same lifeVersion fails with StoreErrorCodes.ID_Deleted
     info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
         lifeVersion);
@@ -2887,7 +3029,7 @@ public class BlobStoreTest {
       store.delete(Collections.singletonList(info));
       fail("Store DELETE should have failed");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
     // deletion from the replication with different lifeVersion is successful
     info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
@@ -2901,7 +3043,7 @@ public class BlobStoreTest {
       store.forceDelete(Collections.singletonList(info));
       fail("Store FORCE DELETE should have failed");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.AlreadyExist, e.getErrorCode());
     }
     // force delete again with different timestamp and life version, fail with Already_Exist
     info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds() + 1,
@@ -2910,7 +3052,7 @@ public class BlobStoreTest {
       store.forceDelete(Collections.singletonList(info));
       fail("Store FORCE DELETE should have failed");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.AlreadyExist, e.getErrorCode());
     }
 
     // By current design, when the blob exists, the put will return success immediately. But the read should still fail
@@ -2924,7 +3066,7 @@ public class BlobStoreTest {
       store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
       fail("Should not be able to GET " + id);
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.IDDeleted, e.getErrorCode());
     }
   }
 
@@ -3025,13 +3167,13 @@ public class BlobStoreTest {
 
     mockBlobStore.start();
     // Second, verify that store won't be shut down if Unknown_Error occurred.
-    StoreException storeExceptionInIndex = new StoreException("Mock Unknown error", StoreErrorCodes.Unknown_Error);
+    StoreException storeExceptionInIndex = new StoreException("Mock Unknown error", StoreErrorCodes.UnknownError);
     mockBlobStore.setPersistentIndex(storeExceptionInIndex);
     try {
       methodCaller.invoke(mockBlobStore);
       fail("should fail");
     } catch (StoreException e) {
-      assertEquals("Mismatch in StoreErrorCode", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals("Mismatch in StoreErrorCode", StoreErrorCodes.UnknownError, e.getErrorCode());
     }
     assertTrue("Store should not be shut down", mockBlobStore.isStarted());
     assertEquals("Mismatch in store io error count", 0, mockBlobStore.getErrorCount().get());
@@ -3243,7 +3385,7 @@ public class BlobStoreTest {
     StoreBatchDeleteInfo storeBatchDeleteInfo = store.batchDelete(msgInfoList);
     for (MessageErrorInfo messageErrorInfo: storeBatchDeleteInfo.getMessageErrorInfos()){
       if (messageErrorInfo.getError() != null){
-        throw new StoreException("Batch delete failed", StoreErrorCodes.Unknown_Error);
+        throw new StoreException("Batch delete failed", StoreErrorCodes.UnknownError);
       }
     }
 
@@ -3865,11 +4007,11 @@ public class BlobStoreTest {
           fail("Operation should have failed");
         } catch (ExecutionException e) {
           StoreException storeException = (StoreException) e.getCause();
-          StoreErrorCodes expectedCode = StoreErrorCodes.ID_Not_Found;
+          StoreErrorCodes expectedCode = StoreErrorCodes.IDNotFound;
           if (deletedKeys.contains(id)) {
-            expectedCode = StoreErrorCodes.ID_Deleted;
+            expectedCode = StoreErrorCodes.IDDeleted;
           } else if (expiredKeys.contains(id)) {
-            expectedCode = StoreErrorCodes.TTL_Expired;
+            expectedCode = StoreErrorCodes.TTLExpired;
           }
           assertEquals("Unexpected StoreErrorCode", expectedCode, storeException.getErrorCode());
         }
@@ -3879,7 +4021,7 @@ public class BlobStoreTest {
 
   /**
    * Verifies that the deletes are successful. Also ensures that a GET for the {@link MockId} fails with
-   * {@link StoreErrorCodes#ID_Deleted}.
+   * {@link StoreErrorCodes#IDDeleted}.
    * @param deleters list of {@link Deleter} instances.
    * @param futures list of {@link Future}s returned from submitting the {@code deleters} to an {@link ExecutorService}
    * @throws Exception
@@ -3889,14 +4031,14 @@ public class BlobStoreTest {
       MockId id = deleters.get(i).id;
       Future<CallableResult> future = futures.get(i);
       future.get(1, TimeUnit.SECONDS);
-      verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
+      verifyGetFailure(id, StoreErrorCodes.IDDeleted);
     }
   }
 
 
   /**
    * Verifies that the batch deletes are successful. Also ensures that a GET for the {@link List<MockId>} fails with
-   * {@link StoreErrorCodes#ID_Deleted}.
+   * {@link StoreErrorCodes#IDDeleted}.
    * @param batchDeleters list of {@link BatchDeleter} instances.
    * @param futures list of {@link Future}s returned from submitting the {@code deleters} to an {@link ExecutorService}
    * @throws Exception
@@ -3907,7 +4049,7 @@ public class BlobStoreTest {
       Future<CallableResult> future = futures.get(i);
       future.get(1, TimeUnit.SECONDS);
       for (MockId id : ids) {
-        verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
+        verifyGetFailure(id, StoreErrorCodes.IDDeleted);
       }
     }
   }
@@ -4067,7 +4209,7 @@ public class BlobStoreTest {
       fail("Store UNDELETE should have failed for key " + idToUndelete);
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
-      if (expectedErrorCode == StoreErrorCodes.ID_Undeleted) {
+      if (expectedErrorCode == StoreErrorCodes.IDUndeleted) {
         assertTrue(e instanceof IdUndeletedStoreException);
       }
     }
@@ -4084,61 +4226,61 @@ public class BlobStoreTest {
       blobStore.get(Collections.EMPTY_LIST, EnumSet.noneOf(StoreGetOptions.class));
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
 
     try {
       blobStore.put(new MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
 
     try {
       blobStore.delete(Collections.EMPTY_LIST);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
 
     try {
       blobStore.updateTtl(Collections.EMPTY_LIST);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
 
     try {
       blobStore.undelete(null);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
     try {
       blobStore.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE, null, null);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
 
     try {
       blobStore.findMissingKeys(Collections.EMPTY_LIST);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
 
     try {
       blobStore.isKeyDeleted(getUniqueId());
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
 
     try {
       blobStore.shutdown();
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
     }
   }
 
@@ -4218,12 +4360,12 @@ public class BlobStoreTest {
     return new MockBlobStore(replicaId, config, replicaStatusDelegates, metrics);
   }
 
-  private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
-    return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
+  private MockReplicaId getMockReplicaId(String filePath) {
+    return createMockReplicaId(storeId, LOG_CAPACITY, filePath);
   }
 
   private AmbryReplica getMockAmbryReplica(ClusterMapConfig clusterMapConfig, String filePath) {
-    return StoreTestUtils.createMockAmbryReplica(storeId, 1024 * 1024 * 1024L, filePath, false);
+    return createMockAmbryReplica(storeId, 1024 * 1024 * 1024L, filePath, false);
   }
 
   /**
@@ -4253,7 +4395,7 @@ public class BlobStoreTest {
     long cutOffTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(bufferTimeSecs);
     // round up to 1s.
     MockId id = put(1, PUT_RECORD_SIZE, cutOffTimeMs - 1000).get(0);
-    verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.Update_Not_Allowed);
+    verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.UpdateNotAllowed);
     // something that is AT cutoff time succeeds, round up to 1s.
     id = put(1, PUT_RECORD_SIZE, cutOffTimeMs + 1000).get(0);
     updateTtl(id);
@@ -4271,7 +4413,7 @@ public class BlobStoreTest {
         {-1, -1, (short) (id.getContainerId() - 1), (short) (id.getContainerId() + 1), id.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyTtlUpdateFailure(new MockId(id.getID(), accountIds[i], containerIds[i]), Utils.Infinite_Time,
-          StoreErrorCodes.Authorization_Failure);
+          StoreErrorCodes.AuthorizationFailure);
     }
   }
 
@@ -4298,7 +4440,7 @@ public class BlobStoreTest {
      * @throws StoreException
      */
     void setPersistentIndex(StoreException exception) throws StoreException {
-      PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+      PersistentIndex mockPersistentIndex = mock(PersistentIndex.class);
       index = mockPersistentIndex;
       doThrow(exception).when(mockPersistentIndex).findEntriesSince(any(FindToken.class), anyLong());
       doThrow(exception).when(mockPersistentIndex).findMissingKeys(anyList());

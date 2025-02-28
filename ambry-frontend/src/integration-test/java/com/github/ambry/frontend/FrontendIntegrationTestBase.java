@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
@@ -1825,7 +1826,7 @@ public class FrontendIntegrationTestBase {
    * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
    */
   void updateAccountsAndVerify(AccountService accountService, Account... accounts) throws Exception {
-    byte[] accountUpdateJson = AccountCollectionSerde.serializeAccountsInJson(Arrays.asList(accounts));
+    byte[] accountUpdateJson = AccountCollectionSerde.serializeAccountsInJson(Arrays.asList(accounts), false);
     FullHttpRequest request =
         buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null, ByteBuffer.wrap(accountUpdateJson));
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
@@ -1847,15 +1848,18 @@ public class FrontendIntegrationTestBase {
     private long expirationTimeMs;
     private long blobSize;
     private long modifiedTimeMs;
+    @JsonProperty("isDirectory")
+    private boolean isDirectory;
 
     public NamedBlobEntry() {
     }
 
-    public NamedBlobEntry(String blobName, long expiration, long blobSize, long modifiedTimeMs) {
+    public NamedBlobEntry(String blobName, long expiration, long blobSize, long modifiedTimeMs, boolean isDirectory) {
       this.blobName = blobName;
       this.expirationTimeMs = expiration;
       this.blobSize = blobSize;
       this.modifiedTimeMs = modifiedTimeMs;
+      this.isDirectory = isDirectory;
     }
 
     public String getBlobName() {
@@ -1888,6 +1892,14 @@ public class FrontendIntegrationTestBase {
 
     public void setModifiedTimeMs(long modifiedTimeMs) {
       this.modifiedTimeMs = modifiedTimeMs;
+    }
+
+    public boolean isDirectory() {
+      return isDirectory;
+    }
+
+    public void setDirectory(boolean isDirectory) {
+      this.isDirectory = isDirectory;
     }
   }
 

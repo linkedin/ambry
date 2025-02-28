@@ -58,7 +58,7 @@ public class ValidatingTransformer implements Transformer {
       short version = headerVersion.getShort();
       if (!isValidHeaderVersion(version)) {
         throw new MessageFormatException("Header version not supported " + version,
-            MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.DataCorrupt);
       }
       int headerSize = getHeaderSizeForVersion(version);
       ByteBuffer headerBuffer = ByteBuffer.allocate(headerSize);

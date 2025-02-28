@@ -24,7 +24,6 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeConfigSourceType;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.Disk;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.HelixAdminFactory;
@@ -222,7 +221,7 @@ public class StorageManagerTest {
       storageManager.start();
       fail("Should fail due to disk health");
     } catch (StoreException e) {
-      assertEquals(StoreErrorCodes.Initialization_Error, e.getErrorCode());
+      assertEquals(StoreErrorCodes.InitializationError, e.getErrorCode());
     }
   }
 
@@ -550,6 +549,9 @@ public class StorageManagerTest {
         newAddedStore.isBootstrapInProgress());
     assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
         newAddedStore.getCurrentState());
+    // verify that compaction is disabled for the new replica
+    assertTrue("The store's compaction should be disabled",
+        storageManager.compactionDisabledForBlobStore(newPartition));
 
     // 2. test that state transition should succeed for existing non-empty replicas (we write some data into store beforehand)
     MockId id = new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), Utils.getRandomShort(TestUtils.RANDOM),
@@ -584,6 +586,34 @@ public class StorageManagerTest {
     assertEquals("The store's current state should be LEADER", ReplicaState.LEADER, localStore.getCurrentState());
 
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  @Test
+  public void replicaFromBootstrapToStandbySuccessTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+
+    // 0. get listeners from Helix participant and verify there is a storageManager listener.
+    Map<StateModelListenerType, PartitionStateChangeListener> listeners =
+        mockHelixParticipant.getPartitionStateChangeListeners();
+    assertTrue("Should contain storage manager listener",
+        listeners.containsKey(StateModelListenerType.StorageManagerListener));
+
+    // 1. Test case where new replica(store) is successfully added into StorageManager
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    // verify that compaction is disabled for the new replica
+    assertTrue("The store's compaction should be disabled",
+        storageManager.compactionDisabledForBlobStore(newPartition));
+    // Other validation is already done in replicaFromOfflineToBoostrap test
+    mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(newPartition.toPathString());
+    assertFalse("The store's compaction should not be disabled",
+        storageManager.compactionDisabledForBlobStore(newPartition));
   }
 
   /**

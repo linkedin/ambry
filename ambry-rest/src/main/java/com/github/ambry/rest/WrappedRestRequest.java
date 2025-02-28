@@ -18,6 +18,8 @@ import com.github.ambry.router.AsyncWritableChannel;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import javax.net.ssl.SSLSession;
 
@@ -29,9 +31,13 @@ import static com.github.ambry.rest.RestMethod.*;
  */
 public class WrappedRestRequest implements RestRequest {
   private final RestRequest restRequest;
+  private final Map<String, Object> map = new ConcurrentHashMap<>();
+  private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
+
 
   public WrappedRestRequest(RestRequest restRequest) {
     this.restRequest = restRequest;
+    map.putAll(restRequest.getArgs());
   }
 
   @Override
@@ -56,16 +62,16 @@ public class WrappedRestRequest implements RestRequest {
 
   @Override
   public Map<String, Object> getArgs() {
-    return restRequest.getArgs();
+    return map;
   }
 
   @Override
   public Object setArg(String key, Object value) {
-    return restRequest.setArg(key, value);
+    return map.put(key, value);
   }
 
   @Override
-  public void removeArg(String key) { restRequest.removeArg(key); }
+  public void removeArg(String key) { map.remove(key); }
 
   @Override
   public SSLSession getSSLSession() {
@@ -89,7 +95,7 @@ public class WrappedRestRequest implements RestRequest {
 
   @Override
   public RestRequestMetricsTracker getMetricsTracker() {
-    return restRequest.getMetricsTracker();
+    return restRequestMetricsTracker;
   }
 
   @Override

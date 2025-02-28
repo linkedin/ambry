@@ -265,10 +265,10 @@ public class SafeServerShutdownTool {
    */
   private boolean controlLogGrowth(DataNodeId dataNodeId, boolean enableGrowth) throws IOException, TimeoutException {
     return serverAdminTool.controlRequest(dataNodeId, null, RequestOrResponseType.PutRequest, enableGrowth)
-        == ServerErrorCode.No_Error
+        == ServerErrorCode.NoError
         && serverAdminTool.controlRequest(dataNodeId, null, RequestOrResponseType.DeleteRequest, enableGrowth)
-        == ServerErrorCode.No_Error
+        == ServerErrorCode.NoError
         && serverAdminTool.controlReplication(dataNodeId, null, Collections.EMPTY_LIST, enableGrowth)
-        == ServerErrorCode.No_Error;
+        == ServerErrorCode.NoError;
   }
 }

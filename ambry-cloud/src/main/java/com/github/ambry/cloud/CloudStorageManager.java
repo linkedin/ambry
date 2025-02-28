@@ -14,11 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
@@ -182,7 +179,7 @@ public class CloudStorageManager implements StoreManager {
      * Vcr nodes serve requests for all partitions from cloud blob store. So assuming that cloud is always available,
      * the local partition status for a vcr node should always be available.
      */
-    return ServerErrorCode.No_Error;
+    return ServerErrorCode.NoError;
   }
 
   /**

@@ -94,7 +94,7 @@ class RouterTestHelpers {
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers in {@code serverLayout}.  If
    *                                there are more values in this array than there are servers, an exception is thrown.
    *                                If there are fewer, the rest of the servers are set to
-   *                                {@link ServerErrorCode#No_Error}
+   *                                {@link ServerErrorCode#NoError}
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @param expectedError The {@link RouterErrorCode} expected, or null if no error is expected.
    * @param errorCodeChecker Performs the checks that ensure that the expected {@link RouterErrorCode} is returned .
@@ -112,7 +112,7 @@ class RouterTestHelpers {
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers returned by
    *                                {@link PartitionId#getReplicaIds()}. If there are more values in this array than
    *                                there are servers containing the partition, an exception is thrown. If there are
-   *                                fewer, the rest of the servers are set to {@link ServerErrorCode#No_Error}
+   *                                fewer, the rest of the servers are set to {@link ServerErrorCode#NoError}
    * @param partition The partition contained by the servers to set error codes on.
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @param expectedError The {@link RouterErrorCode} expected, or null if no error is expected.
@@ -142,7 +142,7 @@ class RouterTestHelpers {
    * Set the servers in the specified layout to respond with the designated error codes.
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers in {@code serverLayout}.
    *                                If there are fewer error codes in this array than there are servers,
-   *                                the rest of the servers are set to {@link ServerErrorCode#No_Error}
+   *                                the rest of the servers are set to {@link ServerErrorCode#NoError}
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @throws IllegalArgumentException If there are more error codes in the input array then there are servers.
    */
@@ -156,7 +156,7 @@ class RouterTestHelpers {
       if (i < serverErrorCodesInOrder.size()) {
         server.setServerErrorForAllRequests(serverErrorCodesInOrder.get(i++));
       } else {
-        server.setServerErrorForAllRequests(ServerErrorCode.No_Error);
+        server.setServerErrorForAllRequests(ServerErrorCode.NoError);
       }
     }
   }
@@ -166,7 +166,7 @@ class RouterTestHelpers {
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers returned by
    *                                {@link PartitionId#getReplicaIds()}. If there are fewer error codes in this array
    *                                than there are servers containing the partition, the rest of the servers are set to
-   *                                {@link ServerErrorCode#No_Error}
+   *                                {@link ServerErrorCode#NoError}
    * @param partition The partition contained by the servers to set error codes on.
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @param originatingDcName originating DC name.

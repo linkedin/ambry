@@ -27,6 +27,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  *            require a response body, otherwise it is {@link ReadableStreamChannel}.
  */
 abstract public class S3BaseHandler<R> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
+  protected static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
 
   /**
    * Handles the S3 request and construct the response.
@@ -120,6 +121,15 @@ abstract public class S3BaseHandler<R> {
   public static boolean isMultipartCreateUploadRequest(RestRequest restRequest) {
     return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
         && restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM);
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a request for batch delete.
+   */
+  public static boolean isBatchDelete(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(BATCH_DELETE_QUERY_PARAM);
   }
 
   /**
