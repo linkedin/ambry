@@ -34,6 +34,7 @@ public class PartitionInfo {
   // all its replicas. This is unlike server-server replication, where multiple threads are working on multiple replicas
   // of a partition. Check selectReplicas().
   private ReplicaThread replicaThread = null;
+  private int priority;
 
   public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store,
       ReplicaId localReplicaId) {
@@ -72,6 +73,10 @@ public class PartitionInfo {
 
   public ReplicaId getLocalReplicaId() {
     return this.localReplicaId;
+  }
+
+  public int getPriority() {
+    return priority;
   }
 
   /**
