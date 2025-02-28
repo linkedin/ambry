@@ -24,7 +24,7 @@ import javax.annotation.Nonnull;
 public class FileCopyUtils {
 
   /**
-   * Get the peer replica in the given datacenter for file copy. We should only copy from LEADER replicas.
+   * Get the peer replica in the given datacenter for file copy. We should only copy from healthy LEADER replicas.
    * @param partitionId the {@link PartitionId} of the replica.
    * @param datacenterName the name of the datacenter.
    * @return the peer replica in the given datacenter for file copy.
