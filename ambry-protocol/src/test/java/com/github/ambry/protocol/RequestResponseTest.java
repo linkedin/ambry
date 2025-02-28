@@ -866,7 +866,7 @@ public class RequestResponseTest {
 
   @Test
   public void doFileCopyChunkRequestTest() throws IOException {
-    short requestVersionToUse = 1;
+    short requestVersionToUse = FileCopyGetChunkRequest.CURRENT_VERSION;
     FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
         new MockPartitionId(), "file1", 1000, 100);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
@@ -882,25 +882,36 @@ public class RequestResponseTest {
     request.release();
 
     try {
+      // Sending null partition id. Expected to throw exception.
       new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", null, "file1", 1000, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
     try {
+      // Sending empty file name. Expected to throw exception.
       new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "", 1000, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
     try {
+      // Sending negative start offset. Expected to throw exception.
       new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "file1", -1, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
     try {
+      // Sending negative chunk size. Expected to throw exception.
       new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "file1", 1000, -1);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+    try {
+      // Sending 0 chunk size. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "file1", 1000, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
@@ -936,7 +947,7 @@ public class RequestResponseTest {
     try {
       // Sending CURRENT_VERSION + 1 as version. Expected to throw exception.
       new FileCopyGetChunkResponse((short) (FileCopyGetChunkResponse.CURRENT_VERSION + 1),
-          111, "id1", ServerErrorCode.No_Error, null, "file1", fileStream, 0L, fileSize, false);
+          111, "id1", ServerErrorCode.NoError, null, "file1", fileStream, 0L, fileSize, false);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e) {
       //expected

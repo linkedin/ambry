@@ -73,7 +73,7 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
   public FileCopyGetChunkRequest( short versionId, int correlationId,
       String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
     super(RequestOrResponseType.FileCopyGetChunkRequest, versionId, correlationId, clientId);
-    if(partitionId == null || fileName.isEmpty() || startOffset < 0 || sizeInBytes < 0){
+    if(partitionId == null || fileName.isEmpty() || startOffset < 0 || sizeInBytes <= 0){
       throw new IllegalArgumentException("PartitionId, FileName, StartOffset or SizeInBytes cannot be null or negative");
     }
     this.partitionId = partitionId;

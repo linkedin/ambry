@@ -62,6 +62,7 @@ import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.FileCopyGetChunkRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -259,6 +260,43 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   public void after() throws InterruptedException {
     storageManager.shutdown();
     nettyByteBufLeakHelper.afterTest();
+  }
+
+  /**
+   * Tests request validator for FileCopyGetChunkRequest.
+   */
+  @Test
+  public void validateFileCopyGetChunkRequestTest() {
+    // test for invalid filename `some_random_file`
+    FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(FileCopyGetChunkRequest.FILE_CHUNK_REQUEST_VERSION_V_1,
+        111, "id1", new MockPartitionId(), "some_random_file", 1000, 100);
+
+    ServerErrorCode actualServerErrorCode = ambryRequests.validateRequest(
+        request, RequestOrResponseType.FileCopyGetChunkRequest);
+    // Error code `BadRequest` is expected for FileCopyGetChunkRequest
+    assertEquals("Error code `BadRequest` is expected for FileCopyGetChunkRequest",
+        ServerErrorCode.BadRequest, actualServerErrorCode);
+
+    // test for valid filename `0_0_log`
+    request = new FileCopyGetChunkRequest(FileCopyGetChunkRequest.FILE_CHUNK_REQUEST_VERSION_V_1,
+        111, "id1", new MockPartitionId(), "0_0_log", 1000, 100);
+    actualServerErrorCode = ambryRequests.validateRequest(request, RequestOrResponseType.FileCopyGetChunkRequest);
+    assertEquals("Error code `No_Error` is expected for FileCopyGetChunkRequest", ServerErrorCode.NoError,
+        actualServerErrorCode);
+
+    // test for valid filename `0_0_index`
+    request = new FileCopyGetChunkRequest(FileCopyGetChunkRequest.FILE_CHUNK_REQUEST_VERSION_V_1,
+        111, "id1", new MockPartitionId(), "0_0_18_index", 1000, 100);
+    actualServerErrorCode = ambryRequests.validateRequest(request, RequestOrResponseType.FileCopyGetChunkRequest);
+    assertEquals("Error code `No_Error` is expected for FileCopyGetChunkRequest", ServerErrorCode.NoError,
+        actualServerErrorCode);
+
+    // test for valid filename `0_0_bloom`
+    request = new FileCopyGetChunkRequest(FileCopyGetChunkRequest.FILE_CHUNK_REQUEST_VERSION_V_1,
+        111, "id1", new MockPartitionId(), "0_0_18_bloom", 1000, 100);
+    actualServerErrorCode = ambryRequests.validateRequest(request, RequestOrResponseType.FileCopyGetChunkRequest);
+    assertEquals("Error code `No_Error` is expected for FileCopyGetChunkRequest", ServerErrorCode.NoError,
+        actualServerErrorCode);
   }
 
   /**

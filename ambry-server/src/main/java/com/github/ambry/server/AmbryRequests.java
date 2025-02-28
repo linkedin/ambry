@@ -91,6 +91,7 @@ import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
+import com.github.ambry.store.LogSegmentStore;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
@@ -1707,8 +1708,13 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetMetaDataResponse(
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), error);
       } else {
-        List<LogInfo> logSegments = storeManager.getStore(
-            fileCopyGetMetaDataRequest.getPartitionId()).getLogSegmentMetadataFiles(false);
+        Store blobStore = storeManager.getStore(fileCopyGetMetaDataRequest.getPartitionId());
+        if (null == blobStore) {
+          logger.error("BlobStore is not available for partition {}", fileCopyGetMetaDataRequest.getPartitionId().getId());
+          throw new StoreException("BlobStore is not available for partition " +
+              fileCopyGetMetaDataRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
+        }
+        List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(false);
 
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
@@ -1760,17 +1766,21 @@ public class AmbryRequests implements RequestAPI {
       fileCopyGetChunkRequest =
           FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
 
-      ServerErrorCode error = validateRequest(fileCopyGetChunkRequest.getPartitionId(),
-          fileCopyGetChunkRequest, RequestOrResponseType.FileCopyGetMetaDataRequest);
+      ServerErrorCode error = validateRequest(fileCopyGetChunkRequest, RequestOrResponseType.FileCopyGetMetaDataRequest);
       if (error != ServerErrorCode.NoError) {
         logger.error("Validating FileCopyGetChunkRequest failed with error {} for request {}",
             error, fileCopyGetChunkRequest);
         response = new FileCopyGetChunkResponse(
             fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), error);
       } else {
-        chunkResponse = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId())
-            .getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(), fileCopyGetChunkRequest.getStartOffset(),
-                fileCopyGetChunkRequest.getChunkLengthInBytes());
+        LogSegmentStore fileStore = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId());
+        if (null == fileStore) {
+          logger.error("FileStore is not available for partition {}", fileCopyGetChunkRequest.getPartitionId().getId());
+          throw new StoreException("FileStore is not available for partition " +
+              fileCopyGetChunkRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
+        }
+        chunkResponse = fileStore.getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(),
+            fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes());
         response = new FileCopyGetChunkResponse(
             FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
             fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
@@ -1960,8 +1970,7 @@ public class AmbryRequests implements RequestAPI {
     return ServerErrorCode.NoError;
   }
 
-  private ServerErrorCode validateRequest(PartitionId partition, RequestOrResponse request,
-      RequestOrResponseType requestType) {
+  protected ServerErrorCode validateRequest(RequestOrResponse request, RequestOrResponseType requestType) {
     if (requestType.equals(RequestOrResponseType.FileCopyGetChunkRequest)) {
       if (!(request instanceof FileCopyGetChunkRequest)) {
         logger.error("Request is not an instance of FileCopyGetChunkRequest");
@@ -1978,8 +1987,17 @@ public class AmbryRequests implements RequestAPI {
         logger.error("FileCopyGetChunkRequest file name is not valid");
         return ServerErrorCode.BadRequest;
       }
+
+      if (fileCopyGetChunkRequest.getChunkLengthInBytes() <= 0) {
+        logger.error("FileCopyGetChunkRequest chunk length is not valid");
+        return ServerErrorCode.BadRequest;
+      }
+      if (fileCopyGetChunkRequest.getStartOffset() < 0) {
+        logger.error("FileCopyGetChunkRequest start offset is not valid");
+        return ServerErrorCode.BadRequest;
+      }
     }
-    return validateRequest(partition, requestType, false);
+    return ServerErrorCode.NoError;
   }
 
   /**
