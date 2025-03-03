@@ -42,6 +42,7 @@ public class PartitionInfo {
     this.partitionId = partitionId;
     this.store = store;
     this.localReplicaId = localReplicaId;
+    priority = 0;
   }
 
   // Only used in VCR, not server-server replication
@@ -76,6 +77,11 @@ public class PartitionInfo {
   }
 
   public int getPriority() {
+    return priority;
+  }
+
+  public int setPriority(int priority) {
+    this.priority = priority;
     return priority;
   }
 

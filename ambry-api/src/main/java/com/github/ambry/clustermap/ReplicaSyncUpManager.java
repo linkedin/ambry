@@ -13,6 +13,9 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * A class helps check if replicas have synced up.
  * There are two use cases:
@@ -141,4 +144,8 @@ public interface ReplicaSyncUpManager {
    * @param replicaId the {@link ReplicaId} which encounters error.
    */
   void onDisconnectionError(ReplicaId replicaId);
+
+  AtomicBoolean getBatchInProgress();
+  ConcurrentHashMap<PrioritizedReplicationManager.PriorityTier, ConcurrentSkipListSet<PartitionId>> getActivePartitionsInBatchByTier();
+  ConcurrentSkipListSet<PartitionId> getActivePartitionsInBatch();
 }

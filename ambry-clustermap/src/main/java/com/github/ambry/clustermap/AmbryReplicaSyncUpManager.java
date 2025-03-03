@@ -19,7 +19,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +51,10 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ConcurrentHashMap<ReplicaId, LocalReplicaLagInfos> replicaToLagInfos = new ConcurrentHashMap<>();
   private final ClusterMapConfig clusterMapConfig;
   private final ReentrantLock updateLock = new ReentrantLock();
+  private final ConcurrentSkipListSet<PartitionId> activePartitionsInBatch = new ConcurrentSkipListSet<>();
+  private final ConcurrentHashMap<PrioritizedReplicationManager.PriorityTier, ConcurrentSkipListSet<PartitionId>> activePartitionsInBatchByTier =
+      new ConcurrentHashMap<>();
+  private final AtomicBoolean batchInProgress = new AtomicBoolean(false);
 
   public AmbryReplicaSyncUpManager(ClusterMapConfig clusterMapConfig) {
     this.clusterMapConfig = clusterMapConfig;
@@ -200,6 +206,39 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     partitionToBootstrapSuccess.put(replicaId.getPartitionId().toPathString(), true);
     replicaToLagInfos.remove(replicaId);
     countDownLatch(partitionToBootstrapLatch, replicaId.getPartitionId().toPathString());
+    partitionComplete(replicaId.getPartitionId());
+  }
+
+  public void partitionComplete(PartitionId partitionId) {
+    boolean removed = activePartitionsInBatch.remove(partitionId);
+
+    // Also remove from tier tracking
+    for (PriorityTier tier : PriorityTier.values()) {
+      if (activePartitionsInBatchByTier.get(tier).remove(partitionId)) {
+        break;
+      }
+    }
+
+    if (removed) {
+      logger.debug("Partition {} completed processing", partitionId);
+
+      // If all partitions are complete, start next batch
+      if (activePartitionsInBatch.isEmpty()) {
+        logger.info("All partitions in current batch completed");
+        resetBatch();
+      }
+    }
+  }
+
+  public void resetBatch() {
+    activePartitionsInBatch.clear();
+    activePartitionsInBatchByTier.clear();
+    // Clear tier tracking
+    for (PriorityTier tier : PriorityTier.values()) {
+      activePartitionsInBatchByTier.get(tier).clear();
+    }
+
+    batchInProgress.set(false);
   }
 
   @Override
@@ -268,6 +307,20 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     partitionToDisconnectionLatch.clear();
     partitionToDisconnectionSuccess.clear();
     replicaToLagInfos.clear();
+    activePartitionsInBatch.clear();
+    activePartitionsInBatchByTier.clear();
+  }
+
+  public ConcurrentSkipListSet<PartitionId> getActivePartitionsInBatch() {
+    return activePartitionsInBatch;
+  }
+
+  public ConcurrentHashMap<PrioritizedReplicationManager.PriorityTier, ConcurrentSkipListSet<PartitionId>> getActivePartitionsInBatchByTier() {
+    return activePartitionsInBatchByTier;
+  }
+
+  public AtomicBoolean getBatchInProgress() {
+    return batchInProgress;
   }
 
   /**

@@ -54,6 +54,8 @@ import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
@@ -69,7 +71,8 @@ public class ReplicationManager extends ReplicationEngine {
 
   private final PriorityBlockingQueue<PartitionInfo> replicationQueue;
   private final ScheduledExecutorService replicationQueueScheduler;
-
+  private final ReentrantLock queueLock;
+  private final AtomicLong batchStartTimeMs;
 
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -127,6 +130,8 @@ public class ReplicationManager extends ReplicationEngine {
         tokenHelper, storeManager);
     replicationQueue = new PriorityBlockingQueue<>(500, (o1, o2) -> o2.getPriority() - o1.getPriority());
     replicationQueueScheduler = Utils.newScheduler(1, false);
+    queueLock = new ReentrantLock();
+    batchStartTimeMs = new AtomicLong(0);
   }
 
   /**
@@ -191,7 +196,7 @@ public class ReplicationManager extends ReplicationEngine {
         this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
             replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
       }
-      replicationQueueScheduler.scheduleAtFixedRate(this::scheduleReplicationTasks, 0, 15, TimeUnit.SECONDS);
+      replicationQueueScheduler.scheduleAtFixedRate(this::scheduledReplicationTasks, 15, 15, TimeUnit.SECONDS);
       started = true;
     } catch (IOException e) {
       logger.error("IO error while starting replication", e);
@@ -200,47 +205,66 @@ public class ReplicationManager extends ReplicationEngine {
     }
   }
 
-  private void scheduleReplicationTasks() {
+  private void scheduledReplicationTasks() {
+    if (!replicaSyncUpManager.getBatchInProgress().compareAndSet(false, true)) {
+      logger.info("Previous batch of prioritized replication is still in progress, skipping this round of replication");
+      return;
+    }
 
-    Map<Integer, List<PartitionInfo>> partitionInfoByPriority = new HashMap<>();
+    try {
 
-    // 1. Get all the partitions from the replication queue and group them by priority
-    // 2. Assign the topmost 3 priority or until all the 50 partitions are assigned to the replica threads
-    while (!replicationQueue.isEmpty()) {
-      PartitionInfo partitionInfo = replicationQueue.poll();
-      if (partitionInfo != null) {
-        partitionInfoByPriority.computeIfAbsent(partitionInfo.getPriority(), k -> new ArrayList<>()).add(partitionInfo);
+      if (!replicaSyncUpManager.getActivePartitionsInBatch().isEmpty()) {
+        logger.info("Active partition set is not empty, skipping this round of replication");
+        return;
       }
 
-      assignPartitionToReplicaThread(partitionInfo);
+      //batchStartTimeMs.set(System.currentTimeMillis());
+
+      Map<PrioritizedReplicationManager.PriorityTier, List<PartitionInfo>> partitionInfoByPriorityTier = new ConcurrentHashMap<>();
+
+      if (partitionInfoByPriorityTier.isEmpty()) {
+        logger.info("No partitions in queue to process");
+        replicaSyncUpManager.getBatchInProgress().set(false);
+        return;
+      }
+
+      int totalBatchSize = partitionInfoByPriorityTier.values().stream().mapToInt(List::size).sum();
+      logger.info("Processing {} partitions in this batch across {} tiers", totalBatchSize, partitionInfoByPriorityTier.size());
+
+
+      for (PrioritizedReplicationManager.PriorityTier tier : PrioritizedReplicationManager.PriorityTier.values()) {
+        if (partitionInfoByPriorityTier.containsKey(tier) && !partitionInfoByPriorityTier.get(tier).isEmpty()) {
+          List<PartitionInfo> partitionInfos = partitionInfoByPriorityTier.get(tier);
+          logger.info("Processing {} partitions in tier {}", partitionInfos.size(), tier);
+          for (PartitionInfo partitionInfo : partitionInfos) {
+            replicaSyncUpManager.getActivePartitionsInBatch().add(partitionInfo.getPartitionId());
+            replicaSyncUpManager.getActivePartitionsInBatchByTier().get(tier).add(partitionInfo.getPartitionId());
+            assignPartitionToReplicaThread(partitionInfo);
+          }
+
+          //replicationMetrics.batchesByTier.get(tier).inc();
+          //replicationMetrics.partitionsProcessedByTier.get(tier).inc(partitionInfos.size());
+          //replicationMetrics
+        }
+      }
+
+    } catch (Exception e) {
+      logger.error("Exception during scheduled replication tasks", e);
+    } finally {
+      replicaSyncUpManager.getBatchInProgress().set(false);
     }
   }
 
-  public boolean assignPartitionToReplicaThread(PartitionInfo partitionInfo) {
-    if (partitionToPartitionInfo.containsKey(partitionInfo.getPartitionId())) {
-      logger.warn("Partition {} already exists in replication manager, rejecting adding replica request.",
-          partitionInfo.getPartitionId());
-      return false;
-    }
-    rwLock.writeLock().lock();
+  public void assignPartitionToReplicaThread(PartitionInfo partitionInfo) {
     try {
-      List<? extends ReplicaId> peerReplicas = partitionInfo.getLocalReplicaId().getPeerReplicaIds();
-      List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
-      if (!peerReplicas.isEmpty()) {
-        remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, partitionInfo.getLocalReplicaId());
-      }
-      updatePartitionInfoMaps(remoteReplicaInfos, partitionInfo.getLocalReplicaId());
-
       logger.info("Assigning thread for {}", partitionInfo.getPartitionId());
-
-      addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
+      addRemoteReplicaInfoToReplicaThread(partitionInfo.getRemoteReplicaInfos(), true);
       // No need to update persistor to explicitly persist tokens for new replica because background persistor will
       // periodically persist all tokens including new added replica's
       logger.info("{} is successfully added into replication manager", partitionInfo.getPartitionId());
-    } finally {
-      rwLock.writeLock().unlock();
+    } catch (Exception e) {
+      logger.error("Error while assigning partition to replica thread", e);
     }
-    return true;
   }
 
   /**
@@ -262,34 +286,27 @@ public class ReplicationManager extends ReplicationEngine {
           replicaId.getPartitionId());
       return false;
     }
+
     rwLock.writeLock().lock();
     try {
       List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
       List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
-
       if (!peerReplicas.isEmpty()) {
         remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, replicaId);
       }
+      int priority = calculatePartitionPriority(replicaId.getPartitionId());
+      PrioritizedReplicationManager.PriorityTier tier = PrioritizedReplicationManager.PriorityTier.fromPriority(priority);
       updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
       PartitionInfo partitionInfo = partitionToPartitionInfo.get(replicaId.getPartitionId());
+      partitionInfo.setPriority(priority);
+      queueLock.lock();
       replicationQueue.add(partitionInfo);
-
-      logger.info("Assigning thread for {}", replicaId.getPartitionId());
-      // control what partitions will be assigned first
-      // 45-50 ACM disruption -> assign -> cycle completesD
-      // 10 queue
-      // Wait
-      // 240-260 queue
-      // P4 -> R1
-      // P1 -> R1
-      // P2 -> R2
-      // P3 -> R3
-      addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-      // No need to update persistor to explicitly persist tokens for new replica because background persistor will
-      // periodically persist all tokens including new added replica's
-      logger.info("{} is successfully added into replication manager", replicaId.getPartitionId());
+      logger.info("{} is successfully added into replication queue", replicaId.getPartitionId());
+      //replicationMetrics.replicationQueueSize.inc();
+      //replicationMetrics.queuedPartitionsByTier.get(tier).inc();
     } finally {
       rwLock.writeLock().unlock();
+      queueLock.unlock();
     }
     return true;
   }
@@ -357,6 +374,38 @@ public class ReplicationManager extends ReplicationEngine {
     }
     replicationMetrics.addLagMetricForPartition(partition, replicationConfig.replicationTrackPerPartitionLagFromRemote);
     return remoteReplicaInfos;
+  }
+
+  /**
+   * Calculate priority for a partition based on scheduled disruptions and other factors
+   * @param partitionId The partition to calculate priority for
+   * @return Priority value (higher = more important)
+   */
+  private int calculatePartitionPriority(PartitionId partitionId) {
+    int priority = 0;
+
+    if (replicationConfig.enablePartitionPrioritization) {
+      long currentTimeMs = System.currentTimeMillis();
+      //long timeToDisruption = poller.getTimeUntilDisruption(partitionId, currentTimeMs);
+      long timeToDisruption = 0;
+      // if this partitionId has AR=2
+      boolean belowMinActiveReplica = false;
+      if (belowMinActiveReplica || timeToDisruption < replicationConfig.partitionPriorityWindowHours * 60 * 60 * 1000) {
+        // Base priority for disruption-scheduled partitions
+        //priority = 70; // Start at HIGH tier
+
+        // Adjust based on time to disruption
+        if (timeToDisruption < 2 * 60 * 60 * 1000) { // Less than 2 hours
+          priority = 95; // CRITICAL tier
+        } else if (timeToDisruption < 6 * 60 * 60 * 1000) { // Less than 6 hours
+          priority = 85; // HIGH tier
+        } else if (timeToDisruption < 12 * 60 * 60 * 1000) { // Less than 12 hours
+          priority = 75; // HIGH tier
+        }
+      }
+    }
+
+    return priority;
   }
 
   /**
