@@ -537,6 +537,7 @@ public class RestUtils {
      * Rest method for the rest request
      */
     public static final String REST_METHOD = KEY_PREFIX + "rest-method";
+    public static final String LIST_REQUEST = KEY_PREFIX + "is-list-request";
   }
 
   /**
@@ -1001,30 +1002,6 @@ public class RestUtils {
    */
   public static boolean isListObjectV2Request(Map<String, Object> args) throws RestServiceException {
     return LIST_TYPE_VERSION_2.equals(RestUtils.getHeader(args, LIST_TYPE, false));
-  }
-
-  /**
-   * Determines whether the request is for a list object, using the provided path and arguments.
-   *
-   * @param path The request path.
-   * @param args The request parameters in a map.
-   * @return true if the request is for a list object (GET method and path length 3), false otherwise.
-   * @throws RestServiceException if there is an issue with the request.
-   */
-  public static boolean isListObjectRequest(String path, Map<String, Object> args) throws RestServiceException {
-    boolean isListObjectRequest = false;
-    String splitPath[] = splitPath(path);
-    String restMethod = getHeader(args, InternalKeys.REST_METHOD, false);
-    // list objects without a prefix, add empty prefix in the args
-    if (!args.containsKey(OBJECT_LOCK_PARAM) && restMethod != null) {
-      if (restMethod.equals(RestMethod.GET.toString()) && splitPath.length == LIST_REQUEST_SEGMENTS) {
-        if(!args.containsKey(PREFIX_PARAM_NAME)) {
-          args.put(PREFIX_PARAM_NAME, EMPTY_PREFIX);
-        }
-        isListObjectRequest = true;
-      }
-    }
-    return isListObjectRequest;
   }
 
   /**
