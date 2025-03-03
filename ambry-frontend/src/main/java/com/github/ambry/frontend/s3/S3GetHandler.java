@@ -85,8 +85,10 @@ public class S3GetHandler extends S3BaseHandler<ReadableStreamChannel> {
     }  else if (S3BaseHandler.isMultipartListPartRequest(restRequest)) {
       s3MultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     } else if (S3BaseHandler.isListObjectRequest(restRequest)) {
-      restRequest.setArg(PREFIX_PARAM_NAME, EMPTY_PREFIX);
       restRequest.setArg(LIST_REQUEST, "true");
+      if(!restRequest.getArgs().containsKey(PREFIX_PARAM_NAME)) {
+        restRequest.setArg(PREFIX_PARAM_NAME, EMPTY_PREFIX);
+      }
       s3ListHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       getBlobHandler.handle(requestPath, restRequest, restResponseChannel,
