@@ -19,7 +19,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.store.LogSegmentStore;
+import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.Store;
 import java.util.Collection;
 import java.util.HashMap;
@@ -110,7 +110,7 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public LogSegmentStore getFileStore(PartitionId id) {
+  public PartitionFileStore getFileStore(PartitionId id) {
     return null;
   }
 

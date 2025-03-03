@@ -23,7 +23,7 @@ import java.util.List;
  * Provides methods to get a ByteBuffer for a file chunk and to put a chunk to a file.
  * Also provides methods to persist and read metadata to/from a partition.
  */
-public interface LogSegmentStore {
+public interface PartitionFileStore {
   /**
    * Get a ByteBuffer for a file chunk.
    * @param fileName the name of the requested file. This could be a log segment, index segment or bloom filter.

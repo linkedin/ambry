@@ -66,7 +66,7 @@ import org.slf4j.LoggerFactory;
  * - Uses atomic operations for file writes
  * - Maintains thread-safe state management
  */
-class FileStore implements LogSegmentStore {
+class FileStore implements PartitionFileStore {
   // Logger instance for this class
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
 

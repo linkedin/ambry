@@ -91,7 +91,7 @@ import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
-import com.github.ambry.store.LogSegmentStore;
+import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
@@ -1766,20 +1766,28 @@ public class AmbryRequests implements RequestAPI {
       fileCopyGetChunkRequest = FileCopyGetChunkRequest.readFrom(
           new DataInputStream(request.getInputStream()), clusterMap);
 
-      LogSegmentStore fileStore = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId());
-      if (null == fileStore) {
-        logger.error("FileStore is not available for partition {}", fileCopyGetChunkRequest.getPartitionId().getId());
-        throw new StoreException("FileStore is not available for partition " +
-            fileCopyGetChunkRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
+      ServerErrorCode error = validateRequest(fileCopyGetChunkRequest.getPartitionId(),
+          RequestOrResponseType.FileCopyGetChunkRequest, false);
+      if (error != ServerErrorCode.NoError) {
+        logger.error("Validating FileCopyGetChunkRequest failed with error {} for request {}",
+            error, fileCopyGetChunkRequest);
+        response = new FileCopyGetChunkResponse(
+            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), error);
+      } else {
+        PartitionFileStore fileStore = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId());
+        if (null == fileStore) {
+          logger.error("FileStore is not available for partition {}", fileCopyGetChunkRequest.getPartitionId().getId());
+          throw new StoreException(
+              "FileStore is not available for partition " + fileCopyGetChunkRequest.getPartitionId(),
+              StoreErrorCodes.StoreNotStarted);
+        }
+        chunkResponse = fileStore.getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(),
+            fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes());
+        response = new FileCopyGetChunkResponse(FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
+            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), ServerErrorCode.NoError,
+            fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
+            fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
       }
-      chunkResponse = fileStore.getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(),
-          fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes());
-      response = new FileCopyGetChunkResponse(
-          FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
-          fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
-          ServerErrorCode.NoError, fileCopyGetChunkRequest.getPartitionId(),
-          fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
-          fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
     } catch (Exception e) {
       if (null == fileCopyGetChunkRequest) {
         logger.error("Error while deserializing FileCopyGetChunkRequest", e);
