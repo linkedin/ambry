@@ -35,6 +35,7 @@ public class PartitionInfo {
   // of a partition. Check selectReplicas().
   private ReplicaThread replicaThread = null;
   private int priority;
+  private long arrivalTime;
 
   public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store,
       ReplicaId localReplicaId) {
@@ -152,5 +153,13 @@ public class PartitionInfo {
   @Override
   public String toString() {
     return partitionId.toString() + " " + remoteReplicas.toString();
+  }
+
+  public void setArrivalTime(long arrivalTime) {
+    this.arrivalTime = arrivalTime;
+  }
+
+  public long getArrivalTime() {
+    return arrivalTime;
   }
 }

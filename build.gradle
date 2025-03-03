@@ -344,11 +344,6 @@ project(':ambry-network') {
 
 project (':ambry-prioritization') {
     dependencies{
-        compile project(':ambry-api')
-        compile project(':ambry-commons')
-        compile project(':ambry-store')
-        compile project(':ambry-clustermap')
-
     }
 }
 
@@ -425,7 +420,8 @@ project(':ambry-replication') {
                 project(':ambry-protocol'),
                 project(':ambry-store'),
                 project(':ambry-network'),
-                project(':ambry-clustermap')
+                project(':ambry-clustermap'),
+                project(':ambry-prioritization')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.apache.commons:commons-lang3:$commonsLangVersion"
         testCompile project(':ambry-store')

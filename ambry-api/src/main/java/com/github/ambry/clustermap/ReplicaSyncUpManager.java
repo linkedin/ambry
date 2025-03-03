@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.replica.prioritization.PartitionPriorityTier;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -146,6 +148,6 @@ public interface ReplicaSyncUpManager {
   void onDisconnectionError(ReplicaId replicaId);
 
   AtomicBoolean getBatchInProgress();
-  ConcurrentHashMap<PrioritizedReplicationManager.PriorityTier, ConcurrentSkipListSet<PartitionId>> getActivePartitionsInBatchByTier();
+  ConcurrentHashMap<PartitionPriorityTier, ConcurrentSkipListSet<PartitionId>> getActivePartitionsInBatchByTier();
   ConcurrentSkipListSet<PartitionId> getActivePartitionsInBatch();
 }

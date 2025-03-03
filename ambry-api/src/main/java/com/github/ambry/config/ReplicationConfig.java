@@ -350,6 +350,34 @@ public class ReplicationConfig {
   @Config(BACKUP_CHECKER_REPORT_DIR)
   public final int maxBackupCheckerReportFd;
 
+  /**
+   * The maximum number of partitions to include in a single batch.
+   */
+  @Config("replication.max.partitions.per.batch")
+  @Default("50")
+  public final int maxPartitionsPerBatch;
+
+  /**
+   * The interval in seconds between batch processing checks.
+   */
+  @Config("replication.batch.processing.interval.seconds")
+  @Default("30")
+  public final int batchProcessingIntervalSeconds;
+
+
+  /**
+   * Whether to enable batch-based partition prioritization.
+   */
+  @Config("replication.enable.batch.prioritization")
+  @Default("false")
+  public final boolean enableBatchPrioritization;
+
+  @Config("replication.partition.priority.window.hours")
+  @Default("86400000")
+  public final long partitionPriorityWindowMS;
+
+
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -428,5 +456,10 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
     replicationUsingNonblockingNetworkClientForLocalColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO, false);
+    enableBatchPrioritization = verifiableProperties.getBoolean("replication.enable.batch.prioritization", false);
+    maxPartitionsPerBatch = verifiableProperties.getInt("replication.max.partitions.per.batch", 50);
+    batchProcessingIntervalSeconds =
+        verifiableProperties.getInt("replication.batch.processing.interval.seconds", 30);
+    partitionPriorityWindowMS = verifiableProperties.getInt("replication.partition.priority.window.hours", 86400000);
   }
 }

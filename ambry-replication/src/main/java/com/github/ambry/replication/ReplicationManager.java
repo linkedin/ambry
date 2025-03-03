@@ -31,6 +31,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replica.prioritization.PartitionPriorityTier;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
@@ -44,12 +45,11 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -220,7 +220,7 @@ public class ReplicationManager extends ReplicationEngine {
 
       //batchStartTimeMs.set(System.currentTimeMillis());
 
-      Map<PrioritizedReplicationManager.PriorityTier, List<PartitionInfo>> partitionInfoByPriorityTier = new ConcurrentHashMap<>();
+      Map<PartitionPriorityTier, List<PartitionInfo>> partitionInfoByPriorityTier = getNextBatchByTier();
 
       if (partitionInfoByPriorityTier.isEmpty()) {
         logger.info("No partitions in queue to process");
@@ -232,7 +232,7 @@ public class ReplicationManager extends ReplicationEngine {
       logger.info("Processing {} partitions in this batch across {} tiers", totalBatchSize, partitionInfoByPriorityTier.size());
 
 
-      for (PrioritizedReplicationManager.PriorityTier tier : PrioritizedReplicationManager.PriorityTier.values()) {
+      for (PartitionPriorityTier tier : PartitionPriorityTier.values()) {
         if (partitionInfoByPriorityTier.containsKey(tier) && !partitionInfoByPriorityTier.get(tier).isEmpty()) {
           List<PartitionInfo> partitionInfos = partitionInfoByPriorityTier.get(tier);
           logger.info("Processing {} partitions in tier {}", partitionInfos.size(), tier);
@@ -253,6 +253,58 @@ public class ReplicationManager extends ReplicationEngine {
     } finally {
       replicaSyncUpManager.getBatchInProgress().set(false);
     }
+  }
+
+  /**
+   * Get the next batch of partitions grouped by priority tier
+   * @return Map of priority tier to list of partitions
+   */
+  private Map<PartitionPriorityTier, List<PartitionInfo>> getNextBatchByTier() {
+    Map<PartitionPriorityTier, List<PartitionInfo>> result = new HashMap<>();
+
+    // First determine optimal batch size based on current conditions
+    int optimalBatchSize = replicationConfig.maxPartitionsPerBatch;
+
+    queueLock.lock();
+    try {
+      int remainingBatchSize = optimalBatchSize;
+
+      // Always process CRITICAL and HIGH priority partitions first
+      for (PartitionPriorityTier tier : PartitionPriorityTier.values()) {
+        if (remainingBatchSize <= 0) break;
+
+        List<PartitionInfo> tierPartitions = new ArrayList<>();
+
+        // Collect partitions for this tier
+        for (PartitionInfo info : replicationQueue) {
+          if (PartitionPriorityTier.fromPriority(info.getPriority()) == tier) {
+            tierPartitions.add(info);
+          }
+        }
+
+        // Sort by priority then arrival time
+        tierPartitions.sort(
+            Comparator.comparing(PartitionInfo::getPriority).reversed().thenComparing(PartitionInfo::getArrivalTime));
+
+        // Take up to the remaining batch size for this tier
+        int tierSize = Math.min(tierPartitions.size(), remainingBatchSize);
+        if (tierSize > 0) {
+          List<PartitionInfo> selectedPartitions = tierPartitions.subList(0, tierSize);
+          result.put(tier, new ArrayList<>(selectedPartitions));
+
+          // Remove these partitions from the queue
+          replicationQueue.removeAll(selectedPartitions);
+          // Add metrics to track the number of partitions in the queue
+          //replicationMetrics.partitionQueueSize.dec(selectedPartitions.size());
+
+          remainingBatchSize -= tierSize;
+        }
+      }
+    } finally {
+      queueLock.unlock();
+    }
+
+    return result;
   }
 
   public void assignPartitionToReplicaThread(PartitionInfo partitionInfo) {
@@ -295,10 +347,12 @@ public class ReplicationManager extends ReplicationEngine {
         remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, replicaId);
       }
       int priority = calculatePartitionPriority(replicaId.getPartitionId());
-      PrioritizedReplicationManager.PriorityTier tier = PrioritizedReplicationManager.PriorityTier.fromPriority(priority);
+      long partitionArrivalTime = System.currentTimeMillis();
+      PartitionPriorityTier tier = PartitionPriorityTier.fromPriority(priority);
       updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
       PartitionInfo partitionInfo = partitionToPartitionInfo.get(replicaId.getPartitionId());
       partitionInfo.setPriority(priority);
+      partitionInfo.setArrivalTime(partitionArrivalTime);
       queueLock.lock();
       replicationQueue.add(partitionInfo);
       logger.info("{} is successfully added into replication queue", replicaId.getPartitionId());
@@ -384,22 +438,22 @@ public class ReplicationManager extends ReplicationEngine {
   private int calculatePartitionPriority(PartitionId partitionId) {
     int priority = 0;
 
-    if (replicationConfig.enablePartitionPrioritization) {
+    if (replicationConfig.enableBatchPrioritization) {
       long currentTimeMs = System.currentTimeMillis();
       //long timeToDisruption = poller.getTimeUntilDisruption(partitionId, currentTimeMs);
       long timeToDisruption = 0;
       // if this partitionId has AR=2
       boolean belowMinActiveReplica = false;
-      if (belowMinActiveReplica || timeToDisruption < replicationConfig.partitionPriorityWindowHours * 60 * 60 * 1000) {
+      if (belowMinActiveReplica || timeToDisruption < (long) replicationConfig.partitionPriorityWindowMS) {
         // Base priority for disruption-scheduled partitions
         //priority = 70; // Start at HIGH tier
 
         // Adjust based on time to disruption
-        if (timeToDisruption < 2 * 60 * 60 * 1000) { // Less than 2 hours
+        if (timeToDisruption <= 2 * 60 * 60 * 1000) { // Less than 2 hours
           priority = 95; // CRITICAL tier
-        } else if (timeToDisruption < 6 * 60 * 60 * 1000) { // Less than 6 hours
+        } else if (timeToDisruption <= 6 * 60 * 60 * 1000) { // Less than 6 hours
           priority = 85; // HIGH tier
-        } else if (timeToDisruption < 12 * 60 * 60 * 1000) { // Less than 12 hours
+        } else if (timeToDisruption <= 12 * 60 * 60 * 1000) { // Less than 12 hours
           priority = 75; // HIGH tier
         }
       }

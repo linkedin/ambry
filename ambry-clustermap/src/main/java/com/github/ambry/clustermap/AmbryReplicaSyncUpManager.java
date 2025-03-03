@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.replica.prioritization.PartitionPriorityTier;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Map;
@@ -52,7 +53,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ClusterMapConfig clusterMapConfig;
   private final ReentrantLock updateLock = new ReentrantLock();
   private final ConcurrentSkipListSet<PartitionId> activePartitionsInBatch = new ConcurrentSkipListSet<>();
-  private final ConcurrentHashMap<PrioritizedReplicationManager.PriorityTier, ConcurrentSkipListSet<PartitionId>> activePartitionsInBatchByTier =
+  private final ConcurrentHashMap<PartitionPriorityTier, ConcurrentSkipListSet<PartitionId>> activePartitionsInBatchByTier =
       new ConcurrentHashMap<>();
   private final AtomicBoolean batchInProgress = new AtomicBoolean(false);
 
@@ -213,7 +214,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     boolean removed = activePartitionsInBatch.remove(partitionId);
 
     // Also remove from tier tracking
-    for (PriorityTier tier : PriorityTier.values()) {
+    for (PartitionPriorityTier tier : PartitionPriorityTier.values()) {
       if (activePartitionsInBatchByTier.get(tier).remove(partitionId)) {
         break;
       }
@@ -234,7 +235,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     activePartitionsInBatch.clear();
     activePartitionsInBatchByTier.clear();
     // Clear tier tracking
-    for (PriorityTier tier : PriorityTier.values()) {
+    for (PartitionPriorityTier tier : PartitionPriorityTier.values()) {
       activePartitionsInBatchByTier.get(tier).clear();
     }
 
@@ -315,7 +316,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     return activePartitionsInBatch;
   }
 
-  public ConcurrentHashMap<PrioritizedReplicationManager.PriorityTier, ConcurrentSkipListSet<PartitionId>> getActivePartitionsInBatchByTier() {
+  public ConcurrentHashMap<PartitionPriorityTier, ConcurrentSkipListSet<PartitionId>> getActivePartitionsInBatchByTier() {
     return activePartitionsInBatchByTier;
   }
 
