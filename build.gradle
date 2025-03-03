@@ -223,6 +223,7 @@ project(':ambry-test-utils') {
         compile project(":ambry-router")
         compile project(":ambry-server")
         compile project(":ambry-store")
+        compile project(":ambry-file-transfer")
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
         compile("org.apache.hadoop:hadoop-common:$hadoopCommonVersion") {
             exclude group: "org.bouncycastle"
@@ -361,6 +362,7 @@ project (':ambry-file-transfer') {
         compile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testCompile project(path: ':ambry-replication', configuration: 'testArchives')
     }
 }
 
