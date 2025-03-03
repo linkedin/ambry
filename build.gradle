@@ -362,7 +362,6 @@ project (':ambry-file-transfer') {
         compile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-replication', configuration: 'testArchives')
     }
 }
 
