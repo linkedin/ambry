@@ -42,12 +42,12 @@ public class FileCopyGetMetaDataResponse extends Response {
   /**
    * The version of the response.
    */
-  public static final short File_Copy_Protocol_Metadata_Response_Version_V1 = 1;
+  public static final short FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1 = 1;
 
   /**
    * The current version of the response.
    */
-  static short CURRENT_VERSION = File_Copy_Protocol_Metadata_Response_Version_V1;
+  static short CURRENT_VERSION = FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1;
 
   /**
    * Constructor for FileCopyGetMetaDataResponse

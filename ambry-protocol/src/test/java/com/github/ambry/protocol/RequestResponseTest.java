@@ -36,10 +36,12 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
 import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
@@ -53,8 +55,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -685,9 +689,9 @@ public class RequestResponseTest {
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     FileCopyGetMetaDataRequest fileMetadataRequestFromBytes =
         FileCopyGetMetaDataRequest.readFrom(requestStream, new MockClusterMap());
-    Assert.assertEquals(fileMetadataRequestFromBytes.getHostName(), "host3");
-    Assert.assertEquals(fileMetadataRequestFromBytes.getPartitionId().getId(), 0l);
-    Assert.assertEquals(fileMetadataRequestFromBytes.getPartitionId().toPathString(), "0");
+    Assert.assertEquals("host3", fileMetadataRequestFromBytes.getHostName());
+    Assert.assertEquals(0l, fileMetadataRequestFromBytes.getPartitionId().getId());
+    Assert.assertEquals("0", fileMetadataRequestFromBytes.getPartitionId().toPathString());
     request.release();
 
     try {
@@ -698,7 +702,6 @@ public class RequestResponseTest {
     } catch (NullPointerException e) {
       //expected
     }
-
     try {
       // Sending empty host name. Expected to throw exception.
       new FileCopyGetMetaDataRequest(requestVersionToUse, 111, "id1",
@@ -741,6 +744,71 @@ public class RequestResponseTest {
     byteBuf.release();
   }
 
+  /**
+   * Test the {@link StoreFileChunk#toBuffer} method.
+   * @throws IOException
+   */
+  @Test
+  public void testStoreFileChunkToBuffer() throws IOException {
+    String fileName = "testFile";
+    long fileSize = 12345L;
+    ByteBuf byteBuf = Unpooled.buffer();
+    byteBuf.writeBytes(fileName.getBytes());
+    byteBuf.writeLong(fileSize);
+    DataInputStream fileStream = new DataInputStream(new ByteBufferInputStream(byteBuf.nioBuffer()));
+
+    // Create a StoreFileChunk object and write it to a byte buffer
+    StoreFileChunk storeFileChunk = new StoreFileChunk(fileStream, fileStream.available());
+    ByteBuffer storeFileChunkByteBuffer = storeFileChunk.toBuffer();
+    ByteBuf storeFileChunkBuf = Unpooled.wrappedBuffer(storeFileChunkByteBuffer);
+
+    // Assert that the byte buffer has the correct values
+    Assert.assertEquals(fileName, storeFileChunkBuf.readCharSequence(fileName.length(), StandardCharsets.UTF_8));
+    Assert.assertEquals(fileSize, storeFileChunkBuf.readLong());
+    Assert.assertEquals(fileStream.available(), storeFileChunkBuf.readableBytes());
+    byteBuf.release();
+  }
+
+  /**
+   * Test the {@link StoreFileChunk#from} method.
+   * @throws IOException
+   */
+  @Test
+  public void testStoreFileChunkFrom() throws IOException {
+    String fileName = "testFile";
+    long fileSize = 12345L;
+    ByteBuf byteBuf = Unpooled.buffer();
+    byteBuf.writeBytes(fileName.getBytes());
+    byteBuf.writeLong(fileSize);
+    DataInputStream fileStream = new DataInputStream(new ByteBufferInputStream(byteBuf.nioBuffer()));
+
+    // Read the byte buffer and create a StoreFileChunk object
+    StoreFileChunk storeFileChunk = StoreFileChunk.from(byteBuf.nioBuffer());
+
+    // Assert that the file chunk object has the correct values
+    Assert.assertEquals(storeFileChunk.getChunkLength(), fileStream.available());
+    Assert.assertTrue(areStreamsEqual(fileStream, storeFileChunk.getStream()));
+    byteBuf.release();
+  }
+
+  private boolean areStreamsEqual(InputStream stream1, InputStream stream2) throws IOException {
+    if (stream1 == stream2) {
+      return true;
+    }
+    if (stream1 == null || stream2 == null) {
+      return false;
+    }
+
+    int byte1, byte2;
+    while ((byte1 = stream1.read()) != -1) {
+      byte2 = stream2.read();
+      if (byte1 != byte2) {
+        return false;
+      }
+    }
+    return stream2.read() == -1;
+  }
+
   @Test
   public void doFileCopyMetaDataResponseTest() throws IOException{
     short requestVersionToUse = 1;
@@ -753,12 +821,11 @@ public class RequestResponseTest {
         new ArrayList<>(Collections.singletonList(new StoreFileInfo("1_1_bloom", 1040L))));
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
 
-    FileCopyGetMetaDataResponse response =
-        new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2, logInfoList, ServerErrorCode.NoError);
+    FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
+        logInfoList, ServerErrorCode.NoError);
 
     DataInputStream requestStream1 = serAndPrepForRead(response, -1, false);
-    FileCopyGetMetaDataResponse response1 =
-        FileCopyGetMetaDataResponse.readFrom(requestStream1);
+    FileCopyGetMetaDataResponse response1 = FileCopyGetMetaDataResponse.readFrom(requestStream1);
 
     Assert.assertEquals(111, response1.getCorrelationId());
     Assert.assertEquals(1, response1.versionId);
@@ -789,8 +856,8 @@ public class RequestResponseTest {
     Assert.assertEquals(1040, (long)response1.getLogInfos().get(1).getBloomFilters().get(0).getFileSize());
     response.release();
 
-    response =
-        new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2, logInfoList, ServerErrorCode.IOError);
+    response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
+        logInfoList, ServerErrorCode.IOError);
     DataInputStream requestStream2 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response2 = FileCopyGetMetaDataResponse.readFrom(requestStream2);
     Assert.assertEquals(ServerErrorCode.IOError, response2.getError());
@@ -798,54 +865,166 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void doFileCopyChunkRequestTest() throws IOException{
-    short requestVersionToUse = 1;
-    FileCopyGetChunkRequest request =
-        new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
-            new MockPartitionId(), "file1", 1000, 100);
+  public void doFileCopyChunkRequestTest() throws IOException {
+    short requestVersionToUse = FileCopyGetChunkRequest.CURRENT_VERSION;
+    FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
+        new MockPartitionId(), "0_0_log", 1000, 100);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
-    FileCopyGetChunkRequest.readFrom(requestStream, new MockClusterMap());
-    Assert.assertEquals(request.getFileName(), "file1");
-    Assert.assertEquals(request.getChunkLengthInBytes(), 100);
-    Assert.assertEquals(request.getPartitionId().getId(), 0);
-    Assert.assertEquals(request.getPartitionId().toPathString(), "0");
-    Assert.assertEquals(request.getCorrelationId(), 111);
-    Assert.assertEquals(request.getStartOffset(), 1000);
-    Assert.assertEquals(request.getVersionId(), requestVersionToUse);
+    FileCopyGetChunkRequest deserialisedRequest = FileCopyGetChunkRequest.readFrom(requestStream, new MockClusterMap());
+
+    Assert.assertEquals("0_0_log", deserialisedRequest.getFileName());
+    Assert.assertEquals(100, deserialisedRequest.getChunkLengthInBytes());
+    Assert.assertEquals(0, deserialisedRequest.getPartitionId().getId());
+    Assert.assertEquals("0", deserialisedRequest.getPartitionId().toPathString());
+    Assert.assertEquals(111, deserialisedRequest.getCorrelationId());
+    Assert.assertEquals(1000, deserialisedRequest.getStartOffset());
+    Assert.assertEquals(requestVersionToUse, deserialisedRequest.getVersionId());
     request.release();
 
-    try{
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
-          null, "file1", 1000, 0);
+    try {
+      // Sending CURRENT_VERSION + 1 as version. Expected to throw exception.
+      new FileCopyGetChunkRequest((short) (FileCopyGetChunkRequest.CURRENT_VERSION + 1),
+          111, "id1", new MockPartitionId(), "0_0_log", 1000, 100);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null partition id. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", null, "0_0_log", 1000, 100);
+      Assert.fail("Should have failed");
+    } catch (NullPointerException e){
+      //expected
+    }
+    try {
+      // Sending empty file name. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "", 1000, 100);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
-
-    try{
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
-          new MockPartitionId(), "", 1000, 0);
+    try {
+      // Sending negative start offset. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", -1, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
-
-    try{
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
-          new MockPartitionId(), "file1", -1, 0);
+    try {
+      // Sending negative chunk size. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", 1000, -1);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
-
-    try{
-      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1",
-          new MockPartitionId(), "file1", 1000, -1);
+    try {
+      // Sending 0 chunk size. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", 1000, 0);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
     }
+    try {
+      // Sending filename "some_random_file". Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "some_random_file", 1000, 100);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+    try {
+      // Sending request for logsegment `0_0_log`. Not expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_log", 1000, 100);
+    } catch (IllegalArgumentException e){
+      Assert.fail("Not expected to fail");
+    }
+    try {
+      // Sending request for logsegment `0_0_bloom`. Not expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_bloom", 1000, 100);
+    } catch (IllegalArgumentException e){
+      Assert.fail("Not expected to fail");
+    }
+    try {
+      // Sending request for logsegment `0_0_index`. Not expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "0_0_index", 1000, 100);
+    } catch (IllegalArgumentException e){
+      Assert.fail("Not expected to fail");
+    }
+  }
 
+  @Test
+  public void doFileCopyChunkResponseTest() throws IOException {
+    short requestVersionToUse = FileCopyGetChunkResponse.CURRENT_VERSION;
+    String fileName = "testFile";
+    long fileSize = 12345L;
+    ByteBuf byteBuf = Unpooled.buffer();
+    byteBuf.writeBytes(fileName.getBytes());
+    byteBuf.writeLong(fileSize);
+    DataInputStream fileStream = new DataInputStream(new ByteBufferInputStream(byteBuf.nioBuffer()));
+
+    FileCopyGetChunkResponse response = new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1",
+        ServerErrorCode.NoError, new MockPartitionId(), "file1", fileStream, 0L, fileSize, false);
+    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
+    FileCopyGetChunkResponse deserialisedResponse = FileCopyGetChunkResponse.readFrom(responseStream, new MockClusterMap());
+
+    Assert.assertEquals("file1", deserialisedResponse.getFileName());
+    Assert.assertEquals(0L, deserialisedResponse.getStartOffset());
+    Assert.assertEquals(fileSize, deserialisedResponse.getChunkSizeInBytes());
+    Assert.assertEquals(111, deserialisedResponse.getCorrelationId());
+    Assert.assertEquals(ServerErrorCode.NoError, deserialisedResponse.getError());
+    Assert.assertEquals(0, deserialisedResponse.getPartitionId().getId());
+    Assert.assertEquals("0", deserialisedResponse.getPartitionId().toPathString());
+    Assert.assertEquals(requestVersionToUse, deserialisedResponse.getVersionId());
+    response.release();
+    byteBuf.release();
+
+    try {
+      // Sending CURRENT_VERSION + 1 as version. Expected to throw exception.
+      new FileCopyGetChunkResponse((short) (FileCopyGetChunkResponse.CURRENT_VERSION + 1),
+          111, "id1", ServerErrorCode.NoError, null, "file1", fileStream, 0L, fileSize, false);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null partition id. Expected to throw exception.
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, null, "file1",
+          fileStream, 0L, fileSize, false);
+      Assert.fail("Should have failed");
+    } catch (NullPointerException e) {
+      //expected
+    }
+    try {
+      // Sending empty file name. Expected to throw exception.
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(), "",
+          fileStream, 0L, fileSize, false);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null file stream. Expected to throw exception.
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(),
+          "file1", null, 0L, fileSize, false);
+      Assert.fail("Should have failed");
+    } catch (NullPointerException e) {
+      //expected
+    }
+    try {
+      // Sending negative start offset. Expected to throw exception.
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(),
+          "file1", fileStream, -1, fileSize, false);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending negative chunk size. Expected to throw exception.
+      new FileCopyGetChunkResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, new MockPartitionId(),
+          "file1", fileStream, 0L, -1, false);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
   }
 
   private void doReplicaMetadataRequestTest(short responseVersionToUse, short requestVersionToUse,

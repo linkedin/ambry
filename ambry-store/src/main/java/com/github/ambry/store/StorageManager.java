@@ -38,7 +38,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileStore;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -356,7 +355,7 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public FileStore getFileStore(PartitionId id) {
+  public PartitionFileStore getFileStore(PartitionId id) {
     //TODO: Implementation To Be added.
     return null;
   }

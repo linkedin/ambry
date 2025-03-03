@@ -13,13 +13,12 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;
-import java.nio.file.FileStore;
 import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -92,7 +91,7 @@ public interface StoreManager {
    * @return the {@link FileStore} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
    *         that partition, or that store was not started.
    */
-  FileStore getFileStore(PartitionId id);
+  PartitionFileStore getFileStore(PartitionId id);
 
   /**
    * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific
