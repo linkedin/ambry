@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 LinkedIn Corp. All rights reserved.
+ * Copyright 2025 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,9 +11,9 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.frontend;
+package com.github.ambry.commons;
 
-import com.github.ambry.commons.FutureUtils;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
@@ -41,7 +41,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 
-public class TestNamedBlobDb implements NamedBlobDb {
+public class InMemNamedBlobDb implements NamedBlobDb {
   private static final Set<GetOption> includeDeletedOptions =
       new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs));
   private static final Set<GetOption> includeExpiredOptions =
@@ -52,7 +52,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   private final int listMaxResults;
   private Exception exception;
 
-  public TestNamedBlobDb(Time time, int listMaxResults) {
+  public InMemNamedBlobDb(Time time, int listMaxResults) {
     this.time = time;
     this.listMaxResults = listMaxResults;
   }
@@ -93,10 +93,6 @@ public class TestNamedBlobDb implements NamedBlobDb {
     if (!allRecords.containsKey(accountName) || !allRecords.get(accountName).containsKey(containerName)) {
       future.complete(new Page<>(entries, nextContinuationToken));
       return future;
-    }
-
-    if (blobNamePrefix == null) {
-      blobNamePrefix = "";
     }
 
     TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> allNamedBlobsInContainer =
@@ -169,14 +165,15 @@ public class TestNamedBlobDb implements NamedBlobDb {
     Pair<NamedBlobRecord, Long> recordWithDelete = getInternal(accountName, containerName, blobName);
     if (recordWithDelete == null) {
       future.completeExceptionally(new RestServiceException("NotFound", RestServiceErrorCode.NotFound));
+    } else {
+      long deleteTs = recordWithDelete.getSecond();
+      boolean alreadyDeleted = true;
+      if (deleteTs == 0 || deleteTs >= time.milliseconds()) {
+        alreadyDeleted = false;
+        putInternal(recordWithDelete.getFirst(), NamedBlobState.READY, time.milliseconds());
+      }
+      future.complete(new DeleteResult(recordWithDelete.getFirst().getBlobId(), alreadyDeleted));
     }
-    long deleteTs = recordWithDelete.getSecond();
-    boolean alreadyDeleted = true;
-    if (deleteTs == 0 || deleteTs >= time.milliseconds()) {
-      alreadyDeleted = false;
-      putInternal(recordWithDelete.getFirst(), NamedBlobState.READY, time.milliseconds());
-    }
-    future.complete(new DeleteResult(recordWithDelete.getFirst().getBlobId(), alreadyDeleted));
     return future;
   }
 

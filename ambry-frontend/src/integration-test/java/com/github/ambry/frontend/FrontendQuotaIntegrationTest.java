@@ -184,7 +184,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty("clustermap.port", String.valueOf(PORT));
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
-    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.frontend.TestNamedBlobDbFactory");
+    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.commons.InMemNamedBlobDbFactory");
     return properties;
   }
 

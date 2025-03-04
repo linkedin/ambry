@@ -377,7 +377,7 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(true));
-    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.frontend.TestNamedBlobDbFactory");
+    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.commons.InMemNamedBlobDbFactory");
     properties.setProperty(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, String.valueOf(NAMED_BLOB_LIST_RESULT_MAX));
     return properties;
   }
