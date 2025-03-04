@@ -145,7 +145,7 @@ class FileStore implements PartitionFileStore {
    * @return StoreFileChunk containing the requested data
    * @throws StoreException        if there are issues reading the file
    */
-  public StoreFileChunk getStoreFileChunk(String fileName, long offset, long size, boolean isChunked)
+  public StoreFileChunk readStoreFileChunkFromDisk(String fileName, long offset, long size, boolean isChunked)
       throws StoreException, IOException {
     // Verify service is running before proceeding
     validateIfFileStoreIsRunning();
@@ -192,9 +192,8 @@ class FileStore implements PartitionFileStore {
    * @throws FileStoreException       if the service is not running
    * @throws IllegalArgumentException if fileInputStream is null
    */
-  public void putStoreFileChunk(String outputFilePath, StoreFileChunk storeFileChunk)
+  public void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk)
       throws IOException {
-
       // Verify service is running
       validateIfFileStoreIsRunning();
 
@@ -234,13 +233,12 @@ class FileStore implements PartitionFileStore {
    * @throws FileStoreException       if the service is not running
    * @throws IllegalArgumentException if logInfoList is null
    */
-  public void persistMetaDataToFile(List<LogInfo> logInfoList) throws IOException {
+  public void writeMetaDataFileToDisk(List<LogInfo> logInfoList) throws IOException {
     // Verify service is running
     validateIfFileStoreIsRunning();
 
     // Validate input
     Objects.requireNonNull(logInfoList, "logInfoList must not be null");
-
     try {
       synchronized (storeWriteLock){
         // Write metadata to temporary file first
@@ -251,7 +249,7 @@ class FileStore implements PartitionFileStore {
 
         // Atomically rename temp file to actual file
         tempMetadataFile.renameTo(actualMetadataFile);
-        logger.debug("Completed writing filecopy metadata to file {}", actualMetadataFile.getAbsolutePath());
+        logger.info("Completed writing filecopy metadata to file {}", actualMetadataFile.getAbsolutePath());
       }
     } catch (IOException e) {
       logger.error("IO error while persisting filecopy metadata to disk {}", tempMetadataFile.getAbsoluteFile());
@@ -265,9 +263,7 @@ class FileStore implements PartitionFileStore {
    * @throws IOException        if there are issues reading the metadata
    * @throws FileStoreException if the service is not running
    */
-  public List<LogInfo> readMetaDataFromFile() throws IOException, StoreException {
-    List<LogInfo> logInfoList = new ArrayList<>();
-
+  public List<LogInfo> readMetaDataFileFromDisk() throws IOException, StoreException {
     // Verify service is running
     validateIfFileStoreIsRunning();
     validateAndGetFile(actualMetadataFile.getName());
@@ -275,8 +271,7 @@ class FileStore implements PartitionFileStore {
       // Read metadata from file
       try (FileInputStream fileStream = new FileInputStream(actualMetadataFile)) {
         logger.info("Attempting reading from file: {}", actualMetadataFile.getAbsolutePath());
-        logInfoList = fileMetadataSerde.retrieve(fileStream);
-        return logInfoList;
+        return fileMetadataSerde.retrieve(fileStream);
       }
     } catch (IOException e) {
       logger.error("IO error while reading filecopy metadata from disk {}", actualMetadataFile.getAbsoluteFile());
@@ -302,9 +297,11 @@ class FileStore implements PartitionFileStore {
     String filePath = partitionPath + File.separator + fileName;
     File file = new File(filePath);
     if (!file.exists()) {
+      logger.error("File doesn't exist: {}", filePath);
       throw new StoreException("File doesn't exist: " + filePath, StoreErrorCodes.FileNotFound);
     }
     if (!file.canRead()) {
+      logger.error("File is not readable: {}", filePath);
       throw new StoreException("File is not readable: " + filePath, StoreErrorCodes.AuthorizationFailure);
     }
     return file;

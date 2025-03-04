@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.List;
 
@@ -33,7 +32,7 @@ public interface PartitionFileStore {
    * @return a StoreFileChunk representing the chunk stream of the file requested.
    * @throws StoreException
    */
-  StoreFileChunk getStoreFileChunk(String fileName, long offset, long size, boolean isChunked)
+  StoreFileChunk readStoreFileChunkFromDisk(String fileName, long offset, long size, boolean isChunked)
       throws StoreException, IOException;
 
   /**
@@ -42,19 +41,19 @@ public interface PartitionFileStore {
    * @param storeFileChunk the StoreFileChunk object representing chunk stream of the file to put.
    * @throws IOException
    */
-  void putStoreFileChunk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException;
+  void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException;
 
   /**
    * Persist metadata for a partition. This metadata contains information about log segments, associated index segments and bloom filters.
    * @param logInfoList the list of LogInfo objects to persist.
    * @throws IOException
    */
-  void persistMetaDataToFile(List<LogInfo> logInfoList) throws IOException;
+  void writeMetaDataFileToDisk(List<LogInfo> logInfoList) throws IOException;
 
   /**
    * Read metadata from a partition. This metadata contains information about log segments, associated index segments and bloom filters.
    * @return
    * @throws IOException
    */
-  List<LogInfo> readMetaDataFromFile() throws IOException, StoreException;
+  List<LogInfo> readMetaDataFileFromDisk() throws IOException, StoreException;
 }

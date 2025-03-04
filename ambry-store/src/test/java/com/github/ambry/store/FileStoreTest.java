@@ -95,7 +95,7 @@ public class FileStoreTest {
     fileStore.stop();
     expectedException.expect(FileStoreException.class);
     expectedException.expectMessage("FileStore is not running");
-    fileStore.getStoreFileChunk("test.txt", 0, 10, false);
+    fileStore.readStoreFileChunkFromDisk("test.txt", 0, 10, false);
   }
 
   /**
@@ -111,7 +111,7 @@ public class FileStoreTest {
     fos.write(content.getBytes());
     fos.close();
 
-    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), 0, content.length(), false);
+    StoreFileChunk result = fileStore.readStoreFileChunkFromDisk(testFile.getName(), 0, content.length(), false);
     assertNotNull("Result should not be null", result);
 
     ByteBuffer buf = result.toBuffer();
@@ -148,7 +148,7 @@ public class FileStoreTest {
 
     // Write data using DataInputStream
     try (DataInputStream fis = new DataInputStream(Files.newInputStream(tempInputFile.toPath()))) {
-        fileStore.putStoreFileChunk(outputFile.getAbsolutePath(), new StoreFileChunk(fis, data.length));
+        fileStore.writeStoreFileChunkToDisk(outputFile.getAbsolutePath(), new StoreFileChunk(fis, data.length));
     }
 
     // Verify written data matches original
@@ -175,10 +175,10 @@ public class FileStoreTest {
     List<LogInfo> logInfoList = createMultipleLogInfo();
 
     // Write metadata to file
-    fileStore.persistMetaDataToFile(logInfoList);
+    fileStore.writeMetaDataFileToDisk(logInfoList);
 
     // Read back metadata
-    List<LogInfo> readLogInfoList = fileStore.readMetaDataFromFile();
+    List<LogInfo> readLogInfoList = fileStore.readMetaDataFileFromDisk();
 
     // Verify number of entries matches
     assertEquals("Number of entries should match",
@@ -248,37 +248,45 @@ public class FileStoreTest {
     List<LogInfo> logInfoList = createMultipleLogInfo();
     int numThreads = 3;
     CountDownLatch latch = new CountDownLatch(numThreads);
+    CountDownLatch writeLatch = new CountDownLatch(1);
     ExecutorService executor = Executors.newFixedThreadPool(numThreads);
     AtomicReference<Exception> exception = new AtomicReference<>();
 
     // Define concurrent write task 1
     Runnable writeTask1 = () -> {
         try {
-            fileStore.persistMetaDataToFile(logInfoList);
+            fileStore.writeMetaDataFileToDisk(logInfoList);
+            writeLatch.countDown(); // Signal that a write is done
             latch.countDown();
         } catch (Exception e) {
             exception.set(e);
+        } finally {
+            latch.countDown();
         }
     };
-
     // Define concurrent write task 2
     Runnable writeTask2 = () -> {
         try {
-            fileStore.persistMetaDataToFile(logInfoList);
+            fileStore.writeMetaDataFileToDisk(logInfoList);
+            writeLatch.countDown(); // Signal that a write is done
             latch.countDown();
         } catch (Exception e) {
             exception.set(e);
+        } finally {
+          latch.countDown();
         }
     };
-
     // Define concurrent read task
     Runnable readTask = () -> {
         try {
-            List<LogInfo> result = fileStore.readMetaDataFromFile();
-            assertNotNull("Read operation should complete", result);
+            writeLatch.await(); // Ensure at least one write happens before reading
+            List<LogInfo> result = fileStore.readMetaDataFileFromDisk();
+            assertEquals("Read data should match written data", logInfoList, result);
             latch.countDown();
         } catch (Exception e) {
             exception.set(e);
+        } finally {
+          latch.countDown();
         }
     };
 
@@ -310,7 +318,7 @@ public class FileStoreTest {
   public void testCorruptMetadataFile() throws Exception {
     // Create and write valid metadata
     List<LogInfo> logInfoList = createMultipleLogInfo();
-    fileStore.persistMetaDataToFile(logInfoList);
+    fileStore.writeMetaDataFileToDisk(logInfoList);
 
     // Verify metadata file exists
     File metadataFile = new File(tempDir, "logs_metadata_file");
@@ -324,7 +332,7 @@ public class FileStoreTest {
 
     // Attempt to read corrupted file
     try {
-        fileStore.readMetaDataFromFile();
+        fileStore.readMetaDataFileFromDisk();
         fail("Expected an exception when reading corrupted metadata file");
     } catch (Exception e) {
         // Verify exception type
@@ -364,7 +372,7 @@ public class FileStoreTest {
             @Override
             public ByteBuffer call() throws Exception {
                 try {
-                    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), offset, 2, false);
+                    StoreFileChunk result = fileStore.readStoreFileChunkFromDisk(testFile.getName(), offset, 2, false);
                     latch.countDown();
                     return result.toBuffer();
                 } catch (Exception e) {
@@ -410,10 +418,10 @@ public class FileStoreTest {
     }
 
     // Write large dataset
-    fileStore.persistMetaDataToFile(largeLogInfoList);
+    fileStore.writeMetaDataFileToDisk(largeLogInfoList);
 
     // Read and verify large dataset
-    List<LogInfo> readLogInfoList = fileStore.readMetaDataFromFile();
+    List<LogInfo> readLogInfoList = fileStore.readMetaDataFileFromDisk();
 
     // Verify size matches
     assertEquals("Size of read list should match written list",
@@ -457,7 +465,7 @@ public class FileStoreTest {
         executor.submit(() -> {
             try {
                 startLatch.await(); // Wait for write to begin
-                fileStore.readMetaDataFromFile();
+                fileStore.readMetaDataFileFromDisk();
             } catch (Exception e) {
                 testException.set(e);
             } finally {
@@ -467,7 +475,7 @@ public class FileStoreTest {
     }
 
     // Perform write operation
-    fileStore.persistMetaDataToFile(logInfoList);
+    fileStore.writeMetaDataFileToDisk(logInfoList);
     startLatch.countDown(); // Signal readers to start
 
     // Wait for all readers to complete
@@ -494,7 +502,7 @@ public class FileStoreTest {
   public void testFilePermissions() throws Exception {
     // Create and write test data
     List<LogInfo> logInfoList = createMultipleLogInfo();
-    fileStore.persistMetaDataToFile(logInfoList);
+    fileStore.writeMetaDataFileToDisk(logInfoList);
 
     // Verify file exists
     File metadataFile = new File(tempDir, "logs_metadata_file");
@@ -508,9 +516,9 @@ public class FileStoreTest {
 
     // Attempt to read without permissions
     try {
-        fileStore.readMetaDataFromFile();
+        fileStore.readMetaDataFileFromDisk();
         fail("Expected exception when reading file without permissions");
-    } catch (IOException e) {
+    } catch (StoreException e) {
         // Expected exception
     } finally {
         // Restore permissions for cleanup
