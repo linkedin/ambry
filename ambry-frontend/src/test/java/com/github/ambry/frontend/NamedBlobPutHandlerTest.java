@@ -26,6 +26,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.InMemNamedBlobDbFactory;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -156,7 +157,7 @@ public class NamedBlobPutHandlerTest {
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + DATASET_NAME
             + SLASH + VERSION;
     NamedBlobDbFactory namedBlobDbFactory =
-        new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+        new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     initNamedBlobPutHandler(props);
   }

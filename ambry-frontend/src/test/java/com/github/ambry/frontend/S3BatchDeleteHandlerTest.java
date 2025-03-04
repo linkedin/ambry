@@ -13,6 +13,7 @@
  *
  */
 package com.github.ambry.frontend;
+import com.github.ambry.commons.InMemNamedBlobDbFactory;
 import java.nio.charset.StandardCharsets;
 
 import com.codahale.metrics.MetricRegistry;
@@ -118,7 +119,7 @@ public class S3BatchDeleteHandlerTest {
     S3MessagePayload.DeleteResult response =
         xmlMapper.readValue(byteBuffer.array(), S3MessagePayload.DeleteResult.class);
     assertEquals(response.getDeleted().get(0).getKey(), KEY_NAME);
-    assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3ErrorObject("key-error","InternalServerError").toString());
+    assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3ErrorObject("key-error","NotFound").toString());
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
 
@@ -237,7 +238,7 @@ public class S3BatchDeleteHandlerTest {
             idSigningService, injector, QuotaTestUtils.createDummyQuotaManager());
     SecurityService securityService = securityServiceFactory.getSecurityService();
     NamedBlobDbFactory namedBlobDbFactory =
-        new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+        new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     NamedBlobDb namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
