@@ -1781,7 +1781,7 @@ public class AmbryRequests implements RequestAPI {
               "FileStore is not available for partition " + fileCopyGetChunkRequest.getPartitionId(),
               StoreErrorCodes.StoreNotStarted);
         }
-        chunkResponse = fileStore.getByteBufferForFileChunk(fileCopyGetChunkRequest.getFileName(),
+        chunkResponse = fileStore.getStoreFileChunk(fileCopyGetChunkRequest.getFileName(),
             fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes());
         response = new FileCopyGetChunkResponse(FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
             fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), ServerErrorCode.NoError,

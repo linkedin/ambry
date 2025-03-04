@@ -40,7 +40,6 @@ import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
-import com.codahale.metrics.MetricRegistry;
 import java.nio.file.Files;
 
 import static org.junit.Assert.*;
@@ -96,7 +95,7 @@ public class FileStoreTest {
     fileStore.stop();
     expectedException.expect(FileStoreException.class);
     expectedException.expectMessage("FileStore is not running");
-    fileStore.getByteBufferForFileChunk("test.txt", 0, 10);
+    fileStore.getStoreFileChunk("test.txt", 0, 10);
   }
 
   /**
@@ -112,7 +111,7 @@ public class FileStoreTest {
     fos.write(content.getBytes());
     fos.close();
 
-    StoreFileChunk result = fileStore.getByteBufferForFileChunk(testFile.getName(), 0, content.length());
+    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), 0, content.length());
     assertNotNull("Result should not be null", result);
 
     ByteBuffer buf = result.toBuffer();
@@ -147,9 +146,9 @@ public class FileStoreTest {
     assertTrue("Failed to create test directory",
         outputFile.getParentFile().exists() || outputFile.getParentFile().mkdirs());
 
-    // Write data using FileInputStream
+    // Write data using DataInputStream
     try (DataInputStream fis = new DataInputStream(Files.newInputStream(tempInputFile.toPath()))) {
-        fileStore.putChunkToFile(outputFile.getAbsolutePath(), fis);
+        fileStore.putStoreFileChunk(outputFile.getAbsolutePath(), new StoreFileChunk(fis, data.length));
     }
 
     // Verify written data matches original
@@ -365,7 +364,7 @@ public class FileStoreTest {
             @Override
             public ByteBuffer call() throws Exception {
                 try {
-                    StoreFileChunk result = fileStore.getByteBufferForFileChunk(testFile.getName(), offset, 2);
+                    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), offset, 2);
                     latch.countDown();
                     return result.toBuffer();
                 } catch (Exception e) {

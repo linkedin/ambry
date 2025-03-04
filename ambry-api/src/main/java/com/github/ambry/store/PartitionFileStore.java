@@ -32,15 +32,15 @@ public interface PartitionFileStore {
    * @return a StoreFileChunk representing the chunk stream of the file requested.
    * @throws StoreException
    */
-  StoreFileChunk getByteBufferForFileChunk(String fileName, long offset, long size) throws StoreException;
+  StoreFileChunk getStoreFileChunk(String fileName, long offset, long size) throws StoreException;
 
   /**
    * Put a chunk to a file.
    * @param outputFilePath the path of the file to put the chunk to.
-   * @param dataInputStream the chunk stream of the file to put.
+   * @param storeFileChunk the StoreFileChunk object representing chunk stream of the file to put.
    * @throws IOException
    */
-  void putChunkToFile(String outputFilePath, DataInputStream dataInputStream) throws IOException;
+  void putStoreFileChunk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException;
 
   /**
    * Persist metadata for a partition. This metadata contains information about log segments, associated index segments and bloom filters.

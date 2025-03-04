@@ -138,15 +138,15 @@ class FileStore implements PartitionFileStore {
   }
 
   /**
-   * Reads a portion of a file into a ByteBuffer.
+   * Reads a portion of a file into a StoreFileChunk object.
    *
    * @param fileName The name of the file to read
    * @param offset   The starting position in the file
    * @param size     The number of bytes to read
-   * @return ByteBuffer containing the requested data
+   * @return StoreFileChunk containing the requested data
    * @throws StoreException        if there are issues reading the file
    */
-  public StoreFileChunk getByteBufferForFileChunk(String fileName, long offset, long size)
+  public StoreFileChunk getStoreFileChunk(String fileName, long offset, long size)
       throws StoreException {
     // Verify service is running before proceeding
     validateIfFileStoreIsRunning();
@@ -198,19 +198,20 @@ class FileStore implements PartitionFileStore {
    * @throws FileStoreException       if the service is not running
    * @throws IllegalArgumentException if fileInputStream is null
    */
-  public void putChunkToFile(String outputFilePath, DataInputStream dataInputStream)
+  public void putStoreFileChunk(String outputFilePath, StoreFileChunk storeFileChunk)
       throws IOException {
 
       // Verify service is running
       validateIfFileStoreIsRunning();
 
       // Validate input
-      Objects.requireNonNull(dataInputStream, "fileInputStream must not be null");
+      Objects.requireNonNull(storeFileChunk, "storeFileChunk must not be null");
+      Objects.requireNonNull(storeFileChunk.getStream(), "dataInputStream in storeFileChunk must not be null");
 
       // Can add buffered streaming to avoid memory overusage if multiple threads calling FileStore.
       // Read the entire file content into memory
-      int fileSize = dataInputStream.available();
-      byte[] content = Utils.readBytesFromStream(dataInputStream, fileSize);
+      int fileSize = storeFileChunk.getStream().available();
+      byte[] content = Utils.readBytesFromStream(storeFileChunk.getStream(), fileSize);
 
       try {
         synchronized (storeWriteLock) {
