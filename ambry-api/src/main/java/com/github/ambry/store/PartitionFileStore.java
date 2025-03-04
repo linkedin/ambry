@@ -29,10 +29,12 @@ public interface PartitionFileStore {
    * @param fileName the name of the requested file. This could be a log segment, index segment or bloom filter.
    * @param offset the start offset of the requested chunk.
    * @param size the size of the requested chunk in bytes.
+   * @param isChunked whether the request is chunked or not.
    * @return a StoreFileChunk representing the chunk stream of the file requested.
    * @throws StoreException
    */
-  StoreFileChunk getStoreFileChunk(String fileName, long offset, long size) throws StoreException;
+  StoreFileChunk getStoreFileChunk(String fileName, long offset, long size, boolean isChunked)
+      throws StoreException, IOException;
 
   /**
    * Put a chunk to a file.
@@ -54,5 +56,5 @@ public interface PartitionFileStore {
    * @return
    * @throws IOException
    */
-  List<LogInfo> readMetaDataFromFile() throws IOException;
+  List<LogInfo> readMetaDataFromFile() throws IOException, StoreException;
 }

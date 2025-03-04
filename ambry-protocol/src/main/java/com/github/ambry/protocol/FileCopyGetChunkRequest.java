@@ -48,6 +48,11 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
   private final long chunkLengthInBytes;
 
   /**
+   * Whether the request is chunked or not.
+   */
+  private final boolean isChunked;
+
+  /**
    * The version of the FileChunkRequest
    */
   public static final short FILE_CHUNK_REQUEST_VERSION_V_1 = 1;
@@ -56,6 +61,11 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
    * The size of the file name field in bytes.
    */
   private static final int FILE_NAME_SIZE_IN_BYTES = 4;
+
+  /**
+   * The size of the isChunked field in bytes.
+   */
+  private static final int IS_CHUNKED_SIZE_IN_BYTES = 1;
 
   /**
    * The current version of the FileChunkRequest
@@ -73,7 +83,7 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
    * @param sizeInBytes The size of the chunk in bytes.
    */
   public FileCopyGetChunkRequest(short versionId, int correlationId,
-      String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
+      String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes, boolean isChunked) {
     super(RequestOrResponseType.FileCopyGetChunkRequest, versionId, correlationId, clientId);
     validateRequest(versionId, partitionId, fileName, startOffset, sizeInBytes);
 
@@ -81,6 +91,7 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     this.fileName = fileName;
     this.startOffset = startOffset;
     this.chunkLengthInBytes = sizeInBytes;
+    this.isChunked = isChunked;
   }
 
   private void validateRequest(short versionId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
@@ -119,9 +130,10 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     String fileName = Utils.readIntString(stream);
     long startOffset = stream.readLong();
     long sizeInBytes = stream.readLong();
+    boolean isChunked = stream.readBoolean();
 
     return new FileCopyGetChunkRequest(versionId, correlationId, clientId, partitionId,
-        fileName, startOffset, sizeInBytes);
+        fileName, startOffset, sizeInBytes, isChunked);
   }
 
   /**
@@ -134,6 +146,7 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     Utils.serializeString(bufferToSend, fileName, Charset.defaultCharset());
     bufferToSend.writeLong(startOffset);
     bufferToSend.writeLong(chunkLengthInBytes);
+    bufferToSend.writeBoolean(isChunked);
   }
 
   public String toString(){
@@ -143,6 +156,7 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
         .append(", FileName=").append(fileName)
         .append(", StartOffset=").append(startOffset)
         .append(", SizeInBytes=").append(chunkLengthInBytes)
+        .append(", IsChunked=").append(isChunked)
         .append("]");
     return sb.toString();
   }
@@ -153,7 +167,7 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
    */
   public long sizeInBytes() {
     return super.sizeInBytes() + partitionId.getBytes().length + FILE_NAME_SIZE_IN_BYTES + fileName.length() +
-        Long.BYTES + Long.BYTES;
+        Long.BYTES + Long.BYTES + IS_CHUNKED_SIZE_IN_BYTES;
   }
 
   /**
@@ -186,6 +200,14 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
    */
   public long getChunkLengthInBytes() {
     return chunkLengthInBytes;
+  }
+
+  /**
+   * Get whether the request is chunked or not
+   * @return boolean
+   */
+  public boolean isChunked() {
+    return isChunked;
   }
 
   static void validateVersion(short version){

@@ -91,11 +91,11 @@ public class FileStoreTest {
    * Expects FileStoreException with appropriate message.
    */
   @Test
-  public void testOperationsWhenNotRunning() throws StoreException {
+  public void testOperationsWhenNotRunning() throws StoreException, IOException {
     fileStore.stop();
     expectedException.expect(FileStoreException.class);
     expectedException.expectMessage("FileStore is not running");
-    fileStore.getStoreFileChunk("test.txt", 0, 10);
+    fileStore.getStoreFileChunk("test.txt", 0, 10, false);
   }
 
   /**
@@ -111,7 +111,7 @@ public class FileStoreTest {
     fos.write(content.getBytes());
     fos.close();
 
-    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), 0, content.length());
+    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), 0, content.length(), false);
     assertNotNull("Result should not be null", result);
 
     ByteBuffer buf = result.toBuffer();
@@ -170,7 +170,7 @@ public class FileStoreTest {
    * @throws IOException if file operations fail
    */
   @Test
-  public void testMetadataOperations() throws IOException {
+  public void testMetadataOperations() throws IOException, StoreException {
     // Create test metadata
     List<LogInfo> logInfoList = createMultipleLogInfo();
 
@@ -364,7 +364,7 @@ public class FileStoreTest {
             @Override
             public ByteBuffer call() throws Exception {
                 try {
-                    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), offset, 2);
+                    StoreFileChunk result = fileStore.getStoreFileChunk(testFile.getName(), offset, 2, false);
                     latch.countDown();
                     return result.toBuffer();
                 } catch (Exception e) {

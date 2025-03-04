@@ -1782,7 +1782,8 @@ public class AmbryRequests implements RequestAPI {
               StoreErrorCodes.StoreNotStarted);
         }
         chunkResponse = fileStore.getStoreFileChunk(fileCopyGetChunkRequest.getFileName(),
-            fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes());
+            fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes(),
+            fileCopyGetChunkRequest.isChunked());
         response = new FileCopyGetChunkResponse(FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
             fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), ServerErrorCode.NoError,
             fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
