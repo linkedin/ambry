@@ -21,6 +21,7 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.InMemNamedBlobDbFactory;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
@@ -104,7 +105,7 @@ public class S3DeleteHandlerTest {
             idSigningService, injector, QuotaTestUtils.createDummyQuotaManager());
     SecurityService securityService = securityServiceFactory.getSecurityService();
     NamedBlobDbFactory namedBlobDbFactory =
-        new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+        new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     NamedBlobDb namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);

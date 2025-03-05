@@ -109,6 +109,14 @@ public class ServerMetrics {
   public final Meter fileCopyGetMetadataRequestRate;
   public final Meter fileCopyGetMetadataDroppedRate;
 
+  public final Histogram fileCopyGetChunkRequestQueueTimeInMs;
+  public final Histogram fileCopyGetChunkProcessingTimeInMs;
+  public final Histogram fileCopyGetChunkResponseQueueTimeInMs;
+  public final Histogram fileCopyGetChunkSendTimeInMs;
+  public final Histogram fileCopyGetChunkTotalTimeInMs;
+  public final Meter fileCopyGetChunkRequestRate;
+  public final Meter fileCopyGetChunkDroppedRate;
+
 
   public final Histogram batchDeleteBlobRequestQueueTimeInMs;
   public final Histogram batchDeleteBlobProcessingTimeInMs;
@@ -443,6 +451,21 @@ public class ServerMetrics {
         registry.meter(MetricRegistry.name(requestClass, "FileCopyGetMetadataRequestRate"));
     fileCopyGetMetadataDroppedRate =
         registry.meter(MetricRegistry.name(requestClass, "FileCopyGetMetadataDroppedRate"));
+
+    fileCopyGetChunkRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetChunkRequestQueueTimeInMs"));
+    fileCopyGetChunkProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetChunkProcessingTimeInMs"));
+    fileCopyGetChunkResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetChunkResponseQueueTimeInMs"));
+    fileCopyGetChunkSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetChunkSendTimeInMs"));
+    fileCopyGetChunkTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyGetChunkTotalTimeInMs"));
+    fileCopyGetChunkRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "FileCopyGetChunkRequestRate"));
+    fileCopyGetChunkDroppedRate =
+        registry.meter(MetricRegistry.name(requestClass, "FileCopyGetChunkDroppedRate"));
 
     batchDeleteBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobRequestQueueTimeInMs"));

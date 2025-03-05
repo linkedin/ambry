@@ -13,7 +13,6 @@
  */
 package com.github.ambry.filetransfer;
 
-import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
