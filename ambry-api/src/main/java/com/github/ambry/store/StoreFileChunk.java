@@ -41,7 +41,9 @@ public class StoreFileChunk {
    */
   public StoreFileChunk(DataInputStream stream, long chunkLength) {
     Objects.requireNonNull(stream, "DataInputStream cannot be null");
-
+    if (chunkLength < 0) {
+      throw new IllegalArgumentException("Chunk length cannot be negative");
+    }
     this.stream = stream;
     this.chunkLength = chunkLength;
   }

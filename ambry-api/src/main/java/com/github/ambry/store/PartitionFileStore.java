@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.List;
 
@@ -29,30 +28,35 @@ public interface PartitionFileStore {
    * @param fileName the name of the requested file. This could be a log segment, index segment or bloom filter.
    * @param offset the start offset of the requested chunk.
    * @param size the size of the requested chunk in bytes.
+   * @param isChunked whether the request is chunked or not.
    * @return a StoreFileChunk representing the chunk stream of the file requested.
    * @throws StoreException
    */
-  StoreFileChunk getByteBufferForFileChunk(String fileName, long offset, long size) throws StoreException;
+  StoreFileChunk readStoreFileChunkFromDisk(String fileName, long offset, long size, boolean isChunked)
+      throws StoreException, IOException;
 
   /**
    * Put a chunk to a file.
    * @param outputFilePath the path of the file to put the chunk to.
-   * @param dataInputStream the chunk stream of the file to put.
+   * @param storeFileChunk the StoreFileChunk object representing chunk stream of the file to put.
    * @throws IOException
    */
-  void putChunkToFile(String outputFilePath, DataInputStream dataInputStream) throws IOException;
+  void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk)
+      throws IOException;
 
   /**
    * Persist metadata for a partition. This metadata contains information about log segments, associated index segments and bloom filters.
    * @param logInfoList the list of LogInfo objects to persist.
    * @throws IOException
    */
-  void persistMetaDataToFile(List<LogInfo> logInfoList) throws IOException;
+  void writeMetaDataFileToDisk(List<LogInfo> logInfoList)
+      throws IOException;
 
   /**
    * Read metadata from a partition. This metadata contains information about log segments, associated index segments and bloom filters.
    * @return
    * @throws IOException
    */
-  List<LogInfo> readMetaDataFromFile() throws IOException;
+  List<LogInfo> readMetaDataFileFromDisk()
+      throws IOException, StoreException;
 }
