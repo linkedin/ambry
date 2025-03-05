@@ -78,7 +78,7 @@ class FileStore implements PartitionFileStore {
   private final FileMetadataSerde fileMetadataSerde = new FileMetadataSerde();;
 
   // Configuration for file copy operations
-  private final String partitionPath;
+  private final String partitionToMountPath;
 
   // File object for temporary metadata file writing
   private final File tempMetadataFile;
@@ -92,15 +92,15 @@ class FileStore implements PartitionFileStore {
   /**
    * Creates a new FileStore instance.
    * @param fileCopyConfig Configuration for file copy operations
-   * @param partitionPath partition path for Filestore to access
+   * @param partitionToMountPath partition path for Filestore to access
    * @throws NullPointerException if fileCopyConfig is null
    */
-  public FileStore(FileCopyConfig fileCopyConfig, String partitionPath) {
-    this.partitionPath = partitionPath;
+  public FileStore(FileCopyConfig fileCopyConfig, String partitionToMountPath) {
+    this.partitionToMountPath = partitionToMountPath;
 
     // Create temporary and actual file paths for metadata persistence
-    tempMetadataFile = new File(partitionPath, fileCopyConfig.filecopyMetaDataFileName + ".tmp");
-    actualMetadataFile = new File(partitionPath, fileCopyConfig.filecopyMetaDataFileName);
+    tempMetadataFile = new File(partitionToMountPath, fileCopyConfig.filecopyMetaDataFileName + ".tmp");
+    actualMetadataFile = new File(partitionToMountPath, fileCopyConfig.filecopyMetaDataFileName);
   }
 
   /**
@@ -294,7 +294,7 @@ class FileStore implements PartitionFileStore {
    * @throws StoreException if the file doesn't exist or is not readable
    */
   private File validateAndGetFile(String fileName) throws StoreException {
-    String filePath = partitionPath + File.separator + fileName;
+    String filePath = partitionToMountPath + File.separator + fileName;
     File file = new File(filePath);
     if (!file.exists()) {
       logger.error("File doesn't exist: {}", filePath);
