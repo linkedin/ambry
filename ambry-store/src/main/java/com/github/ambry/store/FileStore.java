@@ -66,7 +66,7 @@ import org.slf4j.LoggerFactory;
  * - Uses atomic operations for file writes
  * - Maintains thread-safe state management
  */
-class FileStore implements PartitionFileStore {
+public class FileStore implements PartitionFileStore {
   // Logger instance for this class
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
 
@@ -281,10 +281,9 @@ class FileStore implements PartitionFileStore {
 
   /**
    * Performs cleanup operations when shutting down the FileStore.
-   * Currently a no-op implementation.
    */
   public void shutdown() {
-    // no-op
+    isRunning = false;
   }
 
   /**

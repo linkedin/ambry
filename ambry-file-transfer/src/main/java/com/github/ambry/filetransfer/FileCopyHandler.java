@@ -13,15 +13,17 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.clustermap.ReplicaId;
+
+
 /**
  * Interface for FileCopyHandler. This Handler does file copy of
  * data from the given node to current node
  */
 public interface FileCopyHandler {
-
   /**
    * do the file copy
    * @throws Exception exception
    */
-  void copy() throws Exception;
+  void copy(ReplicaId sourceReplicaId, ReplicaId targetReplicaId) throws Exception;
 }
