@@ -348,8 +348,8 @@ public class DynamicClusterManagerComponentsTest {
     }
 
     @Override
-    public boolean getIsValidPartition(AmbryPartition ambryPartition) {
-      throw new UnsupportedOperationException("Temporarily unsupported");
+    public boolean getIsValidPartition(String partitionID) {
+      return true;
     }
 
     /**

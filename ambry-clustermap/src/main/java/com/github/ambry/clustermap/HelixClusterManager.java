@@ -1411,12 +1411,13 @@ public class HelixClusterManager implements ClusterMap {
 
     /**
      *
-     * @param ambryPartition
+     * @param partitionID
      * @return boolean regarding whether we can write to it
      */
     @Override
-    public boolean getIsValidPartition(AmbryPartition ambryPartition) {
-      Set<String> resource = getResourceForPartitionInLocalDc(String.valueOf(ambryPartition.getId()));
+    public boolean getIsValidPartition(String partitionID) {
+      Set<String> resource = getResourceForPartitionInLocalDc(partitionID);
+      AmbryPartition ambryPartition = partitionNameToAmbryPartition.get(partitionID);
       List<AmbryReplica> replicaIds = getReplicaIdsForPartition(ambryPartition);
       ResourceInfo resourceInfo = queryResourceInfos((ResourceIdentifier) resource).get(0);
       if (resourceInfo.numExpectedReplicas == 1 && replicaIds.size() > 1) {

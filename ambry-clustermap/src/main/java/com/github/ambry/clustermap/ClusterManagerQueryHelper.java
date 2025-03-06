@@ -82,5 +82,5 @@ interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P ext
    * Return whether the external view count of replicas match those from ideal state.
    *
    */
-  boolean getIsValidPartition(AmbryPartition ambryPartition);
+  boolean getIsValidPartition(String partitionID);
 }

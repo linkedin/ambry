@@ -717,10 +717,10 @@ public class ClusterMapUtils {
       this.clusterManagerMetrics = clusterManagerMetrics;
 
       Collection<?> partitions = clusterManagerQueryHelper.getPartitions();
-      Collection<AmbryPartition> filteredPartions = new ArrayList<>();
+      Collection<PartitionId> filteredPartions = new ArrayList<>();
       for (Object partition : partitions) {
-        if (clusterManagerQueryHelper.getIsValidPartition((AmbryPartition) partition)){
-          filteredPartions.add((AmbryPartition) partition);
+        if (clusterManagerQueryHelper.getIsValidPartition(partition.toString())){
+          filteredPartions.add((PartitionId) partition);
         }
       }
       updatePartitions(filteredPartions, localDatacenterName);

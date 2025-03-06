@@ -100,6 +100,13 @@ public class ClusterMapUtilsTest {
         new HashSet<>(Arrays.asList(everywhere1, everywhere2, majorDc11, majorDc12, majorDc21, majorDc22)));
     ClusterManagerQueryHelper mockClusterManagerQueryHelper = Mockito.mock(ClusterManagerQueryHelper.class);
     doReturn(allPartitionIdsMain).when(mockClusterManagerQueryHelper).getPartitions();
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[0]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[1]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[2]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[4]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[5]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[6]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[3]");
     ClusterMapUtils.PartitionSelectionHelper psh =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, null, minimumLocalReplicaCount,
             maxReplicasAllSites, null);

@@ -373,7 +373,7 @@ public class PartitionLayout {
     }
 
     @Override
-    public boolean getIsValidPartition(AmbryPartition ambryPartition) {
+    public boolean getIsValidPartition(String partitionID) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
   }
