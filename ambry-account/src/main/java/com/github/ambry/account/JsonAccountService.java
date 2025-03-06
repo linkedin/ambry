@@ -99,8 +99,8 @@ public final class JsonAccountService extends AbstractAccountService {
         scheduler.scheduleAtFixedRate(updater, 0, accountConfig.updaterPollingIntervalMs,
             TimeUnit.MILLISECONDS);
         logger.info(
-            "Background account updater will fetch accounts from remote starting {} ms from now and repeat with interval={} ms",
-            0, accountConfig.updaterPollingIntervalMs);
+            "Background account updater will poll for accounts every {} ms",
+            accountConfig.updaterPollingIntervalMs);
       } else {
         processAccountJsonFile();
       }
