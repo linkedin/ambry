@@ -371,5 +371,10 @@ public class PartitionLayout {
     public Collection<Partition> getPartitions() {
       return partitionMap.values();
     }
+
+    @Override
+    public boolean getIsValidPartition(AmbryPartition ambryPartition) {
+      return true;
+    }
   }
 }

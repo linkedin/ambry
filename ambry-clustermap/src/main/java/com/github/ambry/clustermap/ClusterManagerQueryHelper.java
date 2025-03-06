@@ -77,4 +77,10 @@ interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P ext
    * @return a collection of partitions in this cluster.
    */
   Collection<P> getPartitions();
+
+  /**
+   * Return whether the external view count of replicas match those from ideal state.
+   *
+   */
+  boolean getIsValidPartition(AmbryPartition ambryPartition);
 }

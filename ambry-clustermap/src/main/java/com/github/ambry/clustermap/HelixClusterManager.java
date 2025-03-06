@@ -689,7 +689,7 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Add partition if it's not present in cluster-wide partition map and also update cluster-wide allocated usable
+   * Add partition if it's not present in cluster-wide partition map and also ee cluster-wide allocated usable
    * capacity. If the partition already exists, skip addition and return current partition.
    * @param partition the {@link AmbryPartition} to add (if not present)
    * @param capacityBytes the capacity of partition in bytes
@@ -1407,6 +1407,22 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public Collection<AmbryPartition> getPartitions() {
       return new ArrayList<>(partitionMap.values());
+    }
+
+    /**
+     *
+     * @param ambryPartition
+     * @return boolean regarding whether we can write to it
+     */
+    @Override
+    public boolean getIsValidPartition(AmbryPartition ambryPartition) {
+      Set<String> resource = getResourceForPartitionInLocalDc(String.valueOf(ambryPartition.getId()));
+      List<AmbryReplica> replicaIds = getReplicaIdsForPartition(ambryPartition);
+      ResourceInfo resourceInfo = queryResourceInfos((ResourceIdentifier) resource).get(0);
+      if (resourceInfo.numExpectedReplicas == 1 && replicaIds.size() > 1) {
+        return false;
+      }
+      return true;
     }
 
     /**
