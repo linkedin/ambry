@@ -13,6 +13,7 @@
  */
 package com.github.ambry.filecopy;
 
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filetransfer.FileCopyHandler;
 
 
@@ -25,7 +26,7 @@ public class MockNoOpFileCopyHandler implements FileCopyHandler {
   }
 
   @Override
-  public void copy() throws Exception {
+  public void copy(ReplicaId sourceReplicaId, ReplicaId targetReplicaId) throws Exception {
     if (exception != null) {
       throw exception;
     }
