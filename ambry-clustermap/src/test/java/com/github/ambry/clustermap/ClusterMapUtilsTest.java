@@ -271,7 +271,6 @@ public class ClusterMapUtilsTest {
     properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
     properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, "DEV");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
-
     // test a simple success case.
     BlobId blobId =
         ClusterMapUtils.reserveMetadataBlobId(partitionClass, partitionsToExclude, reservedMetadataIdMetrics,
