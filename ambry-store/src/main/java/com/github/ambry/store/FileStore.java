@@ -176,11 +176,14 @@ public class FileStore implements PartitionFileStore {
       buf.flip();
       // return file chunk buffer read
       return StoreFileChunk.from(buf);
-    }  catch (FileNotFoundException e) {
+    } catch (FileNotFoundException e) {
       throw new StoreException("File not found while reading chunk for FileCopy", e, StoreErrorCodes.FileNotFound);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + "while reading chunk for FileCopy", e, errorCode);
+    } catch (Exception e){
+      logger.error("Error while reading chunk from file: {}", fileName, e);
+      throw new FileStoreException("Error while reading chunk from file: " + fileName, e, FileStoreErrorCode.FileStoreReadError);
     }
   }
 
@@ -221,7 +224,8 @@ public class FileStore implements PartitionFileStore {
           Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         }
       } catch (Exception e){
-        throw new FileStoreException("FileStore encountered write error", FileStoreErrorCode.FileStoreWriteError);
+        logger.error("Error while writing chunk to file: {}", outputFilePath, e);
+        throw new FileStoreException("Error while writing chunk to file: " + outputFilePath, FileStoreErrorCode.FileStoreWriteError);
       }
       logger.info("Write successful for chunk to file: {} with size: {}", outputFilePath, content.length);
   }
@@ -254,6 +258,9 @@ public class FileStore implements PartitionFileStore {
     } catch (IOException e) {
       logger.error("IO error while persisting filecopy metadata to disk {}", tempMetadataFile.getAbsoluteFile());
       throw e;
+    } catch (Exception e) {
+      logger.error("Error while writing metadata to disk", e);
+      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.FileStoreWriteError);
     }
   }
 
@@ -276,6 +283,9 @@ public class FileStore implements PartitionFileStore {
     } catch (IOException e) {
       logger.error("IO error while reading filecopy metadata from disk {}", actualMetadataFile.getAbsoluteFile());
       throw e;
+    } catch (Exception e) {
+      logger.error("Error while reading metadata from disk", e);
+      throw new FileStoreException("Error while reading metadata from disk", e, FileStoreErrorCode.FileStoreReadError);
     }
   }
 

@@ -19,6 +19,6 @@ public class StoreFileCopyHandlerFactory implements FileCopyHandlerFactory {
 
   @Override
   public FileCopyHandler getFileCopyHandler() {
-    return new StoreFileCopyHandler(connectionPool, storeManager, clusterMap);
+    return new TestStoreFileCopyHandler(connectionPool, storeManager, clusterMap);
   }
 }
