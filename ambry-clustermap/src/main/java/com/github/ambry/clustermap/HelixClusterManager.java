@@ -689,7 +689,7 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Add partition if it's not present in cluster-wide partition map and also ee cluster-wide allocated usable
+   * Add partition if it's not present in cluster-wide partition map and also update cluster-wide allocated usable
    * capacity. If the partition already exists, skip addition and return current partition.
    * @param partition the {@link AmbryPartition} to add (if not present)
    * @param capacityBytes the capacity of partition in bytes

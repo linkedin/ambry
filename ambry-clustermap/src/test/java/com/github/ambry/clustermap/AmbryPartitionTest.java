@@ -156,6 +156,11 @@ public class AmbryPartitionTest {
       return null;
     }
 
+    @Override
+    public boolean getIsValidPartition(AmbryPartition ambryPartition) {
+      return false;
+    }
+
     /**
      * Increment the sealed state counter by one.
      */

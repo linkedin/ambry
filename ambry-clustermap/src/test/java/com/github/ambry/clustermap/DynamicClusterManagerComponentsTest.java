@@ -311,7 +311,7 @@ public class DynamicClusterManagerComponentsTest {
 
     @Override
     public List<String> getResourceNamesForPartition(AmbryPartition partition) {
-      return ClusterManagerQueryHelper.super.getResourceNamesForPartition(partition);
+      throw new UnsupportedOperationException("Temporarily unsupported");
     }
 
     @Override
@@ -349,7 +349,7 @@ public class DynamicClusterManagerComponentsTest {
 
     @Override
     public boolean getIsValidPartition(AmbryPartition ambryPartition) {
-      return false;
+      throw new UnsupportedOperationException("Temporarily unsupported");
     }
 
     /**
