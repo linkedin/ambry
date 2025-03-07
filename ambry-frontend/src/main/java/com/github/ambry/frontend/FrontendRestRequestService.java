@@ -545,7 +545,6 @@ class FrontendRestRequestService implements RestRequestService {
       securityService.preProcessRequest(restRequest, FrontendUtils.buildCallback(preProcessingMetrics, r -> {
         RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
         restRequest.setArg(REQUEST_PATH, requestPath);
-        restRequest.setArg(REST_METHOD, restRequest.getRestMethod());
         routingAction.accept(requestPath);
       }, restRequest.getUri(), logger, errorCallback));
     } catch (Exception e) {

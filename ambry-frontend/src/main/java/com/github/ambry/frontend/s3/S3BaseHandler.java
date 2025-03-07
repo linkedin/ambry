@@ -18,7 +18,6 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.FrontendMetrics;
-import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.rest.RequestPath;
@@ -27,7 +26,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,10 +97,10 @@ abstract public class S3BaseHandler<R> {
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @return {@code True} if it is a request to list parts of a completed multipart upload request.
    */
-  public static boolean isListObjectRequest(RestRequest restRequest) throws RestServiceException {
+  public static boolean isListObjectRequest(RestRequest restRequest) {
     RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
     return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
-        && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null;
+        && splitPath(requestPath.getOperationOrBlobId(true)).length == LIST_REQUEST_SEGMENTS;
   }
 
   /**

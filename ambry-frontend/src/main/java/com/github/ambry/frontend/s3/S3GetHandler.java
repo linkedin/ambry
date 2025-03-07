@@ -44,6 +44,8 @@ public class S3GetHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final S3ListHandler s3ListHandler;
   private final S3MultipartUploadHandler s3MultipartUploadHandler;
   private final GetBlobHandler getBlobHandler;
+  public static final String PREFIX_PARAM_NAME = "prefix";
+  public static final String EMPTY_PREFIX = "";
 
   /**
    * Constructs a handler for uploading s3 GET requests.
@@ -80,10 +82,14 @@ public class S3GetHandler extends S3BaseHandler<ReadableStreamChannel> {
       // We don't support Bucket Object Configuration. So always return NOT_FOUND
       new DefaultCallbackChain(restRequest, securityService, frontendMetrics, accountAndContainerInjector, callback,
           "Object Lock configuration is not set.", RestServiceErrorCode.NotFound).start();
-    } else if (S3BaseHandler.isListObjectRequest(restRequest)) {
-      s3ListHandler.handle(restRequest, restResponseChannel, callback);
-    } else if (S3BaseHandler.isMultipartListPartRequest(restRequest)) {
+    }  else if (S3BaseHandler.isMultipartListPartRequest(restRequest)) {
       s3MultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
+    } else if (S3BaseHandler.isListObjectRequest(restRequest)) {
+      restRequest.setArg(LIST_REQUEST, "true");
+      if(!restRequest.getArgs().containsKey(PREFIX_PARAM_NAME)) {
+        restRequest.setArg(PREFIX_PARAM_NAME, EMPTY_PREFIX);
+      }
+      s3ListHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       getBlobHandler.handle(requestPath, restRequest, restResponseChannel,
           buildCallback(frontendMetrics.s3GetHandleMetrics, (r) -> {

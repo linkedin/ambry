@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.Objects;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+
 
 /**
  * Represents the blob url parsing results for named blob.
@@ -97,7 +99,7 @@ public class NamedBlobPath {
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
     // For s3 request, if splitPath.length = 3 && Method = GET, the expected segments = 3
     // All other requests require segments = 4
-    boolean isListObjectRequest = RestUtils.isListObjectRequest(path, args);
+    boolean isListObjectRequest = args.containsKey(LIST_REQUEST);
     int expectedSegments = (isListObjectRequest || isGetObjectLockRequest) ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
       throw new RestServiceException(String.format(
