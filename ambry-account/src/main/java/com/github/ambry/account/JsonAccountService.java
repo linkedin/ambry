@@ -96,12 +96,11 @@ public final class JsonAccountService extends AbstractAccountService {
           }
         };
 
-        int initialDelay = new Random().nextInt(accountConfig.updaterPollingIntervalMs + 1);
-        scheduler.scheduleAtFixedRate(updater, initialDelay, accountConfig.updaterPollingIntervalMs,
+        scheduler.scheduleAtFixedRate(updater, 0, accountConfig.updaterPollingIntervalMs,
             TimeUnit.MILLISECONDS);
         logger.info(
-            "Background account updater will fetch accounts from remote starting {} ms from now and repeat with interval={} ms",
-            initialDelay, accountConfig.updaterPollingIntervalMs);
+            "Background account updater will poll for accounts every {} ms",
+            accountConfig.updaterPollingIntervalMs);
       } else {
         processAccountJsonFile();
       }
