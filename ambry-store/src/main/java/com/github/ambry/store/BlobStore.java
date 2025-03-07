@@ -400,7 +400,7 @@ public class BlobStore implements Store {
       logger.error("checkIfStoreIsStale " + replicaId.getReplicaPath() + " is stale. ");
       BlobStore.staleBlobCount.getAndIncrement();
       if (config.storeBlockStaleBlobStoreToStart) {
-        throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.InitializationError);
+        throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.StoreStaleError);
       }
     }
   }

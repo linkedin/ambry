@@ -45,6 +45,7 @@ public enum StoreErrorCodes {
   LogFileFormatError,
   IndexFileFormatError,
   LogEndOffsetError,
-  IndexRecoveryError
+  IndexRecoveryError,
+  StoreStaleError
 }
 //@formatter:on

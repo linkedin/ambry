@@ -1813,7 +1813,13 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
+      ByteBuf byteBuf = null;
+      try {
+        byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
+      } catch (RuntimeException e) {
+        logger.error("Failed to read ByteBuf from crc input stream with size: {}", dataSize);
+        throw e;
+      }
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {

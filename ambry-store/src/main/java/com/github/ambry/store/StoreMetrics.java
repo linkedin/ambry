@@ -346,6 +346,12 @@ public class StoreMetrics {
     indexes.remove(storeId);
   }
 
+  void initializeRecoveryMetrics(AtomicInteger partialLogSegmentCounter) {
+    Gauge<Integer> recoveryFromPartialLogSegmentGauge = partialLogSegmentCounter::get;
+    registry.gauge(MetricRegistry.name(PersistentIndex.class, "recoveryFromPartialLogSegmentCount"),
+        () -> recoveryFromPartialLogSegmentGauge);
+  }
+
   void initializeHardDeleteMetric(String storeId, final HardDeleter hardDeleter, final PersistentIndex index) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> currentHardDeleteProgress = hardDeleter::getProgress;

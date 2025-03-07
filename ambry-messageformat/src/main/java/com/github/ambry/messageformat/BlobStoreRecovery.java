@@ -26,7 +26,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,18 +40,19 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreRecovery.class);
 
   @Override
-  public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-      throws IOException, StoreException {
+  public RecoveryResult recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) {
     ArrayList<MessageInfo> messageRecovered = new ArrayList<MessageInfo>();
+    StoreException recoveryException = null;
     try {
       while (startOffset < endOffset) {
         // read message header
+        long currentIndex = startOffset;
         ByteBuffer headerVersion = ByteBuffer.allocate(Version_Field_Size_In_Bytes);
-        if (startOffset + Version_Field_Size_In_Bytes > endOffset) {
+        if (currentIndex + Version_Field_Size_In_Bytes > endOffset) {
           throw new IndexOutOfBoundsException("Unable to read version. Reached end of stream");
         }
-        read.readInto(headerVersion, startOffset);
-        startOffset += headerVersion.capacity();
+        read.readInto(headerVersion, currentIndex);
+        currentIndex += headerVersion.capacity();
         headerVersion.flip();
         short version = headerVersion.getShort();
         if (!isValidHeaderVersion(version)) {
@@ -61,15 +61,15 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         }
         ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
         header.putShort(version);
-        if (startOffset + (header.capacity() - headerVersion.capacity()) > endOffset) {
+        if (currentIndex + (header.capacity() - headerVersion.capacity()) > endOffset) {
           throw new IndexOutOfBoundsException("Unable to read version. Reached end of stream");
         }
-        read.readInto(header, startOffset);
-        startOffset += header.capacity() - headerVersion.capacity();
+        read.readInto(header, currentIndex);
+        currentIndex += header.capacity() - headerVersion.capacity();
         header.flip();
         MessageHeader_Format headerFormat = getMessageHeader(version, header);
         headerFormat.verifyHeader();
-        ReadInputStream stream = new ReadInputStream(read, startOffset, endOffset);
+        ReadInputStream stream = new ReadInputStream(read, currentIndex, endOffset);
         StoreKey key = factory.getStoreKey(new DataInputStream(stream));
 
         short lifeVersion = 0;
@@ -120,20 +120,29 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message. we stop recovery at that point and return the
       // messages that have been recovered so far.
-      logger.error("Message format exception while recovering messages", e);
-      throw new StoreException(e, StoreErrorCodes.LogFileFormatError);
+      logger.error("Message format exception while recovering messages, startOffset is {}, endOffset is {}",
+          startOffset, endOffset, e);
+      recoveryException = new StoreException(e, StoreErrorCodes.LogFileFormatError);
     } catch (IndexOutOfBoundsException e) {
       // log in case where were not able to read a complete message. we stop recovery at that point and return
       // the message that have been recovered so far.
-      logger.error("Trying to read more than the available bytes");
-      throw new StoreException(e, StoreErrorCodes.LogFileFormatError);
+      logger.error("Trying to read more than the available bytes, startOffset is {}, endOffset is {}", startOffset,
+          endOffset);
+      recoveryException = new StoreException(e, StoreErrorCodes.LogFileFormatError);
+    } catch (Throwable throwable) {
+      logger.error("Unexpected exception, startOffset is {}, endOffset is {}", startOffset, endOffset);
+      if (throwable instanceof StoreException) {
+        recoveryException = (StoreException) throwable;
+      } else {
+        recoveryException = new StoreException(throwable, StoreErrorCodes.LogFileFormatError);
+      }
     }
     for (MessageInfo messageInfo : messageRecovered) {
       logger.info("Message Recovered key {} size {} ttl {} deleted {} undelete {}", messageInfo.getStoreKey(),
           messageInfo.getSize(), messageInfo.getExpirationTimeInMs(), messageInfo.isDeleted(),
           messageInfo.isUndeleted());
     }
-    return messageRecovered;
+    return new RecoveryResult(messageRecovered, recoveryException, startOffset);
   }
 }
 
