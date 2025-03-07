@@ -534,9 +534,8 @@ public class RestUtils {
     public static final String CONTENT_RANGE_LENGTH = KEY_PREFIX + "content-range-length";
 
     /**
-     * Rest method for the rest request
+     * Is the request a list request
      */
-    public static final String REST_METHOD = KEY_PREFIX + "rest-method";
     public static final String LIST_REQUEST = KEY_PREFIX + "is-list-request";
   }
 
