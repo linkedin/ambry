@@ -310,6 +310,11 @@ public class DynamicClusterManagerComponentsTest {
     }
 
     @Override
+    public List<String> getResourceNamesForPartition(AmbryPartition partition) {
+      throw new UnsupportedOperationException("Temporarily unsupported");
+    }
+
+    @Override
     public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
       throw new UnsupportedOperationException("Temporarily unsupported");
     }
@@ -340,6 +345,11 @@ public class DynamicClusterManagerComponentsTest {
     @Override
     public Collection<AmbryPartition> getPartitions() {
       return partitionToReplicas.keySet();
+    }
+
+    @Override
+    public boolean getIsValidPartition(String partitionID) {
+      return true;
     }
 
     /**

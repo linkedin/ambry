@@ -209,6 +209,17 @@ public class MockClusterMap implements ClusterMap {
         .findFirst()
         .get();
     doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[0]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[1]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[2]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[3]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[4]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[5]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[6]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[7]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[8]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[9]");
+    doReturn(true).when(mockClusterManagerQueryHelper).getIsValidPartition("Partition[10]");
     partitionSelectionHelper =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
             Math.min(defaultPartition.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS, null);

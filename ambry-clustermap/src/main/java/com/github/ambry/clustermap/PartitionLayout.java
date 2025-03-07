@@ -371,5 +371,10 @@ public class PartitionLayout {
     public Collection<Partition> getPartitions() {
       return partitionMap.values();
     }
+
+    @Override
+    public boolean getIsValidPartition(String partitionID) {
+      throw new UnsupportedOperationException("Not supported in static cluster map");
+    }
   }
 }
