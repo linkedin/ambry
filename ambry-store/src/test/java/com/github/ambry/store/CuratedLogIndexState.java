@@ -229,7 +229,9 @@ class CuratedLogIndexState {
    */
   void destroy() throws IOException, StoreException {
     shutDownExecutorService(scheduler, 30, TimeUnit.SECONDS);
-    index.close(false);
+    if (index != null) {
+      index.close(false);
+    }
     log.close(false);
     assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, false));
   }
@@ -1093,7 +1095,9 @@ class CuratedLogIndexState {
    */
   void reloadLog(boolean initIndex) throws IOException, StoreException {
     long segmentCapacity = log.getSegmentCapacity();
-    index.close(false);
+    if (index != null) {
+      index.close(false);
+    }
     log.close(false);
     log = new Log(tempDirStr, LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(segmentCapacity, true), metrics, null);
