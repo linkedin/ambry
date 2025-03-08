@@ -593,12 +593,20 @@ public class ReplicaThread implements Runnable {
             standbyReplicasTimedOutOnNoProgress);
 
         if (activeReplicasPerNode.size() > 0) {
+
+          // maxReplicaCountPerRequest = 20
           List<List<RemoteReplicaInfo>> activeReplicaSubLists =
               maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
                   : Collections.singletonList(activeReplicasPerNode);
           for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
+            int size = replicaSubList.size();
+            if (replicationConfig.replicationEnablePrioritzation) {
+              int maxSize = replicationConfig.replicationMaxPrioritizedReplicasPercent/100 * size;
+              size = Math.min(size, maxSize);
+            }
+
             RemoteReplicaGroup group =
-                new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
+                new RemoteReplicaGroup(replicaSubList.subList(0, size), remoteNode, false, remoteReplicaGroupId++);
             remoteReplicaGroups.add(group);
           }
         }
@@ -2226,7 +2234,7 @@ public class ReplicaThread implements Runnable {
 
         DataNodeTracker dataNodeTracker =
             new DataNodeTracker(remoteHost, remoteReplicasPerNode, maxReplicaCountPerRequest, currentStartGroupId, time,
-                threadThrottleDurationMs);
+                threadThrottleDurationMs, replicationConfig.replicationEnablePrioritzation, replicationConfig.replicationMaxPrioritizedReplicasPercent);
         logger.trace("Thread name: {} for datanode {} create datanode tracker {}", threadName, remoteHost,
             dataNodeTracker);
 
