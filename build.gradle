@@ -52,10 +52,17 @@ subprojects {
     targetCompatibility = 11
 
     if (JavaVersion.current().java9Compatible) {
-        // Our consumers still run on java 8, so this flag ensures that our builds are backwards compatible at runtime
-        // with java 8 platform APIs.
+        // Configure for Java 11
         compileJava {
-            options.compilerArgs.addAll(['--release', '8'])
+            options.release = 11
+            options.compilerArgs += [
+                '--add-exports=java.base/sun.nio.ch=ALL-UNNAMED',
+                '--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED',
+                '--add-opens=java.base/java.lang=ALL-UNNAMED',
+                '--add-opens=java.base/java.nio=ALL-UNNAMED',
+                '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+                '--add-opens=java.base/java.util=ALL-UNNAMED'
+            ]
         }
     }
 
@@ -122,16 +129,9 @@ subprojects {
             exceptionFormat = 'full'
             events "PASSED", "SKIPPED", "FAILED"
         }
-        // Plugin for retrying flaky tests. Reference: https://github.com/gradle/test-retry-gradle-plugin
         retry {
-            // The maximum number of times to retry an individual test
             maxRetries = 3
-            // The maximum number of test failures that are allowed (per module) before retrying is disabled. The count applies to
-            // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
-            // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).
-            // If 5 or more tests were to fail initially then no retry would be attempted.
             maxFailures = 10
-            // Whether tests that initially fail and then pass on retry should fail the task.
             failOnPassedAfterRetry = false
         }
         maxHeapSize = "6g"
@@ -141,11 +141,23 @@ subprojects {
         systemProperty 'io.netty.allocator.normalCacheSize', '0'
         systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
 
-        // make sure Powermockito would be happy
+        // Configure JVM args for Java 11 compatibility
         if (JavaVersion.current().java9Compatible) {
-            jvmArgs '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED'
+            jvmArgs = [
+                '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED',
+                '--add-opens=java.base/java.lang=ALL-UNNAMED',
+                '--add-opens=java.base/java.io=ALL-UNNAMED',
+                '--add-opens=java.base/java.util=ALL-UNNAMED',
+                '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+                '--add-opens=java.base/java.nio=ALL-UNNAMED',
+                '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+                '--add-opens=java.base/java.net=ALL-UNNAMED',
+                '--add-opens=java.base/java.math=ALL-UNNAMED',
+                '--add-opens=java.base/java.text=ALL-UNNAMED',
+                '--add-opens=java.management/sun.management=ALL-UNNAMED',
+                '--add-opens=java.desktop/java.awt.font=ALL-UNNAMED'
+            ]
         }
-
     }
 
     task intTest(type: Test) {
@@ -158,20 +170,31 @@ subprojects {
             events 'started', 'failed', 'passed', 'skipped'
             showStandardStreams = false
         }
-        // Allow for retrying flaky integration tests.
         retry {
-            // The maximum number of times to retry an individual test
             maxRetries = 3
-            // The maximum number of test failures that are allowed (per module) before retrying is disabled. The count applies to
-            // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
-            // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).
-            // If 5 or more tests were to fail initially then no retry would be attempted.
             maxFailures = 10
-            // Whether tests that initially fail and then pass on retry should fail the task.
             failOnPassedAfterRetry = false
         }
         maxHeapSize = "6g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
+
+        // Configure JVM args for Java 11 compatibility
+        if (JavaVersion.current().java9Compatible) {
+            jvmArgs = [
+                '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED',
+                '--add-opens=java.base/java.lang=ALL-UNNAMED',
+                '--add-opens=java.base/java.io=ALL-UNNAMED',
+                '--add-opens=java.base/java.util=ALL-UNNAMED',
+                '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+                '--add-opens=java.base/java.nio=ALL-UNNAMED',
+                '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+                '--add-opens=java.base/java.net=ALL-UNNAMED',
+                '--add-opens=java.base/java.math=ALL-UNNAMED',
+                '--add-opens=java.base/java.text=ALL-UNNAMED',
+                '--add-opens=java.management/sun.management=ALL-UNNAMED',
+                '--add-opens=java.desktop/java.awt.font=ALL-UNNAMED'
+            ]
+        }
     }
 
     task allTest {
