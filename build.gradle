@@ -58,8 +58,8 @@ subprojects {
         apply from: "$rootDir/gradle/java-publishing.gradle"
     }
 
-    sourceCompatibility = 1.8
-    targetCompatibility = 1.8
+    sourceCompatibility = 11
+    targetCompatibility = 11
 
     if (JavaVersion.current().java9Compatible) {
         // Our consumers still run on java 8, so this flag ensures that our builds are backwards compatible at runtime
