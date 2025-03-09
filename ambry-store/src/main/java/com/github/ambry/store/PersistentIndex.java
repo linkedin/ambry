@@ -77,6 +77,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
   static final short VERSION_4 = 4;
   static short CURRENT_VERSION = VERSION_4;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
+  private static final AtomicInteger recoveryFromPartialLogSegmentCounter = new AtomicInteger(0);
 
   static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
     @Override
@@ -412,8 +413,10 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       long endOffset = logSegmentToRecover.sizeInBytes();
       logger.info("Index : {} performing recovery on index with start offset {} and end offset {}", dataDir,
           recoveryStartOffset, endOffset);
-      List<MessageInfo> messagesRecovered =
+      MessageStoreRecovery.RecoveryResult recoveryResult =
           recovery.recover(logSegmentToRecover, recoveryStartOffset.getOffset(), endOffset, factory);
+      maybePerformaPartialRecovery(logSegmentToRecover, recoveryResult);
+      List<MessageInfo> messagesRecovered = recoveryResult.recovered;
       recoveryOccurred = recoveryOccurred || messagesRecovered.size() > 0;
       Offset runningOffset = recoveryStartOffset;
       // Iterate through the recovered messages and update the index
@@ -505,6 +508,42 @@ public class PersistentIndex implements LogSegmentSizeProvider {
         logSegment.setEndOffset(indexSegment.getEndOffset().getOffset());
       }
     }
+  }
+
+  /**
+   * Maybe try to recover from partial log segment. Calling this method to see if we should continue recovering messages
+   * from the given {@link com.github.ambry.store.MessageStoreRecovery.RecoveryResult}.
+   * If there is no exception in the result, then continue.
+   * If partial recovery is not enable, or the log segment is not the last log segment, don't continue;
+   * If there are too many bytes in the remainiikng file, don't continue;
+   * @param logSegmentToRecover
+   * @param recoveryResult
+   * @throws StoreException
+   * @throws IOException
+   */
+  private void maybePerformaPartialRecovery(LogSegment logSegmentToRecover,
+      MessageStoreRecovery.RecoveryResult recoveryResult) throws StoreException, IOException {
+    // There is no exception, then partial recovery is not necessary
+    if (recoveryResult.recoveryException == null) {
+      return;
+    }
+    if (!config.storeEnablePartialLogSegmentRecovery || logSegmentToRecover != log.getLastSegment()) {
+      // Partial log segment recovery is not enabled, or the log segment is not the last one
+      throw recoveryResult.recoveryException;
+    }
+    // If we are here, then this is the last log segment.
+    long startOffsetForBrokenMessage = recoveryResult.currentStartOffset;
+    long endOffset = logSegmentToRecover.sizeInBytes();
+    long remainingDataSize = endOffset - startOffsetForBrokenMessage;
+    if (remainingDataSize > config.storePartialLogSegmentRecoveryRemainingDataSizeThreshold) {
+      throw recoveryResult.recoveryException;
+    }
+    logger.info("Index: {} Partial LogSegment recovery, log segment {} has valid message until {}, the file size is {}",
+        dataDir, logSegmentToRecover.getName(), startOffsetForBrokenMessage, endOffset);
+    recoveryFromPartialLogSegmentCounter.incrementAndGet();
+    // Since we use fallocate --keep-size to preallocate log segment file, we can truncate log segment file here
+    // It will only change the logical file size, not the preallocated disk space.
+    logSegmentToRecover.truncateTo(startOffsetForBrokenMessage);
   }
 
   /**
