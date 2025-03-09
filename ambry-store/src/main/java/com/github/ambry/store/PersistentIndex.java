@@ -94,6 +94,16 @@ public class PersistentIndex implements LogSegmentSizeProvider {
       return o1Offset.compareTo(IndexSegment.getIndexSegmentStartOffset(o2.getName()));
     }
   };
+  static final Comparator<FileInfo> INDEX_SEGMENT_FILE_INFO_COMPARATOR = new Comparator<FileInfo>() {
+    @Override
+    public int compare(FileInfo o1, FileInfo o2) {
+      if (o1 == null || o2 == null) {
+        throw new NullPointerException("arguments to compare two files is null");
+      }
+      Offset o1Offset = IndexSegment.getIndexSegmentStartOffset(o1.getFileName());
+      return o1Offset.compareTo(IndexSegment.getIndexSegmentStartOffset(o2.getFileName()));
+    }
+  };
   static final Comparator<IndexEntry> INDEX_ENTRIES_OFFSET_COMPARATOR = new Comparator<IndexEntry>() {
 
     @Override
