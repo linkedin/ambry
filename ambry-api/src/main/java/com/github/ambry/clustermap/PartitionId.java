@@ -96,4 +96,8 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
   default List<String> getResourceNames() {
     return null;
   }
+
+  default Set<String> getResourceName(String dcName) {
+    return null;
+  }
 }

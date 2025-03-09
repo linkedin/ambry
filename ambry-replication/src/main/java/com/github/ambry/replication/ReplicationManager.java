@@ -31,6 +31,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.prioritization.PartitionPrioritizer;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
@@ -60,6 +61,8 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 public class ReplicationManager extends ReplicationEngine {
   private final boolean trackPerPartitionLagInMetric;
   private final boolean trackPerReplicaReplicationBytes;
+  private final PartitionPrioritizer partitionPrioritizer;
+
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -114,6 +117,7 @@ public class ReplicationManager extends ReplicationEngine {
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
         tokenHelper, storeManager);
+    partitionPrioritizer = new PartitionPrioritizer(replicationConfig, metricRegistry, time);
   }
 
   /**
@@ -146,10 +150,12 @@ public class ReplicationManager extends ReplicationEngine {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+    ReplicaThread replicaThread = new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
+    replicaThread.setPartitionPrioritizer(partitionPrioritizer);
+    return replicaThread;
   }
 
   @Override
@@ -218,11 +224,24 @@ public class ReplicationManager extends ReplicationEngine {
       // No need to update persistor to explicitly persist tokens for new replica because background persistor will
       // periodically persist all tokens including new added replica's
       logger.info("{} is successfully added into replication manager", replicaId.getPartitionId());
+      // Initialize new replica with HIGH priority
+      initializePartitionWithPriority(replicaId.getPartitionId(), PartitionPrioritizer.Priority.HIGH);
     } finally {
       rwLock.writeLock().unlock();
     }
     return true;
   }
+
+  /**
+   * Initialize partition with a specific priority.
+   * @param partitionId The partition to initialize.
+   * @param priority The priority to set.
+   */
+  public void initializePartitionWithPriority(PartitionId partitionId, PartitionPrioritizer.Priority priority) {
+    partitionPrioritizer.setPriority(partitionId, priority);
+    logger.info("Initialized partition {} with priority {}", partitionId, priority);
+  }
+
 
   /**
    * Remove replica from replication manager

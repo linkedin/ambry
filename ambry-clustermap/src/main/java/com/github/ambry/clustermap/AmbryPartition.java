@@ -162,6 +162,11 @@ public class AmbryPartition implements PartitionId {
   }
 
   @Override
+  public Set<String> getResourceName(String dcName) {
+    return clusterManagerQueryHelper.getResourceForPartitionInDc(this.toString(), dcName);
+  }
+
+  @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
     snapshot.put(PARTITION_ID, toPathString());

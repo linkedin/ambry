@@ -350,6 +350,27 @@ public class ReplicationConfig {
   @Config(BACKUP_CHECKER_REPORT_DIR)
   public final int maxBackupCheckerReportFd;
 
+  /**
+   * The time in milliseconds after which an unprioritized partition's priority will be increased.
+   */
+  public static final String REPLICATION_PARTITION_AGING_THRESHOLD_MS = "replication.partition.aging.threshold.ms";
+  @Config(REPLICATION_PARTITION_AGING_THRESHOLD_MS)
+  @Default("86400000") // 24 hours
+  public final long replicationPartitionAgingThresholdMs;
+
+  /**
+   * The maximum number of partitions to prioritize at once.
+   */
+  public static final String REPLICATION_MAX_PRIORITIZED_PARTITIONS = "replication.max.prioritized.partitions";
+  @Config(REPLICATION_MAX_PRIORITIZED_PARTITIONS)
+  @Default("60")
+  public final int replicationMaxPrioritizedPartitions;
+
+  public static final String REPLICATION_IS_PRIORITIZATION_ENABLED = "replication.prioritization.enabled";
+  @Config(REPLICATION_IS_PRIORITIZATION_ENABLED)
+  @Default("false")
+  public final boolean isReplicationPrioritizationEnabled;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -428,5 +449,8 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
     replicationUsingNonblockingNetworkClientForLocalColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO, false);
+    replicationPartitionAgingThresholdMs = verifiableProperties.getInt(REPLICATION_PARTITION_AGING_THRESHOLD_MS, 86400000);
+    replicationMaxPrioritizedPartitions = verifiableProperties.getInt(REPLICATION_MAX_PRIORITIZED_PARTITIONS, 60);
+    isReplicationPrioritizationEnabled = verifiableProperties.getBoolean(REPLICATION_IS_PRIORITIZATION_ENABLED, false);
   }
 }

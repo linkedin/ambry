@@ -688,6 +688,10 @@ public class HelixClusterManager implements ClusterMap {
     return partitionToResourceNameByDc.get(clusterMapConfig.clusterMapDatacenterName).get(partitionName);
   }
 
+  public Set<String> getResourceForPartition(String partitionName, String dcName) {
+    return partitionToResourceNameByDc.get(dcName).get(partitionName);
+  }
+
   /**
    * Add partition if it's not present in cluster-wide partition map and also update cluster-wide allocated usable
    * capacity. If the partition already exists, skip addition and return current partition.
@@ -1211,6 +1215,11 @@ public class HelixClusterManager implements ClusterMap {
         }
       }
       return new ArrayList<>(resourceNames);
+    }
+
+    @Override
+    public Set<String> getResourceForPartitionInDc(String partitionName, String dcName) {
+      return getResourceForPartition(partitionName, dcName);
     }
 
     /**

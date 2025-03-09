@@ -55,6 +55,7 @@ import com.github.ambry.replication.continuous.GroupTracker;
 import com.github.ambry.replication.continuous.ReplicaStatus;
 import com.github.ambry.replication.continuous.ReplicaTracker;
 import com.github.ambry.replication.continuous.StandByGroupTracker;
+import com.github.ambry.replication.prioritization.PartitionPrioritizer;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
@@ -138,6 +139,10 @@ public class ReplicaThread implements Runnable {
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
   protected Thread thread;
   protected AtomicBoolean threadStarted;
+  private PartitionPrioritizer partitionPrioritizer;
+  private long lastPriorityUpdateTimeMs;
+  private static final long PRIORITY_UPDATE_INTERVAL_MS = 60000; // 1 minute
+
 
   // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
@@ -396,8 +401,57 @@ public class ReplicaThread implements Runnable {
    * @param replicas A map of replicas {host -> {replicas}}
    */
   protected Map<DataNodeId, List<RemoteReplicaInfo>> selectReplicas(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
-    // custom filter that inheritors can override for various use cases
-    return replicas;
+    // In case partition prioritization is not enabled
+    if (partitionPrioritizer == null) {
+      return replicas;
+    }
+
+    lock.lock();
+    try {
+      // Check if prioritization is currently enabled by circuit breaker
+      if (!partitionPrioritizer.isPrioritizationEnabled()) {
+        logger.debug("Thread name: {} Prioritization is currently disabled by circuit breaker", threadName);
+        return replicas; // Use all replicas without prioritization
+      }
+
+      // Get all partitions involved in this replication cycle
+      Set<PartitionId> allPartitions = replicas.values().stream()
+          .flatMap(List::stream)
+          .map(r -> r.getReplicaId().getPartitionId())
+          .collect(Collectors.toSet());
+
+      // Periodically update priorities based on aging and active replica count
+      long currentTimeMs = time.milliseconds();
+      if (currentTimeMs - lastPriorityUpdateTimeMs > PRIORITY_UPDATE_INTERVAL_MS) {
+
+        //TODO: Implement method to find partitions which are below MIN_ACTIVE_REPLICA count
+        Map<PartitionId, Integer> activeReplicaCounts = new HashMap<>();
+        //Map<PartitionId, Integer> activeReplicaCounts = getActiveReplicaCounts(allPartitions);
+        partitionPrioritizer.updatePriorities(allPartitions, activeReplicaCounts);
+        lastPriorityUpdateTimeMs = currentTimeMs;
+
+        // Log current priorities for debugging
+       // logPartitionPriorities(allPartitions);
+      }
+
+      // Get high priority partitions
+      Set<PartitionId> highPriorityPartitions = partitionPrioritizer.getPartitionsByPriority(allPartitions,
+          PartitionPrioritizer.Priority.HIGH);
+
+      // If there are high priority partitions, only include those
+      if (!highPriorityPartitions.isEmpty()) {
+        Map<DataNodeId, List<RemoteReplicaInfo>> filteredReplicas = filterReplicasByPartitions(replicas, highPriorityPartitions);
+        if (!filteredReplicas.isEmpty()) {
+          logger.debug("Thread name: {} Prioritizing partitions for replication: {}", threadName, highPriorityPartitions);
+          return filteredReplicas;
+        }
+      }
+
+      // return all replicas in case there is no disrupted partitions or high priority partitions
+      return replicas;
+    } finally {
+      lock.unlock();
+    }
   }
 
   /**
@@ -950,6 +1004,42 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Called when a partition completes bootstrap.
+   * @param partitionId The partition that completed bootstrap.
+   */
+  private void onPartitionBootstrapComplete(PartitionId partitionId) {
+    if (partitionPrioritizer != null) {
+      // Get all partitions managed by this thread
+      Set<PartitionId> allPartitions = getAllPartitions();
+
+      // Update priorities after bootstrap completion
+      partitionPrioritizer.onPartitionBootstrapComplete(partitionId, allPartitions);
+
+      logger.info("Partition {} completed bootstrap, updated priorities", partitionId);
+    }
+  }
+
+  /**
+   * Gets all partitions managed by this replica thread.
+   * @return Set of all partitions.
+   */
+  private Set<PartitionId> getAllPartitions() {
+    Set<PartitionId> allPartitions = new HashSet<>();
+    lock.lock();
+    try {
+      for (Set<RemoteReplicaInfo> replicaInfos : replicasToReplicateGroupedByNode.values()) {
+        for (RemoteReplicaInfo replicaInfo : replicaInfos) {
+          allPartitions.add(replicaInfo.getReplicaId().getPartitionId());
+        }
+      }
+    } finally {
+      lock.unlock();
+    }
+
+    return allPartitions;
+  }
+
+  /**
    * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
    * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
    * but still have missing blobs from last ReplicaMetadataRequest when the leader based replication is enabled.
@@ -976,6 +1066,35 @@ public class ReplicaThread implements Runnable {
       }
     }
   }
+
+  /**
+   * Filters replicas to only include those for specified partitions.
+   * @param replicas All replicas.
+   * @param partitions Partitions to include.
+   * @return Filtered map of replicas.
+   */
+  private Map<DataNodeId, List<RemoteReplicaInfo>> filterReplicasByPartitions(
+      Map<DataNodeId, List<RemoteReplicaInfo>> replicas,
+      Set<PartitionId> partitions) {
+
+    Map<DataNodeId, List<RemoteReplicaInfo>> filteredReplicas = new HashMap<>();
+
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : replicas.entrySet()) {
+      DataNodeId dataNodeId = entry.getKey();
+      List<RemoteReplicaInfo> replicaInfos = entry.getValue();
+
+      List<RemoteReplicaInfo> filteredReplicaInfos = replicaInfos.stream()
+          .filter(r -> partitions.contains(r.getReplicaId().getPartitionId()))
+          .collect(Collectors.toList());
+
+      if (!filteredReplicaInfos.isEmpty()) {
+        filteredReplicas.put(dataNodeId, filteredReplicaInfos);
+      }
+    }
+
+    return filteredReplicas;
+  }
+
 
   /**
    * Handle {@link ReplicaMetadataResponse} returned from the given remote {@link DataNodeId}. It will find all the missing
@@ -1038,6 +1157,7 @@ public class ReplicaThread implements Runnable {
                 // complete BOOTSTRAP -> STANDBY transition
                 remoteReplicaInfo.getLocalStore().setCurrentState(ReplicaState.STANDBY);
                 remoteReplicaInfo.getLocalStore().completeBootstrap();
+                onPartitionBootstrapComplete(remoteReplicaInfo.getReplicaId().getPartitionId());
               }
             }
 
@@ -1988,6 +2108,11 @@ public class ReplicaThread implements Runnable {
    */
   Map<DataNodeId, List<ExchangeMetadataResponse>> getExchangeMetadataResponsesInEachCycle() {
     return exchangeMetadataResponsesInEachCycle;
+  }
+
+  public void setPartitionPrioritizer(PartitionPrioritizer partitionPrioritizer) {
+    this.partitionPrioritizer = partitionPrioritizer;
+    lastPriorityUpdateTimeMs = time.milliseconds();
   }
 
   public static class ExchangeMetadataResponse {
