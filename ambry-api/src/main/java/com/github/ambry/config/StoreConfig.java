@@ -637,6 +637,23 @@ public class StoreConfig {
       "store.remove.directory.and.restart.blob.store";
 
   /**
+   * True to enable partial log segment recovery. If in the last log segment, there are invalid messages, then as long
+   * as these invalid messages are smaller than the given threshold, we should continue recovery and truncate the file.
+   */
+  @Config(storeEnablePartialLogSegmentRecoveryName)
+  public final boolean storeEnablePartialLogSegmentRecovery;
+  public static final String storeEnablePartialLogSegmentRecoveryName = "store.enable.partial.log.segment.recovery";
+
+  /**
+   * The threshold for partial log segment recovery. If there are more bytes in the remaining log segment than the given
+   * threshold, then don't recover. The default value is 5MB, which is a bit larger than the largest put blob.
+   */
+  @Config(storePartialLogSegmentRecoveryRemainingDataSizeThresholdName)
+  public final long storePartialLogSegmentRecoveryRemainingDataSizeThreshold;
+  public static final String storePartialLogSegmentRecoveryRemainingDataSizeThresholdName =
+      "store.partial.log.segment.recovery.remaining.data.size.threshold";
+
+  /**
    * True to restore disk's availability on data node config when an unavailable disk is fixed in FULL AUTO mode.
    */
   @Config(storeRestoreUnavailableDiskInFullAutoName)
@@ -877,6 +894,11 @@ public class StoreConfig {
         verifiableProperties.getBoolean(storeRemoveUnexpectedDirsInFullAutoName, false);
     storeRemoveDirectoryAndRestartBlobStore =
         verifiableProperties.getBoolean(storeRemoveDirectoryAndRestartBlobStoreName, false);
+    storeEnablePartialLogSegmentRecovery =
+        verifiableProperties.getBoolean(storeEnablePartialLogSegmentRecoveryName, false);
+    storePartialLogSegmentRecoveryRemainingDataSizeThreshold =
+        verifiableProperties.getIntInRange(storePartialLogSegmentRecoveryRemainingDataSizeThresholdName,
+            5 * 1024 * 1024, 0, 1024 * 1024 * 1024);
     storeRestoreUnavailableDiskInFullAuto =
         verifiableProperties.getBoolean(storeRestoreUnavailableDiskInFullAutoName, false);
     storeProactivelyTestStorageAvailability =
