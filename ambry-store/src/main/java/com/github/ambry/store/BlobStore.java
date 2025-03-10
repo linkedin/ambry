@@ -400,7 +400,7 @@ public class BlobStore implements Store {
       logger.error("checkIfStoreIsStale " + replicaId.getReplicaPath() + " is stale. ");
       BlobStore.staleBlobCount.getAndIncrement();
       if (config.storeBlockStaleBlobStoreToStart) {
-        throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.InitializationError);
+        throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.StoreStaleError);
       }
     }
   }
@@ -1356,6 +1356,7 @@ public class BlobStore implements Store {
 
   /**
    * Get all log segments in the store.
+   * The list of files returned are sorted by their logSegmentNames
    * Param includeActiveLogSegment is used to determine if the active log segment should be included in the result.
    */
   private List<FileInfo> getLogSegments(boolean includeActiveLogSegment) {
@@ -1372,11 +1373,15 @@ public class BlobStore implements Store {
 
   /**
    * Get all index segments for a log segment.
+   * The list of files returned are sorted by their start offsets using {@link #INDEX_SEGMENT_FILE_INFO_COMPARATOR}
    */
   private List<FileInfo> getIndexSegmentFilesForLogSegment(String dataDir, LogSegmentName logSegmentName) {
-    return Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
+    List<FileInfo> indexFileInfos = Arrays.stream(PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir, logSegmentName))
         .map(file -> new StoreFileInfo(file.getName(), file.length()))
         .collect(Collectors.toList());
+    Collections.sort(indexFileInfos, PersistentIndex.INDEX_SEGMENT_FILE_INFO_COMPARATOR);
+
+    return indexFileInfos;
   }
 
   /**
