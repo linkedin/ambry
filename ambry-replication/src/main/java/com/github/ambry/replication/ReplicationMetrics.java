@@ -467,7 +467,7 @@ public class ReplicationMetrics {
         replicaThread + "-CycleIterations"));
     replicaThreadsCycleIterations.put(replicaThread, replicaThreadsCycleIteration);
     Histogram replicaThreadOneCycleReplicationTime = registry.histogram(MetricRegistry.name(ReplicaThread.class,
-        replicaThread + "-OneCycleReplicationTime"));
+        replicaThread + "-OneCycleReplicationTimeMS"));
     replicaThreadsOneCycleReplicationTime.put(replicaThread, replicaThreadOneCycleReplicationTime);
   }
 
