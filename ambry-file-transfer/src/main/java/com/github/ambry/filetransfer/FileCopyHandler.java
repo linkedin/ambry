@@ -13,7 +13,9 @@
  */
 package com.github.ambry.filetransfer;
 
-import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
+import java.io.IOException;
+import javax.annotation.Nonnull;
 
 
 /**
@@ -23,7 +25,9 @@ import com.github.ambry.clustermap.ReplicaId;
 public interface FileCopyHandler {
   /**
    * do the file copy
+   * @param fileCopyInfo the replica info
    * @throws Exception exception
    */
-  void copy(ReplicaId sourceReplicaId, ReplicaId targetReplicaId) throws Exception;
+  void copy(@Nonnull FileCopyInfo fileCopyInfo)
+      throws IOException, ConnectionPoolTimeoutException, InterruptedException;
 }
