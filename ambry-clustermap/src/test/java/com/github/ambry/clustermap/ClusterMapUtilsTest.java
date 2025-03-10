@@ -62,6 +62,12 @@ public class ClusterMapUtilsTest {
     assertTrue("All replicas should be up", ClusterMapUtils.areAllReplicasForPartitionUp(partitionId));
   }
 
+  @Test
+  public void partitionSelectionFilterTest() {
+
+  }
+
+
   /**
    * Tests for all functions in {@link ClusterMapUtils.PartitionSelectionHelper}
    */

@@ -1414,6 +1414,14 @@ public class HelixClusterManager implements ClusterMap {
 
     /**
      *
+     * @return boolean regarding whether we want to filter partitions
+     */
+    public boolean getIsPartitionFilteringEnabled() {
+      return clusterMapConfig.clusterMapPartitionFilteringEnabled;
+    }
+
+    /**
+     *
      * @param partitionID
      * @return boolean regarding whether we can write to it
      */

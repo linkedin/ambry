@@ -83,4 +83,9 @@ interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P ext
    *
    */
   boolean getIsValidPartition(String partitionID);
+
+  /**
+   * Return whether we want to filter partitions
+   */
+  boolean getIsPartitionFilteringEnabled();
 }

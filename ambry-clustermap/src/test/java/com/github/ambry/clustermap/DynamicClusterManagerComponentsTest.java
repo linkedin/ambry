@@ -352,6 +352,11 @@ public class DynamicClusterManagerComponentsTest {
       return true;
     }
 
+    @Override
+    public boolean getIsPartitionFilteringEnabled() {
+      return false;
+    }
+
     /**
      * Associate the replica with the given partition.
      * @param partition the {@link AmbryPartition}.
