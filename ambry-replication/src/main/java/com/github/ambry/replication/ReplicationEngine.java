@@ -299,8 +299,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       // So do listener actions in addPartition() and removePartition().
       if (remoteReplicaInfo.getReplicaThread() != null) {
         remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
-        remoteReplicaInfo.setReplicaThread(null);
         replicationMetrics.replicaThreadsAssignedRemoteReplicaInfo.get(remoteReplicaInfo.getReplicaThread().getName()).dec();
+        remoteReplicaInfo.setReplicaThread(null);
       }
     }
   }
@@ -407,7 +407,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
                 networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
                 threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
                 responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-        replicationMetrics.populateReplicaThreadMetrics(replicaThread.getName());
         replicaThreads.add(replicaThread);
         createThread(replicaThread, startThread);
       } catch (Exception e) {

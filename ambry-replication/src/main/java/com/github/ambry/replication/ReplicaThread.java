@@ -200,6 +200,7 @@ public class ReplicaThread implements Runnable {
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
+    replicationMetrics.populateReplicaThreadMetrics(threadName);
   }
 
   protected boolean isContinuousReplicationEnabled(ReplicationConfig replicationConfig) {
