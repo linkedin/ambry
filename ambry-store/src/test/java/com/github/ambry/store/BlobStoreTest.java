@@ -50,6 +50,7 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1792,6 +1793,62 @@ public class BlobStoreTest {
       assertEquals("Expecting name of bloom file for log segment =" + segmentName,
           segmentName + "_bloom", storeLogInfos.get(i).getBloomFilters().get(0).getFileName());
     }
+  }
+
+  /**
+   * Test {@link BlobStore#getLogSegmentMetadataFiles} for a store by adding new log segments.
+   * The Log segments and Index files should be in sorted order.
+   * Log segments should be sorted based on {@link LogSegmentName#compareTo}
+   * Index files should be sorted based on {@link PersistentIndex.INDEX_SEGMENT_FILE_INFO_COMPARATOR}
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void testGetLogSegmentMetadataFilesShouldBeInSortedOrder() throws StoreException, IOException {
+    if (!this.isLogSegmented) {
+      // This test is only applicable when the log is segmented
+      return;
+    }
+    // Arrange
+    final BlobStore blobStore = createAndStartBlobStore();
+
+    long totalLogSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
+    LogSegment loadedSegment = getLogSegment(LogSegmentName.fromPositionAndGeneration(totalLogSegments, 0),
+        SEGMENT_CAPACITY, true);
+    List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
+
+    final Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        createStoreConfig(SEGMENT_CAPACITY, true),
+        null, true, segmentsToLoad, Collections.EMPTY_LIST.iterator(), null);
+    blobStore.setLog(log);
+
+    LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
+    LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+    blobStore.getLog().addSegment(segment, true);
+
+    ArrayList<Integer> indexes = new ArrayList<>(Arrays.asList(0, 1, 2, 3, 4));
+    ArrayList<String> expectedIndexFileNames = new ArrayList<>();
+    for (int i: indexes) {
+      expectedIndexFileNames.add(segmentName + "_" + i + "_index");
+    }
+
+    Collections.shuffle(indexes);
+    for (int i: indexes) {
+      Path indexFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_" + i + "_index");
+      Files.copy(Paths.get(tempDir + "/0_0_18_index"), indexFilePath);
+    }
+
+    // Act
+    final List<LogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
+
+    ArrayList<String> actualIndexFileNames = new ArrayList<>();
+    storeLogInfos.get(0).getIndexSegments().forEach(indexSegment -> {
+      actualIndexFileNames.add(indexSegment.getFileName());
+    });
+
+    // Assert
+    assertEquals("Expecting 5 index files for log segment =" + segmentName, 5, storeLogInfos.get(0).getIndexSegments().size());
+    assertEquals("Expecting index files to be in sorted order", expectedIndexFileNames, actualIndexFileNames);
   }
 
   /**
