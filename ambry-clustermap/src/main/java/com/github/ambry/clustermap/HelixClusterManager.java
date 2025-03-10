@@ -16,6 +16,8 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -65,6 +67,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.github.ambry.config.RouterConfig;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
@@ -1417,13 +1420,10 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public boolean getIsValidPartition(String partitionID) {
       Set<String> resource = getResourceForPartitionInLocalDc(partitionID);
-      AmbryPartition ambryPartition = partitionNameToAmbryPartition.get(partitionID);
-      List<AmbryReplica> replicaIds = getReplicaIdsForPartition(ambryPartition);
-      ResourceInfo resourceInfo = queryResourceInfos((ResourceIdentifier) resource).get(0);
-      if (resourceInfo.numExpectedReplicas == 1 && replicaIds.size() > 1) {
-        return false;
-      }
-      return true;
+      String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
+      ResourceProperty resourceProperty  =
+          dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
+      return resourceProperty.replicationFactor < clusterMapConfig.routerPutSuccessTarget;
     }
 
     /**
