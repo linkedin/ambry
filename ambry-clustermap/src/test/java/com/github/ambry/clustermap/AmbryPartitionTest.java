@@ -161,6 +161,11 @@ public class AmbryPartitionTest {
       return true;
     }
 
+    @Override
+    public boolean getIsPartitionFilteringEnabled() {
+      return false;
+    }
+
     /**
      * Increment the sealed state counter by one.
      */
