@@ -300,6 +300,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       if (remoteReplicaInfo.getReplicaThread() != null) {
         remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
         remoteReplicaInfo.setReplicaThread(null);
+        replicationMetrics.replicaThreadsAssignedRemoteReplicaInfo.get(remoteReplicaInfo.getReplicaThread().getName()).dec();
       }
     }
   }
@@ -333,6 +334,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       ReplicaThread replicaThread = dataNodeIdToReplicaThread.computeIfAbsent(dataNodeIdToReplicate,
           key -> replicaThreads.get(getReplicaThreadIndexToUse(datacenter)));
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+      replicationMetrics.replicaThreadsAssignedRemoteReplicaInfo.get(replicaThread.getName()).inc();
       remoteReplicaInfo.setReplicaThread(replicaThread);
     }
   }
@@ -405,6 +407,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
                 networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
                 threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
                 responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+        replicationMetrics.populateReplicaThreadMetrics(replicaThread.getName());
         replicaThreads.add(replicaThread);
         createThread(replicaThread, startThread);
       } catch (Exception e) {

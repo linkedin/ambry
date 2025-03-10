@@ -163,6 +163,10 @@ public class ReplicationMetrics {
   private final Counter intraColoRetryAfterBackoffErrorCount;
   private final Map<String, Counter> dcToResponseError = new ConcurrentHashMap<>();
   private final Counter intraColoResponseErrorCount;
+  public final Map<String, Counter> replicaThreadsAssignedRemoteReplicaInfo = new ConcurrentHashMap<>();
+  public final Map<String, Counter> replicaThreadsCycleIterations = new ConcurrentHashMap<>();
+  public final Map<String, Histogram> replicaThreadsOneCycleReplicationTime = new ConcurrentHashMap<>();
+
 
   // Metric to track number of cross colo replication get requests sent by standby replicas. This is applicable during
   // leader-based replication.
@@ -453,6 +457,20 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ResponseErrorCount"));
     dcToResponseError.put(datacenter, responseError);
   }
+
+
+  public void populateReplicaThreadMetrics(String replicaThread) {
+    Counter replicaThreadAssignedRemoteReplicaInfo = registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-AssignedRemoteReplicaInfo"));
+    replicaThreadsAssignedRemoteReplicaInfo.put(replicaThread, replicaThreadAssignedRemoteReplicaInfo);
+    Counter replicaThreadsCycleIteration = registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-CycleIterations"));
+    replicaThreadsCycleIterations.put(replicaThread, replicaThreadsCycleIteration);
+    Histogram replicaThreadOneCycleReplicationTime = registry.histogram(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-OneCycleReplicationTime"));
+    replicaThreadsOneCycleReplicationTime.put(replicaThread, replicaThreadOneCycleReplicationTime);
+  }
+
 
   /**
    * Register metrics for measuring the number of active replica threads.

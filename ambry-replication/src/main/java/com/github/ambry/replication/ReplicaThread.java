@@ -542,8 +542,11 @@ public class ReplicaThread implements Runnable {
     } catch (Exception e) {
       logger.error("Thread name: {} found some error while replicating from remote hosts", threadName, e);
     } finally {
-      replicationMetrics.updateOneCycleReplicationTime(time.milliseconds() - oneRoundStartTimeMs,
+      long cycleEndTime = time.milliseconds();
+      replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - oneRoundStartTimeMs,
           replicatingFromRemoteColo, datacenterName);
+      replicationMetrics.replicaThreadsOneCycleReplicationTime.get(threadName).update(cycleEndTime - oneRoundStartTimeMs);
+      replicationMetrics.replicaThreadsCycleIterations.get(threadName).inc();
     }
 
     // check and make thread sleep and publish metrics for throttling
@@ -664,6 +667,8 @@ public class ReplicaThread implements Runnable {
       long cycleEndTime = time.milliseconds();
       replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - oneRoundStartTimeMs, replicatingFromRemoteColo,
           datacenterName);
+      replicationMetrics.replicaThreadsOneCycleReplicationTime.get(threadName).update(cycleEndTime - oneRoundStartTimeMs);
+      replicationMetrics.replicaThreadsCycleIterations.get(threadName).inc();
       emitCyclicReplicationIdleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, cycleEndTime);
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
