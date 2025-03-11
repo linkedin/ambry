@@ -157,12 +157,12 @@ public class AmbryPartitionTest {
     }
 
     @Override
-    public boolean getIsValidPartition(String partitionID) {
+    public boolean isValidPartition(String partitionID) {
       return true;
     }
 
     @Override
-    public boolean getIsPartitionFilteringEnabled() {
+    public boolean isPartitionFilteringEnabled() {
       return false;
     }
 

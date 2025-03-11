@@ -1416,7 +1416,7 @@ public class HelixClusterManager implements ClusterMap {
      *
      * @return boolean regarding whether we want to filter partitions
      */
-    public boolean getIsPartitionFilteringEnabled() {
+    public boolean isPartitionFilteringEnabled() {
       return clusterMapConfig.clusterMapPartitionFilteringEnabled;
     }
 
@@ -1426,12 +1426,12 @@ public class HelixClusterManager implements ClusterMap {
      * @return boolean regarding whether we can write to it
      */
     @Override
-    public boolean getIsValidPartition(String partitionID) {
-      Set<String> resource = getResourceForPartitionInLocalDc(partitionID);
+    public boolean isValidPartition(String partitionID) {
+      String resource = getResourceForPartitionInLocalDc(partitionID).iterator().next();
       String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
       ResourceProperty resourceProperty  =
           dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
-      return resourceProperty.replicationFactor < clusterMapConfig.routerPutSuccessTarget;
+      return resourceProperty.replicationFactor >= clusterMapConfig.routerPutSuccessTarget;
     }
 
     /**

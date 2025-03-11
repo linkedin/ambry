@@ -373,12 +373,12 @@ public class PartitionLayout {
     }
 
     @Override
-    public boolean getIsValidPartition(String partitionID) {
+    public boolean isValidPartition(String partitionID) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
 
     @Override
-    public boolean getIsPartitionFilteringEnabled() {
+    public boolean isPartitionFilteringEnabled() {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
   }
