@@ -224,7 +224,7 @@ public class ReplicaThread implements Runnable {
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     threadStarted = new AtomicBoolean(false);
 
-    if (replicationDisabledPartitions != null) {
+    if (replicationDisabledPartitions != null && !replicationDisabledPartitions.isEmpty()) {
       this.replicationDisabledPartitions.addAll(replicationDisabledPartitions);
     }
   }
@@ -929,7 +929,7 @@ public class ReplicaThread implements Runnable {
     boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
     if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
         || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-      logger.debug(
+      logger.info(
           "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
               + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
           replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
