@@ -54,7 +54,7 @@ public interface FileCopyBasedReplicationThreadPoolManager {
   /**
    * It takes individual replicaIds to be removed from the hydration process
    * and stops hydration process on those replicas.
-   * @param replicaId
+   * @param replicaId the replicaId to remove from hydration
    * @return true if the replica was removed successfully, false otherwise
    */
   boolean stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId);
