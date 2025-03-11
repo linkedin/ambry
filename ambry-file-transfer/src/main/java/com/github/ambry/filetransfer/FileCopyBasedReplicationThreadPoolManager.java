@@ -30,19 +30,19 @@ public interface FileCopyBasedReplicationThreadPoolManager {
    * @param numberOfThreads the number of threads to create in the thread pool
    * @return true if the thread pool was created successfully, false otherwise
    */
-    boolean createThreadPool(int numberOfThreads);
+  boolean createThreadPool(int numberOfThreads);
 
   /**
    * @return the number thread pool size.
    */
-    int getThreadPoolSize();
+  int getThreadPoolSize();
 
   /**
    * Should return the disks on which partition hydration is either completed
    * or not started yet.
    * @return the List Of DiskIds that can be hydrated next.
    */
-    List<DiskId> getDiskIdsToHydrate();
+  List<DiskId> getDiskIdsToHydrate();
 
   /**
    * It takes individual replicaIds to be hydrated and
