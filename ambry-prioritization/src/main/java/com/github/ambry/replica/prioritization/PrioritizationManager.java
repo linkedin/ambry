@@ -34,7 +34,7 @@ public interface PrioritizationManager {
 
   /**
    * Checks status of Prioritization manager.
-   * @return true if the PrioritizationManager is running, false otherwise.
+   * @return {@code true} if replica is set up successfully. {@code false} if not.
    */
   boolean isRunning();
 

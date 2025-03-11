@@ -28,7 +28,7 @@ public interface FileCopyBasedReplicationThreadPoolManager {
   /**
     * Create a thread pool with the given number of threads.
    * @param numberOfThreads the number of threads to create in the thread pool
-   * @return true if the thread pool was created successfully, false otherwise
+   * @return {@code true} if replica is set up successfully. {@code false} if not.
    */
   boolean createThreadPool(int numberOfThreads);
 
@@ -55,7 +55,7 @@ public interface FileCopyBasedReplicationThreadPoolManager {
    * It takes individual replicaIds to be removed from the hydration process
    * and stops hydration process on those replicas.
    * @param replicaId the replicaId to remove from hydration
-   * @return true if the replica was removed successfully, false otherwise
+   * @return {@code true} if replica is set up successfully. {@code false} if not.
    */
   boolean stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId);
 }

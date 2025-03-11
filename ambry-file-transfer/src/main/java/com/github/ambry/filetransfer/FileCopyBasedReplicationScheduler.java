@@ -41,7 +41,7 @@ public interface FileCopyBasedReplicationScheduler {
   /**
    * Create a thread pool with the given number of threads.
    * @param numberOfThreads the number of threads to create in the thread pool
-   * @return true if the thread pool was created successfully, false otherwise
+   * @return {@code true} if replica is set up successfully. {@code false} if not.
    */
   boolean createThreadPool(int numberOfThreads);
 
