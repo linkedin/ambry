@@ -89,7 +89,7 @@ public class ClusterMapUtilsTest {
             maxReplicasAllSites, null);
 
     Set<MockPartitionId> allPartitionIds = new HashSet<>(Arrays.asList(everywhere1));
-    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getPartitions(null));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getPartitions(maxReplicasAllSites));
   }
 
   /**
@@ -131,7 +131,6 @@ public class ClusterMapUtilsTest {
     ClusterManagerQueryHelper mockClusterManagerQueryHelper = Mockito.mock(ClusterManagerQueryHelper.class);
     doReturn(allPartitionIdsMain).when(mockClusterManagerQueryHelper).getPartitions();
     doReturn(false).when(mockClusterManagerQueryHelper).isPartitionFilteringEnabled();
-
     ClusterMapUtils.PartitionSelectionHelper psh =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, null, minimumLocalReplicaCount,
             maxReplicasAllSites, null);

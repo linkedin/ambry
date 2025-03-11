@@ -933,7 +933,6 @@ public class PutOperationTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
-
     // Create the blob properties for testing.
     BlobProperties blobProperties = new BlobProperties(-1, "serviceId", "memberId",
         "text/javascript", false, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
