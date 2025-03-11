@@ -110,6 +110,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected static final String replicaTokenFileName = "replicaTokens";
   protected final Time time;
   protected LeaderBasedReplicationAdmin leaderBasedReplicationAdmin = null;
+  protected Set<PartitionId> replicationDisabledPartitions = ConcurrentHashMap.newKeySet();
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -177,6 +178,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   @Override
   public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
+    replicationDisabledPartitions.addAll(ids);
     if (origins.isEmpty()) {
       origins = new ArrayList<>(replicaThreadPoolByDc.keySet());
     }
@@ -372,10 +374,17 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
-        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
-        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin);
+    if (replicationDisabledPartitions.isEmpty()) {
+      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+          replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+          replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+          leaderBasedReplicationAdmin);
+    } else {
+      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+          replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+          replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+          leaderBasedReplicationAdmin, replicationDisabledPartitions);
+    }
   }
 
   /**
