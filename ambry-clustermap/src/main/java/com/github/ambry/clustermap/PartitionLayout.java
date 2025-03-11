@@ -379,7 +379,7 @@ public class PartitionLayout {
 
     @Override
     public boolean isPartitionFilteringEnabled() {
-      throw new UnsupportedOperationException("Not supported in static cluster map");
+      return false;
     }
   }
 }
