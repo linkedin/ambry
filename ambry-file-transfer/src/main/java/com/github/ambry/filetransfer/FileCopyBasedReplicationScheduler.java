@@ -14,19 +14,32 @@
 
 package com.github.ambry.filetransfer;
 
-import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
-import java.util.List;
+
 
 /**
- * Interface for managing dynamic Thread Pool for File Copy. This Manager
- * is responsible for creating thread pools for file copy and managing
- * assignments of partitions for hydration to threads in the thread pool.
+ * Interface for FileCopy Based Replication Scheduler.This scheduler
+ * schedules the replication of files from one node to another
+ * based on the Priority of the Partition.
  */
-
-public interface FileCopyBasedReplicationThreadPoolManager {
+public interface FileCopyBasedReplicationScheduler {
   /**
-    * Create a thread pool with the given number of threads.
+   * Start the scheduler.
+   */
+  void start();
+
+  /**
+   * Shutdown the scheduler.
+   */
+  void shutdown();
+
+  /**
+   * Schedule the replication of Partitions.
+   */
+  void scheduleFileCopy();
+
+  /**
+   * Create a thread pool with the given number of threads.
    * @param numberOfThreads the number of threads to create in the thread pool
    * @return true if the thread pool was created successfully, false otherwise
    */
@@ -38,24 +51,9 @@ public interface FileCopyBasedReplicationThreadPoolManager {
   int getThreadPoolSize();
 
   /**
-   * Should return the disks on which partition hydration is either completed
-   * or not started yet.
-   * @return the List Of {@link DiskId} that can be hydrated next.
-   */
-  List<DiskId> getDiskIdsToHydrate();
-
-  /**
    * It takes individual replicaIds to be hydrated and
    * start hydration process on those replicas.
    * @param replicaId the replicaId to submit for hydration
    */
-  void submitReplicaForHydration(ReplicaId replicaId);
-
-  /**
-   * It takes individual replicaIds to be removed from the hydration process
-   * and stops hydration process on those replicas.
-   * @param replicaId the replicaId to remove from hydration
-   * @return true if the replica was removed successfully, false otherwise
-   */
-  boolean stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId);
+  void addReplica(ReplicaId replicaId);
 }

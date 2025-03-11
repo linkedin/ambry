@@ -13,69 +13,36 @@
  */
 package com.github.ambry.replica.prioritization;
 
-import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-public class PrioritizationManager {
-  private Map<DiskId, ReplicaId> diskToReplicaQueue;
 
-  private final List<DiskId> listOfDisks;
-  private boolean running;
-  public PrioritizationManager() {
-    diskToReplicaQueue = new HashMap<>();
-    running = false;
-    this.listOfDisks = new ArrayList<>();
-  }
 
-  public void start() {
-    running = true;
-    // Start the PrioritisationManager
-  }
+/**
+ * The PrioritizationManager is responsible for managing the prioritization of replicas for replication.
+ */
+public interface PrioritizationManager {
+  /**
+   * Start the PrioritizationManager.
+   */
+  void start();
 
-  public boolean isRunning(){
-    return running;
-  }
+  /**
+   * Shutdown the PrioritizationManager.
+   */
+  void shutdown();
 
-  public void shutdown() {
-    // Shutdown the PrioritisationManager
-  }
+  /**
+   * Checks status of Prioritization manager.
+   * @return true if the PrioritizationManager is running, false otherwise.
+   */
+  boolean isRunning();
 
-  public void addReplica(String partitionName) {
-    // Add a replica to the PrioritisationManager
-  }
-
-  public void removeReplica(String partitionName) {
-    // Remove a task from the PrioritisationManager
-  }
-
-  public void updatePartitionState(String partitionName) {
-    // Update the state of a task in the PrioritisationManager
-  }
-
-  public void updatePartitionProgress(String partitionName) {
-    // Update the progress of a task in the PrioritisationManager
-  }
-
-  public void updatePartitionResult() {
-    // Update the result of a task in the PrioritisationManager
-  }
-
-  public List<DiskId> getListOfDisks(){
-    return  Collections.unmodifiableList(listOfDisks);
-  }
-
-  public String getPartitionForDisk(DiskId diskId){
-    // Get a partition from the PrioritisationManager
-    return null;
-  }
-
-  public String getReplica(String partitionName) {
-    // Get a replica from the PrioritisationManager
-    return null;
-  }
+  /**
+   * Get the list of partitions that should be replicated from the given disk.
+   * @param diskId the {@link DiskId} for which the list of partitions should be replicated.
+   * @param numberOfReplicasPerDisk the number of replicas that should be replicated from the given disk.
+   * @return the list of {@link ReplicaId} that should be replicated from the given disk.
+   */
+  List<ReplicaId> getPartitionListForDisk(DiskId diskId, int numberOfReplicasPerDisk);
 }

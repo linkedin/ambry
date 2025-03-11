@@ -152,4 +152,6 @@ public interface StoreManager {
    * @throws IOException
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
+
+  boolean setUpReplica(String partitionName);
 }
