@@ -45,4 +45,10 @@ public interface PrioritizationManager {
    * @return the list of {@link ReplicaId} that should be replicated from the given disk.
    */
   List<ReplicaId> getPartitionListForDisk(DiskId diskId, int numberOfReplicasPerDisk);
+
+  /**
+   * Add a replica to the prioritization manager.
+   * @param replicaId the {@link ReplicaId} to add.
+   */
+  void addReplica(ReplicaId replicaId);
 }
