@@ -11,9 +11,12 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.filetransfer;
+package com.github.ambry.filetransfer.handler;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
+import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
+import com.github.ambry.filetransfer.handler.StoreFileCopyHandler;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.server.StoreManager;
 

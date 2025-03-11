@@ -13,6 +13,7 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 

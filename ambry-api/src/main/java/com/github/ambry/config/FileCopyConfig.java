@@ -42,14 +42,6 @@ public class FileCopyConfig {
   public final int filecopyNumberOfFileCopyThreads;
 
   /**
-   * Timeout duration for file chunk operations in minutes.
-   * After this duration, incomplete chunk operations are considered failed.
-   */
-  public static final String FILECOPY_FILE_CHUNK_TIMEOUT_IN_MINUTES = "filecopy.file.chunk.timeout.in.minutes";
-  @Config(FILECOPY_FILE_CHUNK_TIMEOUT_IN_MINUTES)
-  public final long filecopyFileChunkTimeoutInMins;
-
-  /**
    * The frequency at which data gets flushed to disk in megabytes.
    * Lower values increase durability but may impact performance.
    * Default: 1000MB
@@ -76,7 +68,6 @@ public class FileCopyConfig {
    *        If a property is not specified, default values are used:
    *        - parallelPartitionHydrationCountPerDisk: 1
    *        - numberOfFileCopyThreads: 4
-   *        - fileChunkTimeoutInMins: 5
    *        - storeDataFlushIntervalInMbs: 1000
    *        - fileCopyMetaDataFileName: "logs_metadata_file"
    */
@@ -85,7 +76,6 @@ public class FileCopyConfig {
     filecopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(
         FILECOPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
     filecopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILECOPY_NUMBER_OF_FILE_COPY_THREADS, 4);
-    filecopyFileChunkTimeoutInMins = verifiableProperties.getInt(FILECOPY_FILE_CHUNK_TIMEOUT_IN_MINUTES, 5);
     filecopyStoreDataFlushIntervalInMbs = verifiableProperties.getLong(FILECOPY_STORE_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
   }
 }

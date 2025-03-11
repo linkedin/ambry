@@ -13,51 +13,90 @@
  */
 package com.github.ambry.filetransfer;
 
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import java.util.Objects;
+import javax.annotation.Nonnull;
 
 
+/**
+ * FileCopyInfo contains the information required to copy a file from one node to another.
+ */
 public class FileCopyInfo {
+  /**
+   * The correlation id of the request
+   */
   private final int correlationId;
+
+  /**
+   * The client id of the request
+   */
   private final String clientId;
+
+  /**
+   * The source replica id
+   */
   private final ReplicaId sourceReplicaId;
+
+  /**
+   * The target replica id
+   */
   private final ReplicaId targetReplicaId;
+
+  /**
+   * The hostname of the target node
+   */
   private final String hostName;
 
+  /**
+   * The name of the file to be copied
+   */
   private String fileName;
+
+  /**
+   * The start offset of the file to be copied
+   */
   private long startOffset;
+
+  /**
+   * The length of the chunk to be copied
+   */
   private long chunkLengthInBytes;
+
+  /**
+   * Whether the file is chunked or not
+   */
   private boolean isChunked;
 
-  private boolean initialised = false;
+  /**
+   * Constructor to create FileCopyInfo
+   * @param correlationId The correlation id of the request
+   * @param clientId The client id of the request
+   * @param sourceReplicaId The source replica id
+   * @param targetReplicaId The target replica id
+   * @param hostName The hostname of the target node
+   */
+  public FileCopyInfo(int correlationId, @Nonnull String clientId, @Nonnull ReplicaId sourceReplicaId,
+      @Nonnull ReplicaId targetReplicaId, @Nonnull String hostName) {
+    Objects.requireNonNull(clientId, "clientId cannot be null");
+    Objects.requireNonNull(sourceReplicaId, "sourceReplicaId cannot be null");
+    Objects.requireNonNull(targetReplicaId, "targetReplicaId cannot be null");
+    Objects.requireNonNull(hostName, "hostName cannot be null");
 
-  public FileCopyInfo(int correlationId, String clientId, ReplicaId sourceReplicaId,
-      ReplicaId targetReplicaId, String hostName) {
     this.correlationId = correlationId;
     this.clientId = clientId;
     this.sourceReplicaId = sourceReplicaId;
     this.targetReplicaId = targetReplicaId;
     this.hostName = hostName;
-
-    this.initialised = true;
   }
 
-  public FileCopyInfo setChunkInfo(String fileName, long startOffset, long chunkLengthInBytes, boolean isChunked) {
-    if (!initialised) {
-      throw new IllegalStateException("FileCopyInfo not initialised");
-    }
-    return new FileCopyInfo(correlationId, clientId, sourceReplicaId, targetReplicaId, hostName, fileName,
-        startOffset, chunkLengthInBytes, isChunked);
-  }
-
-  private FileCopyInfo(int correlationId, String clientId, ReplicaId sourceReplicaId,
-      ReplicaId targetReplicaId, String hostName, String fileName,
-      long startOffset, long chunkLengthInBytes, boolean isChunked) {
-    this.correlationId = correlationId;
-    this.clientId = clientId;
-    this.sourceReplicaId = sourceReplicaId;
-    this.targetReplicaId = targetReplicaId;
-    this.hostName = hostName;
+  /**
+   * Set the chunk info. This is required for making GetChunkData request
+   * @param fileName
+   * @param startOffset
+   * @param chunkLengthInBytes
+   * @param isChunked
+   */
+  public void setChunkInfo(String fileName, long startOffset, long chunkLengthInBytes, boolean isChunked) {
     this.fileName = fileName;
     this.startOffset = startOffset;
     this.chunkLengthInBytes = chunkLengthInBytes;

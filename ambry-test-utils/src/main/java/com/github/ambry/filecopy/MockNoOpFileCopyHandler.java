@@ -14,7 +14,7 @@
 package com.github.ambry.filecopy;
 
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.filetransfer.FileCopyHandler;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 
 
 public class MockNoOpFileCopyHandler implements FileCopyHandler {
