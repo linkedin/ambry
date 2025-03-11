@@ -110,7 +110,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected static final String replicaTokenFileName = "replicaTokens";
   protected final Time time;
   protected LeaderBasedReplicationAdmin leaderBasedReplicationAdmin = null;
-  protected Set<PartitionId> replicationDisabledPartitions = ConcurrentHashMap.newKeySet();
+  protected Set<PartitionId> replicationDisabledPartitions;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -165,6 +165,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.skipPredicate = skipPredicate;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     this.time = time;
+    this.replicationDisabledPartitions = ConcurrentHashMap.newKeySet();
     if (enableClusterMapListener) {
       clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     }
@@ -374,16 +375,16 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    if (replicationDisabledPartitions.isEmpty()) {
-      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
-          replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
-          replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-          leaderBasedReplicationAdmin);
-    } else {
+    if (replicationDisabledPartitions != null && !replicationDisabledPartitions.isEmpty()) {
       return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
           replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
           replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
           leaderBasedReplicationAdmin, replicationDisabledPartitions);
+    } else {
+      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+          replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+          replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+          leaderBasedReplicationAdmin);
     }
   }
 

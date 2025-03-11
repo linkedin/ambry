@@ -149,21 +149,10 @@ public class ReplicaThread implements Runnable {
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyConverter storeKeyConverter,
       Transformer transformer, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName,
       ResponseHandler responseHandler, Time time, ReplicaSyncUpManager replicaSyncUpManager,
-      Predicate<MessageInfo> skipPredicate, Set<PartitionId> replicationDisabledPartitions) {
-    this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, null, replicationConfig,
-        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, null, replicationDisabledPartitions);
-  }
-
-  public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
-      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ReplicationConfig replicationConfig,
-      ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyConverter storeKeyConverter,
-      Transformer transformer, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName,
-      ResponseHandler responseHandler, Time time, ReplicaSyncUpManager replicaSyncUpManager,
       Predicate<MessageInfo> skipPredicate) {
     this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, null, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, null, null);
+        datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, null);
   }
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -173,9 +162,9 @@ public class ReplicaThread implements Runnable {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, null, replicationConfig,
-        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, null);
+    this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
+        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
+        responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, null);
   }
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
