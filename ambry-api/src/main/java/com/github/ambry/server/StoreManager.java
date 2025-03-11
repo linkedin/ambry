@@ -153,5 +153,10 @@ public interface StoreManager {
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
 
+  /**
+   * Set up replica for a partition without building State.
+   * @param partitionName name of the partition
+   * @return {@code true} if replica is set up successfully. {@code false} if not.
+   */
   boolean setUpReplica(String partitionName);
 }
