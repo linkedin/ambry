@@ -257,10 +257,10 @@ public class FileStore implements PartitionFileStore {
       }
     } catch (IOException e) {
       logger.error("IO error while persisting filecopy metadata to disk {}", tempMetadataFile.getAbsoluteFile());
-      throw e;
+      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.FileStoreWriteError);
     } catch (Exception e) {
       logger.error("Error while writing metadata to disk", e);
-      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.FileStoreWriteError);
+      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.UnknownError);
     }
   }
 
@@ -282,10 +282,10 @@ public class FileStore implements PartitionFileStore {
       }
     } catch (IOException e) {
       logger.error("IO error while reading filecopy metadata from disk {}", actualMetadataFile.getAbsoluteFile());
-      throw e;
+      throw new FileStoreException("Error while reading metadata from disk", e, FileStoreErrorCode.FileStoreReadError);
     } catch (Exception e) {
       logger.error("Error while reading metadata from disk", e);
-      throw new FileStoreException("Error while reading metadata from disk", e, FileStoreErrorCode.FileStoreReadError);
+      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.UnknownError);
     }
   }
 

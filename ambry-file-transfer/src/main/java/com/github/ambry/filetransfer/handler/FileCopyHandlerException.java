@@ -52,10 +52,6 @@ public class FileCopyHandlerException extends RuntimeException {
    */
   public enum FileCopyHandlerErrorCode {
     /**
-     * Indicates that an unknown error occurred.
-     */
-    UnknownError,
-    /**
      * Indicates that the {@link FileCopyHandler} is not in running state when an operation was attempted.
      */
     FileCopyHandlerRunningFailure,
@@ -70,6 +66,10 @@ public class FileCopyHandlerException extends RuntimeException {
     /**
      * Indicates that FileCopyHandler encountered an error while making GetChunkData Api request.
      */
-    FileCopyHandlerGetChunkDataApiError
+    FileCopyHandlerGetChunkDataApiError,
+    /**
+     * Indicates that FiceCopyHandler encountered an unknown error.
+     */
+    UnknownError
   }
 }

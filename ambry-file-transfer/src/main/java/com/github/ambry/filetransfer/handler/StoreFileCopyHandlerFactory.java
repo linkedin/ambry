@@ -19,22 +19,49 @@ import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.filetransfer.handler.StoreFileCopyHandler;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.server.StoreManager;
+import java.util.Objects;
+import javax.annotation.Nonnull;
 
 
+/**
+ * Factory class to create {@link StoreFileCopyHandler}
+ */
 public class StoreFileCopyHandlerFactory implements FileCopyHandlerFactory {
+  /**
+   * The connection pool to use for file copy
+   */
   private final ConnectionPool connectionPool;
+
+  /**
+   * The store manager to use for file copy
+   */
   private final StoreManager storeManager;
+
+  /**
+   * The cluster map to use for file copy
+   */
   private final ClusterMap clusterMap;
 
-  public StoreFileCopyHandlerFactory(ConnectionPool connectionPool, StoreManager storeManager, ClusterMap clusterMap)
-      throws Exception {
+  /**
+   * The configuration for the file copy handler.
+   */
+  private final FileCopyHandlerConfig config;
+
+  public StoreFileCopyHandlerFactory(@Nonnull ConnectionPool connectionPool, @Nonnull StoreManager storeManager,
+      @Nonnull ClusterMap clusterMap, @Nonnull FileCopyHandlerConfig config) throws Exception {
+    Objects.requireNonNull(connectionPool, "connectionPool cannot be null");
+    Objects.requireNonNull(storeManager, "storeManager cannot be null");
+    Objects.requireNonNull(clusterMap, "clusterMap cannot be null");
+    Objects.requireNonNull(config, "config cannot be null");
+
     this.connectionPool = connectionPool;
     this.clusterMap = clusterMap;
     this.storeManager = storeManager;
+    this.config = config;
   }
 
   @Override
   public FileCopyHandler getFileCopyHandler() {
-    return new StoreFileCopyHandler(connectionPool, storeManager, clusterMap);
+    return new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, config);
   }
 }
