@@ -85,7 +85,7 @@ public class ClusterMapUtilsTest {
     doReturn(true).when(mockClusterManagerQueryHelper).isPartitionFilteringEnabled();
 
     ClusterMapUtils.PartitionSelectionHelper psh =
-        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, null, minimumLocalReplicaCount,
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, dc1, minimumLocalReplicaCount,
             maxReplicasAllSites, null);
 
     Set<MockPartitionId> allPartitionIds = new HashSet<>(Arrays.asList(everywhere1));
