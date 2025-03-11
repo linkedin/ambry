@@ -47,7 +47,7 @@ public interface ReplicaSyncUpManager {
    * @param partitionName partition name of replica that in file copy state
    * @throws InterruptedException
    */
-  void waitForFileCopyCompleted(String partitionName) throws InterruptedException;
+  void waitForFileCopyCompleted(String partitionName) throws StateTransitionException;
 
 
   /**

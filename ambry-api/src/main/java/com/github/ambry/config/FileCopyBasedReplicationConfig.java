@@ -57,6 +57,10 @@ public class FileCopyBasedReplicationConfig {
   @Default("sealed_segments_metadata_file")
   public final String fileCopyMetaDataFileName;
 
+  public static final String FILE_COPY_REPLICA_TIMEOUT_SECS = "filecopy.replica.timeout.secs";
+  @Config(FILE_COPY_REPLICA_TIMEOUT_SECS)
+  @Default("36000")
+  public final long fileCopyReplicaTimeoutSecs;
 
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
     fileCopyMetaDataFileName = verifiableProperties.getString(File_COPY_META_DATA_FILE_NAME, "sealed_segments_metadata_file");
@@ -64,5 +68,6 @@ public class FileCopyBasedReplicationConfig {
     fileCopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILE_COPY_NUMBER_OF_FILE_COPY_THREADS, 4);
     fileCopyFileChunkTimeoutInMins = verifiableProperties.getInt(FILE_COPY_FILE_CHUNK_TIMEOUT_IN_MINUTES, 5);
     fileCopyDataFlushIntervalInMbs = verifiableProperties.getLong(FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
+    fileCopyReplicaTimeoutSecs = verifiableProperties.getLong(FILE_COPY_REPLICA_TIMEOUT_SECS, 36000);
   }
 }

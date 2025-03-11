@@ -480,6 +480,11 @@ public class StorageManager implements StoreManager {
     return (null != result && !result.isEmpty());
   }
 
+  @Override
+  public boolean setUpReplica(String partitionName) throws ReplicaSetUpException {
+      return false;
+  }
+
   /**
    * Return the disk capacity for healthy disks. This capacity is the sum of all healthy disks. The unit
    * is GiB. This disk capacity is the value to report in instance config.
