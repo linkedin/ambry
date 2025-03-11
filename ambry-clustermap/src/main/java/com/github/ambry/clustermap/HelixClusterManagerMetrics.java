@@ -140,7 +140,7 @@ class HelixClusterManagerMetrics {
   /**
    * Initialize datanode related metrics.
    */
-  void initializeDataNodeMetrics() {
+  void initializeDataNodeMetrics(AtomicLong dataNodeInitializationFailureCount) {
     Gauge<Long> dataNodeCount = clusterMapCallback::getDatanodeCount;
     registry.gauge(MetricRegistry.name(HelixClusterManager.class, "dataNodeCount"), () -> dataNodeCount);
 
@@ -152,6 +152,10 @@ class HelixClusterManagerMetrics {
       Gauge<Long> dataNodeState = () -> datanode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
       registry.gauge(MetricRegistry.name(HelixClusterManager.class, metricName), () -> dataNodeState);
     }
+
+    Gauge<Long> dataNodeInitializationFailureCountGauge = dataNodeInitializationFailureCount::get;
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "dataNodeInitializationFailureCount"),
+        () -> dataNodeInitializationFailureCountGauge);
   }
 
   /**
