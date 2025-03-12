@@ -260,7 +260,6 @@ public class RecoveryNetworkClientTest {
             new ResponseHandler(mockClusterMap), new SystemTime(), null, null,
             null, recoveryManager);
     // Add remote-replica-info to replica-thread
-    replicationMetrics.populateReplicaThreadMetrics("recovery-thread");
     recoveryThread.addRemoteReplicaInfo(remoteStore);
     return recoveryThread;
   }
