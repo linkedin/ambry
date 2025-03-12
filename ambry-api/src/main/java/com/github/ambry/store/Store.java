@@ -228,6 +228,14 @@ public interface Store {
   boolean isDisabled();
 
   /**
+   * @return {@code true} if the store recovers from partial log segment recovery failure.
+   */
+  default boolean hasPartialRecovery() {
+    // By default it's false
+    return false;
+  }
+
+  /**
    * Shuts down the store
    */
   void shutdown() throws StoreException;
