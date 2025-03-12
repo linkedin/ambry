@@ -459,10 +459,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
           if (isTokenForRemoteReplicaInfo(remoteReplicaInfo, tokenInfo)) {
             logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                 token);
-            if (!(partitionInfo.getStore().isEmpty() && partitionInfo.getStore().hasPartialRecovery())) {
-              remoteReplicaInfo.initializeTokens(token);
-              remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
-            } else {
+            if (partitionInfo.getStore().isEmpty() || partitionInfo.getStore().hasPartialRecovery()) {
               // If the local replica is empty, it could have been newly created. In this case, the offset in
               // every peer replica which the local replica lags from should be set to 0, so that the local
               // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
@@ -473,6 +470,9 @@ public abstract class ReplicationEngine implements ReplicationAPI {
               // of the peer to just be safe.
               tokenWasReset = true;
               logTokenReset(partitionId, hostname, port, token);
+            } else {
+              remoteReplicaInfo.initializeTokens(token);
+              remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
             }
             updatedToken = true;
             break;
@@ -492,7 +492,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     replicationMetrics.remoteReplicaTokensRestoreTime.update(time.milliseconds() - readStartTimeMs);
 
     if (tokenWasReset) {
-      // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do
+      // We must ensure that the token file is persisted if any of the tokens in the file got reset. We need to do
       // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
       // before the replica token file is persisted after the reset.
       if (persistor != null) {
@@ -502,7 +502,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       }
     }
   }
-
   /**
    * Update metrics and print a log message when a replica token is reset.
    * @param partitionId The replica's partition.
