@@ -49,6 +49,7 @@ public class PrioritizationManager {
     // Add a replica to the PrioritisationManager
   }
 
+<<<<<<< Updated upstream
   public void removeReplica(String partitionName) {
     // Remove a task from the PrioritisationManager
   }
@@ -78,4 +79,13 @@ public class PrioritizationManager {
     // Get a replica from the PrioritisationManager
     return null;
   }
+=======
+  /**
+   * Add a replica to the prioritization manager.
+   * @param replicaId the {@link ReplicaId} to add.
+   */
+  boolean addReplica(ReplicaId replicaId);
+
+  boolean removeReplica(DiskId diskId, ReplicaId replicaId);
+>>>>>>> Stashed changes
 }

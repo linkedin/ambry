@@ -151,6 +151,10 @@ public class ServerConfig {
   @Config(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION)
   public final ServerReplicationMode serverReplicationProtocolForHydration;
 
+  public static final String HYDRATION_PRIORITIZATION_STRATEGY = "prioritization.strategy";
+  @Config(HYDRATION_PRIORITIZATION_STRATEGY)
+  public final HydrationPrioritizationStrategy hydrationPrioritizationStrategy;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverExecutionMode = verifiableProperties.getEnum(SERVER_EXECUTION_MODE, ServerExecutionMode.class,
         ServerExecutionMode.DATA_SERVING_MODE);
@@ -185,5 +189,7 @@ public class ServerConfig {
     serverRepairRequestsDbFactory = verifiableProperties.getString("server.repair.requests.db.factory", null);
     serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION,
         ServerReplicationMode.class, ServerReplicationMode.BLOB_BASED);
+    hydrationPrioritizationStrategy = verifiableProperties.getEnum(HYDRATION_PRIORITIZATION_STRATEGY,
+        HydrationPrioritizationStrategy.class, HydrationPrioritizationStrategy.FCFS);
   }
 }
