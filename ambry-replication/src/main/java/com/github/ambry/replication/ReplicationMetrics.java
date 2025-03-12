@@ -479,7 +479,7 @@ public class ReplicationMetrics {
    * Increase the number of replication cycle
    * */
   public void updateReplicaThreadCycleIteration(String replicaThread) {
-    replicaThreadsCycleIterations.getOrDefault(replicaThread, registry.counter(MetricRegistry.name(ReplicaThread.class,
+    replicaThreadsCycleIterations.computeIfAbsent(replicaThread, thread -> registry.counter(MetricRegistry.name(ReplicaThread.class,
         replicaThread + "-CycleIterations"))).inc();
   }
 
@@ -487,7 +487,7 @@ public class ReplicationMetrics {
    * Increase the number of assigned remote replica
    * */
   public void increaseReplicaThreadAssignedRemoteReplicaInfo(String replicaThread) {
-    replicaThreadsAssignedRemoteReplicaInfo.getOrDefault(replicaThread, registry.counter(MetricRegistry.name(ReplicaThread.class,
+    replicaThreadsAssignedRemoteReplicaInfo.computeIfAbsent(replicaThread, thread -> registry.counter(MetricRegistry.name(ReplicaThread.class,
         replicaThread + "-AssignedRemoteReplicaInfo"))).inc();
   }
 
@@ -495,7 +495,7 @@ public class ReplicationMetrics {
    * Update cycle replication time
    * */
   public void updateReplicaThreadOneCycleReplicationTime(String replicaThread, long time) {
-    replicaThreadsOneCycleReplicationTime.getOrDefault(replicaThread, registry.histogram(MetricRegistry.name(ReplicaThread.class,
+    replicaThreadsOneCycleReplicationTime.computeIfAbsent(replicaThread, thread -> registry.histogram(MetricRegistry.name(ReplicaThread.class,
         replicaThread + "-OneCycleReplicationTimeMS"))).update(time);
   }
 
@@ -503,7 +503,7 @@ public class ReplicationMetrics {
    * Decrease the number of assigned remote replica
    * */
   public void decreaseReplicaThreadAssignedRemoteReplicaInfo(String replicaThread) {
-    replicaThreadsAssignedRemoteReplicaInfo.getOrDefault(replicaThread, registry.counter(MetricRegistry.name(ReplicaThread.class,
+    replicaThreadsAssignedRemoteReplicaInfo.computeIfAbsent(replicaThread, thread -> registry.counter(MetricRegistry.name(ReplicaThread.class,
         replicaThread + "-AssignedRemoteReplicaInfo"))).dec();
   }
 
