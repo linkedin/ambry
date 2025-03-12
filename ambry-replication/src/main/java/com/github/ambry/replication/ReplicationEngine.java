@@ -459,15 +459,18 @@ public abstract class ReplicationEngine implements ReplicationAPI {
           if (isTokenForRemoteReplicaInfo(remoteReplicaInfo, tokenInfo)) {
             logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                 token);
-            if (!partitionInfo.getStore().isEmpty()) {
+            if (!(partitionInfo.getStore().isEmpty() && partitionInfo.getStore().hasPartialRecovery())) {
               remoteReplicaInfo.initializeTokens(token);
               remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
             } else {
-              // if the local replica is empty, it could have been newly created. In this case, the offset in
+              // If the local replica is empty, it could have been newly created. In this case, the offset in
               // every peer replica which the local replica lags from should be set to 0, so that the local
               // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
               // local replica should also be set to 0. During initialization these values are already set to 0,
               // so we let them be.
+              //
+              // If the local replica has partial recovery, the local replica should start fetching from the beginning
+              // of the peer to just be safe.
               tokenWasReset = true;
               logTokenReset(partitionId, hostname, port, token);
             }
