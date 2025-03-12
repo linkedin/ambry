@@ -110,7 +110,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected static final String replicaTokenFileName = "replicaTokens";
   protected final Time time;
   protected LeaderBasedReplicationAdmin leaderBasedReplicationAdmin = null;
-  protected Set<PartitionId> replicationDisabledPartitions;
+  protected final Set<PartitionId> replicationDisabledPartitions;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
