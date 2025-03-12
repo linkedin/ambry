@@ -902,7 +902,7 @@ public class HelixClusterManagerTest {
   }
 
   /**
-   *
+   * Tests the isValidPartitionFilter function
    */
   @Test
   public void helixClusterPartitionFilterTest() throws Exception {
