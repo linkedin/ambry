@@ -13,7 +13,6 @@
  */
 package com.github.ambry.filetransfer.workflow;
 
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.filetransfer.FileCopyInfo;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
@@ -29,21 +28,11 @@ import java.io.IOException;
 /**
  * This class is responsible for sending a FileCopyGetMetaDataRequest to the target replica and receiving the response.
  */
-public class GetMetadataWorkflow implements OperationRetryHandler.RetryableOperation<FileCopyGetMetaDataResponse> {
-  /**
-   * The connection pool to use to get connections to the target replica.
-   */
-  private final ConnectionPool connectionPool;
-
+public class GetMetadataWorkflow extends BaseWorkFlow implements OperationRetryHandler.RetryableOperation<FileCopyGetMetaDataResponse> {
   /**
    * The {@link FileCopyInfo} that contains the information required to send the request.
    */
   private final FileCopyInfo fileCopyInfo;
-
-  /**
-   * The {@link FileCopyHandlerConfig} that contains the configuration required to send the request.
-   */
-  private final FileCopyHandlerConfig config;
 
   private static final Logger logger = LoggerFactory.getLogger(GetMetadataWorkflow.class);
 
@@ -56,13 +45,13 @@ public class GetMetadataWorkflow implements OperationRetryHandler.RetryableOpera
       @Nonnull ConnectionPool connectionPool,
       @Nonnull FileCopyInfo fileCopyInfo,
       @Nonnull FileCopyHandlerConfig config) {
+    super(connectionPool, config);
+
     Objects.requireNonNull(connectionPool, "connectionPool param cannot be null");
     Objects.requireNonNull(fileCopyInfo, "fileCopyInfo param cannot be null");
     Objects.requireNonNull(config, "config param cannot be null");
 
-    this.connectionPool = connectionPool;
     this.fileCopyInfo = fileCopyInfo;
-    this.config = config;
   }
 
   /**
@@ -80,17 +69,14 @@ public class GetMetadataWorkflow implements OperationRetryHandler.RetryableOpera
         FileCopyGetMetaDataRequest.FILE_METADATA_REQUEST_VERSION_V_1, fileCopyInfo.getCorrelationId(),
         fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileCopyInfo.getHostName());
 
+    ConnectedChannel connectedChannel = getChannel(fileCopyInfo.getTargetReplicaId().getDataNodeId());
+
     logger.info("Sending FileCopyGetMetaDataRequest: {}", request);
     long startTimeMs = System.currentTimeMillis();
-
-    DataNodeId dataNodeId = fileCopyInfo.getTargetReplicaId().getDataNodeId();
-    ConnectedChannel connectedChannel = connectionPool.checkOutConnection(dataNodeId.getHostname(),
-        dataNodeId.getPortToConnectTo(), config.fileCopyHandlerConnectionTimeoutMs);
-
     ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
     FileCopyGetMetaDataResponse response = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
-
     logger.info("Received FileCopyGetMetaDataResponse in {} ms", System.currentTimeMillis() - startTimeMs);
+
     return response;
   }
 }

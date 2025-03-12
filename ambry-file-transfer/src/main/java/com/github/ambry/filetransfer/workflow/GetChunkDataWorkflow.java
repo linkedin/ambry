@@ -30,12 +30,7 @@ import java.io.IOException;
 /**
  * This class is responsible for sending a FileCopyGetChunkRequest to the target replica and receiving the response.
  */
-public class GetChunkDataWorkflow implements OperationRetryHandler.RetryableOperation<FileCopyGetChunkResponse> {
-  /**
-   * The connection pool to use to get connections to the target replica.
-   */
-  private final ConnectionPool connectionPool;
-
+public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetryHandler.RetryableOperation<FileCopyGetChunkResponse> {
   /**
    * The {@link FileCopyInfo} that contains the information required to send the request.
    */
@@ -45,11 +40,6 @@ public class GetChunkDataWorkflow implements OperationRetryHandler.RetryableOper
    * The {@link ClusterMap} that contains the information about the cluster.
    */
   private final ClusterMap clusterMap;
-
-  /**
-   * The {@link FileCopyHandlerConfig} that contains the configuration required to send the request.
-   */
-  private final FileCopyHandlerConfig config;
 
   private static final Logger logger = LoggerFactory.getLogger(GetChunkDataWorkflow.class);
 
@@ -65,15 +55,15 @@ public class GetChunkDataWorkflow implements OperationRetryHandler.RetryableOper
       @Nonnull FileCopyInfo fileCopyInfo,
       @Nonnull ClusterMap clusterMap,
       @Nonnull FileCopyHandlerConfig config) {
+    super(connectionPool, config);
+
     Objects.requireNonNull(connectionPool, "connectionPool param cannot be null");
     Objects.requireNonNull(fileCopyInfo, "fileCopyInfo param cannot be null");
     Objects.requireNonNull(clusterMap, "clusterMap param cannot be null");
     Objects.requireNonNull(config, "config param cannot be null");
 
-    this.connectionPool = connectionPool;
     this.fileCopyInfo = fileCopyInfo;
     this.clusterMap = clusterMap;
-    this.config = config;
   }
 
   /**
@@ -95,9 +85,7 @@ public class GetChunkDataWorkflow implements OperationRetryHandler.RetryableOper
     logger.info("Sending FileCopyGetChunkRequest: {}", request);
     long startTimeMs = System.currentTimeMillis();
 
-    DataNodeId dataNodeId = fileCopyInfo.getTargetReplicaId().getDataNodeId();
-    ConnectedChannel connectedChannel = connectionPool.checkOutConnection(dataNodeId.getHostname(),
-        dataNodeId.getPortToConnectTo(), config.fileCopyHandlerConnectionTimeoutMs);
+    ConnectedChannel connectedChannel = getChannel(fileCopyInfo.getTargetReplicaId().getDataNodeId());
 
     ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
     FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(channelOutput.getInputStream(), clusterMap);

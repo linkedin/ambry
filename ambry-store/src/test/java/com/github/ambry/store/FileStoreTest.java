@@ -337,7 +337,7 @@ public class FileStoreTest {
     } catch (Exception e) {
         // Verify exception type
         assertTrue("Exception should be related to file corruption",
-            e instanceof IOException || e instanceof ArrayIndexOutOfBoundsException);
+            e.getCause() instanceof ArrayIndexOutOfBoundsException);
     }
   }
 

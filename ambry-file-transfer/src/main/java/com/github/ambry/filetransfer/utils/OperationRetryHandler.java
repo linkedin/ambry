@@ -15,7 +15,6 @@ package com.github.ambry.filetransfer.utils;
 
 import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
-import com.github.ambry.protocol.RequestOrResponse;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -53,17 +52,17 @@ public class OperationRetryHandler {
 
   /**
    * Execute the operation with retries
-   * @param operation the operation to execute of type {@link RetryableOperation<T>} where T is a subclass of {@link RequestOrResponse}
+   * @param operation the operation to execute of type {@link RetryableOperation<T>}
    * @param operationName the name of the operation. Needed for logging.
-   * @return the result of the operation of type T where T is a subclass of {@link RequestOrResponse}
-   * @param <T>
+   * @return the result of the operation of type T
+   * @param <T> the return type of the executable operation
    * @throws IOException
    * @throws ConnectionPoolTimeoutException
    * @throws InterruptedException
    */
-  public <T extends RequestOrResponse> T executeWithRetry(@Nonnull RetryableOperation<T> operation, @Nonnull String operationName)
+  public <T> T executeWithRetry(@Nonnull RetryableOperation<T> operation,
+      @Nonnull String operationName)
       throws IOException, ConnectionPoolTimeoutException, InterruptedException {
-
     Objects.requireNonNull(operation, "operation cannot be null");
     int attempts = 0;
 
@@ -102,9 +101,9 @@ public class OperationRetryHandler {
 
   /**
    * Interface for operations that can be retried
-   * @param <T> the type of the operation where T is a subclass of {@link RequestOrResponse}
+   * @param <T> the return type of the operation
    */
-  public interface RetryableOperation<T extends RequestOrResponse> {
+  public interface RetryableOperation<T> {
     T execute() throws IOException, ConnectionPoolTimeoutException, InterruptedException;
   }
 }
