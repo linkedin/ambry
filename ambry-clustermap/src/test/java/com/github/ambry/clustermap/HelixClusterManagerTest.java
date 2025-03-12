@@ -28,6 +28,7 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
@@ -69,6 +71,7 @@ import static com.github.ambry.clustermap.TestUtils.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -896,6 +899,37 @@ public class HelixClusterManagerTest {
         partitionToResource.get(remoteDc).size() + 1);
     assertTrue(partitionToResource.get(localDc).containsKey(partitionName) && !partitionToResource.get(remoteDc)
         .containsKey(partitionName));
+  }
+
+  /**
+   * Tests the isValidPartitionFilter function
+   */
+  @Test
+  public void helixClusterPartitionFilterTest() throws Exception {
+    assumeTrue(!useComposite && !overrideEnabled);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    HelixClusterManager.HelixClusterManagerQueryHelper clusterHelper = helixClusterManager.new HelixClusterManagerQueryHelper();
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
+
+    String partitionID = String.valueOf(clusterHelper.getPartitions().iterator().next().getId());
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    String resourceName = resourceNames.get(0);
+    String tag = "TAG_100000";
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setInstanceGroupTag(tag);
+    helixCluster.refreshIdealState();
+
+    // set to 10 to make function fail
+    Field field = ClusterMapConfig.class.getDeclaredField("routerPutSuccessTarget");
+    field.setAccessible(true);
+    field.set(clusterMapConfig, 10);
+    boolean isValid = clusterHelper.isValidPartition(partitionID);
+    assertFalse(isValid);
+
+    // set to 3 to make function pass
+    field.set(clusterMapConfig, 3);
+    isValid = clusterHelper.isValidPartition(partitionID);
+    assertTrue(isValid);
   }
 
   /**
