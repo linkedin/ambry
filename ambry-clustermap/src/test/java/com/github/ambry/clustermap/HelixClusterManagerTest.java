@@ -907,11 +907,11 @@ public class HelixClusterManagerTest {
   @Test
   public void helixClusterPartitionFilterTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled);
-    String partitionID = "22";
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     HelixClusterManager.HelixClusterManagerQueryHelper clusterHelper = helixClusterManager.new HelixClusterManagerQueryHelper();
     verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
 
+    String partitionID = String.valueOf(clusterHelper.getPartitions().iterator().next().getId());
     List<String> resourceNames = helixCluster.getResources(localDc);
     String resourceName = resourceNames.get(0);
     String tag = "TAG_100000";

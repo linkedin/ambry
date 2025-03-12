@@ -719,9 +719,9 @@ public class ClusterMapUtils {
       Collection<? extends PartitionId> partitions = clusterManagerQueryHelper.getPartitions();
       Collection<PartitionId> filteredPartions = new ArrayList<>();
       if (clusterManagerQueryHelper.isPartitionFilteringEnabled()) {
-        for (Object partition : partitions) {
+        for (PartitionId partition : partitions) {
           if (clusterManagerQueryHelper.isValidPartition(partition.toString())){
-            filteredPartions.add((PartitionId) partition);
+            filteredPartions.add(partition);
           }
         }
         updatePartitions(filteredPartions, localDatacenterName);

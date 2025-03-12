@@ -1427,12 +1427,15 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public boolean isValidPartition(String partitionID) {
-      String resource = getResourceForPartitionInLocalDc(partitionID).iterator().next();
-      ConcurrentHashMap<String, String> res = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName);
-      String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
-      ResourceProperty resourceProperty  =
-          dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
-      return resourceProperty.replicationFactor >= clusterMapConfig.routerPutSuccessTarget;
+      try {
+        String resource = getResourceForPartitionInLocalDc(partitionID).iterator().next();
+        String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
+        ResourceProperty resourceProperty  =
+            dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
+        return resourceProperty.replicationFactor >= clusterMapConfig.routerPutSuccessTarget;
+      } catch (Exception e) {
+        return false;
+      }
     }
 
     /**
