@@ -299,7 +299,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       // So do listener actions in addPartition() and removePartition().
       if (remoteReplicaInfo.getReplicaThread() != null) {
         remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
-        replicationMetrics.replicaThreadsAssignedRemoteReplicaInfo.get(remoteReplicaInfo.getReplicaThread().getName()).dec();
         remoteReplicaInfo.setReplicaThread(null);
       }
     }
@@ -334,7 +333,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       ReplicaThread replicaThread = dataNodeIdToReplicaThread.computeIfAbsent(dataNodeIdToReplicate,
           key -> replicaThreads.get(getReplicaThreadIndexToUse(datacenter)));
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
-      replicationMetrics.replicaThreadsAssignedRemoteReplicaInfo.get(replicaThread.getName()).inc();
       remoteReplicaInfo.setReplicaThread(replicaThread);
     }
   }

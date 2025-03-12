@@ -458,6 +458,10 @@ public class ReplicationMetrics {
     dcToResponseError.put(datacenter, responseError);
   }
 
+  /**
+   * Populates metrics at replicaThread level
+   * @param replicaThread name of replica thread
+   */
 
   public void populateReplicaThreadMetrics(String replicaThread) {
     Counter replicaThreadAssignedRemoteReplicaInfo = registry.counter(MetricRegistry.name(ReplicaThread.class,
@@ -471,6 +475,37 @@ public class ReplicationMetrics {
     replicaThreadsOneCycleReplicationTime.put(replicaThread, replicaThreadOneCycleReplicationTime);
   }
 
+  /**
+   * Increase the number of replication cycle
+   * */
+  public void updateReplicaThreadCycleIteration(String replicaThread) {
+    replicaThreadsCycleIterations.getOrDefault(replicaThread, registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-CycleIterations"))).inc();
+  }
+
+  /**
+   * Increase the number of assigned remote replica
+   * */
+  public void increaseReplicaThreadAssignedRemoteReplicaInfo(String replicaThread) {
+    replicaThreadsAssignedRemoteReplicaInfo.getOrDefault(replicaThread, registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-AssignedRemoteReplicaInfo"))).inc();
+  }
+
+  /**
+   * Update cycle replication time
+   * */
+  public void updateReplicaThreadOneCycleReplicationTime(String replicaThread, long time) {
+    replicaThreadsOneCycleReplicationTime.getOrDefault(replicaThread, registry.histogram(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-OneCycleReplicationTimeMS"))).update(time);
+  }
+
+  /**
+   * Decrease the number of assigned remote replica
+   * */
+  public void decreaseReplicaThreadAssignedRemoteReplicaInfo(String replicaThread) {
+    replicaThreadsAssignedRemoteReplicaInfo.getOrDefault(replicaThread, registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-AssignedRemoteReplicaInfo"))).dec();
+  }
 
   /**
    * Register metrics for measuring the number of active replica threads.

@@ -339,6 +339,7 @@ public class ReplicaThread implements Runnable {
           logger.error("ReplicaThread: {}, RemoteReplicaInfo {} not found.", threadName, remoteReplicaInfo);
         } else {
           logger.info("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
+          decreaseAssignedRemoteReplicaInfosMetric();
         }
       } else {
         replicationMetrics.remoteReplicaInfoRemoveError.inc();
@@ -361,14 +362,17 @@ public class ReplicaThread implements Runnable {
       allReplicatedPartitions.add(remoteReplicaInfo.getReplicaId().getPartitionId());
       DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
       // Use a linked hash set to make sure that we maintain a predictable order based on the insertion
-      if (!replicasToReplicateGroupedByNode.computeIfAbsent(dataNodeId, key -> new LinkedHashSet<>())
-          .add(remoteReplicaInfo)) {
+      boolean doesRemoteReplicaInfoAlreadyExists = replicasToReplicateGroupedByNode.computeIfAbsent(dataNodeId, key -> new LinkedHashSet<>())
+          .add(remoteReplicaInfo);
+      if (!doesRemoteReplicaInfoAlreadyExists) {
         replicationMetrics.remoteReplicaInfoAddError.inc();
         // Since VCR is also listening Ambry Clustermap change, this may happen if events happens in following order:
         // 1. VCR in memory ambry-clustermap updated
         // 2. VcrClusterParticipantListener adds remote replicas for the newly added partition
         // 3. ClusterMapChangeListener adds remote replicas
         logger.warn("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
+      } else {
+        increaseAssignedRemoteReplicaInfosMetric();
       }
     } finally {
       terminateCurrentContinuousReplicationCycle = true;
@@ -546,13 +550,36 @@ public class ReplicaThread implements Runnable {
       long cycleEndTime = time.milliseconds();
       replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - oneRoundStartTimeMs,
           replicatingFromRemoteColo, datacenterName);
-      replicationMetrics.replicaThreadsOneCycleReplicationTime.get(threadName).update(cycleEndTime - oneRoundStartTimeMs);
-      replicationMetrics.replicaThreadsCycleIterations.get(threadName).inc();
+      updateCycleReplicationTimeMetric(cycleEndTime - oneRoundStartTimeMs);
+      updateCycleReplicationIterationsMetric();
     }
 
     // check and make thread sleep and publish metrics for throttling
     maybeSleepAfterReplication(allReplicasCaughtEarly);
     logger.trace("Thread name: {} Exiting replication, all iterations Done!", threadName);
+  }
+
+  /**
+   * Updates the cycle replication time for replicaThread
+   * @param value cycle time
+   */
+  private void updateCycleReplicationTimeMetric(long value) {
+    replicationMetrics.updateReplicaThreadOneCycleReplicationTime(threadName, value);
+  }
+
+  /**
+   * Updates the number of iterations for replication by this replicaThread
+   */
+  private void updateCycleReplicationIterationsMetric() {
+    replicationMetrics.updateReplicaThreadCycleIteration(threadName);
+  }
+
+  public void increaseAssignedRemoteReplicaInfosMetric() {
+    replicationMetrics.increaseReplicaThreadAssignedRemoteReplicaInfo(threadName);
+  }
+
+  public void decreaseAssignedRemoteReplicaInfosMetric() {
+    replicationMetrics.decreaseReplicaThreadAssignedRemoteReplicaInfo(threadName);
   }
 
   /**
