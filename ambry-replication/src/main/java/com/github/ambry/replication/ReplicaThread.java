@@ -550,8 +550,8 @@ public class ReplicaThread implements Runnable {
       long cycleEndTime = time.milliseconds();
       replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - oneRoundStartTimeMs,
           replicatingFromRemoteColo, datacenterName);
-      updateCycleReplicationTimeMetric(cycleEndTime - oneRoundStartTimeMs);
-      updateCycleReplicationIterationsMetric();
+      updatePerReplicationCycleTimeMetric(cycleEndTime - oneRoundStartTimeMs);
+      updateReplicationCycleIterationsMetric();
     }
 
     // check and make thread sleep and publish metrics for throttling
@@ -563,14 +563,14 @@ public class ReplicaThread implements Runnable {
    * Updates the cycle replication time for replicaThread
    * @param value cycle time
    */
-  private void updateCycleReplicationTimeMetric(long value) {
+  private void updatePerReplicationCycleTimeMetric(long value) {
     replicationMetrics.updateReplicaThreadOneCycleReplicationTime(threadName, value);
   }
 
   /**
    * Updates the number of iterations for replication by this replicaThread
    */
-  private void updateCycleReplicationIterationsMetric() {
+  private void updateReplicationCycleIterationsMetric() {
     replicationMetrics.updateReplicaThreadCycleIteration(threadName);
   }
 
@@ -695,8 +695,8 @@ public class ReplicaThread implements Runnable {
       long cycleEndTime = time.milliseconds();
       replicationMetrics.updateOneCycleReplicationTime(cycleEndTime - oneRoundStartTimeMs, replicatingFromRemoteColo,
           datacenterName);
-      replicationMetrics.replicaThreadsOneCycleReplicationTime.get(threadName).update(cycleEndTime - oneRoundStartTimeMs);
-      replicationMetrics.replicaThreadsCycleIterations.get(threadName).inc();
+      updatePerReplicationCycleTimeMetric(cycleEndTime - oneRoundStartTimeMs);
+      updateReplicationCycleIterationsMetric();
       emitCyclicReplicationIdleMetrics(remoteReplicaGroups, oneRoundStartTimeMs, cycleEndTime);
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
