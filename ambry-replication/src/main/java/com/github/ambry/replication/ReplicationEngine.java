@@ -179,13 +179,23 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   @Override
   public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
-    replicationDisabledPartitions.addAll(ids);
     if (origins.isEmpty()) {
       origins = new ArrayList<>(replicaThreadPoolByDc.keySet());
     }
     if (!replicaThreadPoolByDc.keySet().containsAll(origins)) {
       return false;
     }
+
+    if (origins.size() == replicaThreadPoolByDc.size()) {
+      // if all origins are involved, we can disable replication for all partitions and pass this to future ReplicaThreads as well
+      // otherwise control replication for current replica threads only
+      if (!enable) {
+        replicationDisabledPartitions.addAll(ids);
+      } else {
+        replicationDisabledPartitions.removeAll(ids);
+      }
+    }
+
     for (String origin : origins) {
       for (ReplicaThread replicaThread : replicaThreadPoolByDc.get(origin)) {
         replicaThread.controlReplicationForPartitions(ids, enable);
