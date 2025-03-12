@@ -16,6 +16,8 @@ package com.github.ambry.config;
 import com.github.ambry.clustermap.DataNodeConfigSourceType;
 import org.json.JSONObject;
 
+import static com.github.ambry.config.RouterConfig.*;
+
 
 /**
  * The configs for resource state.
@@ -43,6 +45,7 @@ public class ClusterMapConfig {
       "clustermap.delete.data.from.datanode.config.in.property.store.clean.up.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
   public static final String IS_AUTO_REGISTRATION_ENABLED = "clustermap.auto.registration.enabled";
+  public static final String PARTITION_FILTERING_ENABLED = "clustermap.enable.partition.filtering";
 
   /**
    * The factory class used to get the resource state policies.
@@ -384,6 +387,17 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapAutoRegistrationEnabled;
 
+  /**
+   * The minimum number of successful responses required for a put operation.
+   */
+  @Config(ROUTER_PUT_SUCCESS_TARGET)
+  @Default("2")
+  public final int routerPutSuccessTarget;
+
+  @Config(PARTITION_FILTERING_ENABLED)
+  @Default("false")
+  public final boolean clusterMapPartitionFilteringEnabled;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -470,5 +484,7 @@ public class ClusterMapConfig {
             0, Long.MAX_VALUE);
     clusterMapIgnoreDownwardStateTransition = verifiableProperties.getBoolean(IGNORE_DOWNWARD_STATE_TRANSITION, false);
     clusterMapAutoRegistrationEnabled = verifiableProperties.getBoolean(IS_AUTO_REGISTRATION_ENABLED, false);
+    routerPutSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
+    clusterMapPartitionFilteringEnabled = verifiableProperties.getBoolean(PARTITION_FILTERING_ENABLED, false);
   }
 }
