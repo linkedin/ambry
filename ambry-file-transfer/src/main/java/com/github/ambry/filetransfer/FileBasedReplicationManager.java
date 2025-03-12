@@ -61,9 +61,8 @@ public class FileBasedReplicationManager {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       if(storeManager.getReplica(partitionName) == null){
-        //storeManager.setUpReplica(partitionName);
+        storeManager.setUpReplica(partitionName);
       }
-      prioritizationManager.addReplica(partitionName);
     }
 
     @Override
