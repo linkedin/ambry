@@ -123,6 +123,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * Shutdown the file copy handler. Perform clean up steps in case of a graceful shutdown.
    */
   public void shutdown() {
+    connectionPool.shutdown();
     isRunning = false;
   }
 
@@ -161,12 +162,22 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     try {
       metadataResponse = operationRetryHandler.executeWithRetry(
           () -> new GetMetadataWorkflow(connectionPool, fileCopyInfo, config).execute(), operationName);
-    } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
-      logger.error("Failed to fetch metadata for file {}", fileCopyInfo, e);
-      throw new FileCopyHandlerException("Failed to fetch metadata for file " + fileCopyInfo.getFileName(), e,
+    } catch (IOException e) {
+      logger.error("IO error while fetching metadata for file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("IO error while fetching metadata for file " + fileCopyInfo.getFileName(), e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
-    } catch (Exception e) {
-      throw new FileCopyHandlerException("Exception while fetching metadata for file " + fileCopyInfo.getFileName(), e,
+    } catch (ConnectionPoolTimeoutException e) {
+      logger.error("Connection pool timeout while fetching metadata for file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("Connection timeout while fetching metadata for file " + fileCopyInfo.getFileName(), e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt(); // Preserve interrupt status
+      logger.error("Thread interrupted while fetching metadata for file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("Thread interrupted while fetching metadata for file " + fileCopyInfo.getFileName(), e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+    } catch (RuntimeException e) {
+      logger.error("Unexpected runtime error while fetching metadata for file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("Unexpected runtime error while fetching metadata for file " + fileCopyInfo.getFileName(), e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
     validateResponseOrThrow(metadataResponse, operationName);
@@ -189,26 +200,33 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     for (int i = 0; i < chunksInLogSegment; i++) {
       long startOffset = (long) i * config.getFileCopyHandlerChunkSize;
       long sizeInBytes = Math.min(config.getFileCopyHandlerChunkSize, logFileInfo.getFileSize() - startOffset);
+      fileCopyInfo.setChunkInfo(logFileInfo.getFileName(), startOffset, sizeInBytes, true);
+
       try {
-        fileCopyInfo.setChunkInfo(logFileInfo.getFileName(), startOffset, sizeInBytes, true);
         chunkResponse = operationRetryHandler.executeWithRetry(
             () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, clusterMap, config).execute(), operationName);
-      } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
-        throw new RuntimeException(e);
-      }
-    }
-    validateResponseOrThrow(chunkResponse, operationName);
+        validateResponseOrThrow(chunkResponse, operationName);
 
-    String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
-    try {
-      StoreFileChunk chunkToWrite = new StoreFileChunk(chunkResponse.getChunkStream(), chunkResponse.getChunkStream().available());
-      fileStore.writeStoreFileChunkToDisk(filePath, chunkToWrite);
-    } catch (IOException e) {
-      throw new FileCopyHandlerException("Failed to write chunk to disk", e,
-          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
-    } catch (Exception e) {
-      throw new FileCopyHandlerException("Exception while writing chunk to disk", e,
-          FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+        String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
+        StoreFileChunk chunkToWrite = new StoreFileChunk(chunkResponse.getChunkStream(),
+            chunkResponse.getChunkStream().available());
+
+        fileStore.writeStoreFileChunkToDisk(filePath, chunkToWrite);
+      } catch (IOException e) {
+        throw new FileCopyHandlerException("Failed to write chunk to disk", e,
+            FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
+      } catch (ConnectionPoolTimeoutException e) {
+        throw new RuntimeException("Connection pool timeout while fetching chunk data", e);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();  // Preserve interrupt status
+        throw new RuntimeException("Thread was interrupted during execution", e);
+      } catch (RuntimeException e) {
+        throw new FileCopyHandlerException("Unexpected runtime error while processing file copy", e,
+            FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+      } catch (Exception e) {
+        throw new FileCopyHandlerException("Exception while writing chunk to disk", e,
+            FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+      }
     }
   }
 
@@ -222,31 +240,32 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   private void fetchAndPersistIndexFile(FileCopyInfo fileCopyInfo, FileInfo indexFile,
       String partitionToMountFilePath, PartitionFileStore fileStore) {
     String operationName = "GetFileOperation";
-    FileCopyGetChunkResponse chunkResponse = null;
+    fileCopyInfo.setChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
 
     try {
-      fileCopyInfo.setChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
-      chunkResponse = operationRetryHandler.executeWithRetry(
-            () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, clusterMap, config).execute(), operationName);
-    } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
-      logger.error("Failed to fetch metadata for file {}", fileCopyInfo.getFileName(), e);
-      throw new FileCopyHandlerException("Failed to fetch metadata for file " + fileCopyInfo, e,
-          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetChunkDataApiError);
-    } catch (Exception e) {
-      throw new FileCopyHandlerException("Failed to fetch metadata for file " + fileCopyInfo, e,
-          FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
-    }
-    validateResponseOrThrow(chunkResponse, operationName);
+      FileCopyGetChunkResponse chunkResponse = operationRetryHandler.executeWithRetry(
+          () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, clusterMap, config).execute(), operationName);
+      validateResponseOrThrow(chunkResponse, operationName);
 
-    String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
-    try {
+      String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
       StoreFileChunk chunkToWrite = new StoreFileChunk(chunkResponse.getChunkStream(), chunkResponse.getChunkStream().available());
       fileStore.writeStoreFileChunkToDisk(filePath, chunkToWrite);
     } catch (IOException e) {
-      throw new FileCopyHandlerException("Failed to write chunk to disk", e,
+      logger.error("I/O error occurred while processing file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("I/O error occurred while processing file " + fileCopyInfo.getFileName(), e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
-    } catch (Exception e) {
-      throw new FileCopyHandlerException("Failed to fetch metadata for file " + fileCopyInfo, e,
+    } catch (ConnectionPoolTimeoutException e) {
+      logger.error("Connection pool timeout while fetching chunk data for file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("Connection timeout while fetching chunk data for file " + fileCopyInfo.getFileName(), e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetChunkDataApiError);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt(); // Preserve interrupt status
+      logger.error("Thread interrupted while fetching chunk data for file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("Thread interrupted while fetching chunk data for file " + fileCopyInfo.getFileName(), e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetChunkDataApiError);
+    } catch (RuntimeException e) {
+      logger.error("Unexpected runtime error while processing file {}", fileCopyInfo.getFileName(), e);
+      throw new FileCopyHandlerException("Unexpected runtime error while processing file " + fileCopyInfo.getFileName(), e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
   }

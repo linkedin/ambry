@@ -63,22 +63,39 @@ public class OperationRetryHandler {
    */
   public <T extends RequestOrResponse> T executeWithRetry(@Nonnull RetryableOperation<T> operation, @Nonnull String operationName)
       throws IOException, ConnectionPoolTimeoutException, InterruptedException {
-    Objects.requireNonNull(operation, "operation cannot be null");
 
+    Objects.requireNonNull(operation, "operation cannot be null");
     int attempts = 0;
+
     while (true) {
       try {
         return operation.execute();
-      } catch (IOException | ConnectionPoolTimeoutException | InterruptedException e) {
+      } catch (IOException e) {
         attempts++;
+        logger.warn("{} encountered an IO error. Attempt {}/{}", operationName, attempts, maxRetries, e);
         if (attempts >= maxRetries) {
-          logger.error("{} failed after {} attempts", operationName, attempts, e);
+          logger.error("{} failed due to IO error after {} attempts", operationName, attempts, e);
           throw e;
         }
-        logger.info("{} failed. Retrying {}/{}", operationName, attempts, maxRetries, e);
+      } catch (ConnectionPoolTimeoutException e) {
+        attempts++;
+        logger.warn("{} timed out while waiting for connection. Attempt {}/{}", operationName, attempts, maxRetries, e);
+        if (attempts >= maxRetries) {
+          logger.error("{} failed due to connection timeout after {} attempts", operationName, attempts, e);
+          throw e;
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt(); // Preserve the interrupt status
+        logger.error("{} was interrupted during execution. Attempt {}/{}", operationName, attempts, maxRetries, e);
+        throw e;
+      }
 
-        // TODO: Communicate with FCThread about the retry/sleep
+      try {
         TimeUnit.MILLISECONDS.sleep(retryDelayInMS);
+      } catch (InterruptedException sleepInterrupted) {
+        Thread.currentThread().interrupt();
+        logger.error("{} was interrupted during retry delay", operationName, sleepInterrupted);
+        throw sleepInterrupted;
       }
     }
   }
