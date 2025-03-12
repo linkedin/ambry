@@ -910,6 +910,7 @@ public class HelixClusterManagerTest {
     String partitionID = "22";
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     HelixClusterManager.HelixClusterManagerQueryHelper clusterHelper = helixClusterManager.new HelixClusterManagerQueryHelper();
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
 
     List<String> resourceNames = helixCluster.getResources(localDc);
     String resourceName = resourceNames.get(0);
