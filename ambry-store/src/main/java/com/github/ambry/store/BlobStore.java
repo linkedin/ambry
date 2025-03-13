@@ -1183,6 +1183,11 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public boolean hasPartialRecovery() {
+    return index.hasPartialRecovery();
+  }
+
+  @Override
   public boolean isBootstrapInProgress() {
     return (new File(dataDir, config.storeBootstrapInProgressFile)).exists();
   }

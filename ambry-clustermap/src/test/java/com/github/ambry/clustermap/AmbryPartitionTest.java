@@ -156,6 +156,16 @@ public class AmbryPartitionTest {
       return null;
     }
 
+    @Override
+    public boolean isValidPartition(String partitionID) {
+      return true;
+    }
+
+    @Override
+    public boolean isPartitionFilteringEnabled() {
+      return false;
+    }
+
     /**
      * Increment the sealed state counter by one.
      */
