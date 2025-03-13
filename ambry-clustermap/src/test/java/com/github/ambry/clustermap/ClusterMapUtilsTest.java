@@ -101,7 +101,6 @@ public class ClusterMapUtilsTest {
     // case 2: filtering enabled
     doReturn(true).when(mockClusterManagerQueryHelper).isPartitionFilteringEnabled();
     doReturn(true).when(mockClusterManagerQueryHelper).isValidPartition("Partition[1]");
-    doReturn(false).when(mockClusterManagerQueryHelper).isValidPartition("Partition[2]");
     psh.onReplicaAddedOrRemoved(replicaIds, null);
     allPartitionIds = new HashSet<>(Arrays.asList(everywhere1));
     assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getPartitions(maxReplicasAllSites));
