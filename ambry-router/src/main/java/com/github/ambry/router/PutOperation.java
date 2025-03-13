@@ -45,6 +45,8 @@ import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
@@ -1371,7 +1373,20 @@ class PutOperation {
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename(), resolveReservedMetadataId());
-        operationTracker = getOperationTracker();
+
+        int findValidAttempts = 0;
+        while (findValidAttempts < routerConfig.routerMaxSlippedPutAttempts) {
+          try {
+            // Attempt to get the operation tracker
+            operationTracker = getOperationTracker();
+            break;
+          } catch (Exception e) {
+            findValidAttempts++;
+          }
+        }
+        if (findValidAttempts >= routerConfig.routerMaxSlippedPutAttempts) {
+          throw new IllegalArgumentException("failed to find a valid partition in maxslippedputattempts");
+        }
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
         state = ChunkState.Ready;
