@@ -14,7 +14,7 @@
 
 package com.github.ambry.store;
 
-import com.github.ambry.config.FileCopyConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.store.FileStoreException.FileStoreErrorCode;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
@@ -91,16 +91,16 @@ public class FileStore implements PartitionFileStore {
 
   /**
    * Creates a new FileStore instance.
-   * @param fileCopyConfig Configuration for file copy operations
+   * @param fileCopyBasedReplicationConfig Configuration for file copy operations
    * @param partitionToMountPath partition path for Filestore to access
    * @throws NullPointerException if fileCopyConfig is null
    */
-  public FileStore(FileCopyConfig fileCopyConfig, String partitionToMountPath) {
+  public FileStore(FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, String partitionToMountPath) {
     this.partitionToMountPath = partitionToMountPath;
 
     // Create temporary and actual file paths for metadata persistence
-    tempMetadataFile = new File(partitionToMountPath, fileCopyConfig.filecopyMetaDataFileName + ".tmp");
-    actualMetadataFile = new File(partitionToMountPath, fileCopyConfig.filecopyMetaDataFileName);
+    tempMetadataFile = new File(partitionToMountPath, fileCopyBasedReplicationConfig.fileCopyMetaDataFileName + ".tmp");
+    actualMetadataFile = new File(partitionToMountPath, fileCopyBasedReplicationConfig.fileCopyMetaDataFileName);
   }
 
   /**

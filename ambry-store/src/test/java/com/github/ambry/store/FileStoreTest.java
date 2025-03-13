@@ -13,7 +13,7 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.config.FileCopyConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.DataInputStream;
 import java.io.File;
@@ -58,7 +58,7 @@ public class FileStoreTest {
 
   private FileStore fileStore;
   private File tempDir;
-  private FileCopyConfig fileCopyConfig;
+  private FileCopyBasedReplicationConfig _fileCopyBasedReplicationConfig;
 
   /**
    * Sets up the test environment before each test.
@@ -68,8 +68,8 @@ public class FileStoreTest {
   public void setUp() throws Exception {
     tempDir = Files.createTempDirectory("FileStoreTest").toFile();
     Properties props = new Properties();
-    fileCopyConfig = new FileCopyConfig(new VerifiableProperties(props));
-    fileStore = new FileStore(fileCopyConfig, tempDir.getAbsolutePath());
+    _fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(props));
+    fileStore = new FileStore(_fileCopyBasedReplicationConfig, tempDir.getAbsolutePath());
     fileStore.start();
   }
 

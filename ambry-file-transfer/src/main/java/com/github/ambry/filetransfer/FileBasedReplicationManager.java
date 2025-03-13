@@ -20,7 +20,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.FileCopyConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
@@ -37,7 +37,7 @@ public class FileBasedReplicationManager {
 
   private final StoreManager storeManager;
 
-  public FileBasedReplicationManager(PrioritizationManager prioritizationManager, FileCopyConfig fileCopyConfig, ClusterMapConfig clusterMapConfig,
+  public FileBasedReplicationManager(PrioritizationManager prioritizationManager, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
       MetricRegistry metricRegistry, ClusterParticipant clusterParticipant) throws InterruptedException {
