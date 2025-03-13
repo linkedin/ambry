@@ -715,7 +715,19 @@ public class ClusterMapUtils {
       this.clusterManagerQueryHelper = clusterManagerQueryHelper;
       this.defaultPartitionClass = defaultPartitionClass;
       this.clusterManagerMetrics = clusterManagerMetrics;
-      updatePartitions(clusterManagerQueryHelper.getPartitions(), localDatacenterName);
+
+      Collection<? extends PartitionId> partitions = clusterManagerQueryHelper.getPartitions();
+      Collection<PartitionId> filteredPartions = new ArrayList<>();
+      if (clusterManagerQueryHelper.isPartitionFilteringEnabled()) {
+        for (PartitionId partition : partitions) {
+          if (clusterManagerQueryHelper.isValidPartition(partition.toString())){
+            filteredPartions.add(partition);
+          }
+        }
+        updatePartitions(filteredPartions, localDatacenterName);
+      } else {
+        updatePartitions(partitions, localDatacenterName);
+      }
       logger.debug("Number of partitions in data center {} {}", localDatacenterName, allPartitions.size());
       for (Map.Entry<String, SortedMap<Integer, List<PartitionId>>> entry : partitionIdsByClassAndLocalReplicaCount.entrySet()) {
         logger.debug("Partition class {}, partitions {}", entry.getKey(), entry.getValue().values());

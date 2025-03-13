@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -145,6 +145,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
   private final boolean isDeleteFinalStateOfBlob;
 
   private final AtomicInteger partialLogSegmentCount = new AtomicInteger(0);
+  private volatile boolean hasPartialRecovery = false;
   private final AtomicLong wastedLogSegmentSpace = new AtomicLong(0);
 
   // ReadWriteLock to make sure index values are always pointing to valid log segments.
@@ -544,6 +545,7 @@ public class PersistentIndex implements LogSegmentSizeProvider {
     // Since we use fallocate --keep-size to preallocate log segment file, we can truncate log segment file here
     // It will only change the logical file size, not the preallocated disk space.
     logSegmentToRecover.truncateTo(startOffsetForBrokenMessage);
+    hasPartialRecovery = true;
   }
 
   /**
@@ -2373,6 +2375,17 @@ public class PersistentIndex implements LogSegmentSizeProvider {
    */
   boolean isEmpty() {
     return validIndexSegments.isEmpty();
+  }
+
+  /**
+   * Expose this information to replication manager to reset the replication token for this partition since we
+   * recovered from partial log segment. When we persist replication tokens, we intentionally make delays so we don't
+   * persist tokens that are not having all the data in log segment persisted, so we shouldn't have to reset the
+   * replication token, but this is safe.
+   * @return
+   */
+  boolean hasPartialRecovery() {
+    return this.hasPartialRecovery;
   }
 
   /**

@@ -209,6 +209,7 @@ public class MockClusterMap implements ClusterMap {
         .findFirst()
         .get();
     doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
+    doReturn(false).when(mockClusterManagerQueryHelper).isPartitionFilteringEnabled();
     partitionSelectionHelper =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
             Math.min(defaultPartition.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS, null);
