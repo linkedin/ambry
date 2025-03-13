@@ -177,6 +177,17 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    */
   public abstract void start() throws ReplicationException;
 
+  /**
+   * Enable/Disable replication for given partitions if all origins are involved,
+   * we can disable replication for all partitions and pass this to future ReplicaThreads as well
+   * otherwise control replication for current replica threads only
+   * @param ids the {@link PartitionId}s to enable/disable it on.
+   * @param origins the list of datacenters from which replication should be enabled/disabled. Having an empty list
+   *                disables replication from all datacenters.
+   * @param enable whether to enable ({@code true}) or disable.
+   * @return true/false
+   */
+  // TODO: Enhance this method for selective DCs and extending disabled replicaThreads
   @Override
   public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
     if (origins.isEmpty()) {
@@ -187,8 +198,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     }
 
     if (origins.size() == replicaThreadPoolByDc.size()) {
-      // if all origins are involved, we can disable replication for all partitions and pass this to future ReplicaThreads as well
-      // otherwise control replication for current replica threads only
       if (!enable) {
         replicationDisabledPartitions.addAll(ids);
       } else {
