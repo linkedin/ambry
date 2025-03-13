@@ -1080,7 +1080,18 @@ public class ClusterMapUtils {
           : addedReplicas.get(0).getDataNodeId().getDatacenterName();
       logger.info("Re-populating partition-selection related maps because replicas are added or removed in {}", dcName);
       // condition here, remember this method can be invoked by multiple threads (synchronize this method?)
-      Collection<? extends PartitionId> partitionsInCluster = clusterManagerQueryHelper.getPartitions();
+      Collection<PartitionId> partitionsInCluster = new ArrayList<>();
+      Collection<? extends PartitionId> partitions = clusterManagerQueryHelper.getPartitions();
+      if (clusterManagerQueryHelper.isPartitionFilteringEnabled()) {
+        for (PartitionId partition : partitions) {
+          if (clusterManagerQueryHelper.isValidPartition(partition.toString())) {
+            partitionsInCluster.add(partition);
+          }
+        }
+      } else {
+        partitionsInCluster = new ArrayList<>(partitions);
+      }
+
       Map<String, SortedMap<Integer, List<PartitionId>>> partitionSortedByReplicaCount =
           new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       Map<PartitionId, List<ReplicaId>> partitionAndLocalReplicas = new HashMap<>();

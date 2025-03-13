@@ -2321,8 +2321,8 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
-   * Tests  and
-   *  for valid puts, deletes, expired keys and
+   * Tests {@link ReplicaThread#exchangeMetadata(ConnectedChannel, List)} and
+   * {@link ReplicaThread#fixMissingStoreKeys(ConnectedChannel, List, List, boolean)} for valid puts, deletes, expired keys and
    * Tests {@link ReplicaThread#replicate()} for valid puts, deletes, expired keys and
    * corrupt blobs.
    * @throws Exception
