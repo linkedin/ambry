@@ -48,7 +48,7 @@ public interface StoreManager {
    * @param replicaId the {@link ReplicaId} of the {@link FileStore} which would be added.
    * @return {@code true} if adding FileStore was successful. {@code false} if not.
    */
-  boolean addFileStore(ReplicaId replicaId);
+  boolean addFileStore(ReplicaId replicaId) throws StoreException;
 
   /**
    * Build state after filecopy is completed

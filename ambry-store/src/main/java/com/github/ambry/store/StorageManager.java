@@ -31,6 +31,7 @@ import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.FileCopyConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
@@ -88,6 +89,7 @@ public class StorageManager implements StoreManager {
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
   private DiskFailureHandler diskFailureHandler;
+  private final ConcurrentHashMap<PartitionId, FileStore> fileStores = new ConcurrentHashMap<>();
 
   private static String bootstrapInProgressFileName;
 
@@ -354,12 +356,6 @@ public class StorageManager implements StoreManager {
     return getStore(id, false);
   }
 
-  @Override
-  public PartitionFileStore getFileStore(PartitionId id) {
-    //TODO: Implementation To Be added.
-    return null;
-  }
-
   /**
    * @param id the {@link PartitionId} to find the store for.
    * @param skipStateCheck whether to skip checking state of the store. if true, it also returns store that is not started yet.
@@ -593,9 +589,17 @@ public class StorageManager implements StoreManager {
    * @param replicaId the {@link ReplicaId} of the {@link Store} for which store needs to be built
    */
   @Override
-  public boolean addFileStore(ReplicaId replicaId) {
-    //TODO: Implementation To Be added.
-    return false;
+  public boolean addFileStore(ReplicaId replicaId) throws StoreException {
+    String partitionFilePath = replicaId.getMountPath() + File.separator + replicaId.getPartitionId().getId();
+    FileStore fileStore = new FileStore(new FileCopyConfig(), partitionFilePath);
+    fileStore.start();
+    fileStores.put(replicaId.getPartitionId(), fileStore);
+    return true;
+  }
+
+  @Override
+  public PartitionFileStore getFileStore(PartitionId id) {
+    return fileStores.get(id);
   }
 
   public void buildStateForFileCopy(ReplicaId replica) {

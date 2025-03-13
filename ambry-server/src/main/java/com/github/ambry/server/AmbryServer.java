@@ -23,7 +23,6 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.cloud.BackupIntegrityMonitor;
 import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.cloud.RecoveryNetworkClientFactory;
-import com.github.ambry.clustermap.AmbryDataNode;
 import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -31,6 +30,8 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -39,7 +40,6 @@ import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -53,6 +53,9 @@ import com.github.ambry.config.ServerExecutionMode;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.filetransfer.FileCopyHandler;
+import com.github.ambry.filetransfer.TestStoreFileCopyHandler;
+import com.github.ambry.filetransfer.StoreFileCopyHandlerFactory;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -88,6 +91,7 @@ import com.github.ambry.rest.StorageServerNettyFactory;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -97,6 +101,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -104,7 +109,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import org.apache.logging.log4j.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -154,6 +158,8 @@ public class AmbryServer {
   private Thread repairThread = null;
   private RepairRequestsDb repairRequestsDb = null;
   private BackupIntegrityMonitor backupIntegrityMonitor = null;
+  private DataNodeId nodeId;
+
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, vcrClusterAgentsFactory, new LoggingNotificationSystem(), time, null);
@@ -314,6 +320,7 @@ public class AmbryServer {
         scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
         logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
         DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        this.nodeId = nodeId;
         if (nodeId == null) {
           throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
               + "is not present in the clustermap. Failing to start the datanode");
@@ -361,6 +368,16 @@ public class AmbryServer {
                 skipPredicate);
         replicationManager.start();
 
+        FileCopyHandler fileCopyHandler = new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap).getFileCopyHandler();
+        ((TestStoreFileCopyHandler)fileCopyHandler).start();
+
+        long startTimeMs = System.currentTimeMillis();
+        try {
+          testE2E(fileCopyHandler);
+        } catch (Exception e) {
+          logger.error("Demo: E2E flow failed", e);
+        }
+        logger.info("Demo: E2E flow took {} ms", System.currentTimeMillis() - startTimeMs);
 
         logger.info("Creating StatsManager to publish stats");
 
@@ -481,6 +498,74 @@ public class AmbryServer {
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
+    }
+  }
+
+  private void testE2E(FileCopyHandler fileCopyHandler) throws StoreException {
+    String sourceHost = "ltx1-app3645.stg.linkedin.com";
+    String targetHost = "ltx1-app3602.stg.linkedin.com";
+
+    Optional<PartitionId> optional = storageManager.getLocalPartitions().stream().filter(p -> p.getId() == 2).findFirst();
+    PartitionId partitionId;
+    if (optional.isPresent()) {
+      partitionId = optional.get();
+    } else {
+      logger.info("Demo: Partition not found");
+      return;
+    }
+    Optional<? extends ReplicaId> targetReplica = partitionId.getReplicaIds().stream().filter(replicaId ->
+        replicaId.getDataNodeId().getHostname().equals(targetHost)).findFirst();
+    ReplicaId targetReplicaId;
+    if (targetReplica.isPresent()) {
+      targetReplicaId = targetReplica.get();
+    } else {
+      logger.info("Demo: Target Replica not found");
+      return;
+    }
+    Optional<? extends ReplicaId> sourceReplica = partitionId.getReplicaIds().stream().filter(replicaId1 ->
+        replicaId1.getDataNodeId().getHostname().equals(sourceHost)).findFirst();
+    ReplicaId sourceReplicaId;
+    if (sourceReplica.isPresent()) {
+      sourceReplicaId = sourceReplica.get();
+    } else {
+      logger.info("Demo: Source Replica not found");
+      return;
+    }
+    Optional<? extends ReplicaId> selfReplica = partitionId.getReplicaIds().stream().filter(replicaId ->
+        replicaId.getDataNodeId().getHostname().equals(nodeId.getHostname())).findFirst();
+    ReplicaId selfReplicaId;
+    if (selfReplica.isPresent()) {
+      selfReplicaId = selfReplica.get();
+      storageManager.addFileStore(selfReplicaId);
+    } else {
+      logger.info("Demo: Self Replica not found");
+      return;
+    }
+
+    if (nodeId.getHostname().equals(sourceHost)) {
+      logger.info("Demo: Source host. Initiating file copy based bootstrap...");
+      //      File directory = new File(sourceReplicaId.getReplicaPath());
+      //      if (directory.exists() && directory.isDirectory()) {
+      //        for (File file : directory.listFiles()) {
+      //          if (file.isFile()) {
+      //            file.delete();
+      //          }
+      //        }
+      //        logger.info("Demo: All files deleted.");
+      //      } else {
+      //        logger.info("Demo: Directory does not exist.");
+      //      }
+      try {
+        long startTimeMs = System.currentTimeMillis();
+        fileCopyHandler.copy(sourceReplicaId, targetReplicaId);
+        logger.info("Demo: FileCopyHandler took {} ms", System.currentTimeMillis() - startTimeMs);
+
+//        startTimeMs = System.currentTimeMillis();
+//        storageManager.buildStateForFileCopy(sourceReplicaId);
+//        logger.info("Demo: buildStateForFileCopy took {} ms", System.currentTimeMillis() - startTimeMs);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 

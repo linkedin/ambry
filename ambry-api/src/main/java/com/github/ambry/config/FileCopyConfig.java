@@ -88,4 +88,12 @@ public class FileCopyConfig {
     filecopyFileChunkTimeoutInMins = verifiableProperties.getInt(FILECOPY_FILE_CHUNK_TIMEOUT_IN_MINUTES, 5);
     filecopyStoreDataFlushIntervalInMbs = verifiableProperties.getLong(FILECOPY_STORE_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
   }
+
+  public FileCopyConfig() {
+    filecopyMetaDataFileName = "logs_metadata_file";
+    filecopyParallelPartitionHydrationCountPerDisk = 1;
+    filecopyNumberOfFileCopyThreads = 4;
+    filecopyFileChunkTimeoutInMins = 5;
+    filecopyStoreDataFlushIntervalInMbs = 1000;
+  }
 }
