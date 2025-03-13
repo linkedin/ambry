@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -60,6 +61,50 @@ public class ClusterMapUtilsTest {
     assertFalse("Not all replicas should be up", ClusterMapUtils.areAllReplicasForPartitionUp(partitionId));
     replicaId2.markReplicaDownStatus(false);
     assertTrue("All replicas should be up", ClusterMapUtils.areAllReplicasForPartitionUp(partitionId));
+  }
+
+  @Test
+  public void filterPartitionMapsAndSwitchTest() {
+
+    final String dc1 = "DC1";
+    final String maxReplicasAllSites = "max-replicas-all-sites";
+    final int minimumLocalReplicaCount = 3;
+
+    MockDataNodeId dc1Dn1 = getDataNodeId("dc1dn1", dc1);
+    MockDataNodeId dc1Dn2 = getDataNodeId("dc1dn2", dc1);
+    MockDataNodeId dc1Dn3 = getDataNodeId("dc1dn3", dc1);
+
+    List<MockDataNodeId> allDataNodes = Arrays.asList(dc1Dn1, dc1Dn2, dc1Dn3);
+    MockPartitionId everywhere1 = new MockPartitionId(1, maxReplicasAllSites, allDataNodes, 0);
+    MockPartitionId everywhere2 = new MockPartitionId(2, maxReplicasAllSites, allDataNodes, 0);
+    List<ReplicaId> replicaIds = new ArrayList<>();
+    for (ReplicaId replicaId : everywhere1.replicaIds) {
+      replicaIds.add(replicaId);  // Add replicaId to the new list
+    }
+
+    Collection<MockPartitionId> allPartitionIdsMain = Collections.unmodifiableSet(
+        new HashSet<>(Arrays.asList(everywhere1, everywhere2)));
+    ClusterManagerQueryHelper mockClusterManagerQueryHelper = Mockito.mock(ClusterManagerQueryHelper.class);
+    doReturn(false).when(mockClusterManagerQueryHelper).isPartitionFilteringEnabled();
+    doReturn(allPartitionIdsMain).when(mockClusterManagerQueryHelper).getPartitions();
+
+    ClusterMapUtils.PartitionSelectionHelper psh =
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, dc1, minimumLocalReplicaCount,
+            maxReplicasAllSites, null);
+
+    // case 1: filtering disabled
+    doReturn(false).when(mockClusterManagerQueryHelper).isPartitionFilteringEnabled();
+    Set<MockPartitionId> allPartitionIds = new HashSet<>(Arrays.asList(everywhere1, everywhere2));
+    psh.onReplicaAddedOrRemoved(replicaIds, null);
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getPartitions(maxReplicasAllSites));
+
+    // case 2: filtering enabled
+    doReturn(true).when(mockClusterManagerQueryHelper).isPartitionFilteringEnabled();
+    doReturn(true).when(mockClusterManagerQueryHelper).isValidPartition("Partition[1]");
+    doReturn(false).when(mockClusterManagerQueryHelper).isValidPartition("Partition[2]");
+    psh.onReplicaAddedOrRemoved(replicaIds, null);
+    allPartitionIds = new HashSet<>(Arrays.asList(everywhere1));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getPartitions(maxReplicasAllSites));
   }
 
   @Test

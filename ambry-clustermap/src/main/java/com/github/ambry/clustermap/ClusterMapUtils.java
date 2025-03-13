@@ -753,9 +753,9 @@ public class ClusterMapUtils {
     }
 
     /**
-     * .......
+     * Gets the partitions after filtering based on replication factor comparison to routerputsuccesstarget
      * @param partitions
-     * @return
+     * @return filtered partitions that can be written to
      */
     private Collection<PartitionId> getFilteredPartitions(Collection<? extends PartitionId> partitions) {
       Collection<PartitionId> filteredPartitions = new ArrayList<>();
