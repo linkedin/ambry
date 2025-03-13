@@ -67,6 +67,7 @@ import static com.github.ambry.utils.TestUtils.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
 
 @RunWith(Parameterized.class)

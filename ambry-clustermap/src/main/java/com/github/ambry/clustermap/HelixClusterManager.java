@@ -16,6 +16,8 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -65,6 +67,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.github.ambry.config.RouterConfig;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
@@ -124,6 +127,7 @@ public class HelixClusterManager implements ClusterMap {
   private final AtomicLong currentXid;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private HelixAggregatedViewClusterInfo helixAggregatedViewClusterInfo = null;
+  private final AtomicLong dataNodeInitializationFailureCount = new AtomicLong(0);
 
   // The map from resource name to resource config, This is only used in FULL AUTO. This map is not going to be updated
   // if the ResourceConfig is updated, but we are only using default replica capacity from the ResourceConfig. So if you
@@ -230,7 +234,7 @@ public class HelixClusterManager implements ClusterMap {
           initializationFailureMap.values().stream().filter(Objects::nonNull).count());
       helixClusterManagerMetrics.initializeXidMetric(currentXid);
       helixClusterManagerMetrics.initializeDatacenterMetrics();
-      helixClusterManagerMetrics.initializeDataNodeMetrics();
+      helixClusterManagerMetrics.initializeDataNodeMetrics(dataNodeInitializationFailureCount);
       helixClusterManagerMetrics.initializeDiskMetrics();
       helixClusterManagerMetrics.initializePartitionMetrics();
       helixClusterManagerMetrics.initializeCapacityMetrics();
@@ -1410,6 +1414,32 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     /**
+     *
+     * @return boolean regarding whether we want to filter partitions
+     */
+    public boolean isPartitionFilteringEnabled() {
+      return clusterMapConfig.clusterMapPartitionFilteringEnabled;
+    }
+
+    /**
+     *
+     * @param partitionID
+     * @return boolean regarding whether we can write to it
+     */
+    @Override
+    public boolean isValidPartition(String partitionID) {
+      try {
+        String resource = getResourceForPartitionInLocalDc(partitionID).iterator().next();
+        String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
+        ResourceProperty resourceProperty  =
+            dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
+        return resourceProperty.replicationFactor >= clusterMapConfig.routerPutSuccessTarget;
+      } catch (Exception e) {
+        return false;
+      }
+    }
+
+    /**
      * @return the count of partitions in this cluster.
      */
     long getPartitionCount() {
@@ -2077,10 +2107,18 @@ public class HelixClusterManager implements ClusterMap {
     private List<ReplicaId> createNewInstance(DataNodeConfig dataNodeConfig, String dcName) throws Exception {
       String instanceName = dataNodeConfig.getInstanceName();
       logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcName);
-      AmbryDataNode datanode =
-          new AmbryServerDataNode(dataNodeConfig.getDatacenterName(), clusterMapConfig, dataNodeConfig.getHostName(),
-              dataNodeConfig.getPort(), dataNodeConfig.getRackId(), dataNodeConfig.getSslPort(),
-              dataNodeConfig.getHttp2Port(), DEFAULT_XID, helixClusterManagerQueryHelper);
+      AmbryDataNode datanode = null;
+      try {
+        datanode =
+            new AmbryServerDataNode(dataNodeConfig.getDatacenterName(), clusterMapConfig, dataNodeConfig.getHostName(),
+                dataNodeConfig.getPort(), dataNodeConfig.getRackId(), dataNodeConfig.getSslPort(),
+                dataNodeConfig.getHttp2Port(), DEFAULT_XID, helixClusterManagerQueryHelper);
+      } catch (Exception e) {
+        logger.error("Fail to create an AmbryServerDataNode for {} in datacenter {}, skip adding this node.",
+            dataNodeConfig.getHostName(), dataNodeConfig.getDatacenterName(), e);
+        dataNodeInitializationFailureCount.incrementAndGet();
+        return Collections.emptyList();
+      }
       // for new instance, we first set it to unavailable and rely on its participation to update its liveness
       if (!instanceName.equals(selfInstanceName)) {
         datanode.setState(HardwareState.UNAVAILABLE);

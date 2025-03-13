@@ -1110,6 +1110,7 @@ public class IndexTest {
         (read, startOffset, eoffset, factory) -> new MessageStoreRecovery.RecoveryResult(activeSegmentInfos, null,
             eoffset);
     state.reloadIndex(false, false);
+    Assert.assertFalse(state.index.hasPartialRecovery());
     IndexSegment recoveredIndexSegment = state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset());
     assertEquals("LastModifedTime doesn't match", lastModifiedTimeForLastIndexSegment,
         recoveredIndexSegment.getLastModifiedTimeMs() / 1000);
@@ -1166,13 +1167,14 @@ public class IndexTest {
     state.recovery = (read, startOffset, eoffset, factory) -> new MessageStoreRecovery.RecoveryResult(recoveryMessages,
         new StoreException(new IndexOutOfBoundsException(), StoreErrorCodes.LogFileFormatError), recoveryOffset);
 
-    // Case 1, we haven't enable the partial log segment recovery, it should fail
+    // Case 1, we haven't enabled the partial log segment recovery, it should fail
     try {
       state.reloadLog(true);
       fail("Should fail due to exception in recovery");
     } catch (StoreException ex) {
       Assert.assertEquals(StoreErrorCodes.LogFileFormatError, ex.getErrorCode());
       Assert.assertTrue(ex.getCause() instanceof IndexOutOfBoundsException);
+      Assert.assertNull(state.index);
     }
 
     // Case 2, enable partial log segment recovery, but the threshold is not smaller than the last message size
@@ -1185,12 +1187,14 @@ public class IndexTest {
     } catch (StoreException ex) {
       Assert.assertEquals(StoreErrorCodes.LogFileFormatError, ex.getErrorCode());
       Assert.assertTrue(ex.getCause() instanceof IndexOutOfBoundsException);
+      Assert.assertNull(state.index);
     }
 
     // Case 3. enable partial log segment recovery and the threshold is high enough for last message
     state.properties.setProperty(StoreConfig.storePartialLogSegmentRecoveryRemainingDataSizeThresholdName,
         String.valueOf(lastMessageSize * 2));
     state.reloadLog(true);
+    Assert.assertTrue(state.index.hasPartialRecovery());
 
     // Make sure all the recovered messages are valid in the state
     recoveryMessages.forEach(this::checkRecoveryInfoEquivalence);
