@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.filetransfer;
 
 import com.github.ambry.clustermap.DiskId;
@@ -22,6 +35,11 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   private boolean isRunning;
   private final CountDownLatch shutdownLatch;
 
+  /**
+   * Constructor to initialize the thread pool manager with specified disk IDs and number of threads.
+   * @param diskIds List of disk IDs to manage threads for
+   * @param numberOfThreads Maximum number of threads allowed per disk
+   */
   public DiskAwareFileCopyThreadPoolManager(List<DiskId> diskIds, int numberOfThreads) {
     this.numberOfThreadsPerDisk = numberOfThreads;
     this.runningThreads = new HashMap<>();
@@ -34,11 +52,21 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     this.threadQueueLock = new ReentrantLock(true);
   }
 
+  /**
+   * Returns the maximum number of threads allowed per disk.
+   * @return Number of threads per disk
+   */
   @Override
   public int getThreadPoolSize() {
     return numberOfThreadsPerDisk;
   }
 
+  /**
+   * Identifies disks that have capacity for additional threads.
+   * Returns a list of disk IDs where the number of running threads
+   * is less than the maximum allowed threads per disk.
+   * @return List of disk IDs that can accommodate more threads
+   */
   @Override
   public List<DiskId> getDiskIdsToHydrate() {
     List<DiskId> diskIds = new ArrayList<>();
@@ -50,6 +78,13 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     return diskIds;
   }
 
+  /**
+   * Submits a replica for hydration by creating and starting a new FileCopyThread.
+   * The thread is associated with the replica's disk and tracked in the running threads map.
+   * @param replicaId The replica to be hydrated
+   * @param fileCopyStatusListener Listener for file copy status updates
+   * @param fileCopyHandler Handler for performing the file copy operation
+   */
   @Override
   public void submitReplicaForHydration(ReplicaId replicaId, FileCopyStatusListener fileCopyStatusListener,
       FileCopyHandler fileCopyHandler) {
@@ -62,6 +97,12 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     threadQueueLock.unlock();
   }
 
+  /**
+   * Stops and removes a replica's associated thread from the thread pool.
+   * If the thread doesn't exist or is not alive, the method returns without action.
+   * @param replicaId The replica whose thread should be stopped
+   * @throws InterruptedException if the thread shutdown is interrupted
+   */
   @Override
   public void stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId) throws InterruptedException {
     threadQueueLock.lock();
@@ -73,6 +114,11 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     threadQueueLock.unlock();
   }
 
+  /**
+   * Main run loop that manages the thread pool.
+   * Continuously monitors and removes completed threads from the running threads map
+   * until shutdown is initiated and all threads complete.
+   */
   @Override
   public void run() {
     while (isRunning || areThreadsRunning()) {
@@ -85,10 +131,18 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     shutdownLatch.countDown();
   }
 
+  /**
+   * Checks if any threads are still running across all disks.
+   * @return true if there are running threads on any disk, false otherwise
+   */
   boolean areThreadsRunning() {
     return runningThreads.values().stream().noneMatch(Set::isEmpty);
   }
 
+  /**
+   * Initiates shutdown of the thread pool manager and waits for completion.
+   * @throws InterruptedException if the shutdown wait is interrupted
+   */
   public void shutDown() throws InterruptedException {
     isRunning = false;
     shutdownLatch.await();
