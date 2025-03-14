@@ -24,7 +24,21 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.ReentrantLock;
 
-
+/**
+ * A thread pool manager that handles file copy operations with disk-aware thread allocation.
+ * This class manages a pool of {@link FileCopyThread}s while ensuring that the number of concurrent
+ * operations per disk does not exceed a configured threshold. It provides the following key features:
+ * 
+ * <ul>
+ *   <li>Maintains separate thread pools for each disk to prevent disk overload</li>
+ *   <li>Limits the maximum number of concurrent file copy operations per disk</li>
+ *   <li>Tracks and manages the lifecycle of file copy threads</li>
+ *   <li>Provides mechanisms to start, stop, and monitor file copy operations for specific replicas</li>
+ *   <li>Supports graceful shutdown of all managed threads</li>
+ * </ul>
+ * 
+ * This implementation is thread-safe and uses locks to coordinate access to shared resources.
+ */
 public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicationThreadPoolManager, Runnable {
 
   private final Map<ReplicaId, FileCopyThread> replicaToFileCopyThread;
