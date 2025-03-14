@@ -1352,39 +1352,39 @@ class PutOperation {
         BlobDataType blobDataType =
             isMetadataChunk() ? BlobDataType.METADATA : isSimpleBlob ? BlobDataType.SIMPLE : BlobDataType.DATACHUNK;
 
-        if (shouldUseReservedMetadataId()) {
-          partitionId = metadataPutChunk.reservedMetadataChunkId.getPartition();
-          chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
-        } else {
-          partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
-          chunkBlobId =
-              new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                  passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
-                  passedInBlobProperties.isEncrypted(), blobDataType);
-        }
-
-        // To ensure previously attempted partitions are not retried for this PUT after a failure.
-        attemptedPartitionIds.add(partitionId);
-
-        chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
-            passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
-            passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
-            passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
-            passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-            passedInBlobProperties.getFilename(), resolveReservedMetadataId());
-
-        int findValidAttempts = 0;
-        while (findValidAttempts < routerConfig.routerMaxSlippedPutAttempts) {
-          try {
-            // Attempt to get the operation tracker
-            operationTracker = getOperationTracker();
-            break;
-          } catch (Exception e) {
-            findValidAttempts++;
+        while (failedAttempts < routerConfig.routerMaxSlippedPutAttempts) {
+          if (shouldUseReservedMetadataId()) {
+            partitionId = metadataPutChunk.reservedMetadataChunkId.getPartition();
+            chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
+          } else {
+            partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
+            chunkBlobId =
+                new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+                    passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
+                    passedInBlobProperties.isEncrypted(), blobDataType);
           }
+
+          // To ensure previously attempted partitions are not retried for this PUT after a failure.
+          attemptedPartitionIds.add(partitionId);
+
+          chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
+              passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
+              passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
+              passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
+              passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
+              passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
+              passedInBlobProperties.getFilename(), resolveReservedMetadataId());
+
+            try {
+              // Attempt to get the operation tracker
+              operationTracker = getOperationTracker();
+              break;
+            } catch (Exception e) {
+              failedAttempts++;
+            }
         }
-        if (findValidAttempts >= routerConfig.routerMaxSlippedPutAttempts) {
+
+        if (failedAttempts >= routerConfig.routerMaxSlippedPutAttempts) {
           throw new IllegalArgumentException("failed to find a valid partition in maxslippedputattempts");
         }
         correlationIdToChunkPutRequestInfo.clear();
