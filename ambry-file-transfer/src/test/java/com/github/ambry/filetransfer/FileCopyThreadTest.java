@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer;
 
 import com.github.ambry.filecopy.MockFileCopyHandlerFactory;
 import com.github.ambry.filecopy.MockNoOpFileCopyHandler;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
