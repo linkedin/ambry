@@ -2144,6 +2144,40 @@ public class HelixClusterManagerTest {
     assertNull(clusterManager.getRandomFullyWritablePartition(null, partitionIdsToExclude));
   }
 
+
+  @Test
+  public void verifyMinActiveReplicaInResourceProperty() {
+    // get in-mem data structures populated based on initial notification
+    List<String> dcs = clusterManager.getDataNodeIds().stream().map(DataNodeId::getDatacenterName).collect(Collectors.toList());
+    for (String dc : dcs) {
+      MockHelixAdmin helixAdmin = helixCluster.getHelixAdminFromDc(dc);
+      List<IdealState> idealStates = helixAdmin.getIdealStates();
+      int defaultNumReplicas = 3;
+      for (IdealState idealState : idealStates) {
+        String resourceName = idealState.getResourceName();
+
+        int numPartitions = idealState.getNumPartitions();
+        int replicationFactor = idealState.getReplicaCount(defaultNumReplicas);
+        if (replicationFactor == 0) {
+          replicationFactor = defaultNumReplicas;
+        }
+        int minActiveReplicas = idealState.getMinActiveReplicas();
+
+        // In case MIN_ACTIVE_REPLICAS is not set
+        if (minActiveReplicas == -1) {
+          minActiveReplicas = replicationFactor - 1;
+        }
+
+        HelixClusterManager.ResourceProperty resourceProperty =
+            new HelixClusterManager.ResourceProperty(resourceName, numPartitions, replicationFactor, idealState.getRebalanceMode(), minActiveReplicas);
+        assertEquals(numPartitions, resourceProperty.numPartitions);
+        assertEquals(replicationFactor, resourceProperty.replicationFactor);
+        assertEquals(minActiveReplicas, resourceProperty.minActiveReplicas);
+        assertEquals(idealState.getRebalanceMode(), resourceProperty.rebalanceMode);
+      }
+    }
+  }
+
   // Helpers
 
   /**
@@ -2181,6 +2215,8 @@ public class HelixClusterManagerTest {
       }
     }
   }
+
+
 
   /**
    * Helper method to verify leader replicas in cluster match those in routing table snapshot.
