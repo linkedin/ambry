@@ -39,14 +39,14 @@ public class FileCopyBasedReplicationConfig {
   /**
    * The name of the file that stores the metadata for the file copy
    */
-  public static final String File_COPY_META_DATA_FILE_NAME = "filecopy.meta.data.file.name";
-  @Config(File_COPY_META_DATA_FILE_NAME)
+  public static final String FILE_COPY_META_DATA_FILE_NAME = "filecopy.meta.data.file.name";
+  @Config(FILE_COPY_META_DATA_FILE_NAME)
   @Default("segments_metadata_file")
   public final String fileCopyMetaDataFileName;
 
 
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
-    fileCopyMetaDataFileName = verifiableProperties.getString(File_COPY_META_DATA_FILE_NAME, "sealed_segments_metadata_file");
+    fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
     fileCopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(FILE_COPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
     fileCopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILE_COPY_NUMBER_OF_FILE_COPY_THREADS, 4);
     fileCopyDataFlushIntervalInMbs = verifiableProperties.getLong(FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS, 1000);

@@ -48,6 +48,14 @@ public class FileCopyHandlerException extends RuntimeException {
   }
 
   /**
+   * Returns the specific error code associated with this exception.
+   * @return The error code associated with this exception
+   */
+  public FileCopyHandlerErrorCode getErrorCode() {
+    return error;
+  }
+
+  /**
    * Enumeration of possible FileCopyHandler error codes.
    */
   public enum FileCopyHandlerErrorCode {

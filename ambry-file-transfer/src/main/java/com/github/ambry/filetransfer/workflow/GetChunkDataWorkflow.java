@@ -41,6 +41,10 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
    */
   private final ClusterMap clusterMap;
 
+  public static String GET_CHUNK_OPERATION_NAME = "GetChunkOperation";
+
+  public static String GET_FILE_OPERATION_NAME = "GetFileOperation";
+
   private static final Logger logger = LoggerFactory.getLogger(GetChunkDataWorkflow.class);
 
   /**

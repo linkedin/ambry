@@ -34,6 +34,8 @@ public class GetMetadataWorkflow extends BaseWorkFlow implements OperationRetryH
    */
   private final FileCopyInfo fileCopyInfo;
 
+  public static String GET_METADATA_OPERATION_NAME = "GetMetadataOperation";
+
   private static final Logger logger = LoggerFactory.getLogger(GetMetadataWorkflow.class);
 
   /**

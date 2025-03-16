@@ -321,7 +321,7 @@ public class FileStoreTest {
     fileStore.writeMetaDataFileToDisk(logInfoList);
 
     // Verify metadata file exists
-    File metadataFile = new File(tempDir, "logs_metadata_file");
+    File metadataFile = new File(tempDir, _fileCopyBasedReplicationConfig.fileCopyMetaDataFileName);
     assertTrue("Metadata file should exist", metadataFile.exists());
 
     // Corrupt the file by truncating it
@@ -505,13 +505,13 @@ public class FileStoreTest {
     fileStore.writeMetaDataFileToDisk(logInfoList);
 
     // Verify file exists
-    File metadataFile = new File(tempDir, "logs_metadata_file");
+    File metadataFile = new File(tempDir, _fileCopyBasedReplicationConfig.fileCopyMetaDataFileName);
     assertTrue("Metadata file should exist", metadataFile.exists());
 
     // Verify initial permissions
     assertTrue("Metadata file should be readable", metadataFile.canRead());
 
-    // Remove read permissions
+    // Remove read permissionsx
     assertTrue(metadataFile.setReadable(false));
 
     // Attempt to read without permissions
