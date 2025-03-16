@@ -1379,12 +1379,13 @@ class PutOperation {
             break;
           } catch (Exception e) {
             failedAttempts++;
+            if (failedAttempts >= routerConfig.routerMaxSlippedPutAttempts) {
+              throw new IllegalArgumentException("failed to find a valid partition in maxslippedputattempts");
+            }
           }
 
         }
-        if (failedAttempts >= routerConfig.routerMaxSlippedPutAttempts) {
-          throw new IllegalArgumentException("failed to find a valid partition in maxslippedputattempts");
-        }
+
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
         state = ChunkState.Ready;
