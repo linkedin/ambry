@@ -1350,7 +1350,6 @@ class PutOperation {
         BlobDataType blobDataType =
             isMetadataChunk() ? BlobDataType.METADATA : isSimpleBlob ? BlobDataType.SIMPLE : BlobDataType.DATACHUNK;
 
-        while (failedAttempts < routerConfig.routerMaxSlippedPutAttempts) {
           if (shouldUseReservedMetadataId()) {
             partitionId = metadataPutChunk.reservedMetadataChunkId.getPartition();
             chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
@@ -1376,15 +1375,11 @@ class PutOperation {
           try {
             // Attempt to get the operation tracker
             operationTracker = getOperationTracker();
-            break;
           } catch (Exception e) {
             failedAttempts++;
-            if (failedAttempts >= routerConfig.routerMaxSlippedPutAttempts) {
-              throw new IllegalArgumentException("failed to find a valid partition in maxslippedputattempts");
             }
-          }
 
-        }
+
 
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
