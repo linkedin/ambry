@@ -110,6 +110,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected static final String replicaTokenFileName = "replicaTokens";
   protected final Time time;
   protected LeaderBasedReplicationAdmin leaderBasedReplicationAdmin = null;
+  protected final Set<PartitionId> replicationDisabledPartitions;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -164,6 +165,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.skipPredicate = skipPredicate;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     this.time = time;
+    this.replicationDisabledPartitions = ConcurrentHashMap.newKeySet();
     if (enableClusterMapListener) {
       clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     }
@@ -175,6 +177,17 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    */
   public abstract void start() throws ReplicationException;
 
+  /**
+   * Enable/Disable replication for given partitions if all origins are involved,
+   * we can disable replication for all partitions and pass this to future ReplicaThreads as well
+   * otherwise control replication for current replica threads only
+   * @param ids the {@link PartitionId}s to enable/disable it on.
+   * @param origins the list of datacenters from which replication should be enabled/disabled. Having an empty list
+   *                disables replication from all datacenters.
+   * @param enable whether to enable ({@code true}) or disable.
+   * @return true/false
+   */
+  // TODO: Enhance this method for selective DCs and extending disabled replicaThreads
   @Override
   public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
     if (origins.isEmpty()) {
@@ -183,6 +196,15 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     if (!replicaThreadPoolByDc.keySet().containsAll(origins)) {
       return false;
     }
+
+    if (origins.size() == replicaThreadPoolByDc.size()) {
+      if (!enable) {
+        replicationDisabledPartitions.addAll(ids);
+      } else {
+        replicationDisabledPartitions.removeAll(ids);
+      }
+    }
+
     for (String origin : origins) {
       for (ReplicaThread replicaThread : replicaThreadPoolByDc.get(origin)) {
         replicaThread.controlReplicationForPartitions(ids, enable);
@@ -372,10 +394,17 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
-        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
-        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin);
+    if (replicationDisabledPartitions != null && !replicationDisabledPartitions.isEmpty()) {
+      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+          replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+          replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+          leaderBasedReplicationAdmin, replicationDisabledPartitions);
+    } else {
+      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+          replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+          replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+          leaderBasedReplicationAdmin);
+    }
   }
 
   /**
