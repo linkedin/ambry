@@ -47,9 +47,7 @@ public class FileBasedReplicationManager {
       logger.info("File Copy Manager's state change listener registered!");
     }
     this.prioritizationManager = prioritizationManager;
-    if(!prioritizationManager.isRunning()) {
-      prioritizationManager.start();
-    }
+
 
     this.storeManager = storeManager;
   }
@@ -63,8 +61,7 @@ public class FileBasedReplicationManager {
       if(storeManager.getReplica(partitionName) == null){
         //storeManager.setUpReplica(partitionName);
       }
-      prioritizationManager.addReplica(partitionName);
-    }
+     }
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
