@@ -25,12 +25,6 @@ import java.util.List;
  */
 
 public interface FileCopyBasedReplicationThreadPoolManager {
-  /**
-    * Create a thread pool with the given number of threads.
-   * @param numberOfThreads the number of threads to create in the thread pool
-   * @return {@code true} if replica is set up successfully. {@code false} if not.
-   */
-  boolean createThreadPool(int numberOfThreads);
 
   /**
    * @return the number thread pool size.
@@ -49,13 +43,13 @@ public interface FileCopyBasedReplicationThreadPoolManager {
    * start hydration process on those replicas.
    * @param replicaId the replicaId to submit for hydration
    */
-  void submitReplicaForHydration(ReplicaId replicaId);
+  void submitReplicaForHydration(ReplicaId replicaId , FileCopyStatusListener fileCopyStatusListener, FileCopyHandler fileCopyHandler);
 
   /**
    * It takes individual replicaIds to be removed from the hydration process
    * and stops hydration process on those replicas.
    * @param replicaId the replicaId to remove from hydration
-   * @return {@code true} if replica is set up successfully. {@code false} if not.
+
    */
-  boolean stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId);
+  void stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId) throws InterruptedException;
 }

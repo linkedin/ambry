@@ -14,6 +14,7 @@
 package com.github.ambry.filetransfer;
 
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nonnull;
 
 
@@ -21,9 +22,13 @@ import javax.annotation.Nonnull;
  * Thread which will run the logic for FileCopy and will notify the listener
  * whether File Copy succeeded or Failed.
  */
-public class FileCopyThread implements Runnable {
+public class FileCopyThread extends Thread {
   private final FileCopyStatusListener fileCopyStatusListener;
   private final FileCopyHandler fileCopyHandler;
+
+  private boolean isRunning;
+
+  private final CountDownLatch shutDownLatch;
 
   FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener) {
     Objects.requireNonNull(fileCopyHandler, "fileCopyHandler must not be null");
@@ -31,6 +36,8 @@ public class FileCopyThread implements Runnable {
 
     this.fileCopyStatusListener = fileCopyStatusListener;
     this.fileCopyHandler = fileCopyHandler;
+    this.isRunning = true;
+    this.shutDownLatch = new CountDownLatch(1);
   }
 
   @Override
@@ -41,6 +48,13 @@ public class FileCopyThread implements Runnable {
       fileCopyStatusListener.onFileCopySuccess();
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);
+    } finally {
+      shutDownLatch.countDown();
     }
+  }
+
+  public void shutDown() throws InterruptedException {
+    isRunning = false;
+    shutDownLatch.await();
   }
 }
