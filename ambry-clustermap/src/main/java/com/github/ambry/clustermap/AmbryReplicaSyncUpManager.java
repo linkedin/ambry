@@ -47,6 +47,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ConcurrentHashMap<String, Boolean> partitionToDeactivationSuccess = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> partitionToDisconnectionSuccess = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<ReplicaId, LocalReplicaLagInfos> replicaToLagInfos = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, CountDownLatch> partitionToFileCopyLatch = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Boolean> partitionToFileCopySuccess = new ConcurrentHashMap<>();
   private final ClusterMapConfig clusterMapConfig;
   private final ReentrantLock updateLock = new ReentrantLock();
 
@@ -65,7 +67,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void initiateFileCopy(ReplicaId replicaId) {
-    //To Be Added With File Copy Protocol
+    partitionToFileCopyLatch.put(replicaId.getPartitionId().toPathString(), new CountDownLatch(1));
+    partitionToFileCopySuccess.put(replicaId.getPartitionId().toPathString(), false);
   }
 
   @Override
@@ -108,8 +111,21 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void waitForFileCopyCompleted(String partitionName) throws InterruptedException {
-    //To Be Added With File Copy Protocol
+    CountDownLatch latch = partitionToFileCopyLatch.get(partitionName);
+    if (latch == null) {
+      logger.info("Skipping file copy for existing partition {}", partitionName);
+    } else {
+      logger.info("Waiting for new partition {} to complete file copy", partitionName);
+      latch.await();
+      partitionToFileCopyLatch.remove(partitionName);
+      if (!partitionToFileCopySuccess.remove(partitionName)) {
+        throw new StateTransitionException("Partition " + partitionName + " failed to copy files.",
+            FileCopyProtocolFailure);
+      }
+      logger.info("File copy is complete on partition {}", partitionName);
+    }
   }
+
 
   @Override
   public void waitDeactivationCompleted(String partitionName) throws InterruptedException {
@@ -204,7 +220,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
   @Override
   public void onFileCopyComplete(ReplicaId replicaId) {
-    //To Be Added With File Copy Protocol
+    partitionToFileCopySuccess.put(replicaId.getPartitionId().toPathString(), true);
+    countDownLatch(partitionToFileCopyLatch, replicaId.getPartitionId().toPathString());
   }
 
   @Override
@@ -229,6 +246,11 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   public void onBootstrapError(ReplicaId replicaId) {
     replicaToLagInfos.remove(replicaId);
     countDownLatch(partitionToBootstrapLatch, replicaId.getPartitionId().toPathString());
+  }
+
+  @Override
+  public void onFileCopyError(ReplicaId replicaId) {
+    countDownLatch(partitionToFileCopyLatch, replicaId.getPartitionId().toPathString());
   }
 
   @Override

@@ -149,6 +149,11 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
+  public boolean setUpReplica(String partitionName) {
+    return false;
+  }
+
+  @Override
   public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
     throw new UnsupportedOperationException("Method not supported");
   }

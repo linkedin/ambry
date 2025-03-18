@@ -152,4 +152,12 @@ public interface StoreManager {
    * @throws IOException
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
+
+  /**
+   * Sets Up Replica For a given partition. This is used in FileCopy based replication
+   * to set up replica on a node.
+   * @param partitionName Name of partition for which replica needs to be set up.
+   * @return {@code true} if replica is set up successfully. {@code false} if not.
+   */
+  boolean setUpReplica(String partitionName);
 }

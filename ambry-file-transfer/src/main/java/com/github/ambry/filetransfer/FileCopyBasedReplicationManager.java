@@ -30,14 +30,14 @@ import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-public class FileBasedReplicationManager {
+public class FileCopyBasedReplicationManager {
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final PrioritizationManager prioritizationManager;
 
   private final StoreManager storeManager;
 
-  public FileBasedReplicationManager(PrioritizationManager prioritizationManager, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
+  public FileCopyBasedReplicationManager(PrioritizationManager prioritizationManager, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
       MetricRegistry metricRegistry, ClusterParticipant clusterParticipant) throws InterruptedException {
@@ -47,7 +47,6 @@ public class FileBasedReplicationManager {
       logger.info("File Copy Manager's state change listener registered!");
     }
     this.prioritizationManager = prioritizationManager;
-
 
     this.storeManager = storeManager;
   }
@@ -59,7 +58,7 @@ public class FileBasedReplicationManager {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       if(storeManager.getReplica(partitionName) == null){
-        //storeManager.setUpReplica(partitionName);
+        storeManager.setUpReplica(partitionName);
       }
      }
 
