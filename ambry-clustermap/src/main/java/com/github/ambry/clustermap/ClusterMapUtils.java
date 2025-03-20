@@ -715,7 +715,10 @@ public class ClusterMapUtils {
       this.clusterManagerQueryHelper = clusterManagerQueryHelper;
       this.defaultPartitionClass = defaultPartitionClass;
       this.clusterManagerMetrics = clusterManagerMetrics;
-      updatePartitions(clusterManagerQueryHelper.getPartitions(), localDatacenterName);
+
+      Collection<? extends PartitionId> partitions = clusterManagerQueryHelper.getPartitions();
+      Collection<PartitionId> filteredPartitions = getFilteredPartitions(partitions);
+      updatePartitions(filteredPartitions, localDatacenterName);
       logger.debug("Number of partitions in data center {} {}", localDatacenterName, allPartitions.size());
       for (Map.Entry<String, SortedMap<Integer, List<PartitionId>>> entry : partitionIdsByClassAndLocalReplicaCount.entrySet()) {
         logger.debug("Partition class {}, partitions {}", entry.getKey(), entry.getValue().values());
@@ -747,6 +750,25 @@ public class ClusterMapUtils {
      */
     List<PartitionId> getPartitions(String partitionClass) {
       return getPartitionsInClass(partitionClass, false);
+    }
+
+    /**
+     * Gets the partitions after filtering based on replication factor comparison to routerputsuccesstarget
+     * @param partitions
+     * @return filtered partitions that can be written to
+     */
+    private Collection<PartitionId> getFilteredPartitions(Collection<? extends PartitionId> partitions) {
+      Collection<PartitionId> filteredPartitions = new ArrayList<>();
+      if (clusterManagerQueryHelper.isPartitionFilteringEnabled()) {
+        for (PartitionId partition : partitions) {
+          if (clusterManagerQueryHelper.isValidPartition(partition.toString())) {
+            filteredPartitions.add(partition);
+          }
+        }
+      } else {
+        filteredPartitions.addAll(partitions);
+      }
+      return filteredPartitions;
     }
 
     /**
@@ -1068,7 +1090,9 @@ public class ClusterMapUtils {
           : addedReplicas.get(0).getDataNodeId().getDatacenterName();
       logger.info("Re-populating partition-selection related maps because replicas are added or removed in {}", dcName);
       // condition here, remember this method can be invoked by multiple threads (synchronize this method?)
-      Collection<? extends PartitionId> partitionsInCluster = clusterManagerQueryHelper.getPartitions();
+      Collection<? extends PartitionId> partitions = clusterManagerQueryHelper.getPartitions();
+      Collection<PartitionId> partitionsInCluster = getFilteredPartitions(partitions);
+
       Map<String, SortedMap<Integer, List<PartitionId>>> partitionSortedByReplicaCount =
           new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       Map<PartitionId, List<ReplicaId>> partitionAndLocalReplicas = new HashMap<>();

@@ -163,6 +163,10 @@ public class ReplicationMetrics {
   private final Counter intraColoRetryAfterBackoffErrorCount;
   private final Map<String, Counter> dcToResponseError = new ConcurrentHashMap<>();
   private final Counter intraColoResponseErrorCount;
+  public final Map<String, Counter> replicaThreadsAssignedRemoteReplicaInfo = new ConcurrentHashMap<>();
+  public final Map<String, Counter> replicaThreadsCycleIterations = new ConcurrentHashMap<>();
+  public final Map<String, Histogram> replicaThreadsOneCycleReplicationTime = new ConcurrentHashMap<>();
+
 
   // Metric to track number of cross colo replication get requests sent by standby replicas. This is applicable during
   // leader-based replication.
@@ -452,6 +456,55 @@ public class ReplicationMetrics {
     Counter responseError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ResponseErrorCount"));
     dcToResponseError.put(datacenter, responseError);
+  }
+
+  /**
+   * Populates metrics at replicaThread level
+   * @param replicaThread name of replica thread
+   */
+
+  public void populateReplicaThreadMetrics(String replicaThread) {
+    Counter replicaThreadAssignedRemoteReplicaInfo = registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-AssignedRemoteReplicaInfo"));
+    replicaThreadsAssignedRemoteReplicaInfo.put(replicaThread, replicaThreadAssignedRemoteReplicaInfo);
+    Counter replicaThreadsCycleIteration = registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-CycleIterations"));
+    replicaThreadsCycleIterations.put(replicaThread, replicaThreadsCycleIteration);
+    Histogram replicaThreadOneCycleReplicationTime = registry.histogram(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-OneCycleReplicationTimeMS"));
+    replicaThreadsOneCycleReplicationTime.put(replicaThread, replicaThreadOneCycleReplicationTime);
+  }
+
+  /**
+   * Increase the number of replication cycle
+   * */
+  public void updateReplicaThreadCycleIteration(String replicaThread) {
+    replicaThreadsCycleIterations.computeIfAbsent(replicaThread, thread -> registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-CycleIterations"))).inc();
+  }
+
+  /**
+   * Increase the number of assigned remote replica
+   * */
+  public void increaseReplicaThreadAssignedRemoteReplicaInfo(String replicaThread) {
+    replicaThreadsAssignedRemoteReplicaInfo.computeIfAbsent(replicaThread, thread -> registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-AssignedRemoteReplicaInfo"))).inc();
+  }
+
+  /**
+   * Update cycle replication time
+   * */
+  public void updateReplicaThreadOneCycleReplicationTime(String replicaThread, long time) {
+    replicaThreadsOneCycleReplicationTime.computeIfAbsent(replicaThread, thread -> registry.histogram(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-OneCycleReplicationTimeMS"))).update(time);
+  }
+
+  /**
+   * Decrease the number of assigned remote replica
+   * */
+  public void decreaseReplicaThreadAssignedRemoteReplicaInfo(String replicaThread) {
+    replicaThreadsAssignedRemoteReplicaInfo.computeIfAbsent(replicaThread, thread -> registry.counter(MetricRegistry.name(ReplicaThread.class,
+        replicaThread + "-AssignedRemoteReplicaInfo"))).dec();
   }
 
   /**
