@@ -52,9 +52,6 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ClusterMapConfig clusterMapConfig;
   private final ReentrantLock updateLock = new ReentrantLock();
 
-  private final ConcurrentHashMap<String, CountDownLatch> partitionToFileCopyLatch = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, Boolean> partitionToFileCopySuccess = new ConcurrentHashMap<>();
-
   public AmbryReplicaSyncUpManager(ClusterMapConfig clusterMapConfig) {
     this.clusterMapConfig = clusterMapConfig;
   }
