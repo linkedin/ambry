@@ -52,6 +52,9 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ClusterMapConfig clusterMapConfig;
   private final ReentrantLock updateLock = new ReentrantLock();
 
+  private final ConcurrentHashMap<String, CountDownLatch> partitionToFileCopyLatch = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Boolean> partitionToFileCopySuccess = new ConcurrentHashMap<>();
+
   public AmbryReplicaSyncUpManager(ClusterMapConfig clusterMapConfig) {
     this.clusterMapConfig = clusterMapConfig;
   }
@@ -119,8 +122,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       latch.await();
       partitionToFileCopyLatch.remove(partitionName);
       if (!partitionToFileCopySuccess.remove(partitionName)) {
-        throw new StateTransitionException("Partition " + partitionName + " failed to copy files.",
-            FileCopyProtocolFailure);
+        throw new StateTransitionException("Partition " + partitionName + " failed to complete file copy.", FileCopyProtocolFailure);
       }
       logger.info("File copy is complete on partition {}", partitionName);
     }
@@ -249,10 +251,9 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   }
 
   @Override
-  public void onFileCopyError(ReplicaId replicaId) {
+  public void onFileCopyError(ReplicaId replicaId){
     countDownLatch(partitionToFileCopyLatch, replicaId.getPartitionId().toPathString());
   }
-
   @Override
   public void onDeactivationError(ReplicaId replicaId) {
     replicaToLagInfos.remove(replicaId);

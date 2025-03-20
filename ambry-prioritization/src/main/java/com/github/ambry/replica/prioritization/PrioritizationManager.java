@@ -22,14 +22,33 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-public interface PrioritizationManager {
 
+/**
+ * The PrioritizationManager is responsible for managing the prioritization of replicas for replication.
+ */
+public interface PrioritizationManager {
+  /**
+   * Start the PrioritizationManager.
+   */
   void start();
 
+  /**
+   * Shutdown the PrioritizationManager.
+   */
   void shutdown();
 
+  /**
+   * Checks status of Prioritization manager.
+   * @return true if the PrioritizationManager is running, false otherwise.
+   */
   boolean isRunning();
 
+  /**
+   * Get the list of partitions that should be replicated from the given disk.
+   * @param diskId the {@link DiskId} for which the list of partitions should be replicated.
+   * @param numberOfReplicasPerDisk the number of replicas that should be replicated from the given disk.
+   * @return the list of {@link ReplicaId} that should be replicated from the given disk.
+   */
   List<ReplicaId> getPartitionListForDisk(DiskId diskId, int numberOfReplicasPerDisk);
 
   /**

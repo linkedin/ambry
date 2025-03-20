@@ -16,52 +16,94 @@ package com.github.ambry.filetransfer;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
-import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
+import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.store.StoreKeyFactory;
 import java.io.IOException;
-import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 public class FileCopyBasedReplicationManager {
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
-  protected final PrioritizationManager prioritizationManager;
 
+  private final PrioritizationManager prioritizationManager;
   private final StoreManager storeManager;
+  private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
+  private final ClusterParticipant clusterParticipant;
+  private final ReplicaSyncUpManager replicaSyncUpManager;
+  private final FileCopyBasedReplicationScheduler fileCopyBasedReplicationScheduler;
+  private  final NetworkClientFactory networkClientFactory;
+  private final ClusterMap clusterMap;
+  private boolean isRunning = false;
 
-  public FileCopyBasedReplicationManager(PrioritizationManager prioritizationManager, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
-      StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
-      ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
-      MetricRegistry metricRegistry, ClusterParticipant clusterParticipant) throws InterruptedException {
+
+  public FileCopyBasedReplicationManager(FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
+     StoreManager storeManager, ClusterMap clusterMap,
+      NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, ClusterParticipant clusterParticipant,
+      FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory,
+      PrioritizationManagerFactory prioritizationManagerFactory) throws InterruptedException, InstantiationException {
+    this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
+    this.storeManager = storeManager;
+
+    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
+    this.clusterParticipant = clusterParticipant;
+
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.FileCopyManagerListener,
           new PartitionStateChangeListenerImpl());
       logger.info("File Copy Manager's state change listener registered!");
     }
-    this.prioritizationManager = prioritizationManager;
+    this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 
-    this.storeManager = storeManager;
+    this.prioritizationManager = prioritizationManagerFactory.getPrioritizationManager();
+    if(!prioritizationManager.isRunning()) {
+      throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
+    }
+
+    this.networkClientFactory = networkClientFactory;
+    this.clusterMap = clusterMap;
   }
+
   public void start() throws InterruptedException, IOException {
-
+    logger.info("Starting FileCopyBasedReplicationManager");
+    fileCopyBasedReplicationScheduler.start();
+    isRunning = true;
+    logger.info("FileCopyBasedReplicationManager started");
   }
+
+  public void shutdown() throws InterruptedException {
+    logger.info("Shutting down FileCopyBasedReplicationManager");
+    fileCopyBasedReplicationScheduler.shutdown();
+    isRunning = false;
+    logger.info("FileCopyBasedReplicationManager shutdown");
+  }
+
   class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
 
     @Override
-    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) throws InterruptedException {
       if(storeManager.getReplica(partitionName) == null){
-        storeManager.setUpReplica(partitionName);
+        if(storeManager.setUpReplica(partitionName)){
+          logger.info("Replica setup for partition {} is successful", partitionName);
+        } else {
+          logger.error("Replica setup for partition {} failed", partitionName);
+          throw new StateTransitionException("Replica setup for partition " + partitionName + " failed",
+              StateTransitionException.TransitionErrorCode.ReplicaSetUpFailure);
+        }
       }
-     }
-
+      ReplicaId replicaId = storeManager.getReplica(partitionName);
+      replicaSyncUpManager.initiateFileCopy(replicaId);
+      prioritizationManager.addReplica(replicaId);
+      replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+    }
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
 

@@ -24,7 +24,7 @@ import java.util.List;
  * assignments of partitions for hydration to threads in the thread pool.
  */
 
-public interface FileCopyBasedReplicationThreadPoolManager {
+public interface FileCopyBasedReplicationThreadPoolManager{
 
   /**
    * @return the number thread pool size.
@@ -34,7 +34,7 @@ public interface FileCopyBasedReplicationThreadPoolManager {
   /**
    * Should return the disks on which partition hydration is either completed
    * or not started yet.
-   * @return the List Of DiskIds that can be hydrated next.
+   * @return the List Of {@link DiskId} that can be hydrated next.
    */
   List<DiskId> getDiskIdsToHydrate();
 
@@ -51,4 +51,6 @@ public interface FileCopyBasedReplicationThreadPoolManager {
    * @param replicaId the replicaId to remove from hydration
    */
   void stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId) throws InterruptedException;
+
+  void shutdown() throws InterruptedException;
 }

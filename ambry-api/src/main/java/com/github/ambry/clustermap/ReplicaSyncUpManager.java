@@ -97,7 +97,7 @@ public interface ReplicaSyncUpManager {
   void onBootstrapError(ReplicaId replicaId);
 
   /**
-   * When exception/error occurs during File copy
+   * When exception/error occurs during File Copy.
    * @param replicaId the replica which encounters error.
    */
   void onFileCopyError(ReplicaId replicaId);

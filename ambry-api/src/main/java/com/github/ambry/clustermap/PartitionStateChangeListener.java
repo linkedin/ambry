@@ -22,7 +22,7 @@ public interface PartitionStateChangeListener {
    * Action to take when partition becomes bootstrap from offline.
    * @param partitionName of the partition.
    */
-  void onPartitionBecomeBootstrapFromOffline(String partitionName);
+  void onPartitionBecomeBootstrapFromOffline(String partitionName) throws InterruptedException;
 
   /**
    * Action to take when partition becomes standby from bootstrap.
