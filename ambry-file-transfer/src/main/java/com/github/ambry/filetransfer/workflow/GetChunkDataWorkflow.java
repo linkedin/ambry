@@ -89,8 +89,7 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
    * @throws InterruptedException
    */
   @Override
-  public FileCopyGetChunkResponse execute()
-      throws IOException, ConnectionPoolTimeoutException, InterruptedException {
+  public FileCopyGetChunkResponse execute() throws Exception {
     final FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(
         FileCopyGetChunkRequest.FILE_CHUNK_REQUEST_VERSION_V_1, fileCopyInfo.getCorrelationId(),
         fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileChunkInfo.getFileName(),

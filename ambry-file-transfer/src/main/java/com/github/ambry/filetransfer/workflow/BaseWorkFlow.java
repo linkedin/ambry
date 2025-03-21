@@ -65,8 +65,7 @@ public class BaseWorkFlow {
    * @throws IOException
    * @throws InterruptedException
    */
-  public ConnectedChannel getChannel(@Nonnull DataNodeId dataNodeId)
-      throws ConnectionPoolTimeoutException, IOException, InterruptedException {
+  public ConnectedChannel getChannel(@Nonnull DataNodeId dataNodeId) throws Exception {
     Objects.requireNonNull(dataNodeId, "dataNodeId param cannot be null");
 
     ConnectedChannel connectedChannel = operationRetryHandler.executeWithRetry(

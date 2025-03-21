@@ -61,32 +61,22 @@ public class OperationRetryHandler {
    * @throws InterruptedException
    */
   public <T> T executeWithRetry(@Nonnull RetryableOperation<T> operation,
-      @Nonnull String operationName)
-      throws IOException, ConnectionPoolTimeoutException, InterruptedException {
+      @Nonnull String operationName) throws Exception {
     Objects.requireNonNull(operation, "operation cannot be null");
     int attempts = 0;
+    T result;
 
     while (true) {
       try {
-        return operation.execute();
-      } catch (IOException e) {
-        attempts++;
-        logger.warn("{} encountered an IO error. Attempt {}/{}", operationName, attempts, maxRetries, e);
-        if (attempts >= maxRetries) {
-          logger.error("{} failed due to IO error after {} attempts", operationName, attempts, e);
-          throw e;
-        }
-      } catch (ConnectionPoolTimeoutException e) {
-        attempts++;
-        logger.warn("{} timed out while waiting for connection. Attempt {}/{}", operationName, attempts, maxRetries, e);
-        if (attempts >= maxRetries) {
-          logger.error("{} failed due to connection timeout after {} attempts", operationName, attempts, e);
-          throw e;
-        }
+        result = operation.execute();
+        logger.info("{} succeeded after {} attempts", operationName, attempts);
+        return result;
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt(); // Preserve the interrupt status
-        logger.error("{} was interrupted during execution. Attempt {}/{}", operationName, attempts, maxRetries, e);
-        throw e;
+        logMessageAndThrow(operationName, attempts, maxRetries, e);
+      } catch (Exception e) {
+        attempts++;
+        logMessageAndThrow(operationName, attempts, maxRetries, e);
       }
 
       try {
@@ -100,10 +90,25 @@ public class OperationRetryHandler {
   }
 
   /**
+   * Log the message and throw the exception
+   * @param operationName the name of the operation
+   * @param attempts the number of attempts
+   * @param maxRetries the maximum number of retries
+   * @param e the exception to throw
+   */
+  private void logMessageAndThrow(String operationName, int attempts, int maxRetries, Exception e) throws Exception {
+    logger.warn("{} failed with an exception. Attempt {}/{}", operationName, attempts, maxRetries, e);
+    if (attempts >= maxRetries) {
+      logger.error("{} failed due to an exception after {} attempts", operationName, attempts, e);
+      throw e;
+    }
+  }
+
+  /**
    * Interface for operations that can be retried
    * @param <T> the return type of the operation
    */
   public interface RetryableOperation<T> {
-    T execute() throws IOException, ConnectionPoolTimeoutException, InterruptedException;
+    T execute() throws Exception;
   }
 }

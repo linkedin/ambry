@@ -332,7 +332,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private void validateResponseOrThrow(RequestOrResponse response, String operationName) {
     if (response == null) {
-      throw new FileCopyHandlerException(operationName + " :not expecting null response",
+      logger.error(operationName + ": not expecting null response");
+      throw new FileCopyHandlerException(operationName + ": not expecting null response",
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
   }

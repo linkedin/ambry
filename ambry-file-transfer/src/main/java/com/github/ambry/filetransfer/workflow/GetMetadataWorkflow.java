@@ -65,8 +65,7 @@ public class GetMetadataWorkflow extends BaseWorkFlow implements OperationRetryH
    * @throws InterruptedException
    */
   @Override
-  public FileCopyGetMetaDataResponse execute()
-      throws IOException, ConnectionPoolTimeoutException, InterruptedException {
+  public FileCopyGetMetaDataResponse execute() throws Exception {
     final FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
         FileCopyGetMetaDataRequest.FILE_METADATA_REQUEST_VERSION_V_1, fileCopyInfo.getCorrelationId(),
         fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(),

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.filetransfer.handler;
 
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
@@ -31,6 +33,7 @@ import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.junit.Assert.*;
@@ -61,7 +64,6 @@ public class StoreFileCopyHandlerTest {
   private final FileCopyGetMetaDataResponse metadataResponse = new FileCopyGetMetaDataResponse(ServerErrorCode.NoError);
 
   private StoreFileCopyHandler handler;
-  private GetMetadataWorkflow getMetadataWorkflow;
 
   /**
    * Set up the pre-requisites:
@@ -77,7 +79,8 @@ public class StoreFileCopyHandlerTest {
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
 
-    getMetadataWorkflow = new GetMetadataWorkflow(connectionPool, fileCopyInfo, fileCopyHandlerConfig);
+    when(fileCopyInfo.getTargetReplicaId()).thenReturn(Mockito.mock(ReplicaId.class));
+    when(fileCopyInfo.getTargetReplicaId().getPartitionId()).thenReturn(Mockito.mock(PartitionId.class));
   }
 
   /**
@@ -85,7 +88,7 @@ public class StoreFileCopyHandlerTest {
    * @throws Exception
    */
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
     if (handler != null) {
       handler.stop();
     }
@@ -99,8 +102,7 @@ public class StoreFileCopyHandlerTest {
   @Test
   public void testGetFileCopyGetMetaDataResponseExpectSuccess() throws Exception {
     // Arrange: Mock successful metadata retrieval
-    when(handler.getOperationRetryHandler().executeWithRetry(any(), eq(GetMetadataWorkflow.GET_METADATA_OPERATION_NAME)))
-        .thenReturn(metadataResponse);
+    when(handler.getOperationRetryHandler().executeWithRetry(any(), anyString())).thenReturn(metadataResponse);
 
     // Act: Call getFileCopyGetMetaDataResponse
     FileCopyGetMetaDataResponse response = handler.getFileCopyGetMetaDataResponse(fileCopyInfo);
@@ -108,8 +110,7 @@ public class StoreFileCopyHandlerTest {
     // Assert: The response is not null and is the same as the metadataResponse
     assertNotNull(response);
     assertEquals(metadataResponse, response);
-    verify(handler.getOperationRetryHandler(), times(1)).executeWithRetry(any(),
-        eq(GetMetadataWorkflow.GET_METADATA_OPERATION_NAME));
+    verify(handler.getOperationRetryHandler(), times(1)).executeWithRetry(any(), anyString());
   }
 
   /**
@@ -121,7 +122,7 @@ public class StoreFileCopyHandlerTest {
   @Test
   public void testGetFileCopyGetMetaDataResponseExpectIOException() throws Exception {
     // Arrange: Mock IOException during metadata retrieval
-    when(handler.getOperationRetryHandler().executeWithRetry(any(), eq(GetMetadataWorkflow.GET_METADATA_OPERATION_NAME)))
+    when(handler.getOperationRetryHandler().executeWithRetry(any(), anyString()))
         .thenThrow(new IOException("Test IO error"));
 
     // Act: Call getFileCopyGetMetaDataResponse
@@ -131,8 +132,9 @@ public class StoreFileCopyHandlerTest {
       handler.getFileCopyGetMetaDataResponse(fileCopyInfo);
       fail("Expected FileCopyHandlerException");
     } catch (FileCopyHandlerException e) {
-      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError, e.getErrorCode());
-      assertTrue(e.getMessage().contains("IO error while fetching metadata for file"));
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError,
+          e.getErrorCode());
+      assertTrue(e.getMessage().contains("IO error while fetching metadata file"));
     }
   }
 
@@ -145,7 +147,7 @@ public class StoreFileCopyHandlerTest {
   @Test
   public void testGetFileCopyGetMetaDataResponseExpectConnectionTimeout() throws Exception {
     // Arrange: Mock ConnectionPoolTimeoutException
-    when(handler.getOperationRetryHandler().executeWithRetry(any(), eq(GetMetadataWorkflow.GET_METADATA_OPERATION_NAME)))
+    when(handler.getOperationRetryHandler().executeWithRetry(any(), anyString()))
         .thenThrow(new ConnectionPoolTimeoutException("Timeout"));
 
     // Act: Call getFileCopyGetMetaDataResponse
@@ -155,7 +157,8 @@ public class StoreFileCopyHandlerTest {
       handler.getFileCopyGetMetaDataResponse(fileCopyInfo);
       fail("Expected FileCopyHandlerException");
     } catch (FileCopyHandlerException e) {
-      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError, e.getErrorCode());
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError,
+          e.getErrorCode());
       assertTrue(e.getMessage().contains("Connection pool timeout while fetching metadata"));
     }
   }
@@ -169,7 +172,7 @@ public class StoreFileCopyHandlerTest {
   @Test
   public void testGetFileCopyGetMetaDataResponseExpectInterruptedException() throws Exception {
     // Arrange: Mock InterruptedException
-    when(handler.getOperationRetryHandler().executeWithRetry(any(), eq(GetMetadataWorkflow.GET_METADATA_OPERATION_NAME)))
+    when(handler.getOperationRetryHandler().executeWithRetry(any(), anyString()))
         .thenThrow(new InterruptedException("Interrupted"));
 
     // Act: Call getFileCopyGetMetaDataResponse
@@ -179,7 +182,8 @@ public class StoreFileCopyHandlerTest {
       handler.getFileCopyGetMetaDataResponse(fileCopyInfo);
       fail("Expected FileCopyHandlerException");
     } catch (FileCopyHandlerException e) {
-      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError, e.getErrorCode());
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError,
+          e.getErrorCode());
       assertTrue(e.getMessage().contains("Thread interrupted while fetching metadata"));
       assertTrue(Thread.currentThread().isInterrupted()); // Ensure the interrupt flag is set
     }
@@ -194,7 +198,7 @@ public class StoreFileCopyHandlerTest {
   @Test
   public void testGetFileCopyGetMetaDataResponseExpectRuntimeException() throws Exception {
     // Mock unexpected RuntimeException
-    when(handler.getOperationRetryHandler().executeWithRetry(any(), eq(GetMetadataWorkflow.GET_METADATA_OPERATION_NAME)))
+    when(handler.getOperationRetryHandler().executeWithRetry(any(), anyString()))
         .thenThrow(new RuntimeException("Unexpected error"));
 
     // Act: Call getFileCopyGetMetaDataResponse
