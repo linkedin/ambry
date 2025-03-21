@@ -1,3 +1,17 @@
+/**
+ * Copyright 2025 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 package com.github.ambry.filetransfer;
 
 import com.github.ambry.clustermap.ClusterMap;
@@ -8,8 +22,6 @@ import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.store.PartitionFileStore;
-import java.nio.file.FileStore;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -30,6 +42,8 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
 
   private final PrioritizationManager prioritizationManager;
 
+  private final List<ReplicaId> inFlightReplicas;
+
   private final StoreManager storeManager;
 
   private final StoreConfig storeConfig;
@@ -46,6 +60,7 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
     this.clusterMap = clusterMap;
     this.fileCopyBasedReplicationThreadPoolManager = fileCopyBasedReplicationThreadPoolManager;
     this.replicaToStartTimeMap = new ConcurrentHashMap<>();
+    this.inFlightReplicas = new LinkedList<>();
     this.prioritizationManager = prioritizationManager;
     this.replicaSyncUpManager = replicaSyncUpManager;
     this.storeManager = storeManager;
@@ -109,17 +124,20 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
 
         if(!replicaIds.isEmpty()){
           for(ReplicaId replicaId: replicaIds) {
-            if (replicaToStartTimeMap.containsKey(replicaId)) {
+            if (inFlightReplicas.contains(replicaId)) {
               continue;
             }
-            if(storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName){
+            if(storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName)){
               logger.info("File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
+              inFlightReplicas.remove(replicaId);
+              replicaToStartTimeMap.remove(replicaId);
               continue;
             }
             //TODO: Add Persistence of File Copy In Progress File to disk when Changing FileCopyHandler
             // to use Asynchronous Network client. Can be used to recover from restarts.
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
                 new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId), fileCopyHandler);
+            inFlightReplicas.add(replicaId);
             replicaToStartTimeMap.put(replicaId, System.currentTimeMillis()/1000);
           }
         } else{
@@ -133,4 +151,29 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
   public int getThreadPoolSize() {
     return fileCopyBasedReplicationThreadPoolManager.getThreadPoolSize();
   }
+
+  public class FileCopyStatusListenerImpl implements FileCopyStatusListener {
+
+    private final ReplicaSyncUpManager replicaSyncUpManager;
+    private final ReplicaId replicaId;
+
+    public FileCopyStatusListenerImpl(ReplicaSyncUpManager replicaSyncUpManager, ReplicaId replicaId) {
+      this.replicaSyncUpManager = replicaSyncUpManager;
+      this.replicaId = replicaId;
+    }
+    @Override
+    public void onFileCopySuccess() {
+      replicaSyncUpManager.onFileCopyComplete(replicaId);
+      inFlightReplicas.add(replicaId);
+      replicaToStartTimeMap.remove(replicaId);
+    }
+
+    @Override
+    public void onFileCopyFailure(Exception e) {
+      replicaSyncUpManager.onFileCopyError(replicaId);
+      inFlightReplicas.remove(replicaId);
+      replicaToStartTimeMap.remove(replicaId);
+    }
+  }
+
 }

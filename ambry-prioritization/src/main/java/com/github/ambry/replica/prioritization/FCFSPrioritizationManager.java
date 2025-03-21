@@ -19,11 +19,14 @@ import com.github.ambry.clustermap.ReplicaId;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
+
 
 /**
  * The FCFSPrioritizationManager is a First-Come-First-Serve implementation of the PrioritizationManager.
  */
-public class FCFSPrioritizationManager implements PrioritizationManager{
+public class FCFSPrioritizationManager implements PrioritizationManager {
   private boolean isRunning;
 
   private final ConcurrentHashMap<DiskId, List<ReplicaId>> diskToReplicaMap;
@@ -47,14 +50,15 @@ public class FCFSPrioritizationManager implements PrioritizationManager{
   }
 
   @Override
-  public List<ReplicaId> getPartitionListForDisk(DiskId diskId, int numberOfReplicasPerDisk) {
+  public List<ReplicaId> getPartitionListForDisk(@Nonnull DiskId diskId, @Nonnegative int numberOfReplicasPerDisk) {
     List<ReplicaId> replicaListForDisk = diskToReplicaMap.get(diskId);
 
     if(replicaListForDisk == null)
       return null;
     LinkedList<ReplicaId> listsToReturn = new LinkedList<>();
 
-    for( int index = 0; index < Math.min(numberOfReplicasPerDisk, replicaListForDisk.size());index++){
+    int numberOfReplicasToBeRemoved = Math.min(numberOfReplicasPerDisk, replicaListForDisk.size());
+    for(int index = 0; index < numberOfReplicasToBeRemoved; index++){
       listsToReturn.add(replicaListForDisk.get(index));
       replicaListForDisk.remove(index);
     }

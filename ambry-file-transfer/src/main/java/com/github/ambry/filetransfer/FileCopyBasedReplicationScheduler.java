@@ -14,9 +14,6 @@
 
 package com.github.ambry.filetransfer;
 
-import com.github.ambry.clustermap.ReplicaId;
-
-
 /**
  * Interface for FileCopy Based Replication Scheduler.This scheduler
  * schedules the replication of files from one node to another

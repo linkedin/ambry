@@ -89,9 +89,9 @@ public class FileCopyBasedReplicationManager {
   class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
 
     @Override
-    public void onPartitionBecomeBootstrapFromOffline(String partitionName) throws InterruptedException {
-      if(storeManager.getReplica(partitionName) == null){
-        if(storeManager.setUpReplica(partitionName)){
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      if (storeManager.getReplica(partitionName) == null) {
+        if (storeManager.setUpReplica(partitionName)) {
           logger.info("Replica setup for partition {} is successful", partitionName);
         } else {
           logger.error("Replica setup for partition {} failed", partitionName);
@@ -102,7 +102,13 @@ public class FileCopyBasedReplicationManager {
       ReplicaId replicaId = storeManager.getReplica(partitionName);
       replicaSyncUpManager.initiateFileCopy(replicaId);
       prioritizationManager.addReplica(replicaId);
-      replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+      try {
+        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+      } catch (InterruptedException e) {
+        logger.error("File copy for partition {} was interrupted", partitionName);
+        throw new StateTransitionException("File copy for partition " + partitionName + " was interrupted",
+            StateTransitionException.TransitionErrorCode.FileCopyProtocolFailure);
+      }
     }
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {

@@ -91,7 +91,7 @@ public interface StoreManager {
    * @return the {@link FileStore} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
    *         that partition, or that store was not started.
    */
-  PartitionFileStore getFileStore(ReplicaId replicaId);
+  PartitionFileStore getFileStore(PartitionId partitionId);
 
   /**
    * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific

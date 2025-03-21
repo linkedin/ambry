@@ -355,7 +355,7 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public PartitionFileStore getFileStore(ReplicaId replicaId) {
+  public PartitionFileStore getFileStore(PartitionId partitionId) {
     //TODO: Implementation To Be added.
     return null;
   }

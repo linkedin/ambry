@@ -110,7 +110,7 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public PartitionFileStore getFileStore(ReplicaId replicaId) {
+  public PartitionFileStore getFileStore(PartitionId partitionId) {
     return null;
   }
 
