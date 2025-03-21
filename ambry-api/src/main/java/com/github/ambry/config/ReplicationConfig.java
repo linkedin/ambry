@@ -350,6 +350,17 @@ public class ReplicationConfig {
   @Config(BACKUP_CHECKER_REPORT_DIR)
   public final int maxBackupCheckerReportFd;
 
+  @Config(REPLICATION_ENABLE_PRIORITIZATION)
+  @Default("false")
+  public final boolean replicationEnablePrioritzation;
+  public final static String REPLICATION_ENABLE_PRIORITIZATION = "replication.enable.prioritization";
+
+  @Config(REPLICATION_MAX_PRIORITIZED_REPLICAS_PERCENT)
+  @Default("100")
+  public final int replicationMaxPrioritizedReplicasPercent;
+  public final static String REPLICATION_MAX_PRIORITIZED_REPLICAS_PERCENT = "replication.max.prioritized.replicas.percent";
+
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -428,5 +439,7 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
     replicationUsingNonblockingNetworkClientForLocalColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO, false);
+    replicationEnablePrioritzation = verifiableProperties.getBoolean(REPLICATION_ENABLE_PRIORITIZATION, false);
+    replicationMaxPrioritizedReplicasPercent = verifiableProperties.getInt(REPLICATION_MAX_PRIORITIZED_REPLICAS_PERCENT, 100);
   }
 }
