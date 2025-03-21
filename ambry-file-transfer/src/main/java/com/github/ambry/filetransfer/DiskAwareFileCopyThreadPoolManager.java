@@ -157,7 +157,8 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
    * Initiates shutdown of the thread pool manager and waits for completion.
    * @throws InterruptedException if the shutdown wait is interrupted
    */
-  public void shutDown() throws InterruptedException {
+  @Override
+  public void shutdown() throws InterruptedException {
     isRunning = false;
     shutdownLatch.await();
   }
