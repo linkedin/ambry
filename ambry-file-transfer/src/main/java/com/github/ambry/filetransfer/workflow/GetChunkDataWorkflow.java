@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer.workflow;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.filetransfer.FileChunkInfo;
 import com.github.ambry.filetransfer.FileCopyInfo;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
@@ -37,6 +38,11 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
   private final FileCopyInfo fileCopyInfo;
 
   /**
+   * The {@link FileChunkInfo} that contains the file-chunk information required to send the request.
+   */
+  private final FileChunkInfo fileChunkInfo;
+
+  /**
    * The {@link ClusterMap} that contains the information about the cluster.
    */
   private final ClusterMap clusterMap;
@@ -51,22 +57,26 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
    * GetChunkDataWorkflow ctor
    * @param connectionPool The connection pool to use to get connections to the target replica.
    * @param fileCopyInfo The {@link FileCopyInfo} that contains the information required to send the request.
+   * @param fileChunkInfo The {@link FileChunkInfo} that contains the file-chunk information required to send the request.
    * @param clusterMap The {@link ClusterMap} that contains the information about the cluster.
    * @param config The {@link FileCopyHandlerConfig} that contains the configuration required to send the request.
    */
   public GetChunkDataWorkflow(
       @Nonnull ConnectionPool connectionPool,
       @Nonnull FileCopyInfo fileCopyInfo,
+      @Nonnull FileChunkInfo fileChunkInfo,
       @Nonnull ClusterMap clusterMap,
       @Nonnull FileCopyHandlerConfig config) {
     super(connectionPool, config);
 
     Objects.requireNonNull(connectionPool, "connectionPool param cannot be null");
     Objects.requireNonNull(fileCopyInfo, "fileCopyInfo param cannot be null");
+    Objects.requireNonNull(fileChunkInfo, "fileChunkInfo param cannot be null");
     Objects.requireNonNull(clusterMap, "clusterMap param cannot be null");
     Objects.requireNonNull(config, "config param cannot be null");
 
     this.fileCopyInfo = fileCopyInfo;
+    this.fileChunkInfo = fileChunkInfo;
     this.clusterMap = clusterMap;
   }
 
@@ -83,8 +93,8 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
       throws IOException, ConnectionPoolTimeoutException, InterruptedException {
     final FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(
         FileCopyGetChunkRequest.FILE_CHUNK_REQUEST_VERSION_V_1, fileCopyInfo.getCorrelationId(),
-        fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileCopyInfo.getFileName(),
-        fileCopyInfo.getStartOffset(), fileCopyInfo.getChunkLengthInBytes(), fileCopyInfo.isChunked());
+        fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileChunkInfo.getFileName(),
+        fileChunkInfo.getStartOffset(), fileChunkInfo.getChunkLengthInBytes(), fileChunkInfo.isChunked());
 
     logger.info("Sending FileCopyGetChunkRequest: {}", request);
     long startTimeMs = System.currentTimeMillis();

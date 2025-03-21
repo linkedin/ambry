@@ -69,7 +69,8 @@ public class GetMetadataWorkflow extends BaseWorkFlow implements OperationRetryH
       throws IOException, ConnectionPoolTimeoutException, InterruptedException {
     final FileCopyGetMetaDataRequest request = new FileCopyGetMetaDataRequest(
         FileCopyGetMetaDataRequest.FILE_METADATA_REQUEST_VERSION_V_1, fileCopyInfo.getCorrelationId(),
-        fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileCopyInfo.getHostName());
+        fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(),
+        fileCopyInfo.getSourceReplicaId().getDataNodeId().getHostname());
 
     ConnectedChannel connectedChannel = getChannel(fileCopyInfo.getTargetReplicaId().getDataNodeId());
 
