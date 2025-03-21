@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer;
 
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;

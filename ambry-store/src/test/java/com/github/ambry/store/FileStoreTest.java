@@ -13,7 +13,7 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.config.FileCopyConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.DataInputStream;
 import java.io.File;
@@ -58,7 +58,7 @@ public class FileStoreTest {
 
   private FileStore fileStore;
   private File tempDir;
-  private FileCopyConfig fileCopyConfig;
+  private FileCopyBasedReplicationConfig _fileCopyBasedReplicationConfig;
 
   /**
    * Sets up the test environment before each test.
@@ -68,8 +68,8 @@ public class FileStoreTest {
   public void setUp() throws Exception {
     tempDir = Files.createTempDirectory("FileStoreTest").toFile();
     Properties props = new Properties();
-    fileCopyConfig = new FileCopyConfig(new VerifiableProperties(props));
-    fileStore = new FileStore(fileCopyConfig, tempDir.getAbsolutePath());
+    _fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(props));
+    fileStore = new FileStore(_fileCopyBasedReplicationConfig, tempDir.getAbsolutePath());
     fileStore.start();
   }
 
@@ -321,7 +321,7 @@ public class FileStoreTest {
     fileStore.writeMetaDataFileToDisk(logInfoList);
 
     // Verify metadata file exists
-    File metadataFile = new File(tempDir, "logs_metadata_file");
+    File metadataFile = new File(tempDir, _fileCopyBasedReplicationConfig.fileCopyMetaDataFileName);
     assertTrue("Metadata file should exist", metadataFile.exists());
 
     // Corrupt the file by truncating it
@@ -337,7 +337,7 @@ public class FileStoreTest {
     } catch (Exception e) {
         // Verify exception type
         assertTrue("Exception should be related to file corruption",
-            e instanceof IOException || e instanceof ArrayIndexOutOfBoundsException);
+            e.getCause() instanceof ArrayIndexOutOfBoundsException);
     }
   }
 
@@ -505,13 +505,13 @@ public class FileStoreTest {
     fileStore.writeMetaDataFileToDisk(logInfoList);
 
     // Verify file exists
-    File metadataFile = new File(tempDir, "logs_metadata_file");
+    File metadataFile = new File(tempDir, _fileCopyBasedReplicationConfig.fileCopyMetaDataFileName);
     assertTrue("Metadata file should exist", metadataFile.exists());
 
     // Verify initial permissions
     assertTrue("Metadata file should be readable", metadataFile.canRead());
 
-    // Remove read permissions
+    // Remove read permissionsx
     assertTrue(metadataFile.setReadable(false));
 
     // Attempt to read without permissions

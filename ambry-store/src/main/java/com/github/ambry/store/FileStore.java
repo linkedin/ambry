@@ -14,7 +14,7 @@
 
 package com.github.ambry.store;
 
-import com.github.ambry.config.FileCopyConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.store.FileStoreException.FileStoreErrorCode;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
@@ -66,7 +66,7 @@ import org.slf4j.LoggerFactory;
  * - Uses atomic operations for file writes
  * - Maintains thread-safe state management
  */
-class FileStore implements PartitionFileStore {
+public class FileStore implements PartitionFileStore {
   // Logger instance for this class
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
 
@@ -91,16 +91,16 @@ class FileStore implements PartitionFileStore {
 
   /**
    * Creates a new FileStore instance.
-   * @param fileCopyConfig Configuration for file copy operations
+   * @param fileCopyBasedReplicationConfig Configuration for file copy operations
    * @param partitionToMountPath partition path for Filestore to access
    * @throws NullPointerException if fileCopyConfig is null
    */
-  public FileStore(FileCopyConfig fileCopyConfig, String partitionToMountPath) {
+  public FileStore(FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, String partitionToMountPath) {
     this.partitionToMountPath = partitionToMountPath;
 
     // Create temporary and actual file paths for metadata persistence
-    tempMetadataFile = new File(partitionToMountPath, fileCopyConfig.filecopyMetaDataFileName + ".tmp");
-    actualMetadataFile = new File(partitionToMountPath, fileCopyConfig.filecopyMetaDataFileName);
+    tempMetadataFile = new File(partitionToMountPath, fileCopyBasedReplicationConfig.fileCopyMetaDataFileName + ".tmp");
+    actualMetadataFile = new File(partitionToMountPath, fileCopyBasedReplicationConfig.fileCopyMetaDataFileName);
   }
 
   /**
@@ -176,11 +176,14 @@ class FileStore implements PartitionFileStore {
       buf.flip();
       // return file chunk buffer read
       return StoreFileChunk.from(buf);
-    }  catch (FileNotFoundException e) {
+    } catch (FileNotFoundException e) {
       throw new StoreException("File not found while reading chunk for FileCopy", e, StoreErrorCodes.FileNotFound);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + "while reading chunk for FileCopy", e, errorCode);
+    } catch (Exception e){
+      logger.error("Error while reading chunk from file: {}", fileName, e);
+      throw new FileStoreException("Error while reading chunk from file: " + fileName, e, FileStoreErrorCode.FileStoreReadError);
     }
   }
 
@@ -221,7 +224,8 @@ class FileStore implements PartitionFileStore {
           Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         }
       } catch (Exception e){
-        throw new FileStoreException("FileStore encountered write error", FileStoreErrorCode.FileStoreWriteError);
+        logger.error("Error while writing chunk to file: {}", outputFilePath, e);
+        throw new FileStoreException("Error while writing chunk to file: " + outputFilePath, FileStoreErrorCode.FileStoreWriteError);
       }
       logger.info("Write successful for chunk to file: {} with size: {}", outputFilePath, content.length);
   }
@@ -253,7 +257,10 @@ class FileStore implements PartitionFileStore {
       }
     } catch (IOException e) {
       logger.error("IO error while persisting filecopy metadata to disk {}", tempMetadataFile.getAbsoluteFile());
-      throw e;
+      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.FileStoreWriteError);
+    } catch (Exception e) {
+      logger.error("Error while writing metadata to disk", e);
+      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.UnknownError);
     }
   }
 
@@ -275,16 +282,18 @@ class FileStore implements PartitionFileStore {
       }
     } catch (IOException e) {
       logger.error("IO error while reading filecopy metadata from disk {}", actualMetadataFile.getAbsoluteFile());
-      throw e;
+      throw new FileStoreException("Error while reading metadata from disk", e, FileStoreErrorCode.FileStoreReadError);
+    } catch (Exception e) {
+      logger.error("Error while reading metadata from disk", e);
+      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.UnknownError);
     }
   }
 
   /**
    * Performs cleanup operations when shutting down the FileStore.
-   * Currently a no-op implementation.
    */
   public void shutdown() {
-    // no-op
+    isRunning = false;
   }
 
   /**

@@ -13,6 +13,9 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
+
+
 /**
  * This interface contains methods which will be called post {@link FileCopyHandler} is
  * completed in {@link FileCopyThread}

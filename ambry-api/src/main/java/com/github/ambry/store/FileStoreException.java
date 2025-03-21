@@ -45,7 +45,7 @@ public class FileStoreException extends RuntimeException {
    * @param error The specific error code categorizing the failure
    * @param throwable The underlying cause of this exception
    */
-  public FileStoreException(String s, FileStoreErrorCode error, Throwable throwable) {
+  public FileStoreException(String s, Throwable throwable, FileStoreErrorCode error) {
     super(s, throwable);
     this.error = error;
   }
@@ -63,6 +63,14 @@ public class FileStoreException extends RuntimeException {
     /**
      * Indicates that the FileStore service encountered an error during write
      */
-    FileStoreWriteError
+    FileStoreWriteError,
+    /**
+     * Indicates that the FileStore service encountered an error during read
+     */
+    FileStoreReadError,
+    /**
+     * Indicates that the FileStore service encountered an error during delete
+     */
+    UnknownError
   }
 }
