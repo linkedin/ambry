@@ -17,6 +17,7 @@ package com.github.ambry.named;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
@@ -329,6 +330,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     public final Histogram namedTtlupdateTimeInMs;
 
+    public final Meter namedBlobGetRate;
+    public final Meter namedBlobListRate;
+    public final Meter namedBlobDeleteRate;
+    public final Meter namedBlobInsertRate;
+    public final Meter namedBlobUpdateRate;
+
     /**
      * Constructor to create the Metrics.
      * @param metricRegistry The {@link MetricRegistry}.
@@ -373,6 +380,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
       namedTtlupdateTimeInMs =
           metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateTimeInMs"));
+
+      namedBlobGetRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetRate"));
+      namedBlobListRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobListRate"));
+      namedBlobDeleteRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDeleteRate"));
+      namedBlobInsertRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPutRate"));
+      namedBlobUpdateRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobUpdateRate"));
     }
   }
 
@@ -653,6 +666,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setString(3, blobName);
       query = statement.toString();
       logger.debug("Getting blob name from MySql. Query {}", query);
+      metricsRecoder.namedBlobGetRate.mark();
       try (ResultSet resultSet = statement.executeQuery()) {
         if (!resultSet.next()) {
           throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
@@ -703,6 +717,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
+      metricsRecoder.namedBlobListRate.mark();
       try (ResultSet resultSet = statement.executeQuery()) {
         String nextContinuationToken = null;
         List<NamedBlobRecord> entries = new ArrayList<>();
@@ -753,6 +768,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setLong(8, record.getBlobSize());
       query = statement.toString();
       logger.debug("Putting blob name in MySql. Query {}", query);
+      metricsRecoder.namedBlobInsertRate.mark();
       statement.executeUpdate();
     } catch (SQLException e) {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
@@ -771,6 +787,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setLong(4, record.getVersion());
       query = statement.toString();
       logger.debug("Updating TTL in MySql. Query {}", query);
+      metricsRecoder.namedBlobUpdateRate.mark();
       int rowCount = statement.executeUpdate();
       if (rowCount == 0) {
         metricsRecoder.namedTtlupdateErrorCount.inc();
@@ -797,6 +814,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setString(3, blobName);
       query = statement.toString();
       logger.debug("Deleting blob name in MySql. Query {}", query);
+      metricsRecoder.namedBlobDeleteRate.mark();
       try (ResultSet resultSet = statement.executeQuery()) {
         if (!resultSet.next()) {
           throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
