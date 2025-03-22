@@ -1868,10 +1868,17 @@ public class HelixClusterManager implements ClusterMap {
           if (replicationFactor == 0) {
             replicationFactor = DEFAULT_NUM_REPLICAS;
           }
+          int minActiveReplicas = state.getMinActiveReplicas();
+
+          // In case MIN_ACTIVE_REPLICAS is not set
+          if (minActiveReplicas == -1) {
+            minActiveReplicas = replicationFactor - 1;
+          }
+
           if (!Strings.isEmpty(tag)) {
             resourceNameToTag.put(resourceName, tag);
             ResourceProperty resourceProperty =
-                new ResourceProperty(resourceName, numPartitions, replicationFactor, state.getRebalanceMode());
+                new ResourceProperty(resourceName, numPartitions, replicationFactor, state.getRebalanceMode(), minActiveReplicas);
             tagToProperty.put(tag, resourceProperty);
           }
           resourceToPartitionMap.put(resourceName, new HashSet<>(state.getPartitionSet()));
@@ -2254,12 +2261,14 @@ public class HelixClusterManager implements ClusterMap {
     final int numPartitions;
     final int replicationFactor; // number of replicas
     final IdealState.RebalanceMode rebalanceMode;
+    final int minActiveReplicas;
 
-    ResourceProperty(String name, int numPartitions, int replicationFactor, IdealState.RebalanceMode rebalanceMode) {
+    ResourceProperty(String name, int numPartitions, int replicationFactor, IdealState.RebalanceMode rebalanceMode, int minActiveReplicas) {
       this.numPartitions = numPartitions;
       this.name = name;
       this.replicationFactor = replicationFactor;
       this.rebalanceMode = rebalanceMode;
+      this.minActiveReplicas = minActiveReplicas;
     }
   }
 
