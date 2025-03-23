@@ -138,7 +138,7 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
             FileCopyStatusListener fileCopyStatusListener = new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId);
             try{
               /**
-               * Add Persistence of File Copy In Progress File to disk. This will
+               * Adding Persistence of File Copy In Progress File to disk. This will
                * be used for recovery during restarts and rollback/roll forward scenarios.
                */
               createFileCopyInProgressFileIfAbsent(replicaId);
