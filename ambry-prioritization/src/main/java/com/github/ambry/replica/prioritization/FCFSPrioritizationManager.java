@@ -38,7 +38,6 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
   protected final Logger logger = LoggerFactory.getLogger(getClass());
 
   public FCFSPrioritizationManager() {
-    isRunning = false;
     diskToReplicaMap = new ConcurrentHashMap<>();
   }
   @Override

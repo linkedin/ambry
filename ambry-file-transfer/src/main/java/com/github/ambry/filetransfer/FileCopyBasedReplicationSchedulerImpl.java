@@ -22,6 +22,7 @@ import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -178,23 +179,37 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
     }
     @Override
     public void onFileCopySuccess() {
-      replicaSyncUpManager.onFileCopyComplete(replicaId);
       removeReplicaFromFileCopy(replicaId);
+      replicaSyncUpManager.onFileCopyComplete(replicaId);
     }
 
     @Override
     public void onFileCopyFailure(Exception e) {
       logger.error("Error Copying File For Replica: " + replicaId.getPartitionId().toPathString());
       logger.error("[Error]: ", e);
-      replicaSyncUpManager.onFileCopyError(replicaId);
       removeReplicaFromFileCopy(replicaId);
+      replicaSyncUpManager.onFileCopyError(replicaId);
     }
 
     public void removeReplicaFromFileCopy(ReplicaId replicaId){
       inFlightReplicas.remove(replicaId);
       replicaToStartTimeMap.remove(replicaId);
       prioritizationManager.removeReplica(replicaId.getDiskId(), replicaId);
+
+      File fileCopyInProgressFile = new File(replicaId.getReplicaPath(),
+          storeConfig.storeFileCopyInProgressFileName);
+      try {
+        Utils.deleteFileOrDirectory(fileCopyInProgressFile);
+      } catch (IOException e) {
+        // if deletion fails, we log here without throwing exception. Next time when server restarts,
+        // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
+        logger.error("Failed to delete {}", fileCopyInProgressFile.getName(), e);
+      }
     }
+  }
+
+  public Map<ReplicaId, Long> getReplicaToStartTimeMap(){
+    return replicaToStartTimeMap;
   }
 
 }
