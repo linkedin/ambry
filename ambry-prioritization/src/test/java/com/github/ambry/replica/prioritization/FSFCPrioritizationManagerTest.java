@@ -4,6 +4,7 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.StateTransitionException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,11 +17,13 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static org.junit.Assert.*;
 
 
 public class FSFCPrioritizationManagerTest {
   private MockClusterMap clusterMap;
+  FCFSPrioritizationManager prioritizationManager = new FCFSPrioritizationManager();
 
   @Before
   public void initializeCluster() throws IOException {
@@ -29,8 +32,7 @@ public class FSFCPrioritizationManagerTest {
         false, null);
   }
    @Test
-   public void testAddReplica() {
-     FCFSPrioritizationManager prioritizationManager = new FCFSPrioritizationManager();
+   public void testAddAndRemoveReplica() {
      int partitionId1 = 1;
      int partitionId2 = 2;
      int partitionId3 = 3;
@@ -40,77 +42,63 @@ public class FSFCPrioritizationManagerTest {
      PartitionId partition1 =
          new MockPartitionId(partitionId1, MockClusterMap.DEFAULT_PARTITION_CLASS,
              clusterMap.getDataNodes(), mountPathIndex1);
-      PartitionId partition2 =
+     PartitionId partition2 =
          new MockPartitionId(partitionId2, MockClusterMap.DEFAULT_PARTITION_CLASS,
              clusterMap.getDataNodes(), mountPathIndex2);
-      PartitionId partition3 =
+     PartitionId partition3 =
           new MockPartitionId(partitionId3, MockClusterMap.DEFAULT_PARTITION_CLASS,
               clusterMap.getDataNodes(), mountPathIndex3);
-     assertFalse(prioritizationManager.addReplica(partition1.getReplicaIds().get(0)));
-     assertFalse(prioritizationManager.addReplica(partition2.getReplicaIds().get(0)));
-     assertFalse(prioritizationManager.addReplica(partition3.getReplicaIds().get(0)));
+
+     /**
+      * Adding replicas to the prioritization manager before starting it should fail.
+      */
+     try {
+       assertFalse(prioritizationManager.addReplica(partition1.getReplicaIds().get(0)));
+     } catch (StateTransitionException e){
+       assertEquals("Error code doesn't match", PrioritizationManagerRunningFailure, e.getErrorCode());
+     }
 
      prioritizationManager.start();
      assertTrue(prioritizationManager.addReplica(partition1.getReplicaIds().get(0)));
      assertTrue(prioritizationManager.addReplica(partition2.getReplicaIds().get(0)));
      assertTrue(prioritizationManager.addReplica(partition3.getReplicaIds().get(0)));
+
+     assertTrue(prioritizationManager.removeReplica(partition1.getReplicaIds().get(0).getDiskId(), partition1.getReplicaIds().get(0)));
+     assertTrue(prioritizationManager.removeReplica(partition2.getReplicaIds().get(0).getDiskId(), partition2.getReplicaIds().get(0)));
    }
 
-  @Test
-  public void test1(){
+   @Test
+  public void testAddRemoveAndGetPartitionsOnADisk(){
+     Map<Integer, List<PartitionId>> diskToPartitionMap = new ConcurrentHashMap<>();
 
-  }
-//   @Test
-//    public void testAdditionAndRemovalOfReplicasFromPrioritizationManager() throws InterruptedException {
-//      FCFSPrioritizationManager prioritizationManager = new FCFSPrioritizationManager();
-//      Map<Integer, List<PartitionId>> diskToPartitionMap = new ConcurrentHashMap<>();
-//
-//      prioritizationManager.start();
-//
-////      int partitionCounter = 1;
-////      for(int diskId=1; diskId <= 10;diskId++){
-////        for(int numPartitions=0 ; numPartitions < 5; numPartitions++){
-////          PartitionId partition =
-////              new MockPartitionId(partitionCounter++, MockClusterMap.DEFAULT_PARTITION_CLASS,
-////                  clusterMap.getDataNodes(), diskId-1);
-////          diskToPartitionMap.putIfAbsent(diskId, new ArrayList<>());
-////          diskToPartitionMap.get(diskId).add(partition);
-////          prioritizationManager.addReplica(partition.getReplicaIds().get(0));
-////          assertTrue(prioritizationManager.addReplica(partition.getReplicaIds().get(0)));
-////        }
-////      }
-//
-//      ExecutorService executor = Executors.newFixedThreadPool(10);
-//      for(int diskIndex=1; diskIndex <= 10;diskIndex++){
-//        int finalDiskIndex = diskIndex;
-//        int finalDiskIndex1 = diskIndex;
-//        executor.submit(() -> {
-//          int partitionCount = 10*finalDiskIndex;
-//          for(int numPartitions=0 ; numPartitions < 5; numPartitions++){
-//            PartitionId partition =
-//                new MockPartitionId(partitionCount + numPartitions, MockClusterMap.DEFAULT_PARTITION_CLASS,
-//                    clusterMap.getDataNodes(), finalDiskIndex);
-//            DiskId diskId = clusterMap.getDataNodes().get(0).getDiskIds().get(finalDiskIndex -1);
-//            diskToPartitionMap.putIfAbsent(finalDiskIndex1, new ArrayList<>());
-//            diskToPartitionMap.get(finalDiskIndex1).add(partition);
-//            assertTrue(prioritizationManager.addReplica(partition.getReplicaIds().get(0)));
-//
-//          }
-//        });
-//      }
-//
-//     executor.awaitTermination(3, TimeUnit.SECONDS);
-//
-//      for(int diskIndex=1; diskIndex <= 10;diskIndex++){
-//        for(PartitionId partition : diskToPartitionMap.get(diskIndex)){
-//          assertTrue(prioritizationManager.removeReplica(clusterMap.getDataNodes().get(0).getDiskIds().get(diskIndex-1),
-//              partition.getReplicaIds().get(0)));
-//        }
-//      }
-//
-//
-//
-//    }
+     prioritizationManager.start();
+     int partitionCounter = 1;
 
+     // Add 5 Replicas On Each Disk
+     for(int diskId=1; diskId <= 10;diskId++){
+       for(int numPartitions=0 ; numPartitions < 5; numPartitions++){
+          PartitionId partition =
+              new MockPartitionId(partitionCounter++, MockClusterMap.DEFAULT_PARTITION_CLASS,
+                  clusterMap.getDataNodes(), diskId-1);
+          diskToPartitionMap.putIfAbsent(diskId, new ArrayList<>());
+          diskToPartitionMap.get(diskId).add(partition);
+          assertTrue(prioritizationManager.addReplica(partition.getReplicaIds().get(0)));
+       }
+     }
 
+     // Remove replicas and test number of replicas returned by getPartitionListForDisk.
+     for(int diskId=1; diskId <= 10;diskId++){
+       for(int numPartitions=0 ; numPartitions < 5; numPartitions++){
+         PartitionId partition = diskToPartitionMap.get(diskId).get(numPartitions);
+         System.out.println(diskId);
+         System.out.println(numPartitions);
+         assertTrue(prioritizationManager.removeReplica(partition.getReplicaIds().get(0).getDiskId(),
+             partition.getReplicaIds().get(0)));
+         assertEquals(prioritizationManager.getNumberOfDisks(), 10);
+
+         assertEquals(prioritizationManager.getPartitionListForDisk(partition.
+                 getReplicaIds().get(0).getDiskId(), 5).size(), 4-numPartitions);
+       }
+     }
+   }
 }

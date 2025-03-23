@@ -287,6 +287,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     partitionToDeactivationSuccess.clear();
     partitionToDisconnectionLatch.clear();
     partitionToDisconnectionSuccess.clear();
+    partitionToFileCopyLatch.clear();
+    partitionToFileCopySuccess.clear();
     replicaToLagInfos.clear();
   }
 

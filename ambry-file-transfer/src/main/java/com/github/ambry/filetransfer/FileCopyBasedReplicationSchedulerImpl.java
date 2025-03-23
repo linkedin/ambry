@@ -22,6 +22,8 @@ import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -127,16 +129,22 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
             if (inFlightReplicas.contains(replicaId)) {
               continue;
             }
-            if(storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName)){
-              logger.info("File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
-              inFlightReplicas.remove(replicaId);
-              replicaToStartTimeMap.remove(replicaId);
+            FileCopyStatusListener fileCopyStatusListener = new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId);
+            try{
+              /**
+               * Add Persistence of File Copy In Progress File to disk. This will
+               * be used for recovery during restarts and rollback/roll forward scenarios.
+               */
+              createFileCopyInProgressFileIfAbsent(replicaId);
+            } catch (IOException e){
+              logger.error("Error Creating File Copy In Progress File For Replica: " + replicaId.getPartitionId().toPathString());
+              fileCopyStatusListener.onFileCopyFailure(e);
               continue;
             }
-            //TODO: Add Persistence of File Copy In Progress File to disk when Changing FileCopyHandler
-            // to use Asynchronous Network client. Can be used to recover from restarts.
+
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
-                new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId), fileCopyHandler);
+                fileCopyStatusListener, fileCopyHandler);
+
             inFlightReplicas.add(replicaId);
             replicaToStartTimeMap.put(replicaId, System.currentTimeMillis()/1000);
           }
@@ -144,6 +152,13 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
           logger.info("No Replicas To Hydrate For Disk: " + diskId);
         }
       }
+    }
+  }
+
+  public void createFileCopyInProgressFileIfAbsent(ReplicaId replica) throws IOException {
+    File fileCopyInProgressFileName = new File(replica.getReplicaPath(), storeConfig.storeFileCopyInProgressFileName);
+    if (!fileCopyInProgressFileName.exists()) {
+      fileCopyInProgressFileName.createNewFile();
     }
   }
 
@@ -164,15 +179,21 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
     @Override
     public void onFileCopySuccess() {
       replicaSyncUpManager.onFileCopyComplete(replicaId);
-      inFlightReplicas.add(replicaId);
-      replicaToStartTimeMap.remove(replicaId);
+      removeReplicaFromFileCopy(replicaId);
     }
 
     @Override
     public void onFileCopyFailure(Exception e) {
+      logger.error("Error Copying File For Replica: " + replicaId.getPartitionId().toPathString());
+      logger.error("[Error]: ", e);
       replicaSyncUpManager.onFileCopyError(replicaId);
+      removeReplicaFromFileCopy(replicaId);
+    }
+
+    public void removeReplicaFromFileCopy(ReplicaId replicaId){
       inFlightReplicas.remove(replicaId);
       replicaToStartTimeMap.remove(replicaId);
+      prioritizationManager.removeReplica(replicaId.getDiskId(), replicaId);
     }
   }
 

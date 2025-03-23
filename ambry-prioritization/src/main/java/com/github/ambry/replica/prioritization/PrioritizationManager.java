@@ -69,5 +69,7 @@ public interface PrioritizationManager {
    * Returns the number of disks that are currently in the prioritization manager.
    * @return the number of disks.
    */
-  int getNumberOfDisks(int numberOfDisks);
+  int getNumberOfDisks();
+
+  void reset();
 }

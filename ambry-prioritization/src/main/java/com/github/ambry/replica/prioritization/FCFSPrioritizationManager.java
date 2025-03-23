@@ -16,11 +16,16 @@ package com.github.ambry.replica.prioritization;
 
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateTransitionException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
 
 /**
@@ -28,8 +33,10 @@ import javax.annotation.Nonnull;
  */
 public class FCFSPrioritizationManager implements PrioritizationManager {
   private boolean isRunning;
-
   private final ConcurrentHashMap<DiskId, List<ReplicaId>> diskToReplicaMap;
+
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
+
   public FCFSPrioritizationManager() {
     isRunning = false;
     diskToReplicaMap = new ConcurrentHashMap<>();
@@ -41,6 +48,7 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
 
   @Override
   public void shutdown() {
+    reset();
     isRunning = false;
   }
 
@@ -51,45 +59,59 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
 
   @Override
   public List<ReplicaId> getPartitionListForDisk(@Nonnull DiskId diskId, @Nonnegative int numberOfReplicasPerDisk) {
+    if(!isRunning){
+      logger.error("Failed to get partition list for disk {}", diskId);
+      throw new StateTransitionException("Failed to get partition list for disk " + diskId, PrioritizationManagerRunningFailure);
+    }
+
     List<ReplicaId> replicaListForDisk = diskToReplicaMap.get(diskId);
 
     if(replicaListForDisk == null)
       return null;
-    LinkedList<ReplicaId> listsToReturn = new LinkedList<>();
 
     int numberOfReplicasToBeRemoved = Math.min(numberOfReplicasPerDisk, replicaListForDisk.size());
-    for(int index = 0; index < numberOfReplicasToBeRemoved; index++){
-      listsToReturn.add(replicaListForDisk.get(index));
-      replicaListForDisk.remove(index);
-    }
 
-    return listsToReturn;
+    return replicaListForDisk.subList(0, numberOfReplicasToBeRemoved);
   }
 
   @Override
   public synchronized boolean addReplica(ReplicaId replicaId) {
     if(!isRunning){
-      return false;
+      logger.error("Partition {} failed adding to prioritization Manager", replicaId.getReplicaPath());
+      throw new StateTransitionException("Partition " + replicaId.getReplicaPath() + " failed adding to "
+          + "prioritization Manager", PrioritizationManagerRunningFailure);
     }
     diskToReplicaMap.putIfAbsent(replicaId.getDiskId(), new LinkedList<>());
     diskToReplicaMap.get(replicaId.getDiskId()).add(replicaId);
+    logger.info("Added partition {} to prioritization Manager For Disk {}", replicaId.getReplicaPath(),
+        replicaId.getDiskId().getMountPath());
     return true;
   }
 
   @Override
   public synchronized boolean removeReplica(DiskId diskId, ReplicaId replicaId) {
     if(!isRunning){
-      return false;
+      logger.error("Partition {} failed removing from prioritization Manager", replicaId.getReplicaPath());
+      throw new StateTransitionException("Partition " + replicaId.getReplicaPath() + " failed removing from "
+          + "prioritization Manager", PrioritizationManagerRunningFailure);
     }
+
     List<ReplicaId> replicaListForDisk = diskToReplicaMap.get(diskId);
-    if(replicaListForDisk == null){
+    if(replicaListForDisk == null || replicaListForDisk.isEmpty()){
       return false;
     }
+    logger.info("Removed partition {} from prioritization Manager For Disk {}", replicaId.getReplicaPath(),
+        diskId.getMountPath());
     return replicaListForDisk.remove(replicaId);
   }
 
   @Override
-  public int getNumberOfDisks(int numberOfDisks) {
+  public int getNumberOfDisks() {
     return diskToReplicaMap.size();
+  }
+
+  @Override
+  public void reset() {
+    diskToReplicaMap.clear();
   }
 }

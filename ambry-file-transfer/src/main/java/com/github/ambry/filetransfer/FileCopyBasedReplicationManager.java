@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
@@ -42,6 +43,8 @@ public class FileCopyBasedReplicationManager {
   private final FileCopyBasedReplicationScheduler fileCopyBasedReplicationScheduler;
   private  final NetworkClientFactory networkClientFactory;
   private final ClusterMap clusterMap;
+
+  private final StoreConfig storeConfig;
   private boolean isRunning = false;
 
 
@@ -49,7 +52,7 @@ public class FileCopyBasedReplicationManager {
      StoreManager storeManager, ClusterMap clusterMap,
       NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, ClusterParticipant clusterParticipant,
       FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory,
-      PrioritizationManagerFactory prioritizationManagerFactory) throws InterruptedException, InstantiationException {
+      PrioritizationManagerFactory prioritizationManagerFactory, StoreConfig storeConfig) throws InterruptedException, InstantiationException {
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.storeManager = storeManager;
 
@@ -70,6 +73,7 @@ public class FileCopyBasedReplicationManager {
 
     this.networkClientFactory = networkClientFactory;
     this.clusterMap = clusterMap;
+    this.storeConfig = storeConfig;
   }
 
   public void start() throws InterruptedException, IOException {
@@ -90,24 +94,36 @@ public class FileCopyBasedReplicationManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-      if (storeManager.getReplica(partitionName) == null) {
-        if (storeManager.setUpReplica(partitionName)) {
-          logger.info("Replica setup for partition {} is successful", partitionName);
-        } else {
-          logger.error("Replica setup for partition {} failed", partitionName);
-          throw new StateTransitionException("Replica setup for partition " + partitionName + " failed",
-              StateTransitionException.TransitionErrorCode.ReplicaSetUpFailure);
-        }
-      }
+
       ReplicaId replicaId = storeManager.getReplica(partitionName);
+
+      if (replicaId == null) {
+        // Replica set up should have succeeded before this state transition.
+        logger.error("Replica setup for partition {} failed", partitionName);
+        throw new StateTransitionException("Replica setup for partition " + partitionName + " failed",
+              StateTransitionException.TransitionErrorCode.ReplicaSetUpFailure);
+      }
+
+      /**
+       * If the file copy was already completed, then no need to do it again.
+       */
+      if(storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName)){
+        logger.info("File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
+        return;
+      }
+
       replicaSyncUpManager.initiateFileCopy(replicaId);
       prioritizationManager.addReplica(replicaId);
+
       try {
         replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
       } catch (InterruptedException e) {
         logger.error("File copy for partition {} was interrupted", partitionName);
         throw new StateTransitionException("File copy for partition " + partitionName + " was interrupted",
             StateTransitionException.TransitionErrorCode.FileCopyProtocolFailure);
+      } catch (StateTransitionException e){
+        logger.error("File copy for partition {} failed", partitionName);
+        throw e;
       }
     }
     @Override

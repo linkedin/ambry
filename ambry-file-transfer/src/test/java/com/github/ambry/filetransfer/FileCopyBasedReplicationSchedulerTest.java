@@ -12,8 +12,8 @@ public class FileCopyBasedReplicationSchedulerTest {
   @Before
   public void initialize(){
     PrioritizationManager prioritizationManager= new FCFSPrioritizationManager();
-    prioritizationManager.addReplica();
-    fileCopyBasedReplicationScheduler = new FileCopyBasedReplicationSchedulerImpl();
+//    prioritizationManager.addReplica();
+//    fileCopyBasedReplicationScheduler = new FileCopyBasedReplicationSchedulerImpl();
   }
   @Test
   public void testScheduleFileCopy(){

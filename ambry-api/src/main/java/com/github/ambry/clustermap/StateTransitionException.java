@@ -85,6 +85,8 @@ public class StateTransitionException extends RuntimeException {
      */
     BootstrapControllerFailure,
 
-    ReplicaSetUpFailure
+    ReplicaSetUpFailure,
+
+    PrioritizationManagerRunningFailure
   }
 }
