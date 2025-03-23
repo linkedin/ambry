@@ -119,6 +119,9 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
         replicaToStartTimeMap.remove(replica);
         replicaToStatusListenerMap.get(replica).onFileCopyFailure(new Exception("Replica Timed Out"));
         replicaToStatusListenerMap.remove(replica);
+        inFlightReplicas.remove(replica);
+        // TODO: The Replica should be sent to the end of the queue inside prioritization Manager
+        //  instead of removing it to give other replicas a chance.
         prioritizationManager.removeReplica(replica.getDiskId(), replica);
       }
 
