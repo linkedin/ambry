@@ -40,15 +40,13 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
   private final ClusterMap clusterMap;
   private final FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager;
   private final Map<ReplicaId, Long> replicaToStartTimeMap;
+
+  private final Map<ReplicaId, FileCopyStatusListener> replicaToStatusListenerMap;
   private boolean isRunning;
   private final ReplicaSyncUpManager replicaSyncUpManager;
-
   private final PrioritizationManager prioritizationManager;
-
   private final List<ReplicaId> inFlightReplicas;
-
   private final StoreManager storeManager;
-
   private final StoreConfig storeConfig;
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
@@ -68,6 +66,7 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
     this.replicaSyncUpManager = replicaSyncUpManager;
     this.storeManager = storeManager;
     this.storeConfig = storeConfig;
+    this.replicaToStatusListenerMap = new ConcurrentHashMap<>();
   }
   @Override
   public void start() throws InterruptedException {
@@ -118,6 +117,9 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
           logger.error("[Error]: ", e);
         }
         replicaToStartTimeMap.remove(replica);
+        replicaToStatusListenerMap.get(replica).onFileCopyFailure(new Exception("Replica Timed Out"));
+        replicaToStatusListenerMap.remove(replica);
+        prioritizationManager.removeReplica(replica.getDiskId(), replica);
       }
 
       List<DiskId> disksToHydrate = fileCopyBasedReplicationThreadPoolManager.getDiskIdsToHydrate();
@@ -146,6 +148,7 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
                 fileCopyStatusListener, fileCopyHandler);
 
+            replicaToStatusListenerMap.put(replicaId, fileCopyStatusListener);
             inFlightReplicas.add(replicaId);
             replicaToStartTimeMap.put(replicaId, System.currentTimeMillis()/1000);
           }
