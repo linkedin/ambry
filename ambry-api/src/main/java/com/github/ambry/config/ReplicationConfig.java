@@ -226,6 +226,10 @@ public class ReplicationConfig {
   @Default("")
   public final Set<String> replicationVcrRecoveryPartitions;
 
+  @Config("replication.enable.info.logs.for.skipped.partitions")
+  @Default("false")
+  public final boolean replicationEnableInfoLogsForSkippedPartitions;
+
   /**
    * To specify the type of replication to be used for inter colo replication.
    * It has two values - "ALL_TO_ALL" or "LEADER_BASED". Default value is "ALL_TO_ALL".
@@ -410,6 +414,8 @@ public class ReplicationConfig {
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
     String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
+    replicationEnableInfoLogsForSkippedPartitions =
+        verifiableProperties.getBoolean("replication.enable.info.logs.for.skipped.partitions", false);
     replicationModelAcrossDatacenters = ReplicationModelType.valueOf(
         verifiableProperties.getString(REPLICATION_MODEL_ACROSS_DATACENTERS, ReplicationModelType.ALL_TO_ALL.name()));
     replicationContainerDeletionRetentionDays =
