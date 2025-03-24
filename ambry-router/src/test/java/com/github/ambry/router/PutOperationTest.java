@@ -216,7 +216,7 @@ public class PutOperationTest {
     op.handleResponse(responseInfo, putResponse);
     responseInfo.release();
     requestInfos.forEach(info -> info.getRequest().release());
-    assertTrue("Operation should be complete at this time", op.isOperationComplete());
+    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     Assert.assertEquals("Metrics should show creation of metadata chunk", 1,
         routerMetrics.metadataChunkCreationCount.getCount());
   }
@@ -355,7 +355,7 @@ public class PutOperationTest {
     ResponseInfo responseInfo = new ResponseInfo(requestInfos.get(0), true);
     op.handleResponse(responseInfo, null);
     responseInfo.release();
-    assertTrue(op.isOperationComplete());
+    Assert.assertTrue(op.isOperationComplete());
     Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException) op.getOperationException()).getErrorCode());
     Assert.assertEquals("Metrics should show no metadata chunk was created", 0,
         routerMetrics.metadataChunkCreationCount.getCount());
@@ -397,7 +397,7 @@ public class PutOperationTest {
     requestRegistrationCallback.setRequestsToSend(requestInfos);
     // fill chunks
     op.fillChunks();
-    assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
+    Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
         mockNetworkClient.getAndClearWokenUpStatus());
 
     // poll to populate request
@@ -412,7 +412,7 @@ public class PutOperationTest {
         PutOperation.PutChunk putChunk = op.getPutChunks()
             .stream().filter(chunk -> chunk.state == PutOperation.ChunkState.Ready).collect(Collectors.toList()).get(0);
         // Verify that CRC matches
-        assertTrue("CRC should match", putChunk.verifyCRC());
+        Assert.assertTrue("CRC should match", putChunk.verifyCRC());
       }
       op.handleResponse(responseInfo, putResponse);
       requestInfos.get(i).getRequest().release();
@@ -458,7 +458,7 @@ public class PutOperationTest {
     requestRegistrationCallback.setRequestsToSend(requestInfos);
     // fill chunks
     op.fillChunks();
-    assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
+    Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
         mockNetworkClient.getAndClearWokenUpStatus());
 
     // poll to populate request
@@ -522,7 +522,7 @@ public class PutOperationTest {
     requestRegistrationCallback.setRequestsToSend(requestInfos);
     // fill chunks would end up filling the maximum number of PutChunks.
     op.fillChunks();
-    assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
+    Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
         mockNetworkClient.getAndClearWokenUpStatus());
 
     // poll to populate request
@@ -654,7 +654,7 @@ public class PutOperationTest {
             MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
     // Trigger an exception by making the last chunk size too large.
     op.startOperation();
-    assertTrue("Operation should be completed", op.isOperationComplete());
+    Assert.assertTrue("Operation should be completed", op.isOperationComplete());
     Assert.assertEquals("Wrong RouterException error code", RouterErrorCode.InvalidPutArgument,
         ((RouterException) op.getOperationException()).getErrorCode());
     // Ensure that the operation does not provide the background deleter with any data chunks to delete.
@@ -968,7 +968,7 @@ public class PutOperationTest {
     MethodUtils.invokeMethod(putChunk, true, "compressChunk", false);
 
     // Verify the chunk is compressed.
-    assertTrue((boolean) FieldUtils.readField(putChunk, "isChunkCompressed", true));
+    Assert.assertTrue((boolean) FieldUtils.readField(putChunk, "isChunkCompressed", true));
 
     // Release the buf field.
     ByteBuf buf = (ByteBuf) FieldUtils.readField(putChunk, "buf", true);
@@ -1023,6 +1023,6 @@ public class PutOperationTest {
     op.fillChunks();
     op.poll(requestRegistrationCallback);
     // if fail, then requests to send will be 0
-    assertTrue(requestRegistrationCallback.getRequestsToSend().size() > 0);
+    Assert.assertTrue(requestRegistrationCallback.getRequestsToSend().size() > 0);
   }
 }
