@@ -1440,6 +1440,23 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     /**
+     * MIN_ACTIVE_REPLICA configuration is defined at resource level in Helix
+     * @return the MIN_ACTIVE_REPLICA configuration for this resource/partition.
+     */
+    @Override
+    public int getMinActiveReplicas(String partitionId) {
+      try {
+        String resource = getResourceForPartitionInLocalDc(partitionId).iterator().next();
+        String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
+        ResourceProperty resourceProperty  =
+            dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
+        return resourceProperty.minActiveReplicas;
+      } catch (Exception e) {
+        return DEFAULT_NUM_REPLICAS - 1;
+      }
+    }
+
+    /**
      * @return the count of partitions in this cluster.
      */
     long getPartitionCount() {

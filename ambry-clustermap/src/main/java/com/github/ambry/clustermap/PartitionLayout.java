@@ -381,5 +381,10 @@ public class PartitionLayout {
     public boolean isPartitionFilteringEnabled() {
       return false;
     }
+
+    @Override
+    public int getMinActiveReplicas(String partitionId) {
+      return 2;
+    }
   }
 }

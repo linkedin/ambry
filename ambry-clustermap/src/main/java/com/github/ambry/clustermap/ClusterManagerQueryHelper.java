@@ -88,4 +88,11 @@ interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P ext
    * Return whether we want to filter partitions
    */
   boolean isPartitionFilteringEnabled();
+
+  /**
+   * Return the MIN_ACTIVE_REPLICA for the given partition
+   * @param partitionId
+   * @return MIN_ACTIVE_REPLICA
+   */
+  int getMinActiveReplicas(String partitionId);
 }

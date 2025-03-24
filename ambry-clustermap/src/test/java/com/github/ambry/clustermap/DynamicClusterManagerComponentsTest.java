@@ -357,6 +357,11 @@ public class DynamicClusterManagerComponentsTest {
       return false;
     }
 
+    @Override
+    public int getMinActiveReplicas(String partitionId) {
+      return 2;
+    }
+
     /**
      * Associate the replica with the given partition.
      * @param partition the {@link AmbryPartition}.
