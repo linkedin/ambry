@@ -197,7 +197,7 @@ public class PutOperationTest {
         savedRequestContent);
 
     // now that all the requests associated with the original buffer have been read,
-    // the next poll will free this buffer. We cannot actually verify it via the res directly, as this is very
+    // the next poll will free this buffer. We cannot actually verify it via the rest directly, as this is very
     // internal to the chunk (though this can be verified via coverage).
     for (int i = 0; i < requestInfos.size(); i++) {
       responseInfo = getResponseInfo(requestInfos.get(i));
