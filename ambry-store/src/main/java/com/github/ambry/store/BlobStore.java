@@ -255,12 +255,11 @@ public class BlobStore implements Store {
     recoverFromDecommission = isDecommissionInProgress();
   }
 
-  public void initialize() throws StoreException{
+  public void initialize() throws StoreException {
     synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
       }
-  //TODO    final Timer.Context context = metrics.storeStartTime.time();
       try {
         // Check if the data dir exist. If it does not exist, create it
         File dataFile = new File(dataDir);
@@ -288,8 +287,7 @@ public class BlobStore implements Store {
         }
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
-
-      }catch (Exception e) {
+      } catch (Exception e) {
         if (fileLock != null) {
           // Release the file lock
           try {
@@ -300,13 +298,11 @@ public class BlobStore implements Store {
           String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
           throw new StoreException(err, e, StoreErrorCodes.InitializationError);
         }
-      }finally {
-        //TODO context.stop();
       }
     }
   }
 
-  public void load() throws StoreException{
+  public void load() throws StoreException {
     synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
@@ -342,7 +338,7 @@ public class BlobStore implements Store {
           replicaId.markDiskUp();
         }
         enableReplicaIfNeeded();
-      }catch (Exception e) {
+      } catch (Exception e) {
         if (fileLock != null) {
           // Release the file lock
           try {
@@ -350,18 +346,22 @@ public class BlobStore implements Store {
           } catch (Exception lockException) {
             logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
           }
-          String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
-          throw new StoreException(err, e, StoreErrorCodes.InitializationError);
         }
-      }finally {
-        //TODO context.stop();
+        String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
+        throw new StoreException(err, e, StoreErrorCodes.InitializationError);
       }
     }
   }
+
   @Override
   public void start() throws StoreException {
-    initialize();
-    load();
+    final Timer.Context context = metrics.storeStartTime.time();
+    try {
+      initialize();
+      load();
+    } finally {
+      context.stop();
+    }
   }
 
   /**
