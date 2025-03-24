@@ -11,7 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.filetransfer;
+package com.github.ambry.filetransfer.handler;
+
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
+
 
 /**
  * Interface for Factory class which returns the {@link FileCopyHandler} depending on the implementation

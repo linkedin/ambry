@@ -11,17 +11,24 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.filetransfer;
+package com.github.ambry.filetransfer.handler;
+
+import com.github.ambry.filetransfer.FileCopyInfo;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
+import java.io.IOException;
+import javax.annotation.Nonnull;
+
 
 /**
  * Interface for FileCopyHandler. This Handler does file copy of
  * data from the given node to current node
  */
 public interface FileCopyHandler {
-
   /**
    * do the file copy
+   * @param fileCopyInfo the replica info
    * @throws Exception exception
    */
-  void copy() throws Exception;
+  void copy(@Nonnull FileCopyInfo fileCopyInfo)
+      throws IOException, ConnectionPoolTimeoutException, InterruptedException;
 }
