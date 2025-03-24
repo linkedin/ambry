@@ -296,9 +296,9 @@ public class BlobStore implements Store {
           } catch (Exception lockException) {
             logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
           }
-          String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
-          throw new StoreException(err, e, StoreErrorCodes.InitializationError);
         }
+        String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
+        throw new StoreException(err, e, StoreErrorCodes.InitializationError);
       }
     }
   }
