@@ -75,7 +75,7 @@ public class FSFCPrioritizationManagerTest {
      int partitionCounter = 1;
 
      // Add 5 Replicas On Each Disk
-     for(int diskId=1; diskId <= 10;diskId++){
+     for(int diskId=1; diskId <= 10; diskId++){
        for(int numPartitions=0 ; numPartitions < 5; numPartitions++){
           PartitionId partition =
               new MockPartitionId(partitionCounter++, MockClusterMap.DEFAULT_PARTITION_CLASS,
@@ -87,7 +87,7 @@ public class FSFCPrioritizationManagerTest {
      }
 
      // Remove replicas and test number of replicas returned by getPartitionListForDisk.
-     for(int diskId=1; diskId <= 10;diskId++){
+     for(int diskId=1; diskId <= 10; diskId++){
        for(int numPartitions=0 ; numPartitions < 5; numPartitions++){
          PartitionId partition = diskToPartitionMap.get(diskId).get(numPartitions);
          System.out.println(diskId);
