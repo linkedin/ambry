@@ -102,9 +102,20 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public void initialize() throws StoreException {
+
+    }
+
+    @Override
+    public void load() throws StoreException {
+      started = true;
+    }
+
+    @Override
     public void start() throws StoreException {
       throwExceptionIfRequired();
-      started = true;
+      initialize();
+      load();
     }
 
     @Override

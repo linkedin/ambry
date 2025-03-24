@@ -28,6 +28,10 @@ import java.util.Set;
  */
 public interface Store {
 
+  void initialize() throws StoreException;
+
+  void load() throws StoreException;
+
   /**
    * Starts the store
    * @throws StoreException

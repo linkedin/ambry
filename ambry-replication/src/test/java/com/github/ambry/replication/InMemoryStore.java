@@ -185,9 +185,20 @@ public class InMemoryStore implements Store {
   }
 
   @Override
-  public void start() {
+  public void initialize(){
+
+  }
+
+  @Override
+  public void load(){
     started = true;
     currentState = ReplicaState.STANDBY;
+  }
+
+  @Override
+  public void start() {
+    initialize();
+    load();
   }
 
   @Override

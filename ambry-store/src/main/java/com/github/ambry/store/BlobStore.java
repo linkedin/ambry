@@ -255,6 +255,7 @@ public class BlobStore implements Store {
     recoverFromDecommission = isDecommissionInProgress();
   }
 
+  @Override
   public void initialize() throws StoreException {
     synchronized (storeWriteLock) {
       if (started) {
@@ -302,6 +303,7 @@ public class BlobStore implements Store {
     }
   }
 
+  @Override
   public void load() throws StoreException {
     synchronized (storeWriteLock) {
       if (started) {

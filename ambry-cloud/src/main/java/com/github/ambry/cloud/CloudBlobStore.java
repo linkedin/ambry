@@ -134,8 +134,19 @@ public class CloudBlobStore implements Store {
   }
 
   @Override
-  public void start() {
+  public void initialize() throws StoreException {
+    logger.debug("Initialized store: {}", this);
+  }
+
+  public void load() throws StoreException {
     currentState = ReplicaState.STANDBY;
+    logger.debug("Loaded the store: {}", this);
+  }
+
+  @Override
+  public void start() throws StoreException {
+    initialize();
+    load();
     logger.debug("Started store: {}", this);
   }
 
