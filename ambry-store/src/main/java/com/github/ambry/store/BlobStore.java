@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,6 +110,8 @@ public class BlobStore implements Store {
   private FileLock fileLock;
   private volatile ReplicaState currentState;
   private volatile ReplicaState previousState;
+
+  private StoreDescriptor storeDescriptor;
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
   private AtomicReference<ReplicaSealStatus> replicaSealStatus = new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
@@ -252,13 +255,12 @@ public class BlobStore implements Store {
     recoverFromDecommission = isDecommissionInProgress();
   }
 
-  @Override
-  public void start() throws StoreException {
+  public void initialize() throws StoreException{
     synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
       }
-      final Timer.Context context = metrics.storeStartTime.time();
+  //TODO    final Timer.Context context = metrics.storeStartTime.time();
       try {
         // Check if the data dir exist. If it does not exist, create it
         File dataFile = new File(dataDir);
@@ -274,7 +276,6 @@ public class BlobStore implements Store {
           throw new StoreException(dataFile.getAbsolutePath() + " is either not a directory or is not readable",
               StoreErrorCodes.InitializationError);
         }
-
         // check the file system before we do any file write.
         checkIfStoreIsStale();
 
@@ -286,7 +287,31 @@ public class BlobStore implements Store {
               StoreErrorCodes.InitializationError);
         }
 
-        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, config);
+        storeDescriptor = new StoreDescriptor(dataDir, config);
+
+      }catch (Exception e) {
+        if (fileLock != null) {
+          // Release the file lock
+          try {
+            fileLock.unlock();
+          } catch (Exception lockException) {
+            logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
+          }
+          String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
+          throw new StoreException(err, e, StoreErrorCodes.InitializationError);
+        }
+      }finally {
+        //TODO context.stop();
+      }
+    }
+  }
+
+  public void load() throws StoreException{
+    synchronized (storeWriteLock) {
+      if (started) {
+        throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
+      }
+      try {
         log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
@@ -317,7 +342,7 @@ public class BlobStore implements Store {
           replicaId.markDiskUp();
         }
         enableReplicaIfNeeded();
-      } catch (Exception e) {
+      }catch (Exception e) {
         if (fileLock != null) {
           // Release the file lock
           try {
@@ -325,14 +350,18 @@ public class BlobStore implements Store {
           } catch (Exception lockException) {
             logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
           }
+          String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
+          throw new StoreException(err, e, StoreErrorCodes.InitializationError);
         }
-        metrics.storeStartFailure.inc();
-        String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
-        throw new StoreException(err, e, StoreErrorCodes.InitializationError);
-      } finally {
-        context.stop();
+      }finally {
+        //TODO context.stop();
       }
     }
+  }
+  @Override
+  public void start() throws StoreException {
+    initialize();
+    load();
   }
 
   /**
