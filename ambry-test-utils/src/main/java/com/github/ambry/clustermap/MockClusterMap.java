@@ -45,6 +45,7 @@ import static org.mockito.Mockito.*;
  */
 public class MockClusterMap implements ClusterMap {
   public static final String DEFAULT_PARTITION_CLASS = "defaultPartitionClass";
+  public static final String FAKE_CLASS = "fakeClass";
   public static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
   public static final int PLAIN_TEXT_PORT_START_NUMBER = 62000;
   public static final int SSL_PORT_START_NUMBER = 63000;
@@ -90,6 +91,19 @@ public class MockClusterMap implements ClusterMap {
    */
   public MockClusterMap() throws IOException {
     this(false, true, 9, 3, 3, false, false, null);
+  }
+
+  /**
+   * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 default partitions/replicas
+   * per mount point. It will also add replicas for a "special" partition. The distribution of these replicas will be
+   * 3 in the chosen "local" datacenter and 2 everywhere else. This will amount to a total of 9 or 10 replicas per node
+   * and 88 replicas across the cluster.
+   *
+   * If this cluster map is going to be used to start a cluster, use it judiciously to avoid resource consumption issues
+   * on the test machine.
+   */
+  public MockClusterMap(int defaultReplica) throws IOException {
+    this(false, true, 1, 1, 1, false, false, null);
   }
 
   /**
@@ -736,3 +750,5 @@ public class MockClusterMap implements ClusterMap {
     exceptionOnSnapshot = e;
   }
 }
+
+

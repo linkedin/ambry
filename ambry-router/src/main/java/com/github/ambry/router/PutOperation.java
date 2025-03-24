@@ -1351,7 +1351,7 @@ class PutOperation {
             isMetadataChunk() ? BlobDataType.METADATA : isSimpleBlob ? BlobDataType.SIMPLE : BlobDataType.DATACHUNK;
 
         int failedAttempt = 0;
-        while (failedAttempt < routerConfig.routerMaxSlippedPutAttempts) {
+        while (failedAttempt <= routerConfig.routerMaxSlippedPutAttempts) {
           if (shouldUseReservedMetadataId()) {
             partitionId = metadataPutChunk.reservedMetadataChunkId.getPartition();
             chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
@@ -1383,8 +1383,8 @@ class PutOperation {
             }
         }
 
-        if (failedAttempt >= routerConfig.routerMaxSlippedPutAttempts) {
-          throw new IllegalArgumentException("failed to find a valid partition in maxslippedputattempts");
+        if (failedAttempt > routerConfig.routerMaxSlippedPutAttempts) {
+          throw new RouterException("Prepare for sending failed", RouterErrorCode.AmbryUnavailable);
         }
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
