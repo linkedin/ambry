@@ -94,5 +94,5 @@ interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P ext
    * @param partitionId
    * @return MIN_ACTIVE_REPLICA
    */
-  int getMinActiveReplicas(String partitionId);
+  int getMinActiveReplicas(PartitionId partitionId);
 }

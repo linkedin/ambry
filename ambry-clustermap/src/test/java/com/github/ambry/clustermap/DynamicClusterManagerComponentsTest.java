@@ -358,7 +358,7 @@ public class DynamicClusterManagerComponentsTest {
     }
 
     @Override
-    public int getMinActiveReplicas(String partitionId) {
+    public int getMinActiveReplicas(PartitionId partitionId) {
       return 2;
     }
 

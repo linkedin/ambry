@@ -167,7 +167,7 @@ public class AmbryPartitionTest {
     }
 
     @Override
-    public int getMinActiveReplicas(String partitionId) {
+    public int getMinActiveReplicas(PartitionId partitionId) {
       return 2;
     }
 

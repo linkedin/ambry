@@ -383,7 +383,7 @@ public class PartitionLayout {
     }
 
     @Override
-    public int getMinActiveReplicas(String partitionId) {
+    public int getMinActiveReplicas(PartitionId partitionId) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
   }

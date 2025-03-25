@@ -2186,7 +2186,8 @@ public class HelixClusterManagerTest {
     HelixClusterManager.HelixClusterManagerQueryHelper clusterHelper = helixClusterManager.new HelixClusterManagerQueryHelper();
     verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
 
-    String partitionID = String.valueOf(clusterHelper.getPartitions().iterator().next().getId());
+
+    PartitionId partitionId = clusterHelper.getPartitions().iterator().next();
     List<String> resourceNames = helixCluster.getResources(localDc);
     String resourceName = resourceNames.get(0);
     String tag = "TAG_100000";
@@ -2195,7 +2196,7 @@ public class HelixClusterManagerTest {
     idealState.setMinActiveReplicas(2);
     helixCluster.refreshIdealState();
 
-    int minActiveReplicaConfig = clusterHelper.getMinActiveReplicas(partitionID);
+    int minActiveReplicaConfig = clusterHelper.getMinActiveReplicas(partitionId);
     assertEquals(idealState.getMinActiveReplicas(), minActiveReplicaConfig);
   }
 
