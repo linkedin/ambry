@@ -976,11 +976,12 @@ public class PutOperationTest {
   }
 
   /**
-   * Ensure that if any of the requests associated with the buffer of a PutChunk is not completely read out even
-   * after the associated chunk is complete, the buffer is not reused even though the PutChunk is reused.
+   * Tests that if we cannot find a partition with a valid number of replicas, we will retry
+   * rather than throw an exception
+   * This case ensures that one partition fails and then another one passes.
    */
   @Test
-  public void testRetry() throws Exception {
+  public void testRetryOnSimpleOperationTrackerConstructorPass() throws Exception {
     int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
@@ -1031,5 +1032,57 @@ public class PutOperationTest {
       responseInfo.release();
     }
     op.setOperationCompleted();
+  }
+
+  /**
+   * Tests that if we cannot find a partition with a valid number of replicas, we will retry rather
+   * and eventually throw an exception if not found
+   * This case ensures that both partitions fail.
+   */
+  @Test
+  public void testRetryOnSimpleOperationTrackerConstructorFail() throws Exception {
+    int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    FutureResult<String> future = new FutureResult<>();
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    MockClusterMap mockClusterMap = spy(new MockClusterMap());
+    MockPartitionId mockPartitionIdFail = new MockPartitionId();
+    MockPartitionId mockPartitionIdPass =
+        (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(1);
+
+    AtomicInteger callCount = new AtomicInteger(0);
+    // Mock the behavior of getRandomWritablePartition to return different values on each call
+    doAnswer(invocation -> {
+      int callNum = callCount.getAndIncrement();  // Increment call count and get the current value
+      if (callNum == 0) {
+        return mockPartitionIdFail;  // First call returns the first partition
+      } else {
+        return mockPartitionIdFail;  // Second call returns the second partition
+      }
+    }).when(mockClusterMap).getRandomWritablePartition(any(), any());
+
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
+            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+
+    Field field = RouterConfig.class.getDeclaredField("routerPutSuccessTarget");
+    field.setAccessible(true);
+    field.setInt(routerConfig, 2);
+
+    op.fillChunks();
+    op.poll(requestRegistrationCallback);
+    // if fail, then requests to send will be 0
+    Assert.assertTrue(requestRegistrationCallback.getRequestsToSend().size() == 0);
   }
 }
