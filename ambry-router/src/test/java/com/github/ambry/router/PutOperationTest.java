@@ -1053,19 +1053,9 @@ public class PutOperationTest {
     MockNetworkClient mockNetworkClient = new MockNetworkClient();
     MockClusterMap mockClusterMap = spy(new MockClusterMap());
     MockPartitionId mockPartitionIdFail = new MockPartitionId();
-    MockPartitionId mockPartitionIdPass =
-        (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(1);
 
-    AtomicInteger callCount = new AtomicInteger(0);
-    // Mock the behavior of getRandomWritablePartition to return different values on each call
-    doAnswer(invocation -> {
-      int callNum = callCount.getAndIncrement();  // Increment call count and get the current value
-      if (callNum == 0) {
-        return mockPartitionIdFail;  // First call returns the first partition
-      } else {
-        return mockPartitionIdFail;  // Second call returns the second partition
-      }
-    }).when(mockClusterMap).getRandomWritablePartition(any(), any());
+    doAnswer(invocation -> mockPartitionIdFail)
+        .when(mockClusterMap).getRandomWritablePartition(any(), any());
 
     PutOperation op =
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
@@ -1075,10 +1065,6 @@ public class PutOperationTest {
     op.startOperation();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.setRequestsToSend(requestInfos);
-
-    Field field = RouterConfig.class.getDeclaredField("routerPutSuccessTarget");
-    field.setAccessible(true);
-    field.setInt(routerConfig, 2);
 
     op.fillChunks();
     op.poll(requestRegistrationCallback);
