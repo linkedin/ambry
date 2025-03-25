@@ -1384,7 +1384,7 @@ class PutOperation {
         }
 
         if (failedAttempt > routerConfig.routerMaxSlippedPutAttempts) {
-          throw new RouterException("Prepare for sending failed", RouterErrorCode.AmbryUnavailable);
+          throw new RouterException("Prepare for sending failed", RouterErrorCode.UnexpectedInternalError);
         }
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
