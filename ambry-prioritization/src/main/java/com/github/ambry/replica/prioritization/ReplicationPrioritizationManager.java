@@ -83,7 +83,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.replicationEngine = replicationEngine;
     this.clusterMap = clusterMap;
     this.dataNodeId = dataNodeId;
-    this.prioritizationWindowMs = replicationConfig.diruptionReadinessWindow;
+    this.prioritizationWindowMs = replicationConfig.diruptionReadinessWindowInMS;
     this.scheduleIntervalMinutes = replicationConfig.scheduledIntervalMinutes;
     this.rwLock = new ReentrantReadWriteLock();
     this.currentlyReplicatingPartitions = ConcurrentHashMap.newKeySet();
