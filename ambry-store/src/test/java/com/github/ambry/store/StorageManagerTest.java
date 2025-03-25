@@ -1405,6 +1405,45 @@ public class StorageManagerTest {
   }
 
   @Test
+  public void storeRemoveDirectoryAndRestartTestWithStaleBlobStore() throws Exception {
+    // Make sure that we use segmented log files
+    generateConfigs(true, false);
+    Field field = StoreConfig.class.getDeclaredField("storeBlockStaleBlobStoreToStart");
+    field.setAccessible(true);
+    field.set(storeConfig, true);
+
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
+    // Just start the storage manager and this will make sure all the replicas' directories are created
+    // and the first log segment file is also created for each replica.
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    assertNotNull(storageManager.getStore(replica.getPartitionId(), false));
+
+    // Now shutdown the storage manager and change all files' last modified timestamp to be older than the
+    // stale threshold.
+    storageManager.shutdown();
+    changeAllFileMTimesForReplica(replica,
+        System.currentTimeMillis() - TimeUnit.DAYS.toMillis(storeConfig.storeStaleTimeInDays) * 2);
+
+    // Now restart the storage manager
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    assertEquals(1,
+        getCounterValue(metricRegistry.getCounters(), DiskManager.class.getName(), "TotalStoreStartFailures"));
+    assertNull(storageManager.getStore(replica.getPartitionId(), false));
+
+    storageManager.shutdown();
+
+    // Now enable the feature to remove directory and restart blob store
+    generateConfigs(true, false, false, 2, true, false);
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    assertNotNull(storageManager.getStore(replica.getPartitionId(), false));
+    storageManager.shutdown();
+  }
+
+  @Test
   public void storeRemoveDirectoryAndRestartTestWithOtherError() throws Exception {
     generateConfigs(true, false, false, 2, true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
@@ -2654,6 +2693,17 @@ public class StorageManagerTest {
     FileChannel fileChannel = new RandomAccessFile(file, "rw").getChannel();
     fileChannel.truncate(fileChannel.size() / 2);
     fileChannel.close();
+  }
+
+  private void changeFileMtime(File file, long newMtime) throws Exception {
+    file.setLastModified(newMtime);
+  }
+
+  private void changeAllFileMTimesForReplica(ReplicaId replicaId, long newMtime) throws Exception {
+    File replicaDir = new File(replicaId.getReplicaPath());
+    for (File file : replicaDir.listFiles()) {
+      changeFileMtime(file, newMtime);
+    }
   }
 
   /**
