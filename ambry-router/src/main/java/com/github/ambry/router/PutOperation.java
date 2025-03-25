@@ -1350,28 +1350,42 @@ class PutOperation {
         BlobDataType blobDataType =
             isMetadataChunk() ? BlobDataType.METADATA : isSimpleBlob ? BlobDataType.SIMPLE : BlobDataType.DATACHUNK;
 
-        if (shouldUseReservedMetadataId()) {
-          partitionId = metadataPutChunk.reservedMetadataChunkId.getPartition();
-          chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
-        } else {
-          partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
-          chunkBlobId =
-              new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                  passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
-                  passedInBlobProperties.isEncrypted(), blobDataType);
+        int failedAttempt = 0;
+        while (failedAttempt <= routerConfig.routerMaxSlippedPutAttempts) {
+          if (shouldUseReservedMetadataId()) {
+            partitionId = metadataPutChunk.reservedMetadataChunkId.getPartition();
+            chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
+          } else {
+            partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
+            chunkBlobId =
+                new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+                    passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
+                    passedInBlobProperties.isEncrypted(), blobDataType);
+          }
+
+          // To ensure previously attempted partitions are not retried for this PUT after a failure.
+          attemptedPartitionIds.add(partitionId);
+
+          chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
+              passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
+              passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
+              passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
+              passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
+              passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
+              passedInBlobProperties.getFilename(), resolveReservedMetadataId());
+
+            try {
+              // Attempt to get the operation tracker
+              operationTracker = getOperationTracker();
+              break;
+            } catch (Exception e) {
+              failedAttempt++;
+            }
         }
 
-        // To ensure previously attempted partitions are not retried for this PUT after a failure.
-        attemptedPartitionIds.add(partitionId);
-
-        chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
-            passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
-            passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
-            passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
-            passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-            passedInBlobProperties.getFilename(), resolveReservedMetadataId());
-        operationTracker = getOperationTracker();
+        if (failedAttempt > routerConfig.routerMaxSlippedPutAttempts) {
+          throw new RouterException("Prepare for sending failed", RouterErrorCode.UnexpectedInternalError);
+        }
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
         state = ChunkState.Ready;
