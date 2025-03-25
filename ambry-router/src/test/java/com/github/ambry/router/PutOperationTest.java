@@ -1024,5 +1024,12 @@ public class PutOperationTest {
     op.poll(requestRegistrationCallback);
     // if fail, then requests to send will be 0
     Assert.assertTrue(requestRegistrationCallback.getRequestsToSend().size() > 0);
+
+    for (RequestInfo requestInfo : requestInfos) {
+      ResponseInfo responseInfo = new ResponseInfo(requestInfo, true);
+      op.handleResponse(responseInfo, null);
+      responseInfo.release();
+    }
+    op.setOperationCompleted();
   }
 }
