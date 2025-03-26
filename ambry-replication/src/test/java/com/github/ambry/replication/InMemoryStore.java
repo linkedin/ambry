@@ -171,6 +171,7 @@ public class InMemoryStore implements Store {
   private final DummyLog log;
   final List<MessageInfo> messageInfos;
   final PartitionId id;
+  private boolean initialized;
   private boolean started;
 
   public InMemoryStore(PartitionId id, List<MessageInfo> messageInfos, List<ByteBuffer> buffers,
@@ -186,7 +187,7 @@ public class InMemoryStore implements Store {
 
   @Override
   public void initialize(){
-
+    initialized = true;
   }
 
   @Override
@@ -503,6 +504,11 @@ public class InMemoryStore implements Store {
   public void shutdown() {
     started = false;
     currentState = ReplicaState.OFFLINE;
+  }
+
+  @Override
+  public boolean isInitialized() {
+    return initialized;
   }
 
   @Override

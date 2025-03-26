@@ -1311,6 +1311,11 @@ public class CloudBlobStore implements Store {
     return true;
   }
 
+  @Override
+  public boolean isInitialized() {
+    return true;
+  }
+
   private void checkStarted() throws StoreException {
     // There is no concept of start/stop Azure cloud partition
   }

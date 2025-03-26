@@ -726,6 +726,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isInitialized() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public boolean isStarted() {
       throw new IllegalStateException("Not implemented");
     }

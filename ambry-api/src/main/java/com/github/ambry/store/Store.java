@@ -189,6 +189,9 @@ public interface Store {
    */
   boolean isEmpty();
 
+
+  boolean isInitialized();
+
   /**
    * @return true if the store is started
    */

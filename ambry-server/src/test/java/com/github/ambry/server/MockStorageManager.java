@@ -90,6 +90,7 @@ class MockStorageManager extends StorageManager {
    */
   private class TestStore extends BlobStore {
     boolean started;
+    boolean initialized;
     ReplicaState currentState = ReplicaState.STANDBY;
 
     TestStore(ReplicaId replicaId, ClusterParticipant clusterParticipant) throws StoreException {
@@ -103,7 +104,7 @@ class MockStorageManager extends StorageManager {
 
     @Override
     public void initialize() throws StoreException {
-
+      initialized= true;
     }
 
     @Override
@@ -358,6 +359,11 @@ class MockStorageManager extends StorageManager {
     @Override
     public ReplicaState getCurrentState() {
       return currentState;
+    }
+
+    @Override
+    public boolean isInitialized() {
+      return initialized;
     }
 
     @Override

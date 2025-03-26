@@ -107,6 +107,7 @@ public class BlobStore implements Store {
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
   private boolean started;
+  private boolean initialized;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
   private volatile ReplicaState previousState;
@@ -261,6 +262,9 @@ public class BlobStore implements Store {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
       }
+      if(initialized) {
+        throw new StoreException("Store already initialized", StoreErrorCodes.StoreAlreadyInitialized);
+      }
       try {
         // Check if the data dir exist. If it does not exist, create it
         File dataFile = new File(dataDir);
@@ -288,6 +292,7 @@ public class BlobStore implements Store {
         }
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
+        initialized = true;
       } catch (Exception e) {
         if (fileLock != null) {
           // Release the file lock
@@ -308,6 +313,9 @@ public class BlobStore implements Store {
     synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
+      }
+      if (!initialized) {
+        throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
       }
       try {
         log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
@@ -357,12 +365,17 @@ public class BlobStore implements Store {
 
   @Override
   public void start() throws StoreException {
-    final Timer.Context context = metrics.storeStartTime.time();
-    try {
-      initialize();
-      load();
-    } finally {
-      context.stop();
+    synchronized (storeWriteLock) {
+      if (started) {
+        throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
+      }
+      final Timer.Context context = metrics.storeStartTime.time();
+      try {
+        initialize();
+        load();
+      } finally {
+        context.stop();
+      }
     }
   }
 
@@ -1557,8 +1570,9 @@ public class BlobStore implements Store {
   private void shutdown(boolean skipDiskFlush) throws StoreException {
     long startTimeInMs = time.milliseconds();
     synchronized (storeWriteLock) {
-      checkStarted();
+      checkInitialized();
       try {
+        checkStarted();
         logger.info("Store : {} shutting down", dataDir);
         blobStoreStats.close();
         compactor.close(30);
@@ -1578,9 +1592,9 @@ public class BlobStore implements Store {
         }
         metrics.storeShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
       }
+      initialized = false;
     }
   }
-
   /**
    * On an exception/error, if error count exceeds threshold, properly shutdown store.
    */
@@ -1663,6 +1677,10 @@ public class BlobStore implements Store {
     return started;
   }
 
+  public boolean isInitialized(){
+    return initialized;
+  }
+
   /**
    * Compacts the store data based on {@code details}.
    * @param details the {@link CompactionDetails} describing what needs to be compacted.
@@ -1718,6 +1736,12 @@ public class BlobStore implements Store {
   private void checkStarted() throws StoreException {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.StoreNotStarted);
+    }
+  }
+
+  private void checkInitialized() throws StoreException {
+    if (!initialized) {
+      throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
     }
   }
 
