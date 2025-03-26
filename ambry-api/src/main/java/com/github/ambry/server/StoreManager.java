@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.PartitionFileStore;
+import com.github.ambry.store.ReplicaSetUpException;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import java.io.IOException;
@@ -152,4 +153,11 @@ public interface StoreManager {
    * @throws IOException
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
+
+  /**
+   * @param partitionName
+   * @return {@code true} if the store is started, {@code false} otherwise.
+   * @throws
+   */
+  boolean setUpReplica(String partitionName) throws ReplicaSetUpException;
 }

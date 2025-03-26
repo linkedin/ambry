@@ -107,7 +107,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   }
 
   @Override
-  public void waitForFileCopyCompleted(String partitionName) throws InterruptedException {
+  public void waitForFileCopyCompleted(String partitionName) throws StateTransitionException {
     //To Be Added With File Copy Protocol
   }
 
