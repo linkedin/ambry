@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.replication.ReplicationEngine;
@@ -48,7 +47,7 @@ import java.util.stream.Collectors;
  * The ReplicationPrioritizationManager prioritizes partitions for replication based on planned disruptions and replica count.
  * It periodically polls a DisruptionAPI to get information about planned disruptions and uses that information
  * to prioritize partitions with upcoming disruptions and low replica counts.
- * This implementation integrates with ReplicaSyncUpManager to track actual replication progress and adjust
+ * This implementation integrates with StorageManager to track actual replication progress and adjust
  * the priority set in real-time as partitions complete replication.
  */
 public class ReplicationPrioritizationManager implements Runnable {
@@ -67,7 +66,6 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final int minBatchSizeForHighPriorityPartitions;
   private final AtomicBoolean isHighPriorityReplicationRunning;
   private final long replicationTimeoutMs;
-  private final ReplicaSyncUpManager replicaSyncUpManager;
   private final BlockingQueue<PartitionId> completedPartitions;
   private volatile long lastReplicationActivityMs;
   private final StorageManager storageManager;
@@ -87,13 +85,12 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param lowReplicaThreshold The threshold for considering a partition to have low replica count.
    * @param minBatchSizeForHighPriorityPartitions Minimum number of partitions to include in high priority batch.
    * @param replicationTimeoutHours Maximum time without progress to allow before resetting.
-   * @param replicaSyncUpManager The ReplicaSyncUpManager to track replication progress.
    */
 
   ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
       ScheduledExecutorService scheduler, int prioritizationWindowHours, String datacenterName,
       int lowReplicaThreshold, int minBatchSizeForHighPriorityPartitions,
-      int replicationTimeoutHours, ReplicaSyncUpManager replicaSyncUpManager, StorageManager storageManager,
+      int replicationTimeoutHours, StorageManager storageManager,
       ReplicationConfig replicationConfig, HelixClusterManager helixClusterManager, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
       clusterManagerQueryHelper) {
     this.replicationEngine = replicationEngine;
@@ -109,7 +106,6 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.minBatchSizeForHighPriorityPartitions = minBatchSizeForHighPriorityPartitions;
     this.isHighPriorityReplicationRunning = new AtomicBoolean(false);
     this.replicationTimeoutMs = TimeUnit.HOURS.toMillis(replicationTimeoutHours);
-    this.replicaSyncUpManager = replicaSyncUpManager;
     this.completedPartitions = new LinkedBlockingQueue<>();
     this.lastReplicationActivityMs = SystemTime.getInstance().milliseconds();
     this.storageManager = storageManager;
