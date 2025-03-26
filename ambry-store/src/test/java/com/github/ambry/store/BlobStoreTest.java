@@ -667,11 +667,11 @@ public class BlobStoreTest {
   /**
    * Tests {@link BlobStore#initialize()} for corner cases and error cases.
    * Corner cases
-   * 1. Creating a directory on first startup
+   * 1. Creating a directory on first initialize
    * Error cases
-   * 1. Start an already started store.
-   * 2. Unable to create store directory on first startup.
-   * 3. Starting two stores at the same path.
+   * 1. Initialize an already initialized store.
+   * 2. Unable to create store directory on first initialize.
+   * 3. Initialize two stores at the same path.
    * 4. Directory not readable.
    * 5. Path is not a directory.
    * @throws IOException
@@ -725,6 +725,17 @@ public class BlobStoreTest {
     verifyInitializeFailure(blobStore, StoreErrorCodes.InitializationError);
   }
 
+  /**
+   * Tests {@link BlobStore#initialize()} for corner cases and error cases.
+   * 1. Checks if store will be loaded after initialized
+   * Error cases
+   * 1. Start an uninitialized store
+   * 2. Start an already loaded store
+   * 3. Load an started store
+   * 4. Load an store twice
+   * @throws IOException
+   * @throws StoreException
+   */
   @Test
   public void storeInitializeLoadTests() throws IOException, StoreException {
     // Since store creation can fail in this test before the metric has initialized, set the memory usage metric to false.
@@ -751,6 +762,21 @@ public class BlobStoreTest {
 
     verifyStartupFailure(blobStore, StoreErrorCodes.StoreAlreadyStarted);
 
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
+
+    // should not be able to load an already started blobstore
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    blobStore.start();
+    verifyLoadFailure(blobStore, StoreErrorCodes.StoreAlreadyStarted);
+    blobStore.shutdown();
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
+
+    // should not be able load an store twice
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    blobStore.initialize();
+    blobStore.load();
+    verifyLoadFailure(blobStore, StoreErrorCodes.StoreAlreadyStarted);
+    blobStore.shutdown();
     assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
   }
 
