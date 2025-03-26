@@ -4150,12 +4150,22 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Verifies that {@link BlobStore#initialize()} executes successfully and shuts down the store
+   * @param blobStore the {@link BlobStore} to start.
+   * @throws StoreException
+   */
   private void verifyInitializeSuccess(BlobStore blobStore) throws StoreException {
     blobStore.initialize();
     assertTrue("Store has not been initialized", blobStore.isInitialized());
     blobStore.shutdown();
   }
 
+  /**
+   * Verifies that {@link BlobStore#start()} fails.
+   * @param blobStore the {@link BlobStore} to start
+   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure
+   */
   private void verifyInitializeFailure(BlobStore blobStore, StoreErrorCodes expectedErrorCode) {
     try {
       blobStore.initialize();
@@ -4165,12 +4175,23 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Verifies that {@link BlobStore#load()} executes successfully and shuts down the store
+   * @param blobStore the {@link BlobStore} to load
+   * @throws StoreException
+   */
   private void verifyLoadSuccess(BlobStore blobStore) throws StoreException {
     blobStore.load();
     assertTrue("Store has not been loaded", blobStore.isInitialized());
     blobStore.shutdown();
   }
 
+  /**
+   * Verifies that {@link BlobStore#load()} fails.
+   * @param blobStore the {@link BlobStore} to start
+   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure
+   * @throws StoreException
+   */
   private void verifyLoadFailure(BlobStore blobStore, StoreErrorCodes expectedErrorCode) throws StoreException {
     try {
       blobStore.load();

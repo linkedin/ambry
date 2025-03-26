@@ -1677,6 +1677,9 @@ public class BlobStore implements Store {
     return started;
   }
 
+  /**
+   * @return {@code true} if this store has been initialized successfully.
+   */
   public boolean isInitialized(){
     return initialized;
   }
