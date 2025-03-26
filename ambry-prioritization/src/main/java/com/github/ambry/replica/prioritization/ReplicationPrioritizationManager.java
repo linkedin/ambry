@@ -67,7 +67,7 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final int minBatchSizeForHighPriorityPartitions;
   private final AtomicBoolean isHighPriorityReplicationRunning;
   private final long replicationTimeoutMs;
-  private final BlockingQueue<PartitionId> completedPartitions;
+  private final Set<PartitionId> completedPartitions;
   private volatile long lastReplicationActivityMs;
   private final StorageManager storageManager;
   private final Time time;
@@ -108,7 +108,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.minBatchSizeForHighPriorityPartitions = minBatchSizeForHighPriorityPartitions;
     this.isHighPriorityReplicationRunning = new AtomicBoolean(false);
     this.replicationTimeoutMs = TimeUnit.HOURS.toMillis(replicationTimeoutHours);
-    this.completedPartitions = new LinkedBlockingQueue<>();
+    this.completedPartitions = ConcurrentHashMap.newKeySet();
     this.lastReplicationActivityMs = SystemTime.getInstance().milliseconds();
     this.storageManager = storageManager;
     this.time = SystemTime.getInstance();
