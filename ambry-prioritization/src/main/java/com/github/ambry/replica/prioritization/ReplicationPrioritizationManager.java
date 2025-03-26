@@ -13,7 +13,11 @@
  */
 package com.github.ambry.replica.prioritization;
 
+import com.github.ambry.clustermap.AmbryDataNode;
+import com.github.ambry.clustermap.AmbryDisk;
+import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.AmbryReplica;
+import com.github.ambry.clustermap.ClusterManagerQueryHelper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
@@ -70,7 +74,8 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final Time time;
   private final HelixClusterManager helixClusterManager;
   private final long scheduleIntervalMinutes;
-
+  private final ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
+      clusterManagerQueryHelper;
   /**
    * Creates a new ReplicationPrioritizationManager.
    * @param replicationEngine The ReplicationEngine to control partition replication.
@@ -89,7 +94,8 @@ public class ReplicationPrioritizationManager implements Runnable {
       ScheduledExecutorService scheduler, int prioritizationWindowHours, String datacenterName,
       int lowReplicaThreshold, int minBatchSizeForHighPriorityPartitions,
       int replicationTimeoutHours, ReplicaSyncUpManager replicaSyncUpManager, StorageManager storageManager,
-      ReplicationConfig replicationConfig, HelixClusterManager helixClusterManager) {
+      ReplicationConfig replicationConfig, HelixClusterManager helixClusterManager, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
+      clusterManagerQueryHelper) {
     this.replicationEngine = replicationEngine;
     this.clusterMap = clusterMap;
     this.dataNodeId = dataNodeId;
@@ -109,6 +115,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.storageManager = storageManager;
     this.time = SystemTime.getInstance();
     this.helixClusterManager = helixClusterManager;
+    this.clusterManagerQueryHelper = clusterManagerQueryHelper;
 
 
     // Schedule periodic runs for disruption checking
@@ -365,13 +372,12 @@ public class ReplicationPrioritizationManager implements Runnable {
    */
   private boolean isBelowMinActiveReplica(PartitionId partition) {
 
-    // clusterQueryManagerHelper.isBelowMinActiveReplica(partition.getPathToString());
+    int minActiveReplicaCount = clusterManagerQueryHelper.getMinActiveReplicas(partition);
     Set<ReplicaState> states = new HashSet<>(Arrays.asList(ReplicaState.LEADER, ReplicaState.STANDBY));
     Map<ReplicaState, List<AmbryReplica>> localDCReplicas =
         (Map<ReplicaState, List<AmbryReplica>>) partition.getReplicaIdsByStates(states, datacenterName);
-    int MIN_ACTIVE_REPLICAS = 3;
     logger.info("Found {} local replicas for partition {}", localDCReplicas.values().stream().mapToInt(List::size).sum(),
         partition.toPathString());
-    return localDCReplicas.values().stream().mapToInt(List::size).sum() >= MIN_ACTIVE_REPLICAS;
+    return localDCReplicas.values().stream().mapToInt(List::size).sum() <= minActiveReplicaCount;
   }
 }
