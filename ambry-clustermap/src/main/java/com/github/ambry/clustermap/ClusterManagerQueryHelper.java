@@ -24,7 +24,7 @@ import java.util.Set;
  * External components may get resources (i.e. {@link ReplicaId}, {@link PartitionId}, {@link DiskId}, {@link DataNodeId})
  * via this helper class.
  */
-interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P extends PartitionId, N extends DataNodeId> {
+public interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P extends PartitionId, N extends DataNodeId> {
   /**
    * Get all replica ids associated with the given {@link AmbryPartition}
    * @param partition the {@link PartitionId} for which to get the list of replicas.
