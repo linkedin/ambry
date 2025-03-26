@@ -2178,6 +2178,28 @@ public class HelixClusterManagerTest {
     }
   }
 
+
+  @Test
+  public void helixClusterGetMinActiveReplicas() throws Exception {
+    assumeTrue(!useComposite && !overrideEnabled);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    HelixClusterManager.HelixClusterManagerQueryHelper clusterHelper = helixClusterManager.new HelixClusterManagerQueryHelper();
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
+
+
+    PartitionId partitionId = clusterHelper.getPartitions().iterator().next();
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    String resourceName = resourceNames.get(0);
+    String tag = "TAG_100000";
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setInstanceGroupTag(tag);
+    idealState.setMinActiveReplicas(2);
+    helixCluster.refreshIdealState();
+
+    int minActiveReplicaConfig = clusterHelper.getMinActiveReplicas(partitionId);
+    assertEquals(idealState.getMinActiveReplicas(), minActiveReplicaConfig);
+  }
+
   // Helpers
 
   /**
