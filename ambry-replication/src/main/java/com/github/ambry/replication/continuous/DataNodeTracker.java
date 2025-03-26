@@ -48,7 +48,7 @@ public class DataNodeTracker {
    * @param replicaThrottleDurationMs throttle duration for replicas
    */
   public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int maxActiveGroupSize,
-      int startGroupId, Time time, long replicaThrottleDurationMs) {
+      int startGroupId, Time time, long replicaThrottleDurationMs, boolean isReplicaPrioritzationEnabled, int replicationMaxPrioritizedReplicas) {
     this.dataNodeId = dataNodeId;
     this.activeGroupTrackers = new ArrayList<>();
 
@@ -61,7 +61,13 @@ public class DataNodeTracker {
 
     // for each of smaller array of remote replicas create active group trackers with consecutive group ids
     for (List<RemoteReplicaInfo> remoteReplicaList : remoteReplicaSegregatedList) {
-      ActiveGroupTracker activeGroupTracker = new ActiveGroupTracker(currentGroupId, remoteReplicaList.stream()
+      int size = remoteReplicaList.size();
+      if (isReplicaPrioritzationEnabled) {
+        int maxSize = replicationMaxPrioritizedReplicas/100 * size;
+        size = Math.min(size, maxSize);
+      }
+
+      ActiveGroupTracker activeGroupTracker = new ActiveGroupTracker(currentGroupId, remoteReplicaList.subList(0, size).stream()
           .map(remoteReplicaInfo -> new ReplicaTracker(remoteReplicaInfo, time, replicaThrottleDurationMs))
           .collect(Collectors.toList()));
       activeGroupTrackers.add(activeGroupTracker);
