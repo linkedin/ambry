@@ -61,6 +61,7 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final ReadWriteLock rwLock;
   private final Set<PartitionId> currentlyReplicatingPartitions;
   private final Set<PartitionId> disabledReplicationPartitions;
+  private Set<PartitionId> allBootstrappingPartitions;
   private final String datacenterName;
   private final int lowReplicaThreshold;
   private final int minBatchSizeForHighPriorityPartitions;
@@ -101,6 +102,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.rwLock = new ReentrantReadWriteLock();
     this.currentlyReplicatingPartitions = ConcurrentHashMap.newKeySet();
     this.disabledReplicationPartitions = ConcurrentHashMap.newKeySet();
+    this.allBootstrappingPartitions = ConcurrentHashMap.newKeySet();
     this.datacenterName = datacenterName;
     this.lowReplicaThreshold = lowReplicaThreshold;
     this.minBatchSizeForHighPriorityPartitions = minBatchSizeForHighPriorityPartitions;
@@ -145,7 +147,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       // Process any completed partitions
       processCompletedPartitions();
 
-      // 1. Get all bootstrapping partitions from LocalStore
+      // 1. Get all bootstrapping partitions from StorageManager
       Set<PartitionId> partitionIds = getAllBootstrappingPartitionsForNode();
       partitionIds.removeAll(currentlyReplicatingPartitions);
 
@@ -195,6 +197,12 @@ public class ReplicationPrioritizationManager implements Runnable {
       // 5. Update replication priorities
       updateReplicationSet(highPriorityPartitions);
 
+      // If we now have fewer than minimum batch size, add more partitions
+      if (!currentlyReplicatingPartitions.isEmpty() &&
+          currentlyReplicatingPartitions.size() < minBatchSizeForHighPriorityPartitions) {
+        addNewPartitions();
+      }
+
     } catch (Exception e) {
       logger.error("Error in partition prioritization task", e);
     }
@@ -209,12 +217,6 @@ public class ReplicationPrioritizationManager implements Runnable {
     // Remove completed partitions from current set
     currentlyReplicatingPartitions.removeAll(completedPartitions);
     logger.info("Removed {} completed partitions from replication set", completedPartitions.size());
-
-    // If we now have fewer than minimum batch size, add more partitions
-    if (!currentlyReplicatingPartitions.isEmpty() &&
-        currentlyReplicatingPartitions.size() < minBatchSizeForHighPriorityPartitions) {
-      addNewPartitions();
-    }
   }
 
   /**
