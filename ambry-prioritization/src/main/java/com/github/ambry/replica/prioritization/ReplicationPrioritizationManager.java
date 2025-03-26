@@ -122,6 +122,20 @@ public class ReplicationPrioritizationManager implements Runnable {
 
   @Override
   public void run() {
+    start();
+  }
+
+  /**
+   * Starts the replication prioritization manager.
+   * 1. Looks at existing high priority partitions and checks if they have completed replication.
+   * 2. Identifies bootstrapping partitions from local store
+   * 3. From these bootstrapping partitions filter partitions which have count <= MIN_ACTIVE_REPLICAS
+   * 4. Fetches disruptions
+   * 5. Filters for upcoming disruptions within our window
+   * 6. Get affected partitions
+   * 7. Control replication thread based on the high priority partitions
+   */
+  private void start() {
     try {
       logger.info("Starting partition prioritization run");
 
