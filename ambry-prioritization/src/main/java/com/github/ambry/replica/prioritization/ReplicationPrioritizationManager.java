@@ -148,7 +148,8 @@ public class ReplicationPrioritizationManager implements Runnable {
       processCompletedPartitions();
 
       // 1. Get all bootstrapping partitions from StorageManager
-      Set<PartitionId> partitionIds = getAllBootstrappingPartitionsForNode();
+      allBootstrappingPartitions = getAllBootstrappingPartitionsForNode();
+      Set<PartitionId> partitionIds = new HashSet<>(allBootstrappingPartitions);
       partitionIds.removeAll(currentlyReplicatingPartitions);
 
       if (partitionIds.isEmpty()) {
@@ -196,13 +197,6 @@ public class ReplicationPrioritizationManager implements Runnable {
 
       // 5. Update replication priorities
       updateReplicationSet(highPriorityPartitions);
-
-      // If we now have fewer than minimum batch size, add more partitions
-      if (!currentlyReplicatingPartitions.isEmpty() &&
-          currentlyReplicatingPartitions.size() < minBatchSizeForHighPriorityPartitions) {
-        addNewPartitions();
-      }
-
     } catch (Exception e) {
       logger.error("Error in partition prioritization task", e);
     }
@@ -251,6 +245,11 @@ public class ReplicationPrioritizationManager implements Runnable {
 
           // Enable replication for the new high-priority partitions
           currentlyReplicatingPartitions.addAll(newHighPriorityPartitions);
+
+          // Ensure we have at least the minimum batch size
+          if (currentlyReplicatingPartitions.size() < minBatchSizeForHighPriorityPartitions) {
+            addNewPartitions();
+          }
 
           // Update the priority settings
           controlReplicationThreads();
@@ -307,7 +306,7 @@ public class ReplicationPrioritizationManager implements Runnable {
         additionalPartitionsNeeded, minBatchSizeForHighPriorityPartitions);
 
     // Get all partitions for this node
-    Set<PartitionId> allPartitions = getAllBootstrappingPartitionsForNode();
+    Set<PartitionId> allPartitions = new HashSet<>(allBootstrappingPartitions);
     // Remove already prioritized partitions
     allPartitions.removeAll(currentlyReplicatingPartitions);
 
@@ -323,7 +322,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    */
   private void controlReplicationThreads() {
     // Get all partitions that aren't currently replicating
-    Set<PartitionId> allPartitions = getAllBootstrappingPartitionsForNode();
+    Set<PartitionId> allPartitions = new HashSet<>(allBootstrappingPartitions);
     Set<PartitionId> partitionsToDisable = new HashSet<>(allPartitions);
     partitionsToDisable.removeAll(currentlyReplicatingPartitions);
 
