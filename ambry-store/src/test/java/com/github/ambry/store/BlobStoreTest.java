@@ -2306,9 +2306,13 @@ public class BlobStoreTest {
     File cleanShutDownFile = new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME);
     assertTrue("Clean shutdown file should exist.", cleanShutDownFile.exists());
     // no operations should be possible if store is not up or has been shutdown
-    verifyOperationFailuresOnInactiveStore(store);
+    verifyOperationFailuresOnInactiveStore(store, StoreErrorCodes.StoreNotInitialized);
     store = createBlobStore(getMockReplicaId(tempDirStr));
-    verifyOperationFailuresOnInactiveStore(store);
+    verifyOperationFailuresOnInactiveStore(store, StoreErrorCodes.StoreNotInitialized);
+
+    store = createBlobStore(getMockReplicaId(tempDirStr));
+    store.initialize();
+    verifyOperationFailuresOnInactiveStore(store, StoreErrorCodes.StoreNotStarted);
   }
 
   /**
@@ -4402,7 +4406,7 @@ public class BlobStoreTest {
    * Verifies that operations on {@link BlobStore} fail because it is inactive.
    * @param blobStore the inactive {@link BlobStore} on which the operations are performed.
    */
-  private void verifyOperationFailuresOnInactiveStore(BlobStore blobStore) {
+  private void verifyOperationFailuresOnInactiveStore(BlobStore blobStore, StoreErrorCodes shutdownErrorCode) {
     try {
       blobStore.get(Collections.EMPTY_LIST, EnumSet.noneOf(StoreGetOptions.class));
       fail("Operation should have failed because store is inactive");
@@ -4461,7 +4465,7 @@ public class BlobStoreTest {
     try {
       blobStore.shutdown();
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", shutdownErrorCode, e.getErrorCode());
     }
   }
 
