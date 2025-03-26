@@ -81,7 +81,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param clusterMap The ClusterMap to get partition and replica information.
    * @param dataNodeId The DataNodeId of the local node.
    * @param scheduler The scheduler to run periodic tasks.
-   * @param prioritizationWindowHours How far in advance to prioritize disruptions (in hours).
+   * @param prioritizationWindowMs How far in advance to prioritize disruptions (in hours).
    * @param datacenterName The name of the local datacenter.
    * @param lowReplicaThreshold The threshold for considering a partition to have low replica count.
    * @param minBatchSizeForHighPriorityPartitions Minimum number of partitions to include in high priority batch.
@@ -89,7 +89,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    */
 
   ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
-      ScheduledExecutorService scheduler, int prioritizationWindowHours, String datacenterName,
+      ScheduledExecutorService scheduler, int prioritizationWindowMs, String datacenterName,
       int lowReplicaThreshold, int minBatchSizeForHighPriorityPartitions,
       int replicationTimeoutHours, StorageManager storageManager,
       ReplicationConfig replicationConfig, HelixClusterManager helixClusterManager, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
@@ -120,7 +120,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     scheduler.scheduleAtFixedRate(this, 0, scheduleIntervalMinutes, TimeUnit.MINUTES);
 
     logger.info("ReplicationPrioritizationManager initialized with prioritization window of {} hours, schedule interval of {} minutes, " +
-            "and min batch size of {} partitions", prioritizationWindowHours, scheduleIntervalMinutes,
+            "and min batch size of {} partitions", prioritizationWindowMs, scheduleIntervalMinutes,
         minBatchSizeForHighPriorityPartitions);
   }
 
@@ -140,7 +140,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    * 6. Get affected partitions
    * 7. Control replication thread based on the high priority partitions
    */
-  private void start() {
+  void start() {
     try {
       logger.info("Starting partition prioritization run");
 
