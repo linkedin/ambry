@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2025 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,16 +75,23 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
 
   @Override
   public synchronized boolean addReplica(ReplicaId replicaId) {
-    if(!isRunning){
-      logger.error("Partition {} failed adding to prioritization Manager", replicaId.getReplicaPath());
-      throw new StateTransitionException("Partition " + replicaId.getReplicaPath() + " failed adding to "
-          + "prioritization Manager", PrioritizationManagerRunningFailure);
-    }
+    validateIfPzManagerIsRunningOrThrowException(replicaId);
+
     diskToReplicaMap.putIfAbsent(replicaId.getDiskId(), new LinkedList<>());
     diskToReplicaMap.get(replicaId.getDiskId()).add(replicaId);
     logger.info("Added partition {} to prioritization Manager For Disk {}", replicaId.getReplicaPath(),
         replicaId.getDiskId().getMountPath());
     return true;
+  }
+
+  boolean validateIfPzManagerIsRunningOrThrowException(ReplicaId replicaId){
+    if(!isRunning){
+      logger.error("Partition {} failed adding to prioritization Manager", replicaId.getReplicaPath());
+      throw new StateTransitionException("Partition " + replicaId.getReplicaPath() + " failed adding to "
+          + "prioritization Manager", PrioritizationManagerRunningFailure);
+    }
+    else
+      return true;
   }
 
   @Override

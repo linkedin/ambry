@@ -150,7 +150,7 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean setUpReplica(String partitionName) {
-    return false;
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override

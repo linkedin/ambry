@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Utils;
@@ -34,7 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler{
+class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler{
   private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
   private final FileCopyHandler fileCopyHandler;
   private final ClusterMap clusterMap;
@@ -48,6 +49,7 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
   private final List<ReplicaId> inFlightReplicas;
   private final StoreManager storeManager;
   private final StoreConfig storeConfig;
+
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -68,26 +70,32 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
     this.storeConfig = storeConfig;
     this.replicaToStatusListenerMap = new ConcurrentHashMap<>();
   }
+
   @Override
   public void start() throws InterruptedException {
     isRunning = true;
     scheduleFileCopy();
   }
 
-  public List<ReplicaId> findStarvedReplicas() {
+  /**
+   * Find the replicas that are starved for hydration. Return a list of Replicas
+   * which are stuck in hydration for more than the configured values.
+   * @return the list of {@link ReplicaId} that are starved for hydration.
+   */
+  List<ReplicaId> findStarvedReplicas() {
     //TODO: Persist Hydration Start Time on Disks For Replicas in Case Of Restarts
-    List<ReplicaId> replicasToDropForHydration = new ArrayList<>();
-    for (ReplicaId replicas : replicaToStartTimeMap.keySet()) {
-      if (replicaToStartTimeMap.get(replicas) != null
-          && System.currentTimeMillis() / 1000 - replicaToStartTimeMap.get(replicas)
+    List<ReplicaId> replicasToDropFromHydration = new ArrayList<>();
+    for (ReplicaId replica : replicaToStartTimeMap.keySet()) {
+      if (replicaToStartTimeMap.get(replica) != null
+          && System.currentTimeMillis() / 1000 - replicaToStartTimeMap.get(replica)
           > fileCopyBasedReplicationConfig.fileCopyReplicaTimeoutSecs) {
-        replicasToDropForHydration.add(replicas);
+        replicasToDropFromHydration.add(replica);
       }
     }
-    return replicasToDropForHydration;
+    return replicasToDropFromHydration;
   }
 
-  public List<ReplicaId> getNextReplicaToHydrate(DiskId diskId, int numberOfReplicasOnDisk) {
+  List<ReplicaId> getNextReplicaToHydrate(DiskId diskId, int numberOfReplicasOnDisk) {
     List<ReplicaId> replicaIds = prioritizationManager.getPartitionListForDisk(diskId, numberOfReplicasOnDisk);
     if(replicaIds == null || replicaIds.isEmpty())
       return null;
@@ -105,7 +113,8 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
 
     while(isRunning){
 
-      Thread.sleep(1000);
+      Thread.sleep(fileCopyBasedReplicationConfig.fileCopySchedulerWaitTimeSecs*1000);
+
       List<ReplicaId> replicasToDropForHydration = findStarvedReplicas();
 
       for(ReplicaId replica: replicasToDropForHydration){
@@ -162,7 +171,12 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
     }
   }
 
-  public void createFileCopyInProgressFileIfAbsent(ReplicaId replica) throws IOException {
+  /**
+   * Create a file copy in progress file on the disk for the replica.
+   * @param replica
+   * @throws IOException
+   */
+  void createFileCopyInProgressFileIfAbsent(ReplicaId replica) throws IOException {
     File fileCopyInProgressFileName = new File(replica.getReplicaPath(), storeConfig.storeFileCopyInProgressFileName);
     if (!fileCopyInProgressFileName.exists()) {
       fileCopyInProgressFileName.createNewFile();
@@ -174,7 +188,7 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
     return fileCopyBasedReplicationThreadPoolManager.getThreadPoolSize();
   }
 
-  public class FileCopyStatusListenerImpl implements FileCopyStatusListener {
+  class FileCopyStatusListenerImpl implements FileCopyStatusListener {
 
     private final ReplicaSyncUpManager replicaSyncUpManager;
     private final ReplicaId replicaId;
@@ -183,6 +197,7 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
       this.replicaSyncUpManager = replicaSyncUpManager;
       this.replicaId = replicaId;
     }
+
     @Override
     public void onFileCopySuccess() {
       removeReplicaFromFileCopy(replicaId);
@@ -197,11 +212,14 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
       replicaSyncUpManager.onFileCopyError(replicaId);
     }
 
-    public void removeReplicaFromFileCopy(ReplicaId replicaId){
+    void removeReplicaFromFileCopy(ReplicaId replicaId){
       inFlightReplicas.remove(replicaId);
       replicaToStartTimeMap.remove(replicaId);
       prioritizationManager.removeReplica(replicaId.getDiskId(), replicaId);
+      deleteFileCopyInProgressFile(replicaId);
+    }
 
+    void deleteFileCopyInProgressFile(ReplicaId replicaId){
       File fileCopyInProgressFile = new File(replicaId.getReplicaPath(),
           storeConfig.storeFileCopyInProgressFileName);
       try {
@@ -213,9 +231,4 @@ public class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedRepli
       }
     }
   }
-
-  public Map<ReplicaId, Long> getReplicaToStartTimeMap(){
-    return replicaToStartTimeMap;
-  }
-
 }
