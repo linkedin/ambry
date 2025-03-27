@@ -166,6 +166,11 @@ public class AmbryPartitionTest {
       return false;
     }
 
+    @Override
+    public int getMinActiveReplicas(PartitionId partitionId) {
+      return 2;
+    }
+
     /**
      * Increment the sealed state counter by one.
      */

@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filecopy.MockFileCopyHandlerFactory;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;

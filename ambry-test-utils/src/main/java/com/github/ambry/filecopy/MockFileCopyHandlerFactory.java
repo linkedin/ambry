@@ -13,8 +13,8 @@
  */
 package com.github.ambry.filecopy;
 
-import com.github.ambry.filetransfer.FileCopyHandler;
-import com.github.ambry.filetransfer.FileCopyHandlerFactory;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
+import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 
 
 public class MockFileCopyHandlerFactory implements FileCopyHandlerFactory {

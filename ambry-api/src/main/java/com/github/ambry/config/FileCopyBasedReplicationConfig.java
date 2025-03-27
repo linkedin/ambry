@@ -13,13 +13,7 @@
  */
 package com.github.ambry.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public class FileCopyBasedReplicationConfig {
-
-  private static final Logger logger = LoggerFactory.getLogger(FileCopyBasedReplicationConfig.class);
-
   /**
    * The number of partitions that can be hydrated in parallel per disk
    */
@@ -35,13 +29,6 @@ public class FileCopyBasedReplicationConfig {
   public final int fileCopyNumberOfFileCopyThreads;
 
   /**
-   * The timeout for each file chunk
-   */
-  public static final String FILE_COPY_FILE_CHUNK_TIMEOUT_IN_MINUTES = "filecopy.file.chunk.timeout.in.minutes";
-  @Config(FILE_COPY_FILE_CHUNK_TIMEOUT_IN_MINUTES)
-  public final long fileCopyFileChunkTimeoutInMins;
-
-  /**
    * The frequency at which the data gets flushed to disk
    */
   public static final String FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS = "filecopy.data.flush.interval.in.mbs";
@@ -52,9 +39,9 @@ public class FileCopyBasedReplicationConfig {
   /**
    * The name of the file that stores the metadata for the file copy
    */
-  public static final String File_COPY_META_DATA_FILE_NAME = "filecopy.meta.data.file.name";
-  @Config(File_COPY_META_DATA_FILE_NAME)
-  @Default("sealed_segments_metadata_file")
+  public static final String FILE_COPY_META_DATA_FILE_NAME = "filecopy.meta.data.file.name";
+  @Config(FILE_COPY_META_DATA_FILE_NAME)
+  @Default("segments_metadata_file")
   public final String fileCopyMetaDataFileName;
 
   public static final String FILE_COPY_REPLICA_TIMEOUT_SECS = "filecopy.replica.timeout.secs";
@@ -63,10 +50,9 @@ public class FileCopyBasedReplicationConfig {
   public final long fileCopyReplicaTimeoutSecs;
 
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
-    fileCopyMetaDataFileName = verifiableProperties.getString(File_COPY_META_DATA_FILE_NAME, "sealed_segments_metadata_file");
+    fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
     fileCopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(FILE_COPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
     fileCopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILE_COPY_NUMBER_OF_FILE_COPY_THREADS, 4);
-    fileCopyFileChunkTimeoutInMins = verifiableProperties.getInt(FILE_COPY_FILE_CHUNK_TIMEOUT_IN_MINUTES, 5);
     fileCopyDataFlushIntervalInMbs = verifiableProperties.getLong(FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
     fileCopyReplicaTimeoutSecs = verifiableProperties.getLong(FILE_COPY_REPLICA_TIMEOUT_SECS, 36000);
   }
