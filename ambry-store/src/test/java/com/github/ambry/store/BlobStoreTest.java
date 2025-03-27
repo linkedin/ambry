@@ -2768,6 +2768,7 @@ public class BlobStoreTest {
     assertTrue("Could not make readable", invalidDir.setReadable(true));
 
     testStore.deleteStoreFiles();
+    assertFalse("store directory should not exist", storeDir.exists());
   }
 
   /**
