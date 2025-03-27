@@ -134,8 +134,20 @@ public class CloudBlobStore implements Store {
   }
 
   @Override
-  public void start() {
+  public void initialize() {
+    logger.debug("Initialized store: {}", this);
+  }
+
+  @Override
+  public void load() {
     currentState = ReplicaState.STANDBY;
+    logger.debug("Loaded the store: {}", this);
+  }
+
+  @Override
+  public void start() {
+    initialize();
+    load();
     logger.debug("Started store: {}", this);
   }
 
@@ -1296,6 +1308,11 @@ public class CloudBlobStore implements Store {
 
   @Override
   public boolean isStarted() {
+    return true;
+  }
+
+  @Override
+  public boolean isInitialized() {
     return true;
   }
 

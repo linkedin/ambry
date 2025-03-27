@@ -29,7 +29,19 @@ import java.util.Set;
 public interface Store {
 
   /**
-   * Starts the store
+   * Initializes the store without starting it.
+   * @throws StoreException
+   */
+  void initialize() throws StoreException;
+
+  /**
+   * Starts the store if it is initialized.
+   * @throws StoreException
+   */
+  void load() throws StoreException;
+
+  /**
+   * Starts the store. It will initialize the store and then load the store.
    * @throws StoreException
    */
   void start() throws StoreException;
@@ -184,6 +196,11 @@ public interface Store {
    * @return true if the store contains no data
    */
   boolean isEmpty();
+
+  /**
+   * @return true if the store is initialized
+   */
+  boolean isInitialized();
 
   /**
    * @return true if the store is started
