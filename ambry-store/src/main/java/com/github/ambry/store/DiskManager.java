@@ -66,6 +66,8 @@ public class DiskManager {
 
   private final ConcurrentHashMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
+
+  private final ConcurrentHashMap<PartitionId, BlobStore> storePendingLoad = new ConcurrentHashMap<>();
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
@@ -487,6 +489,28 @@ public class DiskManager {
       if (!running) {
         logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
       } else {
+        succeed = initializeBlobStore(replica);
+        if (!succeed) {
+          return false;
+        }
+        succeed = loadInitializedBlobStore(replica);
+      }
+    } catch (Exception e) {
+      logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
+          e);
+    } finally {
+      rwLock.writeLock().unlock();
+    }
+    return succeed;
+  }
+
+  boolean initializeBlobStore(ReplicaId replica) {
+    rwLock.writeLock().lock();
+    boolean succeed = false;
+    try {
+      if (!running) {
+        logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
+      } else {
         // Clean up existing dir associated with this replica to add. Here we re-create a new store because we don't
         // know the state of files in old directory. (The old directory was created last time when adding this replica
         // but failed at some point before updating InstanceConfig)
@@ -503,7 +527,29 @@ public class DiskManager {
         BlobStore store = new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
             diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
             replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
-        store.start();
+        store.initialize();
+        storePendingLoad.put(replica.getPartitionId(), store);
+        succeed = true;
+      }
+    } catch (Exception e) {
+      logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
+          e);
+    } finally {
+      rwLock.writeLock().unlock();
+    }
+    return succeed;
+  }
+
+  boolean loadInitializedBlobStore(ReplicaId replica) {
+    rwLock.writeLock().lock();
+    boolean succeed = false;
+    try {
+      if (!running) {
+        logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
+      } else {
+        BlobStore store = storePendingLoad.get(replica.getPartitionId());
+        storePendingLoad.remove(replica.getPartitionId());
+        store.load();
         // collect store segment requirements and add into DiskSpaceAllocator
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
         diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
