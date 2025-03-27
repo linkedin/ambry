@@ -1325,18 +1325,21 @@ public class BlobStore implements Store {
    */
   public void deleteStoreFiles() throws StoreException, IOException {
     // Step 0: ensure the store has been shut down
-    if (started) {
+    if (started || initialized) {
       throw new IllegalStateException("Store is still started. Deleting store files is not allowed.");
     }
     // Step 1: return occupied swap segments (if any) to reserve pool
-    String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
-    for (String fileName : swapSegmentsInUse) {
-      logger.info("Returning swap segment {} to reserve pool", fileName);
-      File swapSegmentTempFile = new File(dataDir, fileName);
-      diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
+    if (compactor != null) {
+      String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
+      for (String fileName : swapSegmentsInUse) {
+        logger.info("Returning swap segment {} to reserve pool", fileName);
+        File swapSegmentTempFile = new File(dataDir, fileName);
+        diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
+      }
     }
+
     // Step 2: if segmented, delete remaining store segments in reserve pool
-    if (log.isLogSegmented()) {
+    if (log != null && log.isLogSegmented()) {
       logger.info("Deleting remaining segments associated with store {} in reserve pool", storeId);
       diskSpaceAllocator.deleteAllSegmentsForStoreIds(
           Collections.singletonList(replicaId.getPartitionId().toPathString()));
