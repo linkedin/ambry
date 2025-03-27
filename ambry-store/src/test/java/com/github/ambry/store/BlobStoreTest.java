@@ -2723,6 +2723,54 @@ public class BlobStoreTest {
   }
 
   /**
+   * Test both success and failure cases when deleting store files when store is initialized
+   * @throws Exception
+   */
+  @Test
+  public void deleteStoreFilesInitializedBlobStore() throws Exception {
+    store.shutdown();
+    // create test store directory
+    File storeDir = createTempDirectory("store-" + storeId);
+    File reserveDir = createTempDirectory("reserve-pool");
+    reserveDir.deleteOnExit();
+    DiskSpaceAllocator diskAllocator =
+        new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry registry = new MetricRegistry();
+    storeMetrics = new StoreMetrics(registry);
+    BlobStore testStore =
+        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler, null,
+            diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete, null,
+            time, new InMemAccountService(false, false), null, scheduler);
+    testStore.initialize();
+
+    // test that deletion on initialized store should fail
+    try {
+      testStore.deleteStoreFiles();
+    } catch (IllegalStateException e) {
+      //expected
+    }
+
+    // create a unreadable dir in store dir to induce deletion failure
+    File invalidDir = new File(storeDir, "invalidDir");
+    assertTrue("Couldn't create dir within store dir", invalidDir.mkdir());
+    assertTrue("Could not make unreadable", invalidDir.setReadable(false));
+    testStore.shutdown();
+
+    try {
+      testStore.deleteStoreFiles();
+      fail("should fail because one invalid dir is unreadable");
+    } catch (Exception e) {
+      // expected
+    }
+    assertTrue("store directory should exist because deletion failed", storeDir.exists());
+    // reset permission to allow deletion to succeed.
+    assertTrue("Could not make readable", invalidDir.setReadable(true));
+
+    testStore.deleteStoreFiles();
+  }
+
+  /**
    * test store in bootstrap and store completes bootstrap behaviors.
    * @throws Exception
    */
