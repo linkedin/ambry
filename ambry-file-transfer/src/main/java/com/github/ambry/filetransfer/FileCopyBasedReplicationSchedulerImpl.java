@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +59,15 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       ClusterMap clusterMap, FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager,
       PrioritizationManager prioritizationManager, ReplicaSyncUpManager replicaSyncUpManager,
       StoreManager storeManager, StoreConfig storeConfig){
+    Objects.requireNonNull(fileCopyHandler, "fileCopyhandler param cannot be null");
+    Objects.requireNonNull(fileCopyBasedReplicationConfig, "fileCopyBasedReplicationConfig param cannot be null");
+    Objects.requireNonNull(clusterMap, "clusterMap param cannot be null");
+    Objects.requireNonNull(fileCopyBasedReplicationThreadPoolManager, "fileCopyBasedReplicationThreadPoolManager param cannot be null");
+    Objects.requireNonNull(prioritizationManager, "prioritizationManager param cannot be null");
+    Objects.requireNonNull(replicaSyncUpManager, "replicaSyncUpManager param cannot be null");
+    Objects.requireNonNull(storeManager, "storeManager param cannot be null");
+    Objects.requireNonNull(storeConfig, "storeConfig param cannot be null");
+
     this.fileCopyHandler = fileCopyHandler;
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.clusterMap = clusterMap;

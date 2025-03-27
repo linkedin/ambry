@@ -29,6 +29,8 @@ import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
+import java.util.Objects;
+import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +56,17 @@ public class FileCopyBasedReplicationManager {
       NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, ClusterParticipant clusterParticipant,
       FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory,
       PrioritizationManagerFactory prioritizationManagerFactory, StoreConfig storeConfig) throws InterruptedException, InstantiationException {
+
+    Objects.requireNonNull(fileCopyBasedReplicationConfig, "FileCopyBasedReplicationConfig cannot be null");
+    Objects.requireNonNull(clusterMapConfig, "ClusterMapConfig cannot be null");
+    Objects.requireNonNull(storeManager, "StoreManager cannot be null");
+    Objects.requireNonNull(clusterMap, "ClusterMap cannot be null");
+    Objects.requireNonNull(networkClientFactory, "NetworkClientFactory cannot be null");
+    Objects.requireNonNull(metricRegistry, "MetricRegistry cannot be null");
+    Objects.requireNonNull(fileCopyBasedReplicationSchedulerFactory, "FileCopyBasedReplicationSchedulerFactory cannot be null");
+    Objects.requireNonNull(prioritizationManagerFactory, "PrioritizationManagerFactory cannot be null");
+    Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
+
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.storeManager = storeManager;
 
