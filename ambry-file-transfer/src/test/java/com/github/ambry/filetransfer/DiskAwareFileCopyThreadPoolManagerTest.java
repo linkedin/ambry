@@ -89,7 +89,7 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
     assertEquals("No operations should fail", 0, successFailCount.get("fail").intValue());
 
     // Cleanup
-    threadPoolManager.shutDown();
+    threadPoolManager.shutdown();
     threadPoolManagerThread.join();
   }
 

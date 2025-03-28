@@ -103,7 +103,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * Start the file copy handler.
    * @throws StoreException
    */
-  void start() throws StoreException {
+  public void start() throws StoreException {
     isRunning = true;
   }
 
@@ -117,7 +117,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   /**
    * Shutdown the file copy handler. Perform clean up steps in case of a graceful shutdown.
    */
-  void shutdown() {
+  public void shutdown() {
     connectionPool.shutdown();
     isRunning = false;
   }

@@ -44,11 +44,22 @@ public class FileCopyBasedReplicationConfig {
   @Default("segments_metadata_file")
   public final String fileCopyMetaDataFileName;
 
+  public static final String FILE_COPY_REPLICA_TIMEOUT_SECS = "filecopy.replica.timeout.secs";
+  @Config(FILE_COPY_REPLICA_TIMEOUT_SECS)
+  @Default("36000")
+  public final long fileCopyReplicaTimeoutSecs;
+
+  public static final String FILE_COPY_SCHEDULER_WAIT_TIME_SECS = "filecopy.scheduler.wait.time.secs";
+  @Config(FILE_COPY_SCHEDULER_WAIT_TIME_SECS)
+  @Default("30")
+  public final long fileCopySchedulerWaitTimeSecs;
 
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
     fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
     fileCopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(FILE_COPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
     fileCopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILE_COPY_NUMBER_OF_FILE_COPY_THREADS, 4);
     fileCopyDataFlushIntervalInMbs = verifiableProperties.getLong(FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
+    fileCopyReplicaTimeoutSecs = verifiableProperties.getLong(FILE_COPY_REPLICA_TIMEOUT_SECS, 36000);
+    fileCopySchedulerWaitTimeSecs = verifiableProperties.getLong(FILE_COPY_SCHEDULER_WAIT_TIME_SECS, 30);
   }
 }
