@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,9 +107,12 @@ public class BlobStore implements Store {
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
   private boolean started;
+  private boolean initialized;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
   private volatile ReplicaState previousState;
+
+  private StoreDescriptor storeDescriptor;
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
   private AtomicReference<ReplicaSealStatus> replicaSealStatus = new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
@@ -253,12 +257,14 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public void start() throws StoreException {
+  public void initialize() throws StoreException {
     synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
       }
-      final Timer.Context context = metrics.storeStartTime.time();
+      if(initialized) {
+        throw new StoreException("Store already initialized", StoreErrorCodes.StoreAlreadyInitialized);
+      }
       try {
         // Check if the data dir exist. If it does not exist, create it
         File dataFile = new File(dataDir);
@@ -274,7 +280,6 @@ public class BlobStore implements Store {
           throw new StoreException(dataFile.getAbsolutePath() + " is either not a directory or is not readable",
               StoreErrorCodes.InitializationError);
         }
-
         // check the file system before we do any file write.
         checkIfStoreIsStale();
 
@@ -286,7 +291,33 @@ public class BlobStore implements Store {
               StoreErrorCodes.InitializationError);
         }
 
-        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, config);
+        storeDescriptor = new StoreDescriptor(dataDir, config);
+        initialized = true;
+      } catch (Exception e) {
+        if (fileLock != null) {
+          // Release the file lock
+          try {
+            fileLock.unlock();
+          } catch (Exception lockException) {
+            logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
+          }
+        }
+        String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
+        throw new StoreException(err, e, StoreErrorCodes.InitializationError);
+      }
+    }
+  }
+
+  @Override
+  public void load() throws StoreException {
+    synchronized (storeWriteLock) {
+      if (started) {
+        throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
+      }
+      if (!initialized) {
+        throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
+      }
+      try {
         log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
@@ -326,9 +357,22 @@ public class BlobStore implements Store {
             logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
           }
         }
-        metrics.storeStartFailure.inc();
         String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
         throw new StoreException(err, e, StoreErrorCodes.InitializationError);
+      }
+    }
+  }
+
+  @Override
+  public void start() throws StoreException {
+    synchronized (storeWriteLock) {
+      if (started) {
+        throw new StoreException("Store already started", StoreErrorCodes.StoreAlreadyStarted);
+      }
+      final Timer.Context context = metrics.storeStartTime.time();
+      try {
+        initialize();
+        load();
       } finally {
         context.stop();
       }
@@ -1281,18 +1325,21 @@ public class BlobStore implements Store {
    */
   public void deleteStoreFiles() throws StoreException, IOException {
     // Step 0: ensure the store has been shut down
-    if (started) {
+    if (started || initialized) {
       throw new IllegalStateException("Store is still started. Deleting store files is not allowed.");
     }
     // Step 1: return occupied swap segments (if any) to reserve pool
-    String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
-    for (String fileName : swapSegmentsInUse) {
-      logger.info("Returning swap segment {} to reserve pool", fileName);
-      File swapSegmentTempFile = new File(dataDir, fileName);
-      diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
+    if (compactor != null) {
+      String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
+      for (String fileName : swapSegmentsInUse) {
+        logger.info("Returning swap segment {} to reserve pool", fileName);
+        File swapSegmentTempFile = new File(dataDir, fileName);
+        diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
+      }
     }
+
     // Step 2: if segmented, delete remaining store segments in reserve pool
-    if (log.isLogSegmented()) {
+    if (log != null && log.isLogSegmented()) {
       logger.info("Deleting remaining segments associated with store {} in reserve pool", storeId);
       diskSpaceAllocator.deleteAllSegmentsForStoreIds(
           Collections.singletonList(replicaId.getPartitionId().toPathString()));
@@ -1526,8 +1573,9 @@ public class BlobStore implements Store {
   private void shutdown(boolean skipDiskFlush) throws StoreException {
     long startTimeInMs = time.milliseconds();
     synchronized (storeWriteLock) {
-      checkStarted();
+      checkInitialized();
       try {
+        checkStarted();
         logger.info("Store : {} shutting down", dataDir);
         blobStoreStats.close();
         compactor.close(30);
@@ -1547,9 +1595,9 @@ public class BlobStore implements Store {
         }
         metrics.storeShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
       }
+      initialized = false;
     }
   }
-
   /**
    * On an exception/error, if error count exceeds threshold, properly shutdown store.
    */
@@ -1633,6 +1681,13 @@ public class BlobStore implements Store {
   }
 
   /**
+   * @return {@code true} if this store has been initialized successfully.
+   */
+  public boolean isInitialized(){
+    return initialized;
+  }
+
+  /**
    * Compacts the store data based on {@code details}.
    * @param details the {@link CompactionDetails} describing what needs to be compacted.
    * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
@@ -1687,6 +1742,12 @@ public class BlobStore implements Store {
   private void checkStarted() throws StoreException {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.StoreNotStarted);
+    }
+  }
+
+  private void checkInitialized() throws StoreException {
+    if (!initialized) {
+      throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
     }
   }
 
