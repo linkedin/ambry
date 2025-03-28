@@ -15,12 +15,14 @@
 package com.github.ambry.filetransfer;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
+import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Utils;
@@ -32,13 +34,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler{
   private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
-  private final FileCopyHandler fileCopyHandler;
+  private final FileCopyHandlerFactory fileCopyHandlerFactory;
   private final ClusterMap clusterMap;
   private final FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager;
   private final Map<ReplicaId, Long> replicaToStartTimeMap;
@@ -54,24 +57,25 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public FileCopyBasedReplicationSchedulerImpl(FileCopyHandler fileCopyHandler,
+  public FileCopyBasedReplicationSchedulerImpl(@Nonnull FileCopyHandlerFactory fileCopyHandlerFactory,
       FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig,
-      ClusterMap clusterMap, FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager,
-      PrioritizationManager prioritizationManager, ReplicaSyncUpManager replicaSyncUpManager,
-      StoreManager storeManager, StoreConfig storeConfig){
-    Objects.requireNonNull(fileCopyHandler, "fileCopyhandler param cannot be null");
+      ClusterMap clusterMap, @Nonnull PrioritizationManager prioritizationManager,
+      @Nonnull ReplicaSyncUpManager replicaSyncUpManager,
+      StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId){
+
+    Objects.requireNonNull(fileCopyHandlerFactory, "fileCopyHandlerFactory param cannot be null");
     Objects.requireNonNull(fileCopyBasedReplicationConfig, "fileCopyBasedReplicationConfig param cannot be null");
     Objects.requireNonNull(clusterMap, "clusterMap param cannot be null");
-    Objects.requireNonNull(fileCopyBasedReplicationThreadPoolManager, "fileCopyBasedReplicationThreadPoolManager param cannot be null");
     Objects.requireNonNull(prioritizationManager, "prioritizationManager param cannot be null");
     Objects.requireNonNull(replicaSyncUpManager, "replicaSyncUpManager param cannot be null");
     Objects.requireNonNull(storeManager, "storeManager param cannot be null");
     Objects.requireNonNull(storeConfig, "storeConfig param cannot be null");
 
-    this.fileCopyHandler = fileCopyHandler;
+    this.fileCopyHandlerFactory = fileCopyHandlerFactory;
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.clusterMap = clusterMap;
-    this.fileCopyBasedReplicationThreadPoolManager = fileCopyBasedReplicationThreadPoolManager;
+    this.fileCopyBasedReplicationThreadPoolManager = new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(),
+        fileCopyBasedReplicationConfig.fileCopyNumberOfFileCopyThreads);
     this.replicaToStartTimeMap = new ConcurrentHashMap<>();
     this.inFlightReplicas = new LinkedList<>();
     this.prioritizationManager = prioritizationManager;
@@ -84,6 +88,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   @Override
   public void start() throws InterruptedException {
     isRunning = true;
+    logger.info("FileCopyBasedReplicationSchedulerImpl Started");
     scheduleFileCopy();
   }
 
@@ -155,6 +160,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
               continue;
             }
             FileCopyStatusListener fileCopyStatusListener = new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId);
+            FileCopyHandler fileCopyHandler = fileCopyHandlerFactory.getFileCopyHandler();
             try{
               /**
                * Adding Persistence of File Copy In Progress File to disk. This will
@@ -179,6 +185,8 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
         }
       }
     }
+
+    logger.error("FileCopyBasedReplicationSchedulerImpl Stopped");
   }
 
   /**

@@ -53,7 +53,6 @@ public class StoreFileCopyHandlerFactory implements FileCopyHandlerFactory {
     Objects.requireNonNull(storeManager, "storeManager cannot be null");
     Objects.requireNonNull(clusterMap, "clusterMap cannot be null");
     Objects.requireNonNull(config, "config cannot be null");
-
     this.connectionPool = connectionPool;
     this.clusterMap = clusterMap;
     this.storeManager = storeManager;
