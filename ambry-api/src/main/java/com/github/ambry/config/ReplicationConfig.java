@@ -364,6 +364,12 @@ public class ReplicationConfig {
   @Default("15")
   public final int scheduledIntervalMinutes;
 
+  public static final String PRIORITIZED_PARTITIONS_BATCH_SIZE = "prioritization.batch.size";
+  @Config(PRIORITIZED_PARTITIONS_BATCH_SIZE)
+  @Default("150")
+  public final int highPriorityPartitionsBatchSize;
+
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -448,5 +454,7 @@ public class ReplicationConfig {
         verifiableProperties.getLong(DISRUPTION_LOOKAHEAD_WINDOW_MS, 28800000);
     scheduledIntervalMinutes =
         verifiableProperties.getInt(PRIORITIZATION_SCHEDULER_INTERVAL, 15);
+    highPriorityPartitionsBatchSize
+        = verifiableProperties.getInt(PRIORITIZED_PARTITIONS_BATCH_SIZE, 150);
   }
 }

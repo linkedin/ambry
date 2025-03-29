@@ -32,9 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -89,9 +87,8 @@ public class ReplicationPrioritizationManager implements Runnable {
    */
 
   ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
-      ScheduledExecutorService scheduler, int prioritizationWindowMs, String datacenterName,
-      int lowReplicaThreshold, int minBatchSizeForHighPriorityPartitions,
-      int replicationTimeoutHours, StorageManager storageManager,
+      ScheduledExecutorService scheduler, String datacenterName,
+      int lowReplicaThreshold, int replicationTimeoutHours, StorageManager storageManager,
       ReplicationConfig replicationConfig, HelixClusterManager helixClusterManager, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
       clusterManagerQueryHelper) {
     this.replicationEngine = replicationEngine;
@@ -105,7 +102,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.allBootstrappingPartitions = ConcurrentHashMap.newKeySet();
     this.datacenterName = datacenterName;
     this.lowReplicaThreshold = lowReplicaThreshold;
-    this.minBatchSizeForHighPriorityPartitions = minBatchSizeForHighPriorityPartitions;
+    this.minBatchSizeForHighPriorityPartitions = replicationConfig.highPriorityPartitionsBatchSize;
     this.isHighPriorityReplicationRunning = new AtomicBoolean(false);
     this.replicationTimeoutMs = TimeUnit.HOURS.toMillis(replicationTimeoutHours);
     this.completedPartitions = ConcurrentHashMap.newKeySet();
@@ -125,6 +122,13 @@ public class ReplicationPrioritizationManager implements Runnable {
   }
 
 
+  public Set<PartitionId> getCurrentlyReplicatingPartitions() {
+    return currentlyReplicatingPartitions;
+  }
+
+  /**
+   * Main entry point for the replication prioritization manager.
+   */
   @Override
   public void run() {
     start();
@@ -150,11 +154,15 @@ public class ReplicationPrioritizationManager implements Runnable {
       // 1. Get all bootstrapping partitions from StorageManager
       allBootstrappingPartitions = getAllBootstrappingPartitionsForNode();
       Set<PartitionId> partitionIds = new HashSet<>(allBootstrappingPartitions);
+      if (partitionIds.isEmpty()) {
+        logger.info("Bootstrapping partition list from StorageManager is empty");
+        return;
+      }
+
       partitionIds.removeAll(currentlyReplicatingPartitions);
 
       if (partitionIds.isEmpty()) {
-        logger.info("Bootstrapping partition list is empty");
-        return;
+        logger.info("All bootstrapping partitions are already being replicated");
       }
 
       // 3. Analyze replica counts and create prioritized list
@@ -218,7 +226,8 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param highPriorityPartitions The set of partitions that should be prioritized.
    */
   private void updateReplicationSet(Set<PartitionId> highPriorityPartitions) {
-    if (highPriorityPartitions.isEmpty()) {
+
+    if (isHighPriorityReplicationRunning.get() && highPriorityPartitions.isEmpty()) {
       return;
     }
 
