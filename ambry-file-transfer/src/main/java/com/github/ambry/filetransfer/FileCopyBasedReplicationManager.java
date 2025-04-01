@@ -51,13 +51,12 @@ public class FileCopyBasedReplicationManager {
   private boolean isRunning = false;
   private final FileCopyHandlerFactory fileCopyHandlerFactory;
 
-
   public FileCopyBasedReplicationManager(FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
      StoreManager storeManager, ClusterMap clusterMap,
       NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, ClusterParticipant clusterParticipant,
       FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory,
-      FileCopyHandlerFactory fileCopyHandlerFactory,
-      PrioritizationManagerFactory prioritizationManagerFactory, StoreConfig storeConfig, ReplicaPrioritizationConfig replicaPrioritizationConfig)
+      FileCopyHandlerFactory fileCopyHandlerFactory, PrioritizationManagerFactory prioritizationManagerFactory,
+      StoreConfig storeConfig, ReplicaPrioritizationConfig replicaPrioritizationConfig)
       throws InstantiationException {
 
     Objects.requireNonNull(fileCopyBasedReplicationConfig, "FileCopyBasedReplicationConfig cannot be null");
@@ -70,6 +69,7 @@ public class FileCopyBasedReplicationManager {
     Objects.requireNonNull(prioritizationManagerFactory, "PrioritizationManagerFactory cannot be null");
     Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
     Objects.requireNonNull(fileCopyHandlerFactory, "FileCopyHandlerFactory cannot be null");
+    Objects.requireNonNull(replicaPrioritizationConfig, "ReplicaPrioritizationConfig cannot be null");
 
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.storeManager = storeManager;
