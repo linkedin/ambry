@@ -67,7 +67,6 @@ public class DiskManager {
   private final ConcurrentHashMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
 
-  private final ConcurrentHashMap<PartitionId, BlobStore> storePendingLoad = new ConcurrentHashMap<>();
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
@@ -301,7 +300,7 @@ public class DiskManager {
    * @return
    */
   boolean shouldRemoveDirectory(PartitionId partitionId, BlobStore store, Exception startException) {
-    if (store.isStarted() || stoppedReplicas.contains(partitionId.toPathString())) {
+    if (store.isInitialized() || stoppedReplicas.contains(partitionId.toPathString())) {
       return false;
     }
     StoreException storeException = getRootCause(startException, StoreException.class);
@@ -322,7 +321,7 @@ public class DiskManager {
       final AtomicInteger numFailures = new AtomicInteger(0);
       List<Thread> shutdownThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
-        if (!partitionAndStore.getValue().isStarted()) {
+        if (!partitionAndStore.getValue().isInitialized()) {
           continue;
         }
         Thread thread = Utils.newThread("store-shutdown-" + partitionAndStore.getKey(), () -> {
@@ -534,7 +533,8 @@ public class DiskManager {
             diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
             replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
         store.initialize();
-        storePendingLoad.put(replica.getPartitionId(), store);
+        // add new created store into in-memory data structures.
+        stores.put(replica.getPartitionId(), store);
         succeed = true;
       }
     } catch (Exception e) {
@@ -553,16 +553,14 @@ public class DiskManager {
       if (!running) {
         logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
       } else {
-        BlobStore store = storePendingLoad.get(replica.getPartitionId());
-        storePendingLoad.remove(replica.getPartitionId());
+        BlobStore store = stores.get(replica.getPartitionId());
         store.load();
         // collect store segment requirements and add into DiskSpaceAllocator
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
         diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
         // add store into CompactionManager
         compactionManager.addBlobStore(store);
-        // add new created store into in-memory data structures.
-        stores.put(replica.getPartitionId(), store);
+
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
@@ -617,7 +615,7 @@ public class DiskManager {
       BlobStore store = stores.get(id);
       if (store == null || !running) {
         logger.error("Failed to shut down store because {} is not found or DiskManager is not running", id);
-      } else if (!store.isStarted()) {
+      } else if (!store.isInitialized()) {
         succeed = true;
       } else {
         store.shutdown();
@@ -643,8 +641,8 @@ public class DiskManager {
       BlobStore store = stores.get(id);
       if (store == null) {
         logger.error("Store {} is not found in disk manager", id);
-      } else if (!running || store.isStarted()) {
-        logger.error("Removing store {} failed. Disk running = {}, store running = {}", id, running, store.isStarted());
+      } else if (!running || store.isInitialized()) {
+        logger.error("Removing store {} failed. Disk running = {}, store initialized = {}", id, running, store.isInitialized());
       } else if (!compactionManager.removeBlobStore(store)) {
         logger.error("Fail to remove store {} from compaction manager.", id);
       } else {
@@ -753,7 +751,7 @@ public class DiskManager {
     boolean storesAllDown = true;
     try {
       for (BlobStore store : stores.values()) {
-        if (store.isStarted()) {
+        if (store.isInitialized()) {
           storesAllDown = false;
           break;
         }
