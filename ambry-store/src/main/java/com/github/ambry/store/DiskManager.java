@@ -95,9 +95,15 @@ public class DiskManager {
   private final DiskHealthCheck diskHealthCheck;
   // Have a dedicated scheduler for persisting index segments to ensure index segments are always persisted
   private final ScheduledExecutorService indexPersistScheduler;
+  //@formatter:off
   private final EnumSet<StoreErrorCodes> recoverableStoreErrorCodes =
-      EnumSet.of(StoreErrorCodes.LogFileFormatError, StoreErrorCodes.IndexFileFormatError,
-          StoreErrorCodes.LogEndOffsetError, StoreErrorCodes.IndexRecoveryError);
+      EnumSet.of(
+          StoreErrorCodes.LogFileFormatError,
+          StoreErrorCodes.IndexFileFormatError,
+          StoreErrorCodes.LogEndOffsetError,
+          StoreErrorCodes.IndexRecoveryError,
+          StoreErrorCodes.StoreStaleError);
+  //@formatter:on
 
   private final AtomicBoolean ioErrorCheckerScheduled = new AtomicBoolean(false);
 

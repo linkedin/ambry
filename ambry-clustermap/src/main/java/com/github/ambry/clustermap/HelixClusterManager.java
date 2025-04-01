@@ -16,8 +16,6 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -67,7 +65,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.github.ambry.config.RouterConfig;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
@@ -1440,6 +1437,24 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     /**
+     * MIN_ACTIVE_REPLICA configuration is defined at resource level in Helix
+     * @return the MIN_ACTIVE_REPLICA configuration for this resource/partition.
+     */
+    @Override
+    public int getMinActiveReplicas(PartitionId partitionId) {
+      try {
+        String partitionIdString = partitionId.toPathString();
+        String resource = getResourceForPartitionInLocalDc(partitionIdString).iterator().next();
+        String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
+        ResourceProperty resourceProperty  =
+            dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
+        return resourceProperty.minActiveReplicas;
+      } catch (Exception e) {
+        return DEFAULT_NUM_REPLICAS - 1;
+      }
+    }
+
+    /**
      * @return the count of partitions in this cluster.
      */
     long getPartitionCount() {
@@ -1868,10 +1883,17 @@ public class HelixClusterManager implements ClusterMap {
           if (replicationFactor == 0) {
             replicationFactor = DEFAULT_NUM_REPLICAS;
           }
+          int minActiveReplicas = state.getMinActiveReplicas();
+
+          // In case MIN_ACTIVE_REPLICAS is not set
+          if (minActiveReplicas == -1) {
+            minActiveReplicas = replicationFactor - 1;
+          }
+
           if (!Strings.isEmpty(tag)) {
             resourceNameToTag.put(resourceName, tag);
             ResourceProperty resourceProperty =
-                new ResourceProperty(resourceName, numPartitions, replicationFactor, state.getRebalanceMode());
+                new ResourceProperty(resourceName, numPartitions, replicationFactor, state.getRebalanceMode(), minActiveReplicas);
             tagToProperty.put(tag, resourceProperty);
           }
           resourceToPartitionMap.put(resourceName, new HashSet<>(state.getPartitionSet()));
@@ -2254,12 +2276,14 @@ public class HelixClusterManager implements ClusterMap {
     final int numPartitions;
     final int replicationFactor; // number of replicas
     final IdealState.RebalanceMode rebalanceMode;
+    final int minActiveReplicas;
 
-    ResourceProperty(String name, int numPartitions, int replicationFactor, IdealState.RebalanceMode rebalanceMode) {
+    ResourceProperty(String name, int numPartitions, int replicationFactor, IdealState.RebalanceMode rebalanceMode, int minActiveReplicas) {
       this.numPartitions = numPartitions;
       this.name = name;
       this.replicationFactor = replicationFactor;
       this.rebalanceMode = rebalanceMode;
+      this.minActiveReplicas = minActiveReplicas;
     }
   }
 

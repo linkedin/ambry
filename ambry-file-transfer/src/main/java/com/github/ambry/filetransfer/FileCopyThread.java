@@ -13,6 +13,7 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nonnull;
@@ -44,7 +45,7 @@ public class FileCopyThread extends Thread {
   public void run() {
     try {
       //TODO add required params for File copy handler
-      fileCopyHandler.copy();
+      fileCopyHandler.copy(null);
       fileCopyStatusListener.onFileCopySuccess();
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);
@@ -55,6 +56,7 @@ public class FileCopyThread extends Thread {
 
   public void shutDown() throws InterruptedException {
     isRunning = false;
+    fileCopyHandler.shutdown();
     shutDownLatch.await();
   }
 }

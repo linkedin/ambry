@@ -91,7 +91,7 @@ public interface StoreManager {
    * @return the {@link FileStore} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
    *         that partition, or that store was not started.
    */
-  PartitionFileStore getFileStore(PartitionId id);
+  PartitionFileStore getFileStore(PartitionId partitionId);
 
   /**
    * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific
@@ -152,4 +152,12 @@ public interface StoreManager {
    * @throws IOException
    */
   boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException;
+
+  /**
+   * Sets Up Replica For a given partition. This is used in FileCopy based replication
+   * to set up replica on a node.
+   * @param partitionName Name of partition for which replica needs to be set up.
+   * @return {@code true} if replica is set up successfully. {@code false} if not.
+   */
+  boolean setUpReplica(String partitionName);
 }

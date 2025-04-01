@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer;
 
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import java.util.List;
 
 /**
@@ -34,7 +35,7 @@ public interface FileCopyBasedReplicationThreadPoolManager {
   /**
    * Should return the disks on which partition hydration is either completed
    * or not started yet.
-   * @return the List Of DiskIds that can be hydrated next.
+   * @return the List Of {@link DiskId} that can be hydrated next.
    */
   List<DiskId> getDiskIdsToHydrate();
 
@@ -51,4 +52,6 @@ public interface FileCopyBasedReplicationThreadPoolManager {
    * @param replicaId the replicaId to remove from hydration
    */
   void stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId) throws InterruptedException;
+
+  void shutdown() throws InterruptedException;
 }

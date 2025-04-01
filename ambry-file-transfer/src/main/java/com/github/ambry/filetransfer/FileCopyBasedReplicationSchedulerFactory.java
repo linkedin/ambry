@@ -11,17 +11,15 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
+
 package com.github.ambry.filetransfer;
 
 /**
- * Interface for FileCopyHandler. This Handler does file copy of
- * data from the given node to current node
+ * Interface for Factory class which returns the {@link FileCopyBasedReplicationScheduler} depending on the implementation
  */
-public interface FileCopyHandler {
-
+public interface FileCopyBasedReplicationSchedulerFactory {
   /**
-   * do the file copy
-   * @throws Exception exception
+   * @return returns the {@link FileCopyBasedReplicationScheduler}
    */
-  void copy() throws Exception;
+  FileCopyBasedReplicationScheduler getFileCopyBasedReplicationScheduler();
 }
