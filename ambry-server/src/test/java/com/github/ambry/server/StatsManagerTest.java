@@ -583,6 +583,16 @@ public class StatsManagerTest {
     }
 
     @Override
+    public void initialize() throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void load() throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void start() throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
@@ -712,6 +722,11 @@ public class StatsManagerTest {
 
     @Override
     public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public boolean isInitialized() {
       throw new IllegalStateException("Not implemented");
     }
 
