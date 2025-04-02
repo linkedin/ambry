@@ -74,13 +74,14 @@ public class ReplicationPrioritizationManagerTest {
 
   private ReplicationPrioritizationManager manager;
   private ReplicationPrioritizationManager managerWithMockTime;
-  private String datacenterName = "testDC";
-  private int lowReplicaThreshold = 2;
-  private int minBatchSize = 3;
-  private int replicationTimeoutHours = 24;
-  private long scheduleIntervalMinutes = 5;
-  private long disruptionReadinessWindowInMS = TimeUnit.HOURS.toMillis(1);
+  private final String datacenterName = "testDC";
+  private final int lowReplicaThreshold = 2;
+  private final int minBatchSize = 3;
+  private final int replicationTimeoutHours = 24;
+  private final long scheduleIntervalMinutes = 5;
+  private final long disruptionReadinessWindowInMS = TimeUnit.HOURS.toMillis(1);
 
+  private Map<PartitionId, Store> partitionToStoreMap;
   // Test partitions
   private PartitionId partition1, partition2, partition3, partition4, partition5;
 
@@ -112,6 +113,12 @@ public class ReplicationPrioritizationManagerTest {
     when(storageManager.getStore(partition3)).thenReturn(store3);
     when(storageManager.getStore(partition4)).thenReturn(store4);
     when(storageManager.getStore(partition5)).thenReturn(store5);
+    partitionToStoreMap = new HashMap<>();
+    partitionToStoreMap.put(partition1, store1);
+    partitionToStoreMap.put(partition2, store2);
+    partitionToStoreMap.put(partition3, store3);
+    partitionToStoreMap.put(partition4, store4);
+    partitionToStoreMap.put(partition5, store5);
 
     // Create manager instance with system time
     manager = new ReplicationPrioritizationManager(
@@ -188,8 +195,8 @@ public class ReplicationPrioritizationManagerTest {
     // Run the manager
     manager.start();
 
-    // Verify normal partitions were replicated
-    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+    // Verify normal partitions were replicated and control replication was not called
+    verify(replicationEngine, never()).controlReplicationForPartitions(
         any(Set.class), any(List.class), anyBoolean());
   }
 
@@ -205,8 +212,8 @@ public class ReplicationPrioritizationManagerTest {
     when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
 
     // Partition1 has replica count below threshold (high priority)
-    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
-    mockReplicaStates(partition1, 2); // 2 replicas < threshold of 3
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(2);
+    mockReplicaStates(partition1, 2); // 2 replicas <= threshold of 2
 
     // Other partitions have sufficient replicas
     when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(2);
@@ -327,6 +334,11 @@ public class ReplicationPrioritizationManagerTest {
               disabledPartitions.contains(partition2) ||
               disabledPartitions.contains(partition3));
     }
+
+    // Verify enabled partitions
+    assertNotNull("Should have disabled 2 partitions", disabledPartitions);
+    assertTrue("partition4 should be enabled", disabledPartitions.contains(partition4));
+    assertTrue("partition5 should be enabled", disabledPartitions.contains(partition5));
   }
 
   @Test
@@ -464,7 +476,7 @@ public class ReplicationPrioritizationManagerTest {
         enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
 
     // Find the set of enabled partitions
-    Set<PartitionId> secondRunEnabledPartitions = manager.getCurrentlyReplicatingPartitions();
+    Set<PartitionId> secondRunEnabledPartitions = manager.getCurrentlyReplicatingPriorityPartitions();
     // Verify that partition2 was already enabled and partition1 was not
     assertNotNull("Should have enabled some partitions in second run", secondRunEnabledPartitions);
     assertFalse("Partition1 should not be enabled in second run", secondRunEnabledPartitions.contains(partition1));
@@ -652,7 +664,7 @@ public class ReplicationPrioritizationManagerTest {
     manager.start();
 
     // Verify replicationEngine was not called to change any partition states
-    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+    verify(replicationEngine, never()).controlReplicationForPartitions(
         any(Set.class), any(List.class), anyBoolean());
   }
 
@@ -752,6 +764,286 @@ public class ReplicationPrioritizationManagerTest {
     assertTrue("Non-priority partition2 should be enabled", enabledPartitions.contains(partition2));
     assertTrue("Non-priority partition3 should be enabled", enabledPartitions.contains(partition3));
     assertTrue("High-priority partition1 should be enabled", enabledPartitions.contains(partition1));
+  }
+
+  @Test
+  public void testNormalPriorityResumeAfterHighPriorityComplete() {
+    // Setup with mix of high and normal priority partitions
+    Set<PartitionId> allPartitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3, partition4, partition5));
+    when(storageManager.getLocalPartitions()).thenReturn(allPartitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store4.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store5.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Partition1 and Partition2 are high priority
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    mockReplicaStates(partition1, 2); // Below threshold
+    mockReplicaStates(partition2, 2); // Below threshold
+
+    // Partition3, Partition4, and Partition5 are normal priority
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition4)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition5)).thenReturn(2);
+    mockReplicaStates(partition3, 3); // Above threshold
+    mockReplicaStates(partition4, 3); // Above threshold
+    mockReplicaStates(partition5, 3); // Above threshold
+
+    // First run - high priority should be enabled, normal priority disabled
+    manager.run();
+
+    // Verify partitions were prioritized correctly
+    ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+
+    // Find enabled and disabled partition sets
+    Set<PartitionId> enabledPartitions = null;
+    Set<PartitionId> disabledPartitions = null;
+
+    for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+      if (enableCaptor.getAllValues().get(i)) {
+        enabledPartitions = partitionCaptor.getAllValues().get(i);
+      } else {
+        disabledPartitions = partitionCaptor.getAllValues().get(i);
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions", enabledPartitions);
+    assertNotNull("Should have disabled some partitions", disabledPartitions);
+
+    // Verify high priority partitions are enabled and normal priority are disabled
+    assertTrue("High priority partition1 should be enabled", enabledPartitions.contains(partition1));
+    assertTrue("High priority partition2 should be enabled", enabledPartitions.contains(partition2));
+    assertTrue("One partition from non-priority should be enabled", enabledPartitions.contains(partition3) ||
+        enabledPartitions.contains(partition4) || enabledPartitions.contains(partition5));
+    assertTrue("Disabled partitions should have 2 partitions", disabledPartitions.size() == 2);
+
+    // Reset mocks for the next run
+    reset(replicationEngine);
+
+    // Now high priority partitions complete replication
+    when(store1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+
+    // Run the manager again
+    manager.run();
+
+    // Verify that normal priority partitions are now enabled
+    partitionCaptor = ArgumentCaptor.forClass(Set.class);
+    enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+
+    // Out of partition3/4/5 one of them should continue replicating from previous run
+    verify(replicationEngine, never()).controlReplicationForPartitions(
+        partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+  }
+
+  @Test
+  public void testHighPriorityPartitionsWithNormalPartitions() {
+      // Setup with mix of high and normal priority partitions
+      Set<PartitionId> allPartitions = new HashSet<>(Arrays.asList(
+          partition1, partition2, partition3, partition4, partition5));
+      when(storageManager.getLocalPartitions()).thenReturn(allPartitions);
+
+      // All partitions are bootstrapping
+      when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+      when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+      when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+      when(store4.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+      when(store5.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+      // Partition1 and Partition2 are high priority
+      when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+      when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+      mockReplicaStates(partition1, 2); // Below threshold
+      mockReplicaStates(partition2, 2); // Below threshold
+
+      // Partition3, Partition4, and Partition5 are normal priority
+      when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(2);
+      when(clusterManagerQueryHelper.getMinActiveReplicas(partition4)).thenReturn(2);
+      when(clusterManagerQueryHelper.getMinActiveReplicas(partition5)).thenReturn(2);
+      mockReplicaStates(partition3, 3); // Above threshold
+      mockReplicaStates(partition4, 3); // Above threshold
+      mockReplicaStates(partition5, 3); // Above threshold
+
+      // First run - high priority should be enabled, normal priority disabled
+      manager.run();
+
+      // Verify partitions were prioritized correctly
+      ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
+      ArgumentCaptor<Boolean> enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+
+      verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+          partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+
+      // Find enabled and disabled partition sets
+      Set<PartitionId> enabledPartitions = null;
+      Set<PartitionId> disabledPartitions = null;
+
+      for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+        if (enableCaptor.getAllValues().get(i)) {
+          enabledPartitions = partitionCaptor.getAllValues().get(i);
+        } else {
+          disabledPartitions = partitionCaptor.getAllValues().get(i);
+        }
+      }
+
+      assertNotNull("Should have enabled some partitions", enabledPartitions);
+      assertNotNull("Should have disabled some partitions", disabledPartitions);
+
+      // Verify high priority partitions are enabled and normal priority are disabled
+      assertTrue("High priority partition1 should be enabled", enabledPartitions.contains(partition1));
+      assertTrue("High priority partition2 should be enabled", enabledPartitions.contains(partition2));
+      assertTrue("One partition from non-priority should be enabled", enabledPartitions.contains(partition3) ||
+          enabledPartitions.contains(partition4) || enabledPartitions.contains(partition5));
+      assertTrue("Disabled partitions should have 2 partitions", disabledPartitions.size() == 2);
+
+      // Reset mocks for the next run
+      reset(replicationEngine);
+
+      Set<PartitionId> prevDisabledPartitions = new HashSet<>();
+      prevDisabledPartitions.add(partition3);
+      prevDisabledPartitions.add(partition4);
+      prevDisabledPartitions.add(partition5);
+
+      // Now high priority partitions complete replication
+      when(store1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+      when(store2.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+      if (enabledPartitions.contains(partition3)) {
+        when(store3.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+        prevDisabledPartitions.remove(partition3);
+      } else if (enabledPartitions.contains(partition4)) {
+        when(store4.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+        prevDisabledPartitions.remove(partition4);
+      } else {
+        when(store5.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+        prevDisabledPartitions.remove(partition5);
+      }
+
+      // Run the manager again
+      manager.run();
+
+      // Verify that normal priority partitions are now enabled
+      partitionCaptor = ArgumentCaptor.forClass(Set.class);
+      enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+
+      verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+          partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+
+      // Find newly enabled partitions
+      Set<PartitionId> newEnabledPartitions = null;
+      for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+        if (enableCaptor.getAllValues().get(i)) {
+          newEnabledPartitions = partitionCaptor.getAllValues().get(i);
+          break;
+        }
+      }
+
+      assertNotNull("Should have enabled some partitions in second run", newEnabledPartitions);
+      assertEquals("Should have enabled some partitions in second run", 2, newEnabledPartitions.size());
+      assertEquals("Should have prev disabled partitions now enabled", prevDisabledPartitions, newEnabledPartitions);
+  }
+
+
+  @Test
+  public void testReenableAllOnEmptyHighPrioritySet() {
+    // Setup with all partitions bootstrapping
+    Set<PartitionId> allPartitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3, partition4, partition5));
+    when(storageManager.getLocalPartitions()).thenReturn(allPartitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store4.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store5.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // All partitions are normal priority initially
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition4)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition5)).thenReturn(2);
+    mockReplicaStates(partition1, 3);
+    mockReplicaStates(partition2, 3);
+    mockReplicaStates(partition3, 3);
+    mockReplicaStates(partition4, 3);
+    mockReplicaStates(partition5, 3);
+
+    // First run - no high priority partitions
+    manager.run();
+
+    ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, never()).controlReplicationForPartitions(
+        partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+
+
+    // Reset mocks
+    reset(replicationEngine);
+
+    // Now partition1 becomes high priority
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    mockReplicaStates(partition1, 2); // Below threshold
+
+    // Second run - should prioritize partition1
+    manager.run();
+
+    // Verify partition1 is enabled and others disabled
+    partitionCaptor = ArgumentCaptor.forClass(Set.class);
+    enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+      if (enableCaptor.getAllValues().get(i)) {
+         enabledPartitions = partitionCaptor.getAllValues().get(i);
+      }
+    }
+
+    // Reset mocks
+    reset(replicationEngine);
+
+    assert enabledPartitions != null;
+    assertEquals("Should have enabled 3 partitions", 3, enabledPartitions.size());
+    enabledPartitions.forEach(partition -> {
+      when(partitionToStoreMap.get(partition).getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    });
+
+    // Third run - high priority set becomes empty
+    manager.run();
+
+    // Verify that normal partitions are re-enabled
+    partitionCaptor = ArgumentCaptor.forClass(Set.class);
+    enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+
+    // Find newly enabled partitions
+    Set<PartitionId> newEnabledPartitions = null;
+    for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+      if (enableCaptor.getAllValues().get(i)) {
+        newEnabledPartitions = partitionCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions in third run", newEnabledPartitions);
+    assertEquals("Should have enabled all normal partitions", 2, newEnabledPartitions.size());
+    // No intersection with previous completed partitions
+    newEnabledPartitions.removeAll(enabledPartitions);
+    assertEquals("Should have enabled all normal partitions", 2, newEnabledPartitions.size());
   }
 
   /**
