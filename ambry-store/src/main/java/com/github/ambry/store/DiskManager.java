@@ -509,6 +509,11 @@ public class DiskManager {
     return succeed;
   }
 
+  /**
+   *
+   * @param replica {@link ReplicaId}
+   * @return {@code true} if initialization succeeds {@code false} otherwise.
+   */
   boolean initializeBlobStore(ReplicaId replica) {
     rwLock.writeLock().lock();
     boolean succeed = false;
@@ -535,11 +540,12 @@ public class DiskManager {
         store.initialize();
         // add new created store into in-memory data structures.
         stores.put(replica.getPartitionId(), store);
+
+        partitionToReplicaMap.put(replica.getPartitionId(), replica);
         succeed = true;
       }
     } catch (Exception e) {
-      logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
-          e);
+      logger.error("Failed to initialize new added store {} ", replica.getPartitionId(), e);
     } finally {
       rwLock.writeLock().unlock();
     }
@@ -561,7 +567,6 @@ public class DiskManager {
         // add store into CompactionManager
         compactionManager.addBlobStore(store);
 
-        partitionToReplicaMap.put(replica.getPartitionId(), replica);
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
         createBootstrapFileIfAbsent(replica);
@@ -569,7 +574,7 @@ public class DiskManager {
         succeed = true;
       }
     } catch (Exception e) {
-      logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
+      logger.error("Failed to load new added store {} or add requirements to disk allocator", replica.getPartitionId(),
           e);
     } finally {
       rwLock.writeLock().unlock();

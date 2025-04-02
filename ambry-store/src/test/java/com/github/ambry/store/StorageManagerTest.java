@@ -464,6 +464,40 @@ public class StorageManagerTest {
   }
 
   /**
+   * Tests whether if add blobstore fails if initialization fails
+   * Tests whether it will be successful after initialization is successful
+   * @throws Exception exception
+   */
+  @Test
+  public void addBlobStoreInitializationFailureTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    int newMountPathIndex = 3;
+    // add new MountPath to local node
+    File f = File.createTempFile("ambry", ".tmp");
+    File mountFile =
+        new File(f.getParent(), "mountpathfile" + MockClusterMap.PLAIN_TEXT_PORT_START_NUMBER + newMountPathIndex);
+    MockClusterMap.deleteFileOrDirectory(mountFile);
+    assertTrue("Couldn't create mount path directory", mountFile.mkdir());
+    localNode.addMountPaths(Collections.singletonList(mountFile.getAbsolutePath()));
+    PartitionId newPartition1 =
+        new MockPartitionId(10L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), newMountPathIndex);
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
+
+    String newReplicaPath = newPartition1.getReplicaIds().get(0).getReplicaPath();
+    File newReplicaPathFile = new File(newReplicaPath);
+    assertTrue("Could not set readable state to false", newReplicaPathFile.setReadable(false));
+
+    // test add store onto a new disk, which should fail
+    assertFalse("Add new store should succeed", storageManager.addBlobStore(newPartition1.getReplicaIds().get(0)));
+    assertTrue("Could not set readable state to true", newReplicaPathFile.setReadable(true));
+
+    // test add store after directory is readable, which should succeed
+    assertTrue("Add new store should succeed", storageManager.addBlobStore(newPartition1.getReplicaIds().get(0)));
+  }
+
+  /**
    * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE (update
    * InstanceConfig in Helix is turned off in this test)
    * @throws Exception
