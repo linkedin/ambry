@@ -155,10 +155,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           VERSION, DELETED_TS, CURRENT_TIME, NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
   /**
-   * Soft delete a blob by setting the delete timestamp to the current time.
+   * Soft delete a blob by setting the delete timestamp to the current time for a specific version.
+   */
+  private static final String SOFT_DELETE_WITH_VERSION_QUERY_V2 =
+      String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH_VERSION);
+
+  /**
+   * Soft delete a blob by setting the delete timestamp to the current time for all versions.
    */
   private static final String SOFT_DELETE_QUERY_V2 =
-      String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH_VERSION);
+      String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH);
 
   /**
    * Set named blob state to be READY and delete timestamp to null for TtlUpdate case
@@ -493,7 +499,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
       for (StaleNamedBlob record : staleRecords) {
-        applySoftDelete(record.getAccountId(), record.getContainerId(), record.getBlobName(), record.getVersion(),
+        applySoftDeleteWithVersion(record.getAccountId(), record.getContainerId(), record.getBlobName(),
+            record.getVersion(),
             record.getDeleteTs(), connection);
       }
       metricsRecoder.namedBlobCleanupTimeInMs.update(this.time.milliseconds() - startTime);
@@ -832,7 +839,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
     // only need to issue an update statement if the row was not already marked as deleted.
     if (!alreadyDeleted) {
-      applySoftDelete(accountId, containerId, blobName, version, currentDeleteTime, connection);
+      applySoftDelete(accountId, containerId, blobName, currentDeleteTime, connection);
     }
     return new DeleteResult(blobId, alreadyDeleted);
   }
@@ -867,16 +874,35 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
   }
 
-  private void applySoftDelete(short accountId, short containerId, String blobName, long version, Timestamp deleteTs,
+  private void applySoftDeleteWithVersion(short accountId, short containerId, String blobName, long version,
+      Timestamp deleteTs,
       Connection connection) throws Exception {
     String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
+    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_WITH_VERSION_QUERY_V2)) {
       // use the current time
       statement.setTimestamp(1, deleteTs);
       statement.setInt(2, accountId);
       statement.setInt(3, containerId);
       statement.setString(4, blobName);
       statement.setLong(5, version);
+      query = statement.toString();
+      logger.debug("Soft deleting blob in MySql. Query {}", query);
+      statement.executeUpdate();
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
+    }
+  }
+
+  private void applySoftDelete(short accountId, short containerId, String blobName, Timestamp deletedTs,
+      Connection connection) throws Exception {
+    String query = "";
+    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
+      // use the current time
+      statement.setTimestamp(1, deletedTs);
+      statement.setInt(2, accountId);
+      statement.setInt(3, containerId);
+      statement.setString(4, blobName);
       query = statement.toString();
       logger.debug("Soft deleting blob in MySql. Query {}", query);
       statement.executeUpdate();

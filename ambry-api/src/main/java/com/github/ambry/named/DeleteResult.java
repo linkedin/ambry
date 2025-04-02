@@ -15,6 +15,8 @@
 
 package com.github.ambry.named;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -22,6 +24,7 @@ import java.util.Objects;
  * Class to convey information about a successful deletion from {@link NamedBlobDb}.
  */
 public class DeleteResult {
+  private final List<BlobVersion> blobVersions;
   private final String blobId;
   private final boolean alreadyDeleted;
 
@@ -32,6 +35,14 @@ public class DeleteResult {
   public DeleteResult(String blobId, boolean alreadyDeleted) {
     this.blobId = blobId;
     this.alreadyDeleted = alreadyDeleted;
+    blobVersions = new ArrayList<>();
+    blobVersions.add(new BlobVersion(blobId, 0, alreadyDeleted));
+  }
+
+  public DeleteResult(List<BlobVersion> blobVersions) {
+    this.blobVersions = new ArrayList<>(blobVersions);
+    this.blobId = this.blobVersions.size() > 0 ? this.blobVersions.get(0).blobId : null;
+    this.alreadyDeleted = this.blobVersions.size() > 0 ? this.blobVersions.get(0).alreadyDeleted : false;
   }
 
   /**
@@ -63,5 +74,17 @@ public class DeleteResult {
   @Override
   public String toString() {
     return "DeleteResult[blobId=" + getBlobId() + ",isAlreadyDeleted=" + isAlreadyDeleted() + "]";
+  }
+
+  public static class BlobVersion {
+    public final String blobId;
+    public final long version;
+    public final boolean alreadyDeleted;
+
+    public BlobVersion(String blobId, long version, boolean alreadyDeleted) {
+      this.blobId = blobId;
+      this.version = version;
+      this.alreadyDeleted = alreadyDeleted;
+    }
   }
 }
