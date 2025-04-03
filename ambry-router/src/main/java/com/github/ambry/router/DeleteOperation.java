@@ -176,13 +176,8 @@ class DeleteOperation {
    * @return The DeleteRequest.
    */
   private DeleteRequest createDeleteRequest() {
-    if (!enableForceDeleteInRequest) {
-      return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          blobId, deletionTimeMs);
-    } else {
-      return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          blobId, deletionTimeMs, DeleteRequest.DELETE_REQUEST_VERSION_3, true);
-    }
+    return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+        blobId, deletionTimeMs, DeleteRequest.DELETE_REQUEST_VERSION_3, enableForceDeleteInRequest);
   }
 
   /**
