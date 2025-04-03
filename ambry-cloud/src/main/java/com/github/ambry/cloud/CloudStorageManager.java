@@ -110,7 +110,7 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public PartitionFileStore getFileStore(PartitionId id) {
+  public PartitionFileStore getFileStore(PartitionId partitionId) {
     return null;
   }
 
@@ -145,6 +145,11 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean setUpReplica(String partitionName) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

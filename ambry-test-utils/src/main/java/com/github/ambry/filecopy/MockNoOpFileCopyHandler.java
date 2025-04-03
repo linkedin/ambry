@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filetransfer.FileCopyInfo;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.store.StoreException;
 import java.io.IOException;
 import javax.annotation.Nonnull;
 
@@ -46,5 +47,15 @@ public class MockNoOpFileCopyHandler implements FileCopyHandler {
         throw new RuntimeException(e);
       }
     }
+  }
+
+  @Override
+  public void shutdown() throws InterruptedException {
+    // no op
+  }
+
+  @Override
+  public void start() throws StoreException {
+    // no op
   }
 }
