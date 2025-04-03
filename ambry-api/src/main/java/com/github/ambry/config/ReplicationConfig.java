@@ -359,8 +359,8 @@ public class ReplicationConfig {
   @Default("28800000")
   public final long diruptionReadinessWindowInMS;
 
-  public static final String PRIORITIZATION_SCHEDULER_INTERVAL = "prioritization.scheduler.interval";
-  @Config(PRIORITIZATION_SCHEDULER_INTERVAL)
+  public static final String PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES = "prioritization.scheduler.interval.minutes";
+  @Config(PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES)
   @Default("15")
   public final int scheduledIntervalMinutes;
 
@@ -453,7 +453,7 @@ public class ReplicationConfig {
     diruptionReadinessWindowInMS =
         verifiableProperties.getLong(DISRUPTION_LOOKAHEAD_WINDOW_MS, 28800000);
     scheduledIntervalMinutes =
-        verifiableProperties.getInt(PRIORITIZATION_SCHEDULER_INTERVAL, 15);
+        verifiableProperties.getInt(PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES, 15);
     highPriorityPartitionsBatchSize
         = verifiableProperties.getInt(PRIORITIZED_PARTITIONS_BATCH_SIZE, 150);
   }
