@@ -79,10 +79,8 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param clusterMap The ClusterMap to get partition and replica information.
    * @param dataNodeId The DataNodeId of the local node.
    * @param scheduler The scheduler to run periodic tasks.
-   * @param prioritizationWindowMs How far in advance to prioritize disruptions (in hours).
    * @param datacenterName The name of the local datacenter.
    * @param lowReplicaThreshold The threshold for considering a partition to have low replica count.
-   * @param minBatchSizeForHighPriorityPartitions Minimum number of partitions to include in high priority batch.
    * @param replicationTimeoutHours Maximum time without progress to allow before resetting.
    */
 
@@ -271,7 +269,6 @@ public class ReplicationPrioritizationManager implements Runnable {
       return;
     }
 
-    rwLock.writeLock().lock();
     try {
       // Identify truly new high-priority partitions that aren't already being replicated
       Set<PartitionId> newHighPriorityPartitions = new HashSet<>(highPriorityPartitions);
@@ -307,8 +304,8 @@ public class ReplicationPrioritizationManager implements Runnable {
           lastReplicationActivityMs = time.milliseconds();
         }
       }
-    } finally {
-      rwLock.writeLock().unlock();
+    } catch (Exception e) {
+      logger.error("Error updating replication set", e);
     }
   }
 
@@ -317,7 +314,6 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param highPriorityPartitions The set of partitions that should be prioritized.
    */
   private void startHighPriorityReplication(Set<PartitionId> highPriorityPartitions) {
-    rwLock.writeLock().lock();
     try {
       // Initialize the set of replicating partitions with the high-priority ones
       currentlyReplicatingPriorityPartitions.clear();
@@ -336,8 +332,8 @@ public class ReplicationPrioritizationManager implements Runnable {
       lastReplicationActivityMs = time.milliseconds();
 
       logger.info("Started high-priority replication for {} partitions", currentlyReplicatingPriorityPartitions.size());
-    } finally {
-      rwLock.writeLock().unlock();
+    } catch (Exception e) {
+      logger.error("Error starting high-priority replication", e);
     }
   }
 
@@ -426,4 +422,5 @@ public class ReplicationPrioritizationManager implements Runnable {
         partition.toPathString());
     return localDCReplicas.values().stream().mapToInt(List::size).sum() <= minActiveReplicaCount;
   }
+
 }
