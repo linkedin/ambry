@@ -30,7 +30,6 @@ import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileChunk;
-import com.github.ambry.store.StoreFileInfo;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
@@ -155,12 +154,22 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     final FileCopyGetMetaDataResponse metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
 
     metadataResponse.getLogInfos().forEach(logInfo -> {
-      logInfo.getIndexSegments().forEach(indexFile -> fetchAndPersistIndexFile(fileCopyInfo, indexFile,
-          partitionToMountFilePath, fileStore));
+      logInfo.getIndexSegments().forEach(indexFile -> {
+        FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(fileCopyInfo, indexFile, false);
+        String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
 
-      FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
-          logInfo.getLogSegment().getFileSize());
-      fetchAndPersistLogSegment(fileCopyInfo, logFileInfo, partitionToMountFilePath, fileStore);
+        StoreFileChunk chunkToWrite;
+        try {
+          chunkToWrite = new StoreFileChunk(chunkResponse.getChunkStream(), chunkResponse.getChunkStream().available());
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+        writeStoreFileChunkToDisk(fileStore, filePath, chunkToWrite);
+      });
+
+//      FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
+//          logInfo.getLogSegment().getFileSize());
+//      fetchAndPersistLogSegment(fileCopyInfo, logFileInfo, partitionToMountFilePath, fileStore);
     });
   }
 
@@ -170,9 +179,11 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @return
    */
   FileCopyGetMetaDataResponse getFileCopyGetMetaDataResponse(FileCopyInfo fileCopyInfo) {
+    validateIfStoreFileCopyHandlerIsRunning();
     String operationName = GetMetadataWorkflow.GET_METADATA_OPERATION_NAME + "[Partition=" +
         fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
     FileCopyGetMetaDataResponse metadataResponse = null;
+
     try {
       metadataResponse = operationRetryHandler.executeWithRetry(
           () -> new GetMetadataWorkflow(connectionPool, fileCopyInfo, config).execute(), operationName);
@@ -256,30 +267,18 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     }
   }
 
-  /**
-   * Fetch and persist the index file.
-   * @param fileCopyInfo the file copy info
-   * @param indexFile the index file
-   * @param partitionToMountFilePath the partition file path
-   * @param fileStore the file store
-   */
-  private void fetchAndPersistIndexFile(FileCopyInfo fileCopyInfo, FileInfo indexFile,
-      String partitionToMountFilePath, PartitionFileStore fileStore) {
-    String operationName = GetChunkDataWorkflow.GET_FILE_OPERATION_NAME;
+
+  FileCopyGetChunkResponse getFileCopyGetChunkResponse(FileCopyInfo fileCopyInfo, FileInfo indexFile, boolean isChunked) {
+    validateIfStoreFileCopyHandlerIsRunning();
+    String operationName = GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME;
     FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0,
-        indexFile.getFileSize(), false);
+        indexFile.getFileSize(), isChunked);
+    FileCopyGetChunkResponse chunkResponse = null;
 
     try {
-      FileCopyGetChunkResponse chunkResponse = operationRetryHandler.executeWithRetry(
+      chunkResponse = operationRetryHandler.executeWithRetry(
           () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, fileChunkInfo, clusterMap, config)
               .execute(), operationName);
-      validateResponseOrThrow(chunkResponse, operationName);
-
-      String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
-      StoreFileChunk chunkToWrite = new StoreFileChunk(chunkResponse.getChunkStream(),
-          chunkResponse.getChunkStream().available());
-
-      fileStore.writeStoreFileChunkToDisk(filePath, chunkToWrite);
     } catch (IOException e) {
       logMessageAndThrow(operationName, "IO error while processing index file", e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
@@ -297,6 +296,19 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     } catch (Exception e) {
       logMessageAndThrow(operationName, "Exception while processing index file", e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+    }
+
+    validateResponseOrThrow(chunkResponse, operationName);
+    return chunkResponse;
+  }
+
+  void writeStoreFileChunkToDisk(PartitionFileStore fileStore, String filePath, StoreFileChunk chunkToWrite) {
+    validateIfStoreFileCopyHandlerIsRunning();
+    try {
+      fileStore.writeStoreFileChunkToDisk(filePath, chunkToWrite);
+    } catch (IOException e) {
+      logMessageAndThrow("WriteChunkOperation", "Error writing file chunk to disk", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
     }
   }
 
