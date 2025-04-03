@@ -355,7 +355,7 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public PartitionFileStore getFileStore(PartitionId id) {
+  public PartitionFileStore getFileStore(PartitionId partitionId) {
     //TODO: Implementation To Be added.
     return null;
   }
@@ -478,6 +478,12 @@ public class StorageManager implements StoreManager {
   public boolean isFilesExistForPattern(PartitionId partitionId, Pattern pattern) throws IOException {
     List<File> result = this.getDiskManager(partitionId).getFilesForPattern(pattern);
     return (null != result && !result.isEmpty());
+  }
+
+  @Override
+  public boolean setUpReplica(String partitionName) {
+    //TODO: Add Implementation For Set Up Replica and Return Success Or Failure.
+    return false;
   }
 
   /**

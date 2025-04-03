@@ -26,6 +26,8 @@ public enum StoreErrorCodes {
   AlreadyExist,
   StoreNotStarted,
   StoreAlreadyStarted,
+  StoreNotInitialized,
+  StoreAlreadyInitialized,
   StoreShuttingDown,
   IllegalIndexOperation,
   IllegalIndexState,

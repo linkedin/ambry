@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer.handler;
 
 import com.github.ambry.filetransfer.FileCopyInfo;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.store.StoreException;
 import java.io.IOException;
 import javax.annotation.Nonnull;
 
@@ -31,4 +32,8 @@ public interface FileCopyHandler {
    */
   void copy(@Nonnull FileCopyInfo fileCopyInfo)
       throws IOException, ConnectionPoolTimeoutException, InterruptedException;
+
+  void shutdown() throws InterruptedException;
+
+  void start() throws StoreException;
 }
