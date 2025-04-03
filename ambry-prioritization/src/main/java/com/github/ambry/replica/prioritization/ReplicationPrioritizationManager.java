@@ -32,9 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -59,7 +57,7 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final DataNodeId dataNodeId;
   private final long prioritizationWindowMs; // How far in advance to prioritize disruptions
   private final ReadWriteLock rwLock;
-  private final Set<PartitionId> currentlyReplicatingPartitions;
+  private final Set<PartitionId> currentlyReplicatingPriorityPartitions;
   private final Set<PartitionId> disabledReplicationPartitions;
   private Set<PartitionId> allBootstrappingPartitions;
   private final String datacenterName;
@@ -89,9 +87,8 @@ public class ReplicationPrioritizationManager implements Runnable {
    */
 
   ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
-      ScheduledExecutorService scheduler, int prioritizationWindowMs, String datacenterName,
-      int lowReplicaThreshold, int minBatchSizeForHighPriorityPartitions,
-      int replicationTimeoutHours, StorageManager storageManager,
+      ScheduledExecutorService scheduler, String datacenterName,
+      int lowReplicaThreshold, int replicationTimeoutHours, StorageManager storageManager,
       ReplicationConfig replicationConfig, HelixClusterManager helixClusterManager, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
       clusterManagerQueryHelper) {
     this.replicationEngine = replicationEngine;
@@ -100,12 +97,12 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.prioritizationWindowMs = replicationConfig.diruptionReadinessWindowInMS;
     this.scheduleIntervalMinutes = replicationConfig.scheduledIntervalMinutes;
     this.rwLock = new ReentrantReadWriteLock();
-    this.currentlyReplicatingPartitions = ConcurrentHashMap.newKeySet();
+    this.currentlyReplicatingPriorityPartitions = ConcurrentHashMap.newKeySet();
     this.disabledReplicationPartitions = ConcurrentHashMap.newKeySet();
     this.allBootstrappingPartitions = ConcurrentHashMap.newKeySet();
     this.datacenterName = datacenterName;
     this.lowReplicaThreshold = lowReplicaThreshold;
-    this.minBatchSizeForHighPriorityPartitions = minBatchSizeForHighPriorityPartitions;
+    this.minBatchSizeForHighPriorityPartitions = replicationConfig.highPriorityPartitionsBatchSize;
     this.isHighPriorityReplicationRunning = new AtomicBoolean(false);
     this.replicationTimeoutMs = TimeUnit.HOURS.toMillis(replicationTimeoutHours);
     this.completedPartitions = ConcurrentHashMap.newKeySet();
@@ -125,6 +122,13 @@ public class ReplicationPrioritizationManager implements Runnable {
   }
 
 
+  public Set<PartitionId> getCurrentlyReplicatingPriorityPartitions() {
+    return currentlyReplicatingPriorityPartitions;
+  }
+
+  /**
+   * Main entry point for the replication prioritization manager.
+   */
   @Override
   public void run() {
     start();
@@ -144,17 +148,22 @@ public class ReplicationPrioritizationManager implements Runnable {
     try {
       logger.info("Starting partition prioritization run");
 
+      // 1. Get all bootstrapping partitions from StorageManager
+      allBootstrappingPartitions = getAllBootstrappingPartitionsForNode();
+
       // Process any completed partitions
       processCompletedPartitions();
 
-      // 1. Get all bootstrapping partitions from StorageManager
-      allBootstrappingPartitions = getAllBootstrappingPartitionsForNode();
       Set<PartitionId> partitionIds = new HashSet<>(allBootstrappingPartitions);
-      partitionIds.removeAll(currentlyReplicatingPartitions);
+      if (partitionIds.isEmpty()) {
+        logger.info("Bootstrapping partition list from StorageManager is empty");
+        return;
+      }
+
+      partitionIds.removeAll(currentlyReplicatingPriorityPartitions);
 
       if (partitionIds.isEmpty()) {
-        logger.info("Bootstrapping partition list is empty");
-        return;
+        logger.info("All bootstrapping partitions are already being replicated");
       }
 
       // 3. Analyze replica counts and create prioritized list
@@ -196,9 +205,43 @@ public class ReplicationPrioritizationManager implements Runnable {
 //      }
 
       // 5. Update replication priorities
-      updateReplicationSet(highPriorityPartitions);
+      if (highPriorityPartitions.isEmpty() && !isHighPriorityReplicationRunning.get()) {
+        logger.info("No new high-priority partitions identified "
+            + "and no existing high priority run, enabling replication for disabled partitions");
+
+        if (disabledReplicationPartitions.isEmpty()) {
+          logger.info("No disabled partitions to enable");
+        } else {
+          logger.info("Found {} disabled partitions to enable", disabledReplicationPartitions.size());
+          resetToNormalReplication();
+        }
+
+      } else {
+        updateReplicationSet(highPriorityPartitions);
+      }
     } catch (Exception e) {
       logger.error("Error in partition prioritization task", e);
+    }
+  }
+
+
+  /**
+   * Resets replication to normal operation, enabling all partitions.
+   */
+  private void resetToNormalReplication() {
+    try {
+      logger.info("Restoring normal replication for disabled partitions");
+
+      // Helps the mock replication engine
+      Set<PartitionId> copyOfDisabledReplicationPartitions = new HashSet<>(disabledReplicationPartitions);
+      // Enable replication for previously disabled partitions
+      replicationEngine.controlReplicationForPartitions(copyOfDisabledReplicationPartitions, Collections.emptyList(),
+          true);
+      disabledReplicationPartitions.clear();
+      logger.debug("Disabling high priority partition flag isHighPriorityReplicationRunning={}",
+          isHighPriorityReplicationRunning.get());
+    } catch (Exception e) {
+      logger.error("Error resetting to normal replication", e);
     }
   }
 
@@ -206,11 +249,16 @@ public class ReplicationPrioritizationManager implements Runnable {
    * Process any partitions that have completed replication.
    */
   private void processCompletedPartitions() {
-    currentlyReplicatingPartitions.stream().filter(this::hasCompletedReplication).forEach(completedPartitions::add);
+    currentlyReplicatingPriorityPartitions.stream().filter(this::hasCompletedReplication).forEach(completedPartitions::add);
 
     // Remove completed partitions from current set
-    currentlyReplicatingPartitions.removeAll(completedPartitions);
+    currentlyReplicatingPriorityPartitions.removeAll(completedPartitions);
     logger.info("Removed {} completed partitions from replication set", completedPartitions.size());
+
+    if (currentlyReplicatingPriorityPartitions.isEmpty()) {
+      logger.info("No currently replicating partitions, disabling high-priority replication");
+      isHighPriorityReplicationRunning.set(false);
+    }
   }
 
   /**
@@ -218,6 +266,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param highPriorityPartitions The set of partitions that should be prioritized.
    */
   private void updateReplicationSet(Set<PartitionId> highPriorityPartitions) {
+
     if (highPriorityPartitions.isEmpty()) {
       return;
     }
@@ -226,7 +275,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     try {
       // Identify truly new high-priority partitions that aren't already being replicated
       Set<PartitionId> newHighPriorityPartitions = new HashSet<>(highPriorityPartitions);
-      newHighPriorityPartitions.removeAll(currentlyReplicatingPartitions);
+      newHighPriorityPartitions.removeAll(currentlyReplicatingPriorityPartitions);
 
       if (newHighPriorityPartitions.isEmpty() && isHighPriorityReplicationRunning.get()) {
         logger.info("No new high-priority partitions identified, continuing with current replication set");
@@ -244,10 +293,10 @@ public class ReplicationPrioritizationManager implements Runnable {
               newHighPriorityPartitions.size());
 
           // Enable replication for the new high-priority partitions
-          currentlyReplicatingPartitions.addAll(newHighPriorityPartitions);
+          currentlyReplicatingPriorityPartitions.addAll(newHighPriorityPartitions);
 
           // Ensure we have at least the minimum batch size
-          if (currentlyReplicatingPartitions.size() < minBatchSizeForHighPriorityPartitions) {
+          if (currentlyReplicatingPriorityPartitions.size() < minBatchSizeForHighPriorityPartitions) {
             addNewPartitions();
           }
 
@@ -271,11 +320,11 @@ public class ReplicationPrioritizationManager implements Runnable {
     rwLock.writeLock().lock();
     try {
       // Initialize the set of replicating partitions with the high-priority ones
-      currentlyReplicatingPartitions.clear();
-      currentlyReplicatingPartitions.addAll(highPriorityPartitions);
+      currentlyReplicatingPriorityPartitions.clear();
+      currentlyReplicatingPriorityPartitions.addAll(highPriorityPartitions);
 
       // Ensure we have at least the minimum batch size
-      if (currentlyReplicatingPartitions.size() < minBatchSizeForHighPriorityPartitions) {
+      if (currentlyReplicatingPriorityPartitions.size() < minBatchSizeForHighPriorityPartitions) {
         addNewPartitions();
       }
 
@@ -286,7 +335,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       isHighPriorityReplicationRunning.set(true);
       lastReplicationActivityMs = time.milliseconds();
 
-      logger.info("Started high-priority replication for {} partitions", currentlyReplicatingPartitions.size());
+      logger.info("Started high-priority replication for {} partitions", currentlyReplicatingPriorityPartitions.size());
     } finally {
       rwLock.writeLock().unlock();
     }
@@ -296,7 +345,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    * Add additional partitions to meet the minimum batch size requirement.
    */
   private void addNewPartitions() {
-    int additionalPartitionsNeeded = minBatchSizeForHighPriorityPartitions - currentlyReplicatingPartitions.size();
+    int additionalPartitionsNeeded = minBatchSizeForHighPriorityPartitions - currentlyReplicatingPriorityPartitions.size();
 
     if (additionalPartitionsNeeded <= 0) {
       return;
@@ -308,12 +357,12 @@ public class ReplicationPrioritizationManager implements Runnable {
     // Get all partitions for this node
     Set<PartitionId> allPartitions = new HashSet<>(allBootstrappingPartitions);
     // Remove already prioritized partitions
-    allPartitions.removeAll(currentlyReplicatingPartitions);
+    allPartitions.removeAll(currentlyReplicatingPriorityPartitions);
 
     // Add additional normal partitions up to the minimum batch size
     if (!allPartitions.isEmpty()) {
       int partitionsToAdd = Math.min(additionalPartitionsNeeded, allPartitions.size());
-      currentlyReplicatingPartitions.addAll(allPartitions.stream().limit(partitionsToAdd).collect(Collectors.toSet()));
+      currentlyReplicatingPriorityPartitions.addAll(allPartitions.stream().limit(partitionsToAdd).collect(Collectors.toSet()));
     }
   }
 
@@ -324,7 +373,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     // Get all partitions that aren't currently replicating
     Set<PartitionId> allPartitions = new HashSet<>(allBootstrappingPartitions);
     Set<PartitionId> partitionsToDisable = new HashSet<>(allPartitions);
-    partitionsToDisable.removeAll(currentlyReplicatingPartitions);
+    partitionsToDisable.removeAll(currentlyReplicatingPriorityPartitions);
 
     // Disable non-priority partitions
     if (!partitionsToDisable.isEmpty()) {
@@ -334,8 +383,8 @@ public class ReplicationPrioritizationManager implements Runnable {
     }
 
     // Enable high-priority partitions
-    logger.info("Enabling replication for {} high-priority partitions", currentlyReplicatingPartitions.size());
-    replicationEngine.controlReplicationForPartitions(currentlyReplicatingPartitions, Collections.emptyList(), true);
+    logger.info("Enabling replication for {} high-priority partitions", currentlyReplicatingPriorityPartitions.size());
+    replicationEngine.controlReplicationForPartitions(currentlyReplicatingPriorityPartitions, Collections.emptyList(), true);
   }
 
 
