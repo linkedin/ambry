@@ -103,7 +103,7 @@ public class ReplicationPrioritizationManagerTest {
 
     Properties properties = new Properties();
     properties.setProperty("disruption.lookahead.window.ms", Long.toString(disruptionReadinessWindowInMS));
-    properties.setProperty("prioritization.scheduler.interval", Long.toString(scheduleIntervalMinutes));
+    properties.setProperty("prioritization.scheduler.interval.minutes", Long.toString(scheduleIntervalMinutes));
     properties.setProperty("prioritization.batch.size", Integer.toString(minBatchSize));
     replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
 
