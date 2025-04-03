@@ -129,7 +129,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    */
   @Override
   public void run() {
-    start();
+    startPrioritizationCycle();
   }
 
   /**
@@ -142,7 +142,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    * 6. Get affected partitions
    * 7. Control replication thread based on the high priority partitions
    */
-  void start() {
+  void startPrioritizationCycle() {
     try {
       logger.info("Starting partition prioritization run");
 

@@ -177,7 +177,7 @@ public class ReplicationPrioritizationManagerTest {
     when(store3.getCurrentState()).thenReturn(ReplicaState.STANDBY);
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify no partition replication was controlled (since there are no bootstrapping partitions)
     verify(replicationEngine, never()).controlReplicationForPartitions(
@@ -206,7 +206,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 3);
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify normal partitions were replicated and control replication was not called
     verify(replicationEngine, never()).controlReplicationForPartitions(
@@ -235,7 +235,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 3);
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify partitions were prioritized correctly
     ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
@@ -307,7 +307,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition5, 3);
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify partitions were prioritized correctly
     ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
@@ -376,7 +376,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 3);
 
     // First run - establishes baseline
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify that replicationEngine was called with appropriate sets
     ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
@@ -390,7 +390,7 @@ public class ReplicationPrioritizationManagerTest {
     when(store1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
 
     // Second run - should recognize partition1 as completed
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Check that partition1 is not in any enabled set
     boolean partition1Enabled = false;
@@ -449,7 +449,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 3);
 
     // First run - should prioritize partition1
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify that partition1 was enabled
     ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
@@ -480,7 +480,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition2, 2); // Now below threshold
 
     // Second run - should prioritize partition2 now
-    manager.start();
+    manager.startPrioritizationCycle();
 
     enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
     enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
@@ -502,7 +502,7 @@ public class ReplicationPrioritizationManagerTest {
     when(storageManager.getLocalPartitions()).thenThrow(new RuntimeException("Test exception"));
 
     // Run should not propagate exception
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // No assertions needed - test passes if no exception is thrown
   }
@@ -535,7 +535,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition5, 3);
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify that at least minBatchSize partitions were enabled
     ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
@@ -579,7 +579,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 3);
 
     // First run - sets up initial state with partition1 as high priority
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify that both partition1 and partition2 are now enabled
     ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
@@ -609,7 +609,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition2, 2); // Now below threshold
 
     // Second run - should add partition2 to high priority set
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify that both partition1 and partition2 were already enabled
     verify(replicationEngine, never()).controlReplicationForPartitions(
@@ -636,7 +636,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 2); // Below threshold
 
     // First run - sets up initial state with all partitions as high priority
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Reset mocks for clean verification in second run
     reset(replicationEngine);
@@ -647,7 +647,7 @@ public class ReplicationPrioritizationManagerTest {
     when(store3.getCurrentState()).thenReturn(ReplicaState.STANDBY);
 
     // Second run - should recognize all partitions as completed
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify that replicationEngine was not called to enable any partitions
     verify(replicationEngine, never()).controlReplicationForPartitions(
@@ -674,7 +674,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 3); // Above threshold
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify replicationEngine was not called to change any partition states
     verify(replicationEngine, never()).controlReplicationForPartitions(
@@ -687,7 +687,7 @@ public class ReplicationPrioritizationManagerTest {
     when(storageManager.getLocalPartitions()).thenReturn(Collections.emptySet());
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify replicationEngine was not called
     verify(replicationEngine, never()).controlReplicationForPartitions(
@@ -755,7 +755,7 @@ public class ReplicationPrioritizationManagerTest {
     mockReplicaStates(partition3, 3);
 
     // Run the manager
-    manager.start();
+    manager.startPrioritizationCycle();
 
     // Verify that non-priority partitions were disabled
     ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
