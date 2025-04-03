@@ -56,6 +56,7 @@ public class FileCopyThread extends Thread {
 
   public void shutDown() throws InterruptedException {
     isRunning = false;
+    fileCopyHandler.shutdown();
     shutDownLatch.await();
   }
 }

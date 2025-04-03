@@ -16,8 +16,6 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -67,7 +65,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.github.ambry.config.RouterConfig;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
@@ -1436,6 +1433,24 @@ public class HelixClusterManager implements ClusterMap {
         return resourceProperty.replicationFactor >= clusterMapConfig.routerPutSuccessTarget;
       } catch (Exception e) {
         return false;
+      }
+    }
+
+    /**
+     * MIN_ACTIVE_REPLICA configuration is defined at resource level in Helix
+     * @return the MIN_ACTIVE_REPLICA configuration for this resource/partition.
+     */
+    @Override
+    public int getMinActiveReplicas(PartitionId partitionId) {
+      try {
+        String partitionIdString = partitionId.toPathString();
+        String resource = getResourceForPartitionInLocalDc(partitionIdString).iterator().next();
+        String tag = dcToResourceNameToTag.get(clusterMapConfig.clusterMapDatacenterName).get(resource);
+        ResourceProperty resourceProperty  =
+            dcToTagToResourceProperty.get(clusterMapConfig.clusterMapDatacenterName).get(tag);
+        return resourceProperty.minActiveReplicas;
+      } catch (Exception e) {
+        return DEFAULT_NUM_REPLICAS - 1;
       }
     }
 

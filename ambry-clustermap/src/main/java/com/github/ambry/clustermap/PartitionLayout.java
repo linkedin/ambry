@@ -381,5 +381,10 @@ public class PartitionLayout {
     public boolean isPartitionFilteringEnabled() {
       return false;
     }
+
+    @Override
+    public int getMinActiveReplicas(PartitionId partitionId) {
+      throw new UnsupportedOperationException("Not supported in static cluster map");
+    }
   }
 }
