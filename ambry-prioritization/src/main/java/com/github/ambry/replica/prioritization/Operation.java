@@ -1,6 +1,5 @@
 package com.github.ambry.replica.prioritization;
 
-import com.google.protobuf.Timestamp;
 
 /**
  * The Operation interface defines the contract for operations in the system.
@@ -12,5 +11,5 @@ public interface Operation extends Comparable<Operation> {
    *
    * @return the start time of the operation in milliseconds.
    */
-  Timestamp getStartTime();
+  long getStartTime();
 }

@@ -13,7 +13,7 @@ public interface DisruptionService {
    * Batches operations by partition by merging operations from all replicas in the local datacenter.
    *
    * @param partitionIds List of partitions to process
-   * @return A map of PartitionId to a list of merged ACMOperations
+   * @return A map of PartitionId to a list of merged DisruptionOperations
    */
   Map<PartitionId, List<Operation>> batchDisruptionsByPartition(List<PartitionId> partitionIds);
 }
