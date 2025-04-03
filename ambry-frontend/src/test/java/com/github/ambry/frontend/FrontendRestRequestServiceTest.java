@@ -210,6 +210,7 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.enable.blob.name.rule.check", "true");
     configProps.setProperty(FrontendConfig.INVALID_ASCII_BLOB_NAME_CHARS, "\\\\,{,},^,%,`,[,],\",<,>,~,#,|\n");
     CommonTestUtils.populateRequiredRouterProps(configProps);
+    configProps.put("clustermap.cluster.name", clusterName);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
@@ -4457,6 +4458,8 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if ((restRequest.getRestMethod() == RestMethod.PUT || restRequest.getRestMethod() == RestMethod.POST)
           && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
+      } else {
+        returnInputIfTranslationNull = true;
       }
       return completeOperation(input, blobProperties, callback);
     }
@@ -4665,7 +4668,7 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.StitchBlob);
   }
