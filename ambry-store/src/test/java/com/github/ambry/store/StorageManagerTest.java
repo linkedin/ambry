@@ -464,6 +464,72 @@ public class StorageManagerTest {
   }
 
   /**
+   * Tests whether if add blobstore fails if initialization fails
+   * Tests whether it will be successful after initialization is successful
+   * @throws Exception exception
+   */
+  @Test
+  public void addBlobStoreInitializationFailureTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    int newMountPathIndex = 3;
+    // add new MountPath to local node
+    File f = File.createTempFile("ambry", ".tmp");
+    File mountFile =
+        new File(f.getParent(), "mountpathfile" + MockClusterMap.PLAIN_TEXT_PORT_START_NUMBER + newMountPathIndex);
+    MockClusterMap.deleteFileOrDirectory(mountFile);
+    assertTrue("Couldn't create mount path directory", mountFile.mkdir());
+    localNode.addMountPaths(Collections.singletonList(mountFile.getAbsolutePath()));
+    PartitionId newPartition1 =
+        new MockPartitionId(10L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), newMountPathIndex);
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
+
+    String newReplicaPath = newPartition1.getReplicaIds().get(0).getReplicaPath();
+    File newReplicaPathFile = new File(newReplicaPath);
+    assertTrue("Could not set readable state to false", newReplicaPathFile.setReadable(false));
+
+    // test add store onto a new disk, which should fail
+    assertFalse("Add new store should succeed", storageManager.addBlobStore(newPartition1.getReplicaIds().get(0)));
+    assertTrue("Could not set readable state to true", newReplicaPathFile.setReadable(true));
+
+    // test add store after directory is readable, which should succeed
+    assertTrue("Add new store should succeed", storageManager.addBlobStore(newPartition1.getReplicaIds().get(0)));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Tests whether add blobstore fails if loading of blobstore is failed.
+   * @throws Exception exception
+   */
+  @Test
+  public void addBlobStoreLoadFailureTest() throws Exception{
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+
+    PartitionId newPartition1 =
+        new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+
+    // test add store but fail to add segment requirements to DiskSpaceAllocator. (This is simulated by inducing
+    // addRequiredSegments failure to make store inaccessible)
+    List<String> mountPaths = localNode.getMountPaths();
+    String diskToFail = mountPaths.get(0);
+    File reservePoolDir = new File(diskToFail, diskManagerConfig.diskManagerReserveFileDirName);
+    File storeReserveDir = new File(reservePoolDir, DiskSpaceAllocator.STORE_DIR_PREFIX + newPartition1.toPathString());
+    StorageManager storageManager = createStorageManager(localNode, new MetricRegistry(), null);
+    storageManager.start();
+    Utils.deleteFileOrDirectory(storeReserveDir);
+    assertTrue("File creation should succeed", storeReserveDir.createNewFile());
+
+    assertFalse("Add store should fail if store couldn't start due to initializePool failure",
+        storageManager.addBlobStore(newPartition1.getReplicaIds().get(0)));
+    assertNull("New store shouldn't be in in-memory data structure", storageManager.getStore(newPartition1, false));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
    * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE (update
    * InstanceConfig in Helix is turned off in this test)
    * @throws Exception
