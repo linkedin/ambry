@@ -349,6 +349,7 @@ project (':ambry-prioritization') {
         compile project(':ambry-commons')
         compile project(':ambry-store')
         compile project(':ambry-clustermap')
+        compile project(':ambry-replication')
         testCompile project(':ambry-test-utils')
     }
 }
