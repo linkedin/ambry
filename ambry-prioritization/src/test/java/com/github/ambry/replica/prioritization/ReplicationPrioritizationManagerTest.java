@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StorageManager;
@@ -74,9 +75,6 @@ public class ReplicationPrioritizationManagerTest {
   private ReplicationConfig replicationConfig;
 
   @Mock
-  private HelixClusterManager helixClusterManager;
-
-  @Mock
   private ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerQueryHelper;
 
   @Mock
@@ -85,12 +83,13 @@ public class ReplicationPrioritizationManagerTest {
   @Mock
   private Store store1, store2, store3, store4, store5;
 
+  @Mock
+  private DisruptionService disruptionService;
+
   private ReplicationPrioritizationManager manager;
   private ReplicationPrioritizationManager managerWithMockTime;
   private final String datacenterName = "testDC";
-  private final int lowReplicaThreshold = 2;
   private final int minBatchSize = 3;
-  private final int replicationTimeoutHours = 24;
   private final long scheduleIntervalMinutes = 5;
   private final long disruptionReadinessWindowInMS = TimeUnit.HOURS.toMillis(1);
 
@@ -133,11 +132,13 @@ public class ReplicationPrioritizationManagerTest {
     partitionToStoreMap.put(partition4, store4);
     partitionToStoreMap.put(partition5, store5);
 
+    when(disruptionService.batchDisruptionsByPartition(anyList()))
+        .thenReturn(new HashMap<>());
     // Create manager instance with system time
     manager = new ReplicationPrioritizationManager(
         replicationEngine, clusterMap, dataNodeId, scheduler,
-        datacenterName, lowReplicaThreshold, replicationTimeoutHours,
-        storageManager, replicationConfig, helixClusterManager, clusterManagerQueryHelper);
+        datacenterName,
+        storageManager, replicationConfig, clusterManagerQueryHelper, disruptionService);
 
     // Initialize mock time
    // when(mockTime.milliseconds()).thenReturn(System.currentTimeMillis());
@@ -145,8 +146,8 @@ public class ReplicationPrioritizationManagerTest {
     // Create manager instance with mock time for testing timeouts
     managerWithMockTime = new ReplicationPrioritizationManager(
         replicationEngine, clusterMap, dataNodeId, scheduler,
-        datacenterName, lowReplicaThreshold, replicationTimeoutHours,
-        storageManager, replicationConfig, helixClusterManager, clusterManagerQueryHelper);
+        datacenterName,
+        storageManager, replicationConfig, clusterManagerQueryHelper, disruptionService);
 
     // Need to use reflection to set the private time field
     try {
