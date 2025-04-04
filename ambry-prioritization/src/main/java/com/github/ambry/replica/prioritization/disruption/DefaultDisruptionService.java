@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.replica.prioritization;
+package com.github.ambry.replica.prioritization.disruption;
 
 import com.github.ambry.clustermap.PartitionId;
 import java.util.Arrays;
