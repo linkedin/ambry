@@ -13,7 +13,9 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
+import com.github.ambry.filetransfer.utils.FileCopyUtils;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nonnull;
@@ -44,8 +46,22 @@ public class FileCopyThread extends Thread {
   @Override
   public void run() {
     try {
-      //TODO add required params for File copy handler
-      fileCopyHandler.copy(null);
+      ReplicaId replicaId = fileCopyStatusListener.getReplicaId();
+      if (replicaId == null) {
+        throw new IllegalStateException("ReplicaId cannot be null");
+      }
+
+      //TODO add logic to get the source and target replica id
+      ReplicaId targetReplicaId = FileCopyUtils.getPeerForFileCopy(replicaId.getPartitionId(), replicaId.getDataNodeId().getDatacenterName());
+
+      if(targetReplicaId == null) {
+        throw new IllegalStateException("Target ReplicaId cannot be null");
+      }
+
+      FileCopyInfo fileCopyInfo = new FileCopyInfo(replicaId, targetReplicaId);
+      fileCopyHandler.start();
+      // Start the file copy process
+      fileCopyHandler.copy(fileCopyInfo);
       fileCopyStatusListener.onFileCopySuccess();
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);

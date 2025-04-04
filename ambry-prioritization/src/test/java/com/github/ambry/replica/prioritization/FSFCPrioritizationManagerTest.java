@@ -112,28 +112,4 @@ public class FSFCPrioritizationManagerTest {
      }
    }
 
-//   @Test
-//  public void checkOrderOfReplicasAdded(){
-//    prioritizationManager.start();
-//    Map<DiskId, List<PartitionId>> diskToPartitionMap = new ConcurrentHashMap<>();
-//    int partitionCounter = 1;
-//    List<ReplicaId> replicas = new ArrayList<>();
-//    for(int diskId=1; diskId <= 10; diskId++){
-//        PartitionId partition =
-//            new MockPartitionId(partitionCounter++, MockClusterMap.DEFAULT_PARTITION_CLASS,
-//                clusterMap.getDataNodes(), diskId-1);
-//
-//
-//        replicas.add(partition.getReplicaIds().get(0));
-//        assertTrue(prioritizationManager.addReplica(partition.getReplicaIds().get(0)));
-//    }
-//
-//     for(int diskId=1; diskId <= 10; diskId++){
-//       List<ReplicaId> partitionList = prioritizationManager.getPartitionListForDisk(clusterMap.getDataNodes().get(0).getDiskIds()
-//           .get(0), 1);
-//       for(int i=0; i < partitionList.size(); i++){
-//         assertEquals(partitionList.get(i).getReplicaPath(), replicas.get((diskId-1)*5 + i).getReplicaPath());
-//       }
-//     }
-//  }
 }

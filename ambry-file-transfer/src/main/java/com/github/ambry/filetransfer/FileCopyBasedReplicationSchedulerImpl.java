@@ -216,6 +216,10 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       this.replicaId = replicaId;
     }
 
+    public ReplicaId getReplicaId() {
+      return replicaId;
+    }
+
     @Override
     public void onFileCopySuccess() {
       removeReplicaFromFileCopy(replicaId);
@@ -227,6 +231,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       logger.error("Error Copying File For Replica: " + replicaId.getPartitionId().toPathString());
       logger.error("[Error]: ", e);
       removeReplicaFromFileCopy(replicaId);
+      //TODO: update Metrics For File Copy Failure.
       replicaSyncUpManager.onFileCopyError(replicaId);
     }
 

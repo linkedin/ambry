@@ -108,6 +108,7 @@ public class FileCopyBasedReplicationManager {
     logger.info("FileCopyBasedReplicationManager started");
     PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
     List<Integer> partitionIds = new ArrayList<>();
+    partitionIds.add(1);
     List<PartitionId> partitionIdList =
         storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
     //Integrate clean up.

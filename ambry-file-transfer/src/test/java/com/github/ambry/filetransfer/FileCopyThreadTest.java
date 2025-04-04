@@ -13,6 +13,7 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filecopy.MockFileCopyHandlerFactory;
 import com.github.ambry.filecopy.MockNoOpFileCopyHandler;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
@@ -72,6 +73,11 @@ public class FileCopyThreadTest {
       @Override
       public void onFileCopySuccess() {
         successFailCount.put("success", successFailCount.get("success") + 1);
+      }
+
+      @Override
+      public ReplicaId getReplicaId() {
+        return null;
       }
 
       @Override

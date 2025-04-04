@@ -71,6 +71,11 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
           }
 
           @Override
+          public ReplicaId getReplicaId() {
+            return null;
+          }
+
+          @Override
           public void onFileCopyFailure(Exception e) {
             successFailCount.put("fail", successFailCount.get("fail") + 1);
           }
@@ -133,6 +138,11 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
   private static class MockFileCopyStatusListener implements FileCopyStatusListener {
     @Override
     public void onFileCopySuccess() {
+    }
+
+    @Override
+    public ReplicaId getReplicaId() {
+      return null;
     }
 
     @Override
