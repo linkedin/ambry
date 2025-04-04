@@ -19,9 +19,11 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
+import com.github.ambry.config.ReplicaPrioritizationStrategy;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
+import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
 import java.util.Objects;
 
@@ -39,14 +41,14 @@ public class FileCopyBasedReplicationSchedulerFactoryImpl implements FileCopyBas
 
   public FileCopyBasedReplicationSchedulerFactoryImpl(FileCopyHandlerFactory fileCopyHandlerFactory,
       FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMap clusterMap,
-      PrioritizationManager prioritizationManager, StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId, ClusterParticipant clusterParticipant) {
+      PrioritizationManagerFactory prioritizationManagerFactory, StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId, ClusterParticipant clusterParticipant) {
 
     Objects.requireNonNull(clusterParticipant, "ClusterParticipant cannot be null");
 
     this.fileCopyHandlerFactory = fileCopyHandlerFactory;
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.clusterMap = clusterMap;
-    this.prioritizationManager = prioritizationManager;
+    this.prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(ReplicaPrioritizationStrategy.FirstComeFirstServe);
     this.storeManager = storeManager;
     this.storeConfig = storeConfig;
     this.dataNodeId = dataNodeId;
