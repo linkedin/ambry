@@ -66,7 +66,6 @@ public class DiskManager {
 
   private final ConcurrentHashMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
-
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
