@@ -146,6 +146,8 @@ public class ServerConfig {
 
   /**
    * Decide Replication Protocol For Hydration Of Newly Added Replicas
+   * - Blob Based Replication
+   * - File Based Replication
    */
   public static final String SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION = "server.replication.protocol.for.hydration";
   @Config(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION)

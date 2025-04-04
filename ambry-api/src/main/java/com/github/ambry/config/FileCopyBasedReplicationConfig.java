@@ -13,6 +13,9 @@
  */
 package com.github.ambry.config;
 
+import java.util.Objects;
+
+
 public class FileCopyBasedReplicationConfig {
   /**
    * The number of partitions that can be hydrated in parallel per disk
@@ -54,6 +57,33 @@ public class FileCopyBasedReplicationConfig {
   @Default("30")
   public final long fileCopySchedulerWaitTimeSecs;
 
+  public static final String FILECOPYHANDLER_MAX_API_RETRIES = "filecopyhandler.max.api.retries";
+  @Config(FILECOPYHANDLER_MAX_API_RETRIES)
+  @Default("3")
+  public final int fileCopyHandlerMaxApiRetries;
+
+  /**
+   * The backoff time in milliseconds between retries
+   */
+  public static final String FILECOPYHANDLER_RETRY_BACKOFF_MS = "filecopyhandler.retry.backoff.ms";
+  @Config(FILECOPYHANDLER_RETRY_BACKOFF_MS)
+  @Default("500")
+  public final int fileCopyHandlerRetryBackoffMs;
+
+  /**
+   * The chunk size for file copy
+   */
+  public static final String FILECOPYHANDLER_CHUNK_SIZE = "filecopyhandler.chunk.size";
+  @Config(FILECOPYHANDLER_CHUNK_SIZE)
+  @Default("10485760") // 10 MB
+  public final int getFileCopyHandlerChunkSize;
+
+  public static final String FILECOPYHANDLER_CONNECTION_TIMEOUT_MS = "filecopyhandler.connection.timeout.ms";
+  @Config(FILECOPYHANDLER_CONNECTION_TIMEOUT_MS)
+  @Default("5000")
+  public final int fileCopyHandlerConnectionTimeoutMs;
+
+
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
     fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
     fileCopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(FILE_COPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
@@ -61,5 +91,11 @@ public class FileCopyBasedReplicationConfig {
     fileCopyDataFlushIntervalInMbs = verifiableProperties.getLong(FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
     fileCopyReplicaTimeoutSecs = verifiableProperties.getLong(FILE_COPY_REPLICA_TIMEOUT_SECS, 36000);
     fileCopySchedulerWaitTimeSecs = verifiableProperties.getLong(FILE_COPY_SCHEDULER_WAIT_TIME_SECS, 30);
+    Objects.requireNonNull(verifiableProperties, "verifiableProperties cannot be null");
+
+    fileCopyHandlerMaxApiRetries = verifiableProperties.getInt(FILECOPYHANDLER_MAX_API_RETRIES, 3);
+    fileCopyHandlerRetryBackoffMs = verifiableProperties.getInt(FILECOPYHANDLER_RETRY_BACKOFF_MS, 500);
+    getFileCopyHandlerChunkSize = verifiableProperties.getInt(FILECOPYHANDLER_CHUNK_SIZE, 10 * 1024 * 1024); // 10 MB
+    fileCopyHandlerConnectionTimeoutMs = verifiableProperties.getInt(FILECOPYHANDLER_CONNECTION_TIMEOUT_MS, 5000);
   }
 }

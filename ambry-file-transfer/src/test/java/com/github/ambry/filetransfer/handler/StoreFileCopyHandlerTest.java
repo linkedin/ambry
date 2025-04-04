@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer.handler;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
@@ -73,9 +74,9 @@ public class StoreFileCopyHandlerTest {
    */
   @Before
   public void setUp() throws StoreException {
-    FileCopyHandlerConfig fileCopyHandlerConfig = new FileCopyHandlerConfig(new VerifiableProperties(new Properties()));
+    FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(new Properties()));
 
-    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyHandlerConfig);
+    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
 

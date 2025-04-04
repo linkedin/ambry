@@ -43,9 +43,11 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.ReplicaPrioritizationConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
@@ -53,6 +55,12 @@ import com.github.ambry.config.ServerExecutionMode;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationManager;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactory;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactoryImpl;
+import com.github.ambry.filetransfer.handler.FileCopyHandler;
+import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
+import com.github.ambry.filetransfer.handler.StoreFileCopyHandlerFactory;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -76,6 +84,10 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.replica.prioritization.FCFSPrioritizationManager;
+import com.github.ambry.replica.prioritization.FileBasedReplicationPrioritizationManagerFactory;
+import com.github.ambry.replica.prioritization.PrioritizationManager;
+import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
@@ -201,6 +213,7 @@ public class AmbryServer {
 
   public void startup() throws InstantiationException {
     try {
+
       logger.info("starting");
       clusterParticipants = clusterAgentsFactory.getClusterParticipants();
       if (clusterParticipants == null || clusterParticipants.isEmpty()) {
@@ -223,6 +236,8 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
+      FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(properties);
+      ReplicaPrioritizationConfig replicaPrioritizationConfig = new ReplicaPrioritizationConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -478,10 +493,31 @@ public class AmbryServer {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
+
+      FileCopyHandlerFactory fileCopyHandlerFactory = new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap, fileCopyBasedReplicationConfig);
+
+      PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
+      PrioritizationManager prioritizationManager = new FCFSPrioritizationManager();
+      DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+
+      FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory = new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory,
+          fileCopyBasedReplicationConfig, clusterMap, prioritizationManagerFactory, storageManager, storeConfig, nodeId, clusterParticipant );
+      FileCopyBasedReplicationManager fileCopyBasedReplicationManager = new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig,
+          storageManager, clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant, fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory,
+          prioritizationManagerFactory, storeConfig, replicaPrioritizationConfig);
+      testE2EFlow(fileCopyBasedReplicationManager);
+
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
     }
+  }
+
+  private void testE2EFlow(FileCopyBasedReplicationManager fileCopyBasedReplicationManager)
+      throws IOException, InterruptedException {
+    fileCopyBasedReplicationManager.start();
+
+
   }
 
   /**

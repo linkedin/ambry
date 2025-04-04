@@ -14,6 +14,7 @@
 package com.github.ambry.filetransfer.utils;
 
 
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import java.io.IOException;
@@ -35,7 +36,7 @@ public class OperationRetryHandlerTest {
 
   @Before
   public void setup() {
-    FileCopyHandlerConfig fileCopyHandlerConfig = new FileCopyHandlerConfig(new VerifiableProperties(new Properties()));
+    FileCopyBasedReplicationConfig fileCopyHandlerConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(new Properties()));
     retryHandler = new OperationRetryHandler(fileCopyHandlerConfig);
   }
 
