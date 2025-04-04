@@ -354,6 +354,22 @@ public class ReplicationConfig {
   @Config(BACKUP_CHECKER_REPORT_DIR)
   public final int maxBackupCheckerReportFd;
 
+  public static final String DISRUPTION_LOOKAHEAD_WINDOW_MS = "disruption.lookahead.window.ms";
+  @Config(DISRUPTION_LOOKAHEAD_WINDOW_MS)
+  @Default("28800000")
+  public final long diruptionReadinessWindowInMS;
+
+  public static final String PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES = "prioritization.scheduler.interval.minutes";
+  @Config(PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES)
+  @Default("15")
+  public final int scheduledIntervalMinutes;
+
+  public static final String PRIORITIZED_PARTITIONS_BATCH_SIZE = "prioritization.batch.size";
+  @Config(PRIORITIZED_PARTITIONS_BATCH_SIZE)
+  @Default("150")
+  public final int highPriorityPartitionsBatchSize;
+
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -434,5 +450,11 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
     replicationUsingNonblockingNetworkClientForLocalColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO, false);
+    diruptionReadinessWindowInMS =
+        verifiableProperties.getLong(DISRUPTION_LOOKAHEAD_WINDOW_MS, 28800000);
+    scheduledIntervalMinutes =
+        verifiableProperties.getInt(PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES, 15);
+    highPriorityPartitionsBatchSize
+        = verifiableProperties.getInt(PRIORITIZED_PARTITIONS_BATCH_SIZE, 150);
   }
 }
