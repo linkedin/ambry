@@ -73,7 +73,8 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
       clusterManagerQueryHelper;
   private final DisruptionService disruptionService;
-  Map<PriorityTier, Set<PartitionId>> prioritizedPartitions;
+  private Map<PriorityTier, Set<PartitionId>> prioritizedPartitions;
+  private final ScheduledExecutorService scheduler;
   /**
    * Creates a new ReplicationPrioritizationManager.
    * @param replicationEngine The ReplicationEngine to control partition replication.
@@ -106,10 +107,10 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.clusterManagerQueryHelper = clusterManagerQueryHelper;
     this.disruptionService = disruptionService;
     this.prioritizedPartitions = new EnumMap<>(PriorityTier.class);
+    this.scheduler = scheduler;
 
-
-    // Schedule periodic runs for disruption checking
-    scheduler.scheduleAtFixedRate(this, 0, scheduleIntervalMinutes, TimeUnit.MINUTES);
+    // Schedule periodic runs for prioritization run
+    this.scheduler.scheduleAtFixedRate(this, 0, scheduleIntervalMinutes, TimeUnit.MINUTES);
 
     logger.info("ReplicationPrioritizationManager initialized with prioritization window of {} hours, schedule interval of {} minutes, " +
             "and min batch size of {} partitions", prioritizationWindowMs, scheduleIntervalMinutes,
