@@ -161,18 +161,17 @@ public class ReplicationPrioritizationManager implements Runnable {
         logger.info("All bootstrapping partitions are already being replicated");
       }
 
-      // 3. Fetch disruptions for all partitions
-      Map<PartitionId, List<Operation>> disruptionsByPartition =
-          disruptionService.batchDisruptionsByPartition(new ArrayList<>(partitionIds));
+      Map<PartitionId, List<Operation>> disruptionsByPartition = fetchDisruptions(new ArrayList<>(partitionIds));
 
-      logger.info("Fetched disruptions for {} partitions", disruptionsByPartition.size());
-
+      if (disruptionsByPartition == null || disruptionsByPartition.isEmpty()) {
+        logger.info("No disruptions found for any partitions");
+      } else {
+        logger.info("Fetched disruptions for {} partitions", disruptionsByPartition.size());
+      }
       // 4. Create prioritized partition lists
       prioritizedPartitions = prioritizePartitions(partitionIds, disruptionsByPartition);
 
-      prioritizedPartitions.keySet().forEach(priorityTier -> {
-        logger.info("Found {} partitions in {} category", prioritizedPartitions.get(priorityTier).size(), priorityTier);
-      });
+      prioritizedPartitions.keySet().forEach(priorityTier -> logger.info("Found {} partitions in {} category", prioritizedPartitions.get(priorityTier).size(), priorityTier));
 
       // 5. Update replication priorities
       if (prioritizedPartitions.entrySet().stream().
@@ -189,13 +188,22 @@ public class ReplicationPrioritizationManager implements Runnable {
           resetToNormalReplication();
         }
       } else {
-        Set<PartitionId> highPriorityPartitions = new HashSet<>();
         // Add partitions according to priority order
-        highPriorityPartitions.addAll(prioritizedPartitions.get(PriorityTier.BELOW_MIN_REPLICA_WITH_DISRUPTION));
-        highPriorityPartitions.addAll(prioritizedPartitions.get(PriorityTier.BELOW_MIN_REPLICA_NO_DISRUPTION));
-        highPriorityPartitions.addAll(prioritizedPartitions.get(PriorityTier.MIN_REPLICA_WITH_DISRUPTION));
-        highPriorityPartitions.addAll(prioritizedPartitions.get(PriorityTier.MIN_REPLICA_NO_DISRUPTION));
+        Set<PartitionId> highPriorityPartitions = new HashSet<>();
 
+        for (PriorityTier priorityTier : PriorityTier.values()) {
+          Set<PartitionId> partitions = prioritizedPartitions.get(priorityTier);
+          if (!partitions.isEmpty()) {
+            int partitionsToAdd = Math.min(minBatchSizeForHighPriorityPartitions - highPriorityPartitions.size(), partitions.size());
+            highPriorityPartitions.addAll(partitions.stream().limit(partitionsToAdd).collect(Collectors.toSet()));
+
+            if (highPriorityPartitions.size() >= minBatchSizeForHighPriorityPartitions) {
+              break;
+            }
+          }
+        }
+
+        logger.info("Identified {} high-priority partitions for replication", highPriorityPartitions.size());
         updateReplicationSet(highPriorityPartitions);
       }
 
@@ -204,6 +212,25 @@ public class ReplicationPrioritizationManager implements Runnable {
     }
   }
 
+  /**
+   * Fetches disruptions for the given partitions.
+   *
+   * @param partitionIds List of partitions to fetch disruptions for
+   * @return Map of PartitionId to list of disruptions
+   */
+  private Map<PartitionId, List<Operation>> fetchDisruptions(List<PartitionId> partitionIds) {
+    Map<PartitionId, List<Operation>> disruptionsByPartition = new HashMap<>();
+    try {
+      // 3. Fetch disruptions for all partitions
+      disruptionsByPartition =
+          disruptionService.batchDisruptionsByPartition(new ArrayList<>(partitionIds));
+    } catch (Exception e) {
+      logger.error("Error fetching disruptions from DisruptionService", e);
+      logger.info("Proceeding with prioritization based on MIN_ACTIVE_REPLICA", e);
+    }
+
+    return disruptionsByPartition;
+  }
 
   /**
    * Prioritizes partitions based on replica count and disruption status.
@@ -216,7 +243,6 @@ public class ReplicationPrioritizationManager implements Runnable {
       Set<PartitionId> partitionIds, Map<PartitionId, List<Operation>> disruptionsByPartition) {
 
     Map<PriorityTier, Set<PartitionId>> result = new EnumMap<>(PriorityTier.class);
-
     // Initialize all priority categories with empty sets
     for (PriorityTier category : PriorityTier.values()) {
       result.put(category, new HashSet<>());
@@ -226,19 +252,19 @@ public class ReplicationPrioritizationManager implements Runnable {
     long currentTimeMs = time.milliseconds();
     Map<PartitionId, Boolean> hasUpcomingDisruption = new HashMap<>();
 
-    for (Map.Entry<PartitionId, List<Operation>> entry : disruptionsByPartition.entrySet()) {
-      PartitionId partitionId = entry.getKey();
-      List<Operation> operations = entry.getValue();
+    if (disruptionsByPartition != null) {
+      for (Map.Entry<PartitionId, List<Operation>> entry : disruptionsByPartition.entrySet()) {
+        PartitionId partitionId = entry.getKey();
+        List<Operation> operations = entry.getValue();
 
-      // Check if any operation is within our prioritization window
-      boolean hasDisruptionInWindow = operations.stream()
-          .anyMatch(op -> {
-            long scheduledTime = op.getStartTime();
-            return scheduledTime > currentTimeMs &&
-                scheduledTime - currentTimeMs >= prioritizationWindowMs;
-          });
+        // Check if any operation is within our prioritization window
+        boolean hasDisruptionInWindow = operations.stream().anyMatch(op -> {
+          long scheduledTime = op.getStartTime();
+          return scheduledTime > currentTimeMs && scheduledTime - currentTimeMs >= prioritizationWindowMs;
+        });
 
-      hasUpcomingDisruption.put(partitionId, hasDisruptionInWindow);
+        hasUpcomingDisruption.put(partitionId, hasDisruptionInWindow);
+      }
     }
 
     // Categorize all partitions
@@ -420,8 +446,16 @@ public class ReplicationPrioritizationManager implements Runnable {
     }
 
     // Prioritize the remaining partitions
-
     // Add partitions in priority order until we reach the minimum batch size
+    fillUptoBatchSize(additionalPartitionsNeeded, remainingPartitions);
+  }
+
+  /**
+   * Fill the currently replicating partitions up to the minimum batch size.
+   * @param additionalPartitionsNeeded addition partitions needed
+   * @param remainingPartitions remaining partitions to choose from
+   */
+  private void fillUptoBatchSize(int additionalPartitionsNeeded, Set<PartitionId> remainingPartitions) {
     int added = 0;
     for (PriorityTier priorityTier : PriorityTier.values()) {
       Set<PartitionId> partitions = prioritizedPartitions.get(priorityTier);

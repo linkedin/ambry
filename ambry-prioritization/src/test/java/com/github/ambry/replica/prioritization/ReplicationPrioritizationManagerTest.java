@@ -1,12 +1,9 @@
 /**
  * Copyright 2025 LinkedIn Corp. All rights reserved.
- *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,16 +17,18 @@ import com.github.ambry.clustermap.AmbryReplica;
 import com.github.ambry.clustermap.ClusterManagerQueryHelper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replica.prioritization.disruption.DisruptionService;
+import com.github.ambry.replica.prioritization.disruption.Operation;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.Time;
+import com.google.common.collect.Lists;
+import java.lang.reflect.Field;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
@@ -84,6 +83,9 @@ public class ReplicationPrioritizationManagerTest {
   private Store store1, store2, store3, store4, store5;
 
   @Mock
+  private Operation operation1, operation2, operation3, operation4, operation5;
+
+  @Mock
   private DisruptionService disruptionService;
 
   private ReplicationPrioritizationManager manager;
@@ -132,8 +134,11 @@ public class ReplicationPrioritizationManagerTest {
     partitionToStoreMap.put(partition4, store4);
     partitionToStoreMap.put(partition5, store5);
 
-    when(disruptionService.batchDisruptionsByPartition(anyList()))
-        .thenReturn(new HashMap<>());
+    // Setup Operation mocks with scheduled times
+    long currentTime = System.currentTimeMillis();
+    when(operation1.getStartTime()).thenReturn(currentTime + TimeUnit.MINUTES.toMillis(75)); // Within window
+    when(operation2.getStartTime()).thenReturn(currentTime + TimeUnit.MINUTES.toMillis(45)); // Outside window
+    when(operation3.getStartTime()).thenReturn(currentTime + TimeUnit.DAYS.toMillis(1));    // Within window
     // Create manager instance with system time
     manager = new ReplicationPrioritizationManager(
         replicationEngine, clusterMap, dataNodeId, scheduler,
@@ -151,12 +156,15 @@ public class ReplicationPrioritizationManagerTest {
 
     // Need to use reflection to set the private time field
     try {
-      java.lang.reflect.Field timeField = ReplicationPrioritizationManager.class.getDeclaredField("time");
+      Field timeField = ReplicationPrioritizationManager.class.getDeclaredField("time");
       timeField.setAccessible(true);
       timeField.set(managerWithMockTime, mockTime);
     } catch (Exception e) {
       throw new RuntimeException("Failed to set mock time", e);
     }
+
+    // Default mock for disruption service (override in specific tests)
+    when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(Collections.emptyMap());
   }
 
   @Test
@@ -838,7 +846,7 @@ public class ReplicationPrioritizationManagerTest {
     assertTrue("High priority partition2 should be enabled", enabledPartitions.contains(partition2));
     assertTrue("One partition from non-priority should be enabled", enabledPartitions.contains(partition3) ||
         enabledPartitions.contains(partition4) || enabledPartitions.contains(partition5));
-    assertTrue("Disabled partitions should have 2 partitions", disabledPartitions.size() == 2);
+    assertEquals("Disabled partitions should have 2 partitions", 2, disabledPartitions.size());
 
     // Reset mocks for the next run
     reset(replicationEngine);
@@ -855,8 +863,18 @@ public class ReplicationPrioritizationManagerTest {
     enableCaptor = ArgumentCaptor.forClass(Boolean.class);
 
     // Out of partition3/4/5 one of them should continue replicating from previous run
-    verify(replicationEngine, never()).controlReplicationForPartitions(
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
         partitionCaptor.capture(), eq(Collections.emptyList()), enableCaptor.capture());
+
+    for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+      if (enableCaptor.getAllValues().get(i)) {
+        enabledPartitions = partitionCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions in second run", enabledPartitions);
+    assertEquals("Should have enabled some partitions in second run", 3, enabledPartitions.size());
   }
 
   @Test
@@ -1059,6 +1077,437 @@ public class ReplicationPrioritizationManagerTest {
     newEnabledPartitions.removeAll(enabledPartitions);
     assertEquals("Should have enabled all normal partitions", 2, newEnabledPartitions.size());
   }
+
+  @Test
+  public void testPrioritizationWithDisruptions() {
+    // Setup with bootstrapping partitions
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3, partition4, partition5));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store4.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store5.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Set replica counts for different prioritization categories
+    // partition1: LOW_REPLICA_WITH_DISRUPTION (highest priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    mockReplicaStates(partition1, 2); // Below threshold
+
+    // partition2: LOW_REPLICA_NO_DISRUPTION (second priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    mockReplicaStates(partition2, 2); // Below threshold
+
+    // partition3: MIN_REPLICA_WITH_DISRUPTION (third priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    mockReplicaStates(partition3, 3); // At threshold
+
+    // partition4: MIN_REPLICA_NO_DISRUPTION (fourth priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition4)).thenReturn(3);
+    mockReplicaStates(partition4, 3); // At threshold
+
+    // partition5: NORMAL (lowest priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition5)).thenReturn(2);
+    mockReplicaStates(partition5, 4); // Above threshold
+
+    // Mock disruption service to return disruptions for partition1 and partition3
+    Map<PartitionId, List<Operation>> disruptionsByPartition = new HashMap<>();
+    disruptionsByPartition.put(partition1, Lists.newArrayList(operation1)); // Within window
+    disruptionsByPartition.put(partition3, Lists.newArrayList(operation3)); // Within window
+
+    when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(disruptionsByPartition);
+
+    // Run the manager
+    manager.startPrioritizationCycle();
+
+    // Capture the enabled partitions
+    ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
+
+    // Find the enabled partitions
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enabledCaptor.getAllValues().size(); i++) {
+      if (enabledCaptor.getAllValues().get(i)) {
+        enabledPartitions = enabledPartitionsCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions", enabledPartitions);
+
+    // Verify priority ordering
+    assertTrue("Highest priority partition1 should be enabled", enabledPartitions.contains(partition1));
+    assertTrue("Second priority partition2 should be enabled", enabledPartitions.contains(partition2));
+    assertTrue("Third priority partition3 should be enabled", enabledPartitions.contains(partition3));
+
+    // Since we have minimum batch size = 3, verify partition4 is not enabled
+    // (partition4 would be fourth priority)
+    assertFalse("Fourth priority partition4 should not be enabled yet", enabledPartitions.contains(partition4));
+    assertFalse("Lowest priority partition5 should not be enabled", enabledPartitions.contains(partition5));
+  }
+
+  @Test
+  public void testAllPartitionsHaveDisruptions() {
+    // Setup with all partitions having disruptions
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3, partition4));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store4.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Set up replica counts
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition4)).thenReturn(3);
+    mockReplicaStates(partition1, 2); // Below threshold (LOW_REPLICA)
+    mockReplicaStates(partition2, 3); // At threshold (MIN_REPLICA)
+    mockReplicaStates(partition3, 4); // Above threshold (NORMAL)
+    mockReplicaStates(partition4, 4); // Above threshold (NORMAL)
+
+    // Mock disruption service to return disruptions for ALL partitions
+    Map<PartitionId, List<Operation>> disruptionsByPartition = new HashMap<>();
+    disruptionsByPartition.put(partition1, Lists.newArrayList(operation1));
+    disruptionsByPartition.put(partition2, Lists.newArrayList(operation2));
+    disruptionsByPartition.put(partition3, Lists.newArrayList(operation3));
+    disruptionsByPartition.put(partition4, Lists.newArrayList(operation4));
+
+    when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(disruptionsByPartition);
+
+    // Run the manager
+    manager.startPrioritizationCycle();
+
+    // Capture enabled partitions
+    ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
+
+    // Find enabled partitions
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enabledCaptor.getAllValues().size(); i++) {
+      if (enabledCaptor.getAllValues().get(i)) {
+        enabledPartitions = enabledPartitionsCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions", enabledPartitions);
+
+    // Verify priority ordering is respected
+    assertEquals(3, enabledPartitions.size());
+    assertTrue("LOW_REPLICA_WITH_DISRUPTION partition1 should be enabled",
+        enabledPartitions.contains(partition1));
+    assertTrue("MIN_REPLICA_WITH_DISRUPTION partition2 should be enabled",
+        enabledPartitions.contains(partition2));
+    assertFalse("NORMAL with disruption partition3 should not be enabled yet",
+        enabledPartitions.contains(partition3) && enabledPartitions.contains(partition4));
+  }
+
+  @Test
+  public void testNoPartitionsHaveDisruptions() {
+    // Setup with no partitions having disruptions
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3, partition4));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store4.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+
+    // Set up replica counts
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition4)).thenReturn(3);
+    mockReplicaStates(partition1, 2); // Below threshold (LOW_REPLICA)
+    mockReplicaStates(partition2, 3); // At threshold (MIN_REPLICA)
+    mockReplicaStates(partition3, 4); // Above threshold (NORMAL)
+    mockReplicaStates(partition4, 4); // Above threshold (NORMAL)
+
+
+    // Mock disruption service to return empty map (no disruptions)
+    when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(Collections.emptyMap());
+
+    // Run the manager
+    manager.startPrioritizationCycle();
+
+    // Capture enabled partitions
+    ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
+
+    // Find enabled partitions
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enabledCaptor.getAllValues().size(); i++) {
+      if (enabledCaptor.getAllValues().get(i)) {
+        enabledPartitions = enabledPartitionsCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions", enabledPartitions);
+
+    // Verify priority based just on replica count
+    assertTrue("LOW_REPLICA partition1 should be enabled",
+        enabledPartitions.contains(partition1));
+    assertTrue("MIN_REPLICA partition2 should be enabled",
+        enabledPartitions.contains(partition2));
+    assertFalse("1 NORMAL partition3 or partition 4 should be enabled",
+        enabledPartitions.contains(partition3) && enabledPartitions.contains(partition4));
+  }
+
+  @Test
+  public void testMultipleDisruptionsPerPartition() {
+    // Setup scenario with multiple disruptions per partition
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // All partitions have the same replica count for easy comparison
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    mockReplicaStates(partition1, 3); // All at threshold (MIN_REPLICA)
+    mockReplicaStates(partition2, 3);
+    mockReplicaStates(partition3, 3);
+
+    // Set up different operation times
+    long currentTime = System.currentTimeMillis();
+    when(operation1.getStartTime()).thenReturn(currentTime + TimeUnit.MINUTES.toMillis(10)); // Soon
+    when(operation2.getStartTime()).thenReturn(currentTime + TimeUnit.HOURS.toMillis(2)); // Later
+    when(operation3.getStartTime()).thenReturn(currentTime + TimeUnit.DAYS.toMillis(2)); // Outside window
+
+    // Create multiple disruptions for partition1
+    List<Operation> partition1Ops = new ArrayList<>();
+    partition1Ops.add(operation1); // Within window (soon)
+    partition1Ops.add(operation3); // Outside window
+
+    // Create single disruption for partition2
+    List<Operation> partition2Ops = new ArrayList<>();
+    partition2Ops.add(operation2); // Within window (later)
+
+    // No disruptions for partition3
+
+    // Mock disruption service
+    Map<PartitionId, List<Operation>> disruptionsByPartition = new HashMap<>();
+    disruptionsByPartition.put(partition1, partition1Ops);
+    disruptionsByPartition.put(partition2, partition2Ops);
+
+    when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(disruptionsByPartition);
+
+    // Run the manager
+    manager.startPrioritizationCycle();
+
+    // Capture enabled partitions
+    ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
+
+    // Find enabled partitions
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enabledCaptor.getAllValues().size(); i++) {
+      if (enabledCaptor.getAllValues().get(i)) {
+        enabledPartitions = enabledPartitionsCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions", enabledPartitions);
+
+    // Verify priority order respects the earliest valid disruption time
+    assertTrue("Partition1 with earliest disruption should be enabled first",
+        enabledPartitions.contains(partition1));
+    assertTrue("Partition2 with later disruption should be enabled second",
+        enabledPartitions.contains(partition2));
+    assertTrue("Partition3 with no disruption should be enabled to fill batch",
+        enabledPartitions.contains(partition3));
+  }
+
+  @Test
+  public void testDisruptionServiceFailure() {
+    // Setup scenario
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Set up different replica counts
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    mockReplicaStates(partition1, 2); // Below threshold (LOW_REPLICA)
+    mockReplicaStates(partition2, 3); // At threshold (MIN_REPLICA)
+    mockReplicaStates(partition3, 4); // Above threshold (NORMAL)
+
+    // Make disruption service throw exception
+    when(disruptionService.batchDisruptionsByPartition(any()))
+        .thenThrow(new RuntimeException("Test disruption service failure"));
+
+    // Run the manager - should not throw exception
+    manager.startPrioritizationCycle();
+
+    // Verify we still enabled partitions based on replica count
+    ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
+
+    // Find enabled partitions
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enabledCaptor.getAllValues().size(); i++) {
+      if (enabledCaptor.getAllValues().get(i)) {
+        enabledPartitions = enabledPartitionsCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions despite disruption service failure",
+        enabledPartitions);
+
+    // Verify we prioritized based on replica count only
+    assertTrue("LOW_REPLICA partition1 should be enabled",
+        enabledPartitions.contains(partition1));
+    assertTrue("MIN_REPLICA partition2 should be enabled",
+        enabledPartitions.contains(partition2));
+    assertTrue("NORMAL partition3 should be enabled to fill batch",
+        enabledPartitions.contains(partition3));
+  }
+
+  @Test
+  public void testDisruptionServiceReturnsNull() {
+    // Setup scenario
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Set up different replica counts
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    mockReplicaStates(partition1, 2); // Below threshold (LOW_REPLICA)
+    mockReplicaStates(partition2, 3); // At threshold (MIN_REPLICA)
+    mockReplicaStates(partition3, 4); // Above threshold (NORMAL)
+
+    // Make disruption service return null
+    when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(null);
+
+    // Run the manager - should handle null gracefully
+    manager.startPrioritizationCycle();
+
+    // Verify we still enabled partitions based on replica count
+    ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
+
+    // Find enabled partitions
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enabledCaptor.getAllValues().size(); i++) {
+      if (enabledCaptor.getAllValues().get(i)) {
+        enabledPartitions = enabledPartitionsCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions despite null disruption data",
+        enabledPartitions);
+
+    // Verify we prioritized based on replica count only
+    assertTrue("LOW_REPLICA partition1 should be enabled",
+        enabledPartitions.contains(partition1));
+    assertTrue("MIN_REPLICA partition2 should be enabled",
+        enabledPartitions.contains(partition2));
+    assertTrue("NORMAL partition3 should be enabled to fill batch",
+        enabledPartitions.contains(partition3));
+  }
+
+  @Test
+  public void testOperationOutsideWindow() {
+    // Setup scenario with operation outside window
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(
+        partition1, partition2, partition3));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // All partitions have the same replica count for easy comparison
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    mockReplicaStates(partition1, 3); // All at threshold (MIN_REPLICA)
+    mockReplicaStates(partition2, 3);
+    mockReplicaStates(partition3, 3);
+
+    // Set operation3 to be outside the window
+    long currentTime = System.currentTimeMillis();
+    when(operation3.getStartTime()).thenReturn(currentTime + TimeUnit.DAYS.toMillis(2)); // Outside window
+
+    // Create disruption map with operation outside window
+    Map<PartitionId, List<Operation>> disruptionsByPartition = new HashMap<>();
+    disruptionsByPartition.put(partition1, Lists.newArrayList(operation3)); // Outside window
+
+    when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(disruptionsByPartition);
+
+    // Run the manager
+    manager.startPrioritizationCycle();
+
+    // Capture enabled partitions
+    ArgumentCaptor<Set<PartitionId>> enabledPartitionsCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enabledCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(
+        enabledPartitionsCaptor.capture(), eq(Collections.emptyList()), enabledCaptor.capture());
+
+    // Find enabled partitions
+    Set<PartitionId> enabledPartitions = null;
+    for (int i = 0; i < enabledCaptor.getAllValues().size(); i++) {
+      if (enabledCaptor.getAllValues().get(i)) {
+        enabledPartitions = enabledPartitionsCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions", enabledPartitions);
+
+    // Verify partition1 is not treated as having a disruption since it's outside window
+    // All partitions should be treated equally (same replica count, no disruptions in window)
+    assertTrue("All partitions should be in batch", enabledPartitions.size() == 3);
+    assertTrue("Partition1 should be in batch", enabledPartitions.contains(partition1));
+    assertTrue("Partition2 should be in batch", enabledPartitions.contains(partition2));
+    assertTrue("Partition3 should be in batch", enabledPartitions.contains(partition3));
+  }
+
 
   /**
    * Helper method to mock replica states for a partition
