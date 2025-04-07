@@ -10,6 +10,10 @@
  */
 package com.github.ambry.replica.prioritization;
 
+/**
+ * Enum representing the priority tiers for replica prioritization.
+ * The order of the enum values indicates their priority level, with the first value being the highest priority.
+ */
 public enum PriorityTier {
   BELOW_MIN_REPLICA_WITH_DISRUPTION,   // Highest priority
   BELOW_MIN_REPLICA_NO_DISRUPTION,     // Second priority

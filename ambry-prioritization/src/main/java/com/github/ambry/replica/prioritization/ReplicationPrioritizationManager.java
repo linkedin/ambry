@@ -240,37 +240,31 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param disruptionsByPartition Map of partitions to their disruptions
    * @return Map of priority categories to sets of partitions
    */
-  private Map<PriorityTier, Set<PartitionId>> prioritizePartitions(
-      Set<PartitionId> partitionIds, Map<PartitionId, List<Operation>> disruptionsByPartition) {
+  private Map<PriorityTier, Set<PartitionId>> prioritizePartitions(Set<PartitionId> partitionIds, Map<PartitionId, List<Operation>> disruptionsByPartition) {
+    // Filter disruptions within our window
+    Map<PartitionId, Boolean> hasUpcomingDisruption = populateDisruptionData(disruptionsByPartition);
 
+    // Categorize all partitions
+    Map<PriorityTier, Set<PartitionId>> result = assignPriorityTierToPartitions(partitionIds, hasUpcomingDisruption);
+
+    return result;
+  }
+
+  /**
+   * Assigns priority tiers to partitions based on their replica count and disruption status.
+   *
+   * @param partitionIds Set of all partitions to evaluate
+   * @param hasUpcomingDisruption Map of partitions to their disruption status
+   * @return Map of priority categories to sets of partitions
+   */
+  private Map<PriorityTier, Set<PartitionId>> assignPriorityTierToPartitions(Set<PartitionId> partitionIds, Map<PartitionId, Boolean> hasUpcomingDisruption) {
     Map<PriorityTier, Set<PartitionId>> result = new EnumMap<>(PriorityTier.class);
     // Initialize all priority categories with empty sets
     for (PriorityTier category : PriorityTier.values()) {
       result.put(category, new HashSet<>());
     }
 
-    // Filter disruptions within our window
-    long currentTimeMs = time.milliseconds();
-    Map<PartitionId, Boolean> hasUpcomingDisruption = new HashMap<>();
-
-    if (disruptionsByPartition != null) {
-      for (Map.Entry<PartitionId, List<Operation>> entry : disruptionsByPartition.entrySet()) {
-        PartitionId partitionId = entry.getKey();
-        List<Operation> operations = entry.getValue();
-
-        // Check if any operation is within our prioritization window
-        boolean hasDisruptionInWindow = operations.stream().anyMatch(op -> {
-          long scheduledTime = op.getStartTime();
-          return scheduledTime > currentTimeMs && scheduledTime - currentTimeMs >= prioritizationWindowMs;
-        });
-
-        hasUpcomingDisruption.put(partitionId, hasDisruptionInWindow);
-      }
-    }
-
-    // Categorize all partitions
     for (PartitionId partition : partitionIds) {
-
       int localReplicaCount = calculateLocalReplicaCount(partition);
       int minActiveReplica = getMinActiveReplicas(partition);
       boolean isBelowMinActiveReplica = false;
@@ -305,6 +299,34 @@ public class ReplicationPrioritizationManager implements Runnable {
     }
 
     return result;
+  }
+
+
+  /**
+   * Populates disruption data for each partition.
+   *
+   * @param disruptionsByPartition Map of partitions to their disruptions
+   * @return Map of partitions to their disruption status
+   */
+  private Map<PartitionId, Boolean> populateDisruptionData(Map<PartitionId, List<Operation>> disruptionsByPartition) {
+    Map<PartitionId, Boolean> hasUpcomingDisruption = new HashMap<>();
+    long currentTimeMs = time.milliseconds();
+    if (disruptionsByPartition != null) {
+      for (Map.Entry<PartitionId, List<Operation>> entry : disruptionsByPartition.entrySet()) {
+        PartitionId partitionId = entry.getKey();
+        List<Operation> operations = entry.getValue();
+
+        // Check if any operation is within our prioritization window
+        boolean hasDisruptionInWindow = operations.stream().anyMatch(op -> {
+          long scheduledTime = op.getStartTime();
+          return scheduledTime > currentTimeMs && scheduledTime - currentTimeMs >= prioritizationWindowMs;
+        });
+
+        hasUpcomingDisruption.put(partitionId, hasDisruptionInWindow);
+      }
+    }
+
+    return hasUpcomingDisruption;
   }
 
 
