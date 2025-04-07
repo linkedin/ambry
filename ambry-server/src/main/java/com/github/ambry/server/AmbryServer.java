@@ -30,6 +30,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HelixClusterAgentsFactory;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
@@ -76,6 +77,9 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.replica.prioritization.ReplicationPrioritizationManager;
+import com.github.ambry.replica.prioritization.disruption.DefaultDisruptionService;
+import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
@@ -101,6 +105,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -154,6 +159,10 @@ public class AmbryServer {
   private Thread repairThread = null;
   private RepairRequestsDb repairRequestsDb = null;
   private BackupIntegrityMonitor backupIntegrityMonitor = null;
+
+  // Replication Prioritization Manager
+  private ReplicationPrioritizationManager replicationPrioritizationManager = null;
+
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, vcrClusterAgentsFactory, new LoggingNotificationSystem(), time, null);
@@ -466,6 +475,17 @@ public class AmbryServer {
         for (ClusterParticipant participant : clusterParticipants) {
           participant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
         }
+
+
+        if (replicationConfig.enableReplicationPrioritization) {
+          HelixClusterAgentsFactory helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, registry);
+          HelixClusterManager helixClusterManager = helixClusterAgentsFactory.getClusterMap();
+          replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager,
+          clusterMap, nodeId, new ScheduledThreadPoolExecutor(1), nodeId.getDatacenterName(), storageManager, replicationConfig,
+          helixClusterManager.getManagerQueryHelper(), new DefaultDisruptionService());
+          replicationPrioritizationManager.run();
+        }
+
       } else {
         throw new IllegalArgumentException("Unknown server execution mode");
       }
@@ -568,6 +588,10 @@ public class AmbryServer {
       }
       if (serverSecurityService != null) {
         serverSecurityService.close();
+      }
+
+      if (replicationPrioritizationManager != null) {
+        replicationPrioritizationManager.shutdown();
       }
 
       logger.info("shutdown completed");

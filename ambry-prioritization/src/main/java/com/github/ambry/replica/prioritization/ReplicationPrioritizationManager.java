@@ -30,6 +30,7 @@ import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +85,7 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @param datacenterName The name of the local datacenter.
    */
 
-  ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
+  public ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
       ScheduledExecutorService scheduler, String datacenterName, StorageManager storageManager,
       ReplicationConfig replicationConfig, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
       clusterManagerQueryHelper, DisruptionService disruptionService) {
@@ -128,6 +129,22 @@ public class ReplicationPrioritizationManager implements Runnable {
   @Override
   public void run() {
     startPrioritizationCycle();
+  }
+
+  public void shutdown() {
+    if (!scheduler.isTerminated()) {
+      logger.info("Shutting down ReplicationPrioritizationManager");
+      Utils.shutDownExecutorService(scheduler, 5, TimeUnit.SECONDS);
+      // clear all maps
+      currentlyReplicatingPriorityPartitions.clear();
+      disabledReplicationPartitions.clear();
+      allBootstrappingPartitions.clear();
+      completedPartitions.clear();
+      prioritizedPartitions.clear();
+      isHighPriorityReplicationRunning.set(false);
+    } else {
+      logger.info("ReplicationPrioritizationManager already shut down");
+    }
   }
 
   /**
