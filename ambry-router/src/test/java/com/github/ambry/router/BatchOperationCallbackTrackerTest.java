@@ -40,11 +40,11 @@ public class BatchOperationCallbackTrackerTest extends NonBlockingRouterTestBase
   private static final QuotaChargeCallback quotaChargeCallback = new QuotaTestUtils.TestQuotaChargeCallback();
   private static final int NUM_CHUNKS = 5;
   private static Exception trackerException;
-  private final List<BlobId> chunkIds;
-  private final BlobId finalBlobId;
+  private final List<String> chunkIds;
+  private final String finalBlobId;
   private final Callback<Void> callback;
   private final AtomicBoolean finalOperationCalled = new AtomicBoolean(false);
-  private final BiConsumer<BlobId, Callback> finalOperation = (b, c) -> {
+  private final BiConsumer<String, Callback> finalOperation = (b, c) -> {
     finalOperationCalled.set(true);
   };
 
@@ -58,12 +58,12 @@ public class BatchOperationCallbackTrackerTest extends NonBlockingRouterTestBase
       chunkIds.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), new Partition(i, "test", PartitionState.READ_WRITE, 1073741824),
-          false, BlobId.BlobDataType.DATACHUNK));
+          false, BlobId.BlobDataType.DATACHUNK).getID());
     }
     finalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), new Partition(6, "test", PartitionState.READ_WRITE, 1073741824), false,
-        BlobId.BlobDataType.DATACHUNK);
+        BlobId.BlobDataType.DATACHUNK).getID();
 
     callback = (Void result, Exception exception) -> {
       trackerException = exception;

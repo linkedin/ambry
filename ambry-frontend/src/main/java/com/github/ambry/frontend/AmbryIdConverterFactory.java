@@ -174,7 +174,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         if (restRequest.getRestMethod() == RestMethod.DELETE) {
           // on delete requests we can soft delete the record from NamedBlobDb and get the blob ID in one step.
           conversionFuture = getNamedBlobDb().delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
+              namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobIdsForAllVersions);
         }  else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
             .matchesOperation(Operations.UPDATE_TTL)) {
           //If operation == UPDATE_TTL, we will get the version and blobId info from named blob first

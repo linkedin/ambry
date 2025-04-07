@@ -151,8 +151,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * This select call also allows the current blob ID to be retrieved prior to a delete.
    */
   private static final String SELECT_FOR_SOFT_DELETE_QUERY_V2 =
-      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1 FOR UPDATE", BLOB_ID,
-          VERSION, DELETED_TS, CURRENT_TIME, NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
+      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s ORDER BY %s DESC FOR UPDATE", BLOB_ID, VERSION,
+          DELETED_TS, CURRENT_TIME, BLOB_STATE, NAMED_BLOBS_V2, PK_MATCH, VERSION);
 
   /**
    * Soft delete a blob by setting the delete timestamp to the current time for a specific version.
@@ -164,7 +164,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Soft delete a blob by setting the delete timestamp to the current time for all versions.
    */
   private static final String SOFT_DELETE_QUERY_V2 =
-      String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH);
+      String.format("UPDATE %s SET %s = ? WHERE %s AND %s IS NOT NULL", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH);
 
   /**
    * Set named blob state to be READY and delete timestamp to null for TtlUpdate case
@@ -814,6 +814,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     long version;
     Timestamp currentDeleteTime;
     boolean alreadyDeleted;
+    List<DeleteResult.BlobVersion> blobVersions = new ArrayList<>();
+    boolean allDeleted = true;
     String query = "";
     try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY_V2)) {
       statement.setInt(1, accountId);
@@ -832,16 +834,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         Timestamp originalDeletionTime = resultSet.getTimestamp(3);
         currentDeleteTime = resultSet.getTimestamp(4);
         alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
+        blobVersions.add(new DeleteResult.BlobVersion(blobId, version, alreadyDeleted));
+        allDeleted = allDeleted && alreadyDeleted;
       }
     } catch (SQLException e) {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
     // only need to issue an update statement if the row was not already marked as deleted.
-    if (!alreadyDeleted) {
+    if (!allDeleted) {
       applySoftDelete(accountId, containerId, blobName, currentDeleteTime, connection);
     }
-    return new DeleteResult(blobId, alreadyDeleted);
+    return new DeleteResult(blobVersions);
   }
 
   private List<StaleNamedBlob> runPullStaleBlobs(final Connection connection) throws Exception {

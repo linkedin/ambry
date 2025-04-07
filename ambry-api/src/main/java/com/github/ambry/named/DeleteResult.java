@@ -16,6 +16,7 @@
 package com.github.ambry.named;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -40,9 +41,18 @@ public class DeleteResult {
   }
 
   public DeleteResult(List<BlobVersion> blobVersions) {
-    this.blobVersions = new ArrayList<>(blobVersions);
-    this.blobId = this.blobVersions.size() > 0 ? this.blobVersions.get(0).blobId : null;
-    this.alreadyDeleted = this.blobVersions.size() > 0 ? this.blobVersions.get(0).alreadyDeleted : false;
+    this.blobVersions = Collections.unmodifiableList(new ArrayList<>(blobVersions));
+    this.blobId = this.blobVersions.size() > 0 ? this.blobVersions.get(0).getBlobId() : null;
+    this.alreadyDeleted = this.blobVersions.size() > 0 ? this.blobVersions.get(0).isAlreadyDeleted() : false;
+  }
+
+  public List<BlobVersion> getBlobVersions() {
+    return blobVersions;
+  }
+
+  public String getBlobIdsForAllVersions() {
+    // BlobId is in base64 format, "," character is not allowed in base64 encoding.
+    return blobVersions.stream().map(BlobVersion::getBlobId).reduce((a, b) -> a + "," + b).orElse("");
   }
 
   /**
@@ -77,14 +87,26 @@ public class DeleteResult {
   }
 
   public static class BlobVersion {
-    public final String blobId;
-    public final long version;
-    public final boolean alreadyDeleted;
+    private final String blobId;
+    private final long version;
+    private final boolean alreadyDeleted;
 
     public BlobVersion(String blobId, long version, boolean alreadyDeleted) {
       this.blobId = blobId;
       this.version = version;
       this.alreadyDeleted = alreadyDeleted;
+    }
+
+    public String getBlobId() {
+      return blobId;
+    }
+
+    public long getVersion() {
+      return version;
+    }
+
+    public boolean isAlreadyDeleted() {
+      return alreadyDeleted;
     }
   }
 }

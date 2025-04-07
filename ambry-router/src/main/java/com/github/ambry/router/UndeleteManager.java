@@ -131,10 +131,10 @@ public class UndeleteManager {
 
     // If we are here, that means the blob is a composite blob. So we will do a batch operation.
     BatchOperationCallbackTracker tracker =
-        new BatchOperationCallbackTracker(chunkIds, blobId, futureResult, callback, quotaChargeCallback,
+        new BatchOperationCallbackTracker(chunkIdStrs, blobIdStr, futureResult, callback, quotaChargeCallback,
             (bId, callBack) -> {
               UndeleteOperation undeleteOperation =
-                  new UndeleteOperation(clusterMap, routerConfig, routerMetrics, bId, serviceId, time.milliseconds(),
+                  new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, time.milliseconds(),
                       callBack, time, futureResult, quotaChargeCallback);
               undeleteOperations.add(undeleteOperation);
             }, nonBlockingRouter);
@@ -142,7 +142,8 @@ public class UndeleteManager {
     for (BlobId chunkId : chunkIds) {
       UndeleteOperation undeleteOperation =
           new UndeleteOperation(clusterMap, routerConfig, routerMetrics, chunkId, serviceId, operationTimeMs,
-              tracker.getCallback(chunkId), time, BatchOperationCallbackTracker.DUMMY_FUTURE, quotaChargeCallback);
+              tracker.getCallback(chunkId.getID()), time, BatchOperationCallbackTracker.DUMMY_FUTURE,
+              quotaChargeCallback);
       undeleteOperations.add(undeleteOperation);
     }
   }
