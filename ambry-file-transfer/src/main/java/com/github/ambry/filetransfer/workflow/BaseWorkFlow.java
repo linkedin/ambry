@@ -15,7 +15,6 @@ package com.github.ambry.filetransfer.workflow;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
-import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;

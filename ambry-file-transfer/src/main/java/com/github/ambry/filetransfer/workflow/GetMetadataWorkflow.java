@@ -15,7 +15,6 @@ package com.github.ambry.filetransfer.workflow;
 
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.filetransfer.FileCopyInfo;
-import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.network.*;
 import com.github.ambry.protocol.*;

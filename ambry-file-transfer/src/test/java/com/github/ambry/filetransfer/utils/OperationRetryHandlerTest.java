@@ -16,7 +16,6 @@ package com.github.ambry.filetransfer.utils;
 
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;

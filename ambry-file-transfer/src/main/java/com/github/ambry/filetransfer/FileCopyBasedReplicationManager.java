@@ -35,9 +35,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,6 +86,8 @@ public class FileCopyBasedReplicationManager {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.FileCopyManagerListener,
           new PartitionStateChangeListenerImpl());
       logger.info("File Copy Manager's state change listener registered!");
+    } else {
+      throw new InstantiationException("File Copy Manager cannot be instantiated without a ClusterParticipant");
     }
     this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 

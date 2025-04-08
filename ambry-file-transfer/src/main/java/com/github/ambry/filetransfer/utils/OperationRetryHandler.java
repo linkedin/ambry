@@ -14,7 +14,6 @@
 package com.github.ambry.filetransfer.utils;
 
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
-import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import java.io.IOException;
 import java.util.Objects;

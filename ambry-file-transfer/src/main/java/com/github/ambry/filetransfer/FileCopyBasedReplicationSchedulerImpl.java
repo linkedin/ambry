@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,6 +105,10 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       if (replicaToStartTimeMap.get(replica) != null
           && System.currentTimeMillis() / 1000 - replicaToStartTimeMap.get(replica)
           > fileCopyBasedReplicationConfig.fileCopyReplicaTimeoutSecs) {
+
+        logger.info("Replica: {} is starved for hydration. Time since start: {} seconds",
+            replica.getPartitionId().toPathString(),
+            System.currentTimeMillis() / 1000 - replicaToStartTimeMap.get(replica));
         replicasToDropFromHydration.add(replica);
       }
     }
@@ -125,12 +130,18 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
   @Override
   public void scheduleFileCopy() throws InterruptedException {
-
+    logger.info("Starting File Copy Scheduler");
     while(isRunning){
 
       Thread.sleep(fileCopyBasedReplicationConfig.fileCopySchedulerWaitTimeSecs*1000);
 
       List<ReplicaId> replicasToDropForHydration = findStarvedReplicas();
+      if(!replicasToDropForHydration.isEmpty()){
+        logger.info("Found Replicas To Drop From Hydration: " + replicasToDropForHydration.stream()
+            .map(replicaId -> replicaId.getPartitionId().toPathString()).collect(Collectors.toList()));
+      } else{
+        logger.info("No Replicas To Drop From Hydration In Current Cycle");
+      }
 
       for(ReplicaId replica: replicasToDropForHydration){
         try {

@@ -19,6 +19,8 @@ import com.github.ambry.filetransfer.utils.FileCopyUtils;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nonnull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -33,18 +35,28 @@ public class FileCopyThread extends Thread {
 
   private final CountDownLatch shutDownLatch;
 
+  final String threadName;
+
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  /**
+   * Constructor for FileCopyThread
+   * @param fileCopyHandler the file copy handler
+   * @param fileCopyStatusListener the file copy status listener
+   */
   FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener) {
     Objects.requireNonNull(fileCopyHandler, "fileCopyHandler must not be null");
     Objects.requireNonNull(fileCopyStatusListener, "fileCopyStatusListener must not be null");
 
     this.fileCopyStatusListener = fileCopyStatusListener;
     this.fileCopyHandler = fileCopyHandler;
+    this.threadName = "FileCopyThread-" + fileCopyStatusListener.getReplicaId().getPartitionId().toPathString();
     this.isRunning = true;
     this.shutDownLatch = new CountDownLatch(1);
   }
 
   @Override
   public void run() {
+    logger.info("Starting FileCopyThread: {} for replicaId: {}", threadName, fileCopyStatusListener.getReplicaId());
     try {
       ReplicaId replicaId = fileCopyStatusListener.getReplicaId();
       if (replicaId == null) {
@@ -61,7 +73,9 @@ public class FileCopyThread extends Thread {
       FileCopyInfo fileCopyInfo = new FileCopyInfo(replicaId, targetReplicaId);
       fileCopyHandler.start();
       // Start the file copy process
+
       fileCopyHandler.copy(fileCopyInfo);
+
       fileCopyStatusListener.onFileCopySuccess();
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);
