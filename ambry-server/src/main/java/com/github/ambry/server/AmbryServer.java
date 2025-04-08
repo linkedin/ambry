@@ -55,12 +55,6 @@ import com.github.ambry.config.ServerExecutionMode;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.filetransfer.FileCopyBasedReplicationManager;
-import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactory;
-import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactoryImpl;
-import com.github.ambry.filetransfer.handler.FileCopyHandler;
-import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
-import com.github.ambry.filetransfer.handler.StoreFileCopyHandlerFactory;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -84,10 +78,6 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
-import com.github.ambry.replica.prioritization.FCFSPrioritizationManager;
-import com.github.ambry.replica.prioritization.FileBasedReplicationPrioritizationManagerFactory;
-import com.github.ambry.replica.prioritization.PrioritizationManager;
-import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
@@ -493,31 +483,10 @@ public class AmbryServer {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
-
-      FileCopyHandlerFactory fileCopyHandlerFactory = new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap, fileCopyBasedReplicationConfig);
-
-      PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
-      PrioritizationManager prioritizationManager = new FCFSPrioritizationManager();
-      DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
-
-      FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory = new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory,
-          fileCopyBasedReplicationConfig, clusterMap, prioritizationManagerFactory, storageManager, storeConfig, nodeId, clusterParticipant );
-      FileCopyBasedReplicationManager fileCopyBasedReplicationManager = new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig,
-          storageManager, clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant, fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory,
-          prioritizationManagerFactory, storeConfig, replicaPrioritizationConfig);
-      testE2EFlow(fileCopyBasedReplicationManager);
-
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
     }
-  }
-
-  private void testE2EFlow(FileCopyBasedReplicationManager fileCopyBasedReplicationManager)
-      throws IOException, InterruptedException {
-    fileCopyBasedReplicationManager.start();
-
-
   }
 
   /**

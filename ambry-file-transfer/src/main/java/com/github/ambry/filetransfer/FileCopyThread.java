@@ -37,6 +37,12 @@ public class FileCopyThread extends Thread {
 
   final String threadName;
 
+  private final int START_CORRELATION_ID = 1;
+
+  private final String CLIENT_ID = "FileCopyClient";
+  /**
+   * The logger for this class.
+   */
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   /**
    * Constructor for FileCopyThread
@@ -70,7 +76,7 @@ public class FileCopyThread extends Thread {
         throw new IllegalStateException("Target ReplicaId cannot be null");
       }
 
-      FileCopyInfo fileCopyInfo = new FileCopyInfo(replicaId, targetReplicaId);
+      FileCopyInfo fileCopyInfo = new FileCopyInfo(START_CORRELATION_ID, CLIENT_ID, replicaId, targetReplicaId);
       fileCopyHandler.start();
       // Start the file copy process
 

@@ -119,7 +119,8 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
       threadQueueLock.unlock();
     } catch (Exception e) {
       logger.error("Error while submitting replica {} for hydration: {}", replicaId, e.getMessage());
-      throw new StateTransitionException("Error while submitting replica " + replicaId + " for hydration", e);
+      throw new StateTransitionException("Error while submitting replica " + replicaId + " for hydration",
+          StateTransitionException.TransitionErrorCode.FileCopyProtocolFailure);
     } finally {
       threadQueueLock.unlock();
     }

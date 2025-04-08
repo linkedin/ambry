@@ -22,10 +22,19 @@ import javax.annotation.Nonnull;
  * FileCopyInfo contains the information required to copy a file from one node to another.
  */
 public class FileCopyInfo {
+  /**
+   * The correlation id of the request
+   */
+  private final int correlationId;
 
+  /**
+   * The client id of the request
+   */
+  private final String clientId;
   /**
    * The source replica id
    */
+
   private final ReplicaId sourceReplicaId;
 
   /**
@@ -38,13 +47,30 @@ public class FileCopyInfo {
    * @param sourceReplicaId The source replica id
    * @param targetReplicaId The target replica id
    */
-  public FileCopyInfo(@Nonnull ReplicaId sourceReplicaId,
+  public FileCopyInfo(int correlationId, @Nonnull String clientId, @Nonnull ReplicaId sourceReplicaId,
       @Nonnull ReplicaId targetReplicaId) {
+    Objects.requireNonNull(clientId, "clientId cannot be null");
     Objects.requireNonNull(sourceReplicaId, "sourceReplicaId cannot be null");
     Objects.requireNonNull(targetReplicaId, "targetReplicaId cannot be null");
 
+    this.correlationId = correlationId;
+    this.clientId = clientId;
     this.sourceReplicaId = sourceReplicaId;
     this.targetReplicaId = targetReplicaId;
+  }
+
+  /**
+   * Get the correlation id of the request
+   */
+  public int getCorrelationId() {
+    return correlationId;
+  }
+
+  /**
+   * Get the client id of the request
+   */
+  public String getClientId() {
+    return clientId;
   }
 
   /**
