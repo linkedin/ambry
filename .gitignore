@@ -24,3 +24,7 @@ null/
 .DS_Store
 
 .remote*
+
+# files created by azurite for unit testing
+__*
+AzuriteConfig

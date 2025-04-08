@@ -390,6 +390,10 @@ public class BlobStoreTest {
       // verify that the index object was removed from the metrics.
       assertFalse(storeMetrics.indexes.containsKey(store.getReplicaId().getPartitionId().toString()));
     }
+    if(store.isInitialized()) {
+      store.shutdown();
+    }
+
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", cleanDirectory(tempDir, true));
     generatedKeys.clear();
     allKeys.clear();
@@ -658,6 +662,122 @@ public class BlobStoreTest {
     Files.move(Paths.get(tempDir+"/0_0_18_bloom"), Paths.get(tempDir+"/0_4_18_bloom"));
 
     reloadStore();
+  }
+
+  /**
+   * Tests {@link BlobStore#initialize()} for corner cases and error cases.
+   * Corner cases
+   * 1. Creating a directory on first initialize
+   * Error cases
+   * 1. Initialize an already initialized store.
+   * 2. Unable to create store directory on first initialize.
+   * 3. Initialize two stores at the same path.
+   * 4. Directory not readable.
+   * 5. Path is not a directory.
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void storeInitializeTests() throws IOException, StoreException {
+    // Since store creation can fail in this test before the metric has initialized, set the memory usage metric to false.
+    properties.put("store.enable.index.direct.memory.usage.metric", "false");
+    enableIndexDirectMemoryUsageMetric = false;
+
+    // attempt to start when store is already started fails
+    verifyInitializeFailure(store, StoreErrorCodes.StoreAlreadyStarted);
+
+    String nonExistentDir = new File(tempDir, TestUtils.getRandomString(10)).getAbsolutePath();
+
+    // fail if attempt to create directory fails
+    String badPath = new File(nonExistentDir, TestUtils.getRandomString(10)).getAbsolutePath();
+
+    BlobStore blobStore = createBlobStore(getMockReplicaId(badPath));
+
+    verifyInitializeFailure(blobStore, StoreErrorCodes.InitializationError);
+
+    ReplicaId replicaIdWithNonExistentDir = getMockReplicaId(nonExistentDir);
+
+    // create directory if it does not exist
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    verifyInitializeSuccess(blobStore);
+    File createdDir = new File(nonExistentDir);
+    assertTrue("Directory should now exist", createdDir.exists() && createdDir.isDirectory());
+
+    // should not be able to initialize two stores at the same path
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    blobStore.initialize();
+    BlobStore secondStore = createBlobStore(replicaIdWithNonExistentDir);
+    verifyInitializeFailure(secondStore, StoreErrorCodes.InitializationError);
+    blobStore.shutdown();
+
+    // fail if directory is not readable
+    assertTrue("Could not set readable state to false", createdDir.setReadable(false));
+    verifyInitializeFailure(blobStore, StoreErrorCodes.InitializationError);
+
+    assertTrue("Could not set readable state to true", createdDir.setReadable(true));
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
+
+    // fail if provided path is not a directory
+    File file = new File(tempDir, TestUtils.getRandomString(10));
+    assertTrue("Test file could not be created", file.createNewFile());
+    file.deleteOnExit();
+    blobStore = createBlobStore(getMockReplicaId(file.getAbsolutePath()));
+    verifyInitializeFailure(blobStore, StoreErrorCodes.InitializationError);
+  }
+
+  /**
+   * Tests {@link BlobStore#initialize()} for corner cases and error cases.
+   * 1. Checks if store will be loaded after initialized
+   * Error cases
+   * 1. Start an uninitialized store
+   * 2. Start an already loaded store
+   * 3. Load an started store
+   * 4. Load an store twice
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void storeInitializeLoadTests() throws IOException, StoreException {
+    // Since store creation can fail in this test before the metric has initialized, set the memory usage metric to false.
+    properties.put("store.enable.index.direct.memory.usage.metric", "false");
+    enableIndexDirectMemoryUsageMetric = false;
+
+    String nonExistentDir = new File(tempDir, TestUtils.getRandomString(10)).getAbsolutePath();
+    File createdDir = new File(nonExistentDir);
+
+    ReplicaId replicaIdWithNonExistentDir = getMockReplicaId(nonExistentDir);
+    // create directory if it does not exist
+    BlobStore blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    blobStore.initialize();
+    verifyLoadSuccess(blobStore);
+
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
+
+    // should not be able to load the uninitialized blobstore
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    verifyLoadFailure(blobStore, StoreErrorCodes.StoreNotInitialized);
+
+    blobStore.initialize();
+    blobStore.load();
+
+    verifyStartupFailure(blobStore, StoreErrorCodes.StoreAlreadyStarted);
+
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
+
+    // should not be able to load an already started blobstore
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    blobStore.start();
+    verifyLoadFailure(blobStore, StoreErrorCodes.StoreAlreadyStarted);
+    blobStore.shutdown();
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
+
+    // should not be able load an store twice
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    blobStore.initialize();
+    blobStore.load();
+    verifyLoadFailure(blobStore, StoreErrorCodes.StoreAlreadyStarted);
+    blobStore.shutdown();
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
   }
 
   /**
@@ -2212,9 +2332,13 @@ public class BlobStoreTest {
     File cleanShutDownFile = new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME);
     assertTrue("Clean shutdown file should exist.", cleanShutDownFile.exists());
     // no operations should be possible if store is not up or has been shutdown
-    verifyOperationFailuresOnInactiveStore(store);
+    verifyOperationFailuresOnInactiveStore(store, StoreErrorCodes.StoreNotInitialized);
     store = createBlobStore(getMockReplicaId(tempDirStr));
-    verifyOperationFailuresOnInactiveStore(store);
+    verifyOperationFailuresOnInactiveStore(store, StoreErrorCodes.StoreNotInitialized);
+
+    store = createBlobStore(getMockReplicaId(tempDirStr));
+    store.initialize();
+    verifyOperationFailuresOnInactiveStore(store, StoreErrorCodes.StoreNotStarted);
   }
 
   /**
@@ -2549,6 +2673,126 @@ public class BlobStoreTest {
             diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete, null,
             time, new InMemAccountService(false, false), null, scheduler);
     testStore.start();
+    DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
+    diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
+        : Collections.singletonList(testStore.getDiskSpaceRequirements()));
+    // ensure store directory and file exist
+    assertTrue("Store directory doesn't exist", storeDir.exists());
+    File storeSegmentDir = new File(reserveDir, DiskSpaceAllocator.STORE_DIR_PREFIX + storeId);
+    if (isLogSegmented) {
+      assertTrue("Store segment directory doesn't exist", storeSegmentDir.exists());
+      assertTrue("In-mem store file map should contain entry associated with test store",
+          diskAllocator.getStoreReserveFileMap().containsKey(storeId));
+    }
+    // test that deletion on started store should fail
+    try {
+      testStore.deleteStoreFiles();
+    } catch (IllegalStateException e) {
+      //expected
+    }
+    // create a unreadable dir in store dir to induce deletion failure
+    File invalidDir = new File(storeDir, "invalidDir");
+    assertTrue("Couldn't create dir within store dir", invalidDir.mkdir());
+    assertTrue("Could not make unreadable", invalidDir.setReadable(false));
+    testStore.shutdown();
+    try {
+      testStore.deleteStoreFiles();
+      fail("should fail because one invalid dir is unreadable");
+    } catch (Exception e) {
+      // expected
+    }
+    assertTrue("store directory should exist because deletion failed", storeDir.exists());
+    // reset permission to allow deletion to succeed.
+    assertTrue("Could not make readable", invalidDir.setReadable(true));
+
+    // put a swap segment into store dir
+    File tempFile = File.createTempFile("sample-swap",
+        LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, storeDir);
+    // test success case (swap segment is returned and store dir is correctly deleted)
+    assertEquals("Swap reserve dir should be empty initially", 0,
+        diskAllocator.getSwapReserveFileMap().getFileSizeSet().size());
+    testStore.deleteStoreFiles();
+    assertFalse("swap segment still exists", tempFile.exists());
+    assertEquals("Swap reserve dir should have one swap segment", 1,
+        diskAllocator.getSwapReserveFileMap().getFileSizeSet().size());
+    assertFalse("store directory shouldn't exist", storeDir.exists());
+    assertFalse("store segment directory shouldn't exist", storeSegmentDir.exists());
+    assertFalse("test store entry should have been removed from in-mem store file map ",
+        diskAllocator.getStoreReserveFileMap().containsKey(storeId));
+    reloadStore();
+  }
+
+  /**
+   * Test both success and failure cases when deleting store files when store is initialized
+   * @throws Exception
+   */
+  @Test
+  public void deleteStoreFilesInitializedBlobStore() throws Exception {
+    store.shutdown();
+    // create test store directory
+    File storeDir = createTempDirectory("store-" + storeId);
+    File reserveDir = createTempDirectory("reserve-pool");
+    reserveDir.deleteOnExit();
+    DiskSpaceAllocator diskAllocator =
+        new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry registry = new MetricRegistry();
+    storeMetrics = new StoreMetrics(registry);
+    BlobStore testStore =
+        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler, null,
+            diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete, null,
+            time, new InMemAccountService(false, false), null, scheduler);
+    testStore.initialize();
+
+    // test that deletion on initialized store should fail
+    try {
+      testStore.deleteStoreFiles();
+    } catch (IllegalStateException e) {
+      //expected
+    }
+
+    // create a unreadable dir in store dir to induce deletion failure
+    File invalidDir = new File(storeDir, "invalidDir");
+    assertTrue("Couldn't create dir within store dir", invalidDir.mkdir());
+    assertTrue("Could not make unreadable", invalidDir.setReadable(false));
+    testStore.shutdown();
+
+    try {
+      testStore.deleteStoreFiles();
+      fail("should fail because one invalid dir is unreadable");
+    } catch (Exception e) {
+      // expected
+    }
+    assertTrue("store directory should exist because deletion failed", storeDir.exists());
+    // reset permission to allow deletion to succeed.
+    assertTrue("Could not make readable", invalidDir.setReadable(true));
+
+    testStore.deleteStoreFiles();
+    assertFalse("store directory should not exist", storeDir.exists());
+  }
+
+  /**
+   * Test both success and failure cases when deleting store files when store is initialized and loaded
+   * @throws Exception
+   */
+  @Test
+  public void deleteStoreFilesInitializedAndLoadedBlobStore() throws Exception {
+    store.shutdown();
+    // create test store directory
+    File storeDir = createTempDirectory("store-" + storeId);
+    File reserveDir = createTempDirectory("reserve-pool");
+    reserveDir.deleteOnExit();
+    DiskSpaceAllocator diskAllocator =
+        new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry registry = new MetricRegistry();
+    storeMetrics = new StoreMetrics(registry);
+    BlobStore testStore =
+        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler, null,
+            diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete, null,
+            time, new InMemAccountService(false, false), null, scheduler);
+    testStore.initialize();
+    testStore.load();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
     diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
         : Collections.singletonList(testStore.getDiskSpaceRequirements()));
@@ -4026,6 +4270,57 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Verifies that {@link BlobStore#initialize()} executes successfully and shuts down the store
+   * @param blobStore the {@link BlobStore} to start.
+   * @throws StoreException
+   */
+  private void verifyInitializeSuccess(BlobStore blobStore) throws StoreException {
+    blobStore.initialize();
+    assertTrue("Store has not been initialized", blobStore.isInitialized());
+    blobStore.shutdown();
+  }
+
+  /**
+   * Verifies that {@link BlobStore#start()} fails.
+   * @param blobStore the {@link BlobStore} to start
+   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure
+   */
+  private void verifyInitializeFailure(BlobStore blobStore, StoreErrorCodes expectedErrorCode) {
+    try {
+      blobStore.initialize();
+      fail("Store initialization should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Verifies that {@link BlobStore#load()} executes successfully and shuts down the store
+   * @param blobStore the {@link BlobStore} to load
+   * @throws StoreException
+   */
+  private void verifyLoadSuccess(BlobStore blobStore) throws StoreException {
+    blobStore.load();
+    assertTrue("Store has not been loaded", blobStore.isInitialized());
+    blobStore.shutdown();
+  }
+
+  /**
+   * Verifies that {@link BlobStore#load()} fails.
+   * @param blobStore the {@link BlobStore} to start
+   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure
+   * @throws StoreException
+   */
+  private void verifyLoadFailure(BlobStore blobStore, StoreErrorCodes expectedErrorCode) throws StoreException {
+    try {
+      blobStore.load();
+      fail("Store loading should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
+    }
+  }
+
   // concurrent tests helpers
 
   /**
@@ -4278,7 +4573,7 @@ public class BlobStoreTest {
    * Verifies that operations on {@link BlobStore} fail because it is inactive.
    * @param blobStore the inactive {@link BlobStore} on which the operations are performed.
    */
-  private void verifyOperationFailuresOnInactiveStore(BlobStore blobStore) {
+  private void verifyOperationFailuresOnInactiveStore(BlobStore blobStore, StoreErrorCodes shutdownErrorCode) {
     try {
       blobStore.get(Collections.EMPTY_LIST, EnumSet.noneOf(StoreGetOptions.class));
       fail("Operation should have failed because store is inactive");
@@ -4337,7 +4632,7 @@ public class BlobStoreTest {
     try {
       blobStore.shutdown();
     } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.StoreNotStarted, e.getErrorCode());
+      assertEquals("Unexpected StoreErrorCode", shutdownErrorCode, e.getErrorCode());
     }
   }
 
