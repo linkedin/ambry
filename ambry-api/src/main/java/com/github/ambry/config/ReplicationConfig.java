@@ -369,6 +369,10 @@ public class ReplicationConfig {
   @Default("150")
   public final int highPriorityPartitionsBatchSize;
 
+  public static final String ENABLE_REPLICATION_PRIORITIZATION = "enable.replication.prioritization";
+  @Config(ENABLE_REPLICATION_PRIORITIZATION)
+  @Default("false")
+  public final boolean enableReplicationPrioritization;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -456,5 +460,7 @@ public class ReplicationConfig {
         verifiableProperties.getInt(PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES, 15);
     highPriorityPartitionsBatchSize
         = verifiableProperties.getInt(PRIORITIZED_PARTITIONS_BATCH_SIZE, 150);
+    enableReplicationPrioritization =
+        verifiableProperties.getBoolean(ENABLE_REPLICATION_PRIORITIZATION, false);
   }
 }
