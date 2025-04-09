@@ -64,6 +64,8 @@ public class StoreFileCopyHandlerTest {
   @Mock
   private final FileCopyGetMetaDataResponse metadataResponse = new FileCopyGetMetaDataResponse(ServerErrorCode.NoError);
 
+  protected final FileCopyHandlerConfig fileCopyHandlerConfig = new FileCopyHandlerConfig(new VerifiableProperties(new Properties()));
+
   protected StoreFileCopyHandler handler;
 
   /**
@@ -79,7 +81,6 @@ public class StoreFileCopyHandlerTest {
     fileStore.start();
     when(storeManager.getFileStore(any())).thenReturn(fileStore);
 
-    FileCopyHandlerConfig fileCopyHandlerConfig = new FileCopyHandlerConfig(new VerifiableProperties(new Properties()));
     handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyHandlerConfig);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
