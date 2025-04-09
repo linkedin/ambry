@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.filetransfer.utils.FileCopyUtils;
+import java.io.IOException;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nonnull;
@@ -63,6 +64,7 @@ public class FileCopyThread extends Thread {
   @Override
   public void run() {
     logger.info("Starting FileCopyThread: {} for replicaId: {}", threadName, fileCopyStatusListener.getReplicaId());
+
     try {
       ReplicaId replicaId = fileCopyStatusListener.getReplicaId();
       if (replicaId == null) {

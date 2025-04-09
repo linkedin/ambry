@@ -13,17 +13,30 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filecopy.MockFileCopyHandlerFactory;
 import com.github.ambry.filecopy.MockNoOpFileCopyHandler;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
 public class FileCopyThreadTest {
+
+  public ClusterMap clusterMap;
+  @Before
+  public void setUp() throws IOException {
+    clusterMap = new MockClusterMap(false, true, 1,
+        10, 3, false,
+        false, null);
+  }
 
   /**
    * Tests when fileCopyHandler is successful and onFileCopySuccess is called.
@@ -36,6 +49,7 @@ public class FileCopyThreadTest {
     successFailCount.putIfAbsent("fail", 0);
     FileCopyHandler fileCopyHandler = new MockFileCopyHandlerFactory().getFileCopyHandler();
     Thread fileCopyThreadThread = getThread(successFailCount, fileCopyHandler);
+
     fileCopyThreadThread.start();
     try {
       fileCopyThreadThread.join();
@@ -58,6 +72,7 @@ public class FileCopyThreadTest {
     FileCopyHandler fileCopyHandler = new MockFileCopyHandlerFactory().getFileCopyHandler();
     ((MockNoOpFileCopyHandler) fileCopyHandler).setException(new Exception());
     Thread fileCopyThreadThread = getThread(successFailCount, fileCopyHandler);
+
     fileCopyThreadThread.start();
     try {
       fileCopyThreadThread.join();
@@ -77,7 +92,17 @@ public class FileCopyThreadTest {
 
       @Override
       public ReplicaId getReplicaId() {
-        return null;
+        MockClusterMap mockClusterMap = null;
+        try {
+          mockClusterMap = new MockClusterMap(false, true, 1,
+              10, 3, false,
+              false, null);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+        MockPartitionId partitionId = new MockPartitionId(1L, mockClusterMap.DEFAULT_PARTITION_CLASS,
+            mockClusterMap.getDataNodes(), 0);
+        return partitionId.getReplicaIds().get(0);
       }
 
       @Override
