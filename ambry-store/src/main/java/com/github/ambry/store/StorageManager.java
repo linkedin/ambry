@@ -594,6 +594,33 @@ public class StorageManager implements StoreManager {
     return true;
   }
 
+  public boolean initializeBlobStore(ReplicaId replica) {
+    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
+      return false;
+    }
+    DiskManager diskManager = addDisk(replica.getDiskId());
+    if (diskManager == null || !diskManager.initializeBlobStore(replica)) {
+      logger.error("Failed to add new store into DiskManager");
+      return false;
+    }
+    partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+    partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
+    logger.info("New store is successfully initialized and added to StorageManager");
+    return true;
+  }
+
+  public boolean loadBlobStore(ReplicaId replica) {
+    if (!partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.error("Could not find blob store in partitionToDiskManager");
+      return false;
+    }
+    DiskManager diskManager = partitionToDiskManager.get(replica.getPartitionId());
+    diskManager.loadInitializedBlobStore(replica);
+    logger.info("Initialized store in successfully loaded");
+    return true;
+  }
+
   /**
    * Build in-memory state for file copy based replication post filecopy is completed.
    * @param replicaId the {@link ReplicaId} of the {@link Store} for which store needs to be built

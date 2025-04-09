@@ -499,6 +499,33 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
+  @Test
+  public void initializedLoadBlobStoreTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+
+    PartitionId newPartition1 =
+        new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+
+    storageManager.initializeBlobStore(newPartition1.getReplicaIds().get(0));
+    localReplicas.add(newPartition1.getReplicaIds().get(0));
+    assertNull(storageManager.getStore(newPartition1));
+    assertNotNull(storageManager.getStore(newPartition1, true));
+    storageManager.loadBlobStore(newPartition1.getReplicaIds().get(0));
+    assertNotNull(storageManager.getStore(newPartition1));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+
+  public void initializeBlobStoreFailureTest() throws Exception {
+
+  }
+
   /**
    * Tests whether add blobstore fails if loading of blobstore is failed.
    * @throws Exception exception
