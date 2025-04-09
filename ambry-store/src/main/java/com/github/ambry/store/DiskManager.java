@@ -573,6 +573,8 @@ public class DiskManager {
         succeed = true;
       }
     } catch (Exception e) {
+      stores.remove(replica.getPartitionId());
+      partitionToReplicaMap.remove(replica.getPartitionId());
       logger.error("Failed to load new added store {} or add requirements to disk allocator", replica.getPartitionId(),
           e);
     } finally {

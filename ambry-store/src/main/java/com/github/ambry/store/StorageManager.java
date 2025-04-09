@@ -579,18 +579,15 @@ public class StorageManager implements StoreManager {
 
   @Override
   public boolean addBlobStore(ReplicaId replica) {
-    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
-      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
+    if (!initializeBlobStore(replica)) {
+      logger.info("Initialization failed for blobstore {}", replica.getPartitionId());
       return false;
     }
-    DiskManager diskManager = addDisk(replica.getDiskId());
-    if (diskManager == null || !diskManager.addBlobStore(replica)) {
-      logger.error("Failed to add new store into DiskManager");
+    if (!loadBlobStore(replica)) {
+      logger.info("Loading failed for initialized blobstore {}", replica.getPartitionId());
       return false;
     }
-    partitionToDiskManager.put(replica.getPartitionId(), diskManager);
-    partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
-    logger.info("New store is successfully added into StorageManager");
+    logger.info("New store is successfully added to StorageManager {}", replica.getPartitionId());
     return true;
   }
 
@@ -616,7 +613,10 @@ public class StorageManager implements StoreManager {
       return false;
     }
     DiskManager diskManager = partitionToDiskManager.get(replica.getPartitionId());
-    diskManager.loadInitializedBlobStore(replica);
+    if (!diskManager.loadInitializedBlobStore(replica)) {
+      logger.info("Failed to load initialized blob store");
+      return false;
+    }
     logger.info("Initialized store in successfully loaded");
     return true;
   }

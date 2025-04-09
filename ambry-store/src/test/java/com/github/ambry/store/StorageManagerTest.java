@@ -521,9 +521,114 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
-
+  /**
+   * Tests whether if initializeBlobStore fails if initialization fails
+   * Tests whether it will be successful after initialization is successful
+   * @throws Exception exception
+   */
+  @Test
   public void initializeBlobStoreFailureTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
 
+    // Create a new partition
+    PartitionId newPartition =
+        new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+
+    // Make the directory inaccessible
+    String newReplicaPath = newPartition.getReplicaIds().get(0).getReplicaPath();
+    File newReplicaPathFile = new File(newReplicaPath);
+    assertTrue("Could not set readable state to false", newReplicaPathFile.setReadable(false));
+
+    // Initialize StorageManager
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
+
+    // Attempt to initialize the blob store
+    assertFalse(storageManager.initializeBlobStore(newPartition.getReplicaIds().get(0)));
+
+    // Restore directory accessibility
+    assertTrue("Could not set readable state to true", newReplicaPathFile.setReadable(true));
+
+    // Retry initialization, which should now succeed
+    storageManager.initializeBlobStore(newPartition.getReplicaIds().get(0));
+    assertNotNull("Blob store should be initialized successfully", storageManager.getStore(newPartition, true));
+
+    // Shutdown and validate
+    localReplicas.add(newPartition.getReplicaIds().get(0));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  @Test
+  public void initializeAndLoadBlobStoreTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+
+    // Create a new partition
+    PartitionId newPartition =
+        new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+
+    // Initialize StorageManager
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
+
+    // Initialize the blob store
+    assertTrue("Blob store initialization should succeed",
+        storageManager.initializeBlobStore(newPartition.getReplicaIds().get(0)));
+
+    // Verify that getBlobStore with skipStateCheck = false returns null
+    assertNull("Blob store should not be accessible without skipping state check",
+        storageManager.getStore(newPartition, false));
+
+    // Load the blob store
+    storageManager.loadBlobStore(newPartition.getReplicaIds().get(0));
+
+    // Verify that getBlobStore with skipStateCheck = false now returns the store
+    assertNotNull("Blob store should be accessible after loading",
+        storageManager.getStore(newPartition, false));
+
+    // Verify that getBlobStore with skipStateCheck = true also returns the store
+    assertNotNull("Blob store should be accessible with skipStateCheck = true",
+        storageManager.getStore(newPartition, true));
+
+    // Shutdown and validate
+    localReplicas.add(newPartition.getReplicaIds().get(0));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  @Test
+  public void initializeShutdownAndRemoveBlobStoreTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+
+    // Create a new partition
+    PartitionId newPartition =
+        new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+
+    // Initialize StorageManager
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
+
+    // Initialize the blob store
+    ReplicaId replica = newPartition.getReplicaIds().get(0);
+    assertTrue("Blob store initialization should succeed", storageManager.initializeBlobStore(replica));
+
+    storageManager.controlCompactionForBlobStore(newPartition, false);
+    // Shutdown the blob store
+    assertTrue("Blob store shutdown should succeed", storageManager.shutdownBlobStore(newPartition));
+
+    // Remove the blob store after shutdown, which should succeed
+    assertTrue("Blob store removal should succeed after shutdown", storageManager.removeBlobStore(newPartition));
+
+    // Verify that the blob store is no longer accessible
+    assertNull("Blob store should not exist after removal", storageManager.getStore(newPartition, true));
+
+    // Shutdown and validate
+    localReplicas.add(replica);
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
   /**
