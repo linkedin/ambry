@@ -374,6 +374,15 @@ public class ReplicationConfig {
   @Default("false")
   public final boolean enableReplicationPrioritization;
 
+  /**
+   * The factory class the disruption service
+   */
+  public static final String DEFAULT_DISRUPTION_FACTORY = "com.github.ambry.replica.prioritization.disruption.factory.DefaultDisruptionFactory";
+  public static final String DISRUPTION_SERVICE_FACTORY = "disruption.service.factory";
+  @Config(DISRUPTION_SERVICE_FACTORY)
+  @Default(DEFAULT_DISRUPTION_FACTORY)
+  public final String disruptionServiceFactory;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -462,5 +471,7 @@ public class ReplicationConfig {
         = verifiableProperties.getInt(PRIORITIZED_PARTITIONS_BATCH_SIZE, 150);
     enableReplicationPrioritization =
         verifiableProperties.getBoolean(ENABLE_REPLICATION_PRIORITIZATION, false);
+    disruptionServiceFactory =
+        verifiableProperties.getString(DISRUPTION_SERVICE_FACTORY, DEFAULT_DISRUPTION_FACTORY);
   }
 }
