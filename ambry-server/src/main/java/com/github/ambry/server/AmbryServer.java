@@ -478,11 +478,11 @@ public class AmbryServer {
 
 
         if (replicationConfig.enableReplicationPrioritization) {
-          HelixClusterAgentsFactory helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, registry);
-          HelixClusterManager helixClusterManager = helixClusterAgentsFactory.getClusterMap();
+          HelixClusterManager helixClusterManager = (HelixClusterManager) clusterAgentsFactory.getClusterMap();
+          DisruptionService disruptionService = Utils.getObj(replicationConfig.disruptionServiceFactory, properties);
           replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager,
           clusterMap, nodeId, new ScheduledThreadPoolExecutor(1), nodeId.getDatacenterName(), storageManager, replicationConfig,
-          helixClusterManager.getManagerQueryHelper(), new DefaultDisruptionService());
+          helixClusterManager.getManagerQueryHelper(), disruptionService);
           replicationPrioritizationManager.run();
         }
 
