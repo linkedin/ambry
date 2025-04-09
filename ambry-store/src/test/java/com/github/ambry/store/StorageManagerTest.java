@@ -626,8 +626,21 @@ public class StorageManagerTest {
     // Verify that the blob store is no longer accessible
     assertNull("Blob store should not exist after removal", storageManager.getStore(newPartition, true));
 
-    // Shutdown and validate
     localReplicas.add(replica);
+
+
+    PartitionId newPartition1 =
+        new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+
+    storageManager.controlCompactionForBlobStore(newPartition1, false);
+
+    ReplicaId replica1 = newPartition1.getReplicaIds().get(0);
+
+    assertFalse(storageManager.removeBlobStore(newPartition1));
+
+    localReplicas.add(replica1);
+
+    // Shutdown and validate
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
