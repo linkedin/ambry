@@ -30,7 +30,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HelixClusterAgentsFactory;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
@@ -40,7 +39,6 @@ import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -78,7 +76,6 @@ import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.replica.prioritization.ReplicationPrioritizationManager;
-import com.github.ambry.replica.prioritization.disruption.DefaultDisruptionService;
 import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
@@ -483,7 +480,6 @@ public class AmbryServer {
           replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager,
           clusterMap, nodeId, new ScheduledThreadPoolExecutor(1), nodeId.getDatacenterName(), storageManager, replicationConfig,
           helixClusterManager.getManagerQueryHelper(), disruptionService);
-          replicationPrioritizationManager.run();
         }
 
       } else {
