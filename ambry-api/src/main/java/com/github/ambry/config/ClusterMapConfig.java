@@ -273,11 +273,20 @@ public class ClusterMapConfig {
   public final long clustermapReplicaCatchupAcceptableLagBytes;
 
   /**
-   * The minimum number of peers that a bootstrap replica is required to catch up with. If target is set to 0, then
-   * {@link com.github.ambry.clustermap.ReplicaSyncUpManager} will use number of replicas in local dc as catchup target.
+   * The minimum number of peers that a bootstrap replica is required to catch up with.
    */
   @Config("clustermap.replica.catchup.target")
   public final int clustermapReplicaCatchupTarget;
+
+  /**
+   * If this is set to true, while determining the catchup target, @link com.github.ambry.clustermap.ReplicaSyncUpManager}
+   *
+   *  will use number of replicas in local dc as catchup target.
+   */
+  @Config("clustermap.replica.catchup.target.count.local.peers")
+  @Default("true")
+  public final boolean clustermapReplicaCatchupTargetCountLocalPeers;
+
   /**
    * The minimum number of peers that a replica is required to catch up with when it's downward transition from leader/standby
    * to inactive, offline and dropped. If target is set to 0, then * {@link com.github.ambry.clustermap.ReplicaSyncUpManager}
@@ -447,6 +456,8 @@ public class ClusterMapConfig {
         verifiableProperties.getLongInRange("clustermap.replica.catchup.acceptable.lag.bytes", 0L, 0L, Long.MAX_VALUE);
     clustermapReplicaCatchupTarget =
         verifiableProperties.getIntInRange("clustermap.replica.catchup.target", 0, 0, Integer.MAX_VALUE);
+    clustermapReplicaCatchupTargetCountLocalPeers =
+        verifiableProperties.getBoolean("clustermap.replica.catchup.target.count.local.peers", true);
     clustermapReplicaCatchupTargetForDownwardTransition =
         verifiableProperties.getIntInRange("clustermap.replica.catchup.target.for.downward.transition", 2, 0,
             Integer.MAX_VALUE);
