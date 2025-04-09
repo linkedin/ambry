@@ -279,9 +279,8 @@ public class ClusterMapConfig {
   public final int clustermapReplicaCatchupTarget;
 
   /**
-   * If this is set to true, while determining the catchup target, @link com.github.ambry.clustermap.ReplicaSyncUpManager}
-   *
-   *  will use number of replicas in local dc as catchup target.
+   * If this is set to true, while determining the catchup target, {@link com.github.ambry.clustermap.ReplicaSyncUpManager}
+   *  will take count of maximum of count replicas in local dc as catchup target and {@link #clustermapReplicaCatchupTarget} .
    */
   @Config("clustermap.replica.catchup.target.count.local.peers")
   @Default("true")
