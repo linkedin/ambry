@@ -30,8 +30,7 @@ public class DeleteRequest extends RequestOrResponse {
   public static final short DELETE_REQUEST_VERSION_1 = 1;
   public static final short DELETE_REQUEST_VERSION_2 = 2;
   public static final short DELETE_REQUEST_VERSION_3 = 3;
-  // TODO Update CURRENT_VERSION to 3 after the change is rolled out on all servers
-  private final static short CURRENT_VERSION = DELETE_REQUEST_VERSION_2;
+  private final static short CURRENT_VERSION = DELETE_REQUEST_VERSION_3;
   protected static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
   protected static final int FORCE_DELETE_FLAG_SIZE = 1;
 
