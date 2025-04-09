@@ -116,7 +116,6 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
       fileCopyThread.start();
       runningThreads.get(diskId).add(fileCopyThread);
       replicaToFileCopyThread.put(replicaId, fileCopyThread);
-      threadQueueLock.unlock();
     } catch (Exception e) {
       logger.error("Error while submitting replica {} for hydration: {}", replicaId, e.getMessage());
       throw new StateTransitionException("Error while submitting replica " + replicaId + " for hydration",
