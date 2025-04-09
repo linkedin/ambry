@@ -24,7 +24,8 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
-import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.protocol.Response;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.PartitionFileStore;
@@ -342,10 +343,15 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param response
    * @param operationName
    */
-  private void validateResponseOrThrow(RequestOrResponse response, String operationName) {
+  private void validateResponseOrThrow(Response response, String operationName) {
     if (response == null) {
       logger.error(operationName + ": not expecting null response");
       throw new FileCopyHandlerException(operationName + ": not expecting null response",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+    }
+    if (response.getError() != ServerErrorCode.NoError) {
+      logger.error(operationName + ": not expecting error response");
+      throw new FileCopyHandlerException(operationName + ": not expecting error response",
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
   }
