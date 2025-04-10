@@ -144,6 +144,11 @@ public class InMemNamedBlobDb implements NamedBlobDb {
         return future;
       }
     }
+    if (record.getVersion() == 0) {
+      record = new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+          record.getBlobId(), record.getExpirationTimeMs(), time.milliseconds(), record.getBlobSize(),
+          record.getModifiedTimeMs(), record.isDirectory());
+    }
     putInternal(record, state);
     future.complete(new PutResult(record));
     return future;

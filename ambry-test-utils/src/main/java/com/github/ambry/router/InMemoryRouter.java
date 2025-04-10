@@ -30,7 +30,6 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -38,6 +37,7 @@ import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -52,6 +52,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.utils.Utils.*;
@@ -224,7 +225,8 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
@@ -270,22 +272,26 @@ public class InMemoryRouter implements Router {
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      GetBlobResult operationResult = exception == null ? new GetBlobResult(blobInfo, blobDataChannel, blobChunkIds) : null;
+      GetBlobResult operationResult =
+          exception == null ? new GetBlobResult(blobInfo, blobDataChannel, blobChunkIds) : null;
       completeOperation(futureResult, callback, operationResult, exception);
     }
     return futureResult;
   }
 
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata,
+      ReadableStreamChannel channel, PutBlobOptions options, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
-    PostData postData = new PostData(blobProperties, usermetadata, channel, null, options, wrappedCallback, futureResult);
+        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback)
+            : callback;
+    PostData postData =
+        new PostData(blobProperties, usermetadata, channel, null, options, wrappedCallback, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
@@ -307,7 +313,8 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<Void> deleteBlob(RestRequest restRequest, String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
@@ -326,8 +333,23 @@ public class InMemoryRouter implements Router {
               // Handle error in conversion
               callback.onCompletion(null, exception);
             } else {
-              // Continue with TTL update once blobId is available
-              proceedWithDelete(convertedBlobId, serviceId, callback, futureResult);
+              List<String> blobIds = Arrays.stream(convertedBlobId.split(",")).collect(Collectors.toList());
+              List<FutureResult<Void>> futures = new ArrayList<>();
+              for (String blobId : blobIds) {
+                FutureResult<Void> futureResult = new FutureResult<>();
+                proceedWithDelete(blobId, serviceId, null, futureResult);
+                futures.add(futureResult);
+              }
+              for (FutureResult<Void> future : futures) {
+                try {
+                  future.get();
+                } catch (Exception e) {
+                  // Handle error in delete operation
+                  callback.onCompletion(null, e);
+                  return;
+                }
+              }
+              callback.onCompletion(null, null);
             }
           }
         });
@@ -383,7 +405,8 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     FutureResult<Void> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
