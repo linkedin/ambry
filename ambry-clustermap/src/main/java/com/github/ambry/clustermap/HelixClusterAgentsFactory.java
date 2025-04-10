@@ -44,7 +44,7 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
     this(clusterMapConfig, new MetricRegistry());
   }
 
-  HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, MetricRegistry metricRegistry) {
+  public HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, MetricRegistry metricRegistry) {
     this.clusterMapConfig = clusterMapConfig;
     this.instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
