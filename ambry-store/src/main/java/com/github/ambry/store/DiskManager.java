@@ -509,7 +509,7 @@ public class DiskManager {
   }
 
   /**
-   *
+   * Adds and initializes a new BlobStore with given {@link ReplicaId}
    * @param replica {@link ReplicaId}
    * @return {@code true} if initialization succeeds {@code false} otherwise.
    */
@@ -551,6 +551,11 @@ public class DiskManager {
     return succeed;
   }
 
+  /**
+   * Loads the initialized Blobstore and starts it for given {@link ReplicaId}
+   * @param replica {{@link ReplicaId}
+   * @return {@code true} if loading succeeds {@code false} otherwise.
+   */
   boolean loadInitializedBlobStore(ReplicaId replica) {
     rwLock.writeLock().lock();
     boolean succeed = false;

@@ -591,6 +591,11 @@ public class StorageManager implements StoreManager {
     return true;
   }
 
+  /**
+   * Initializes the blob store for the given Replica
+   * @param replica {@link ReplicaId} replicaId for which store should be added.
+   * @return {@code true} if initialization is successful, {@code false} otherwise
+   */
   public boolean initializeBlobStore(ReplicaId replica) {
     if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
       logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
@@ -603,21 +608,29 @@ public class StorageManager implements StoreManager {
     }
     partitionToDiskManager.put(replica.getPartitionId(), diskManager);
     partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
-    logger.info("New store is successfully initialized and added to StorageManager");
+    logger.info("New store is successfully initialized and added to StorageManager for Partition {}",
+        replica.getPartitionId());
     return true;
   }
 
+  /**
+   * Loads and starts the already initialized blob store for the given Replica
+   * @param replica {@link ReplicaId}
+   * @return {@code true} if loading is successful, {@code false} otherwise
+   */
   public boolean loadBlobStore(ReplicaId replica) {
     if (!partitionToDiskManager.containsKey(replica.getPartitionId())) {
-      logger.error("Could not find blob store in partitionToDiskManager");
+      logger.error("Could not find blob store in partitionToDiskManager for Partition {}", replica.getPartitionId());
       return false;
     }
     DiskManager diskManager = partitionToDiskManager.get(replica.getPartitionId());
     if (!diskManager.loadInitializedBlobStore(replica)) {
-      logger.info("Failed to load initialized blob store");
+      partitionToDiskManager.remove(replica.getPartitionId());
+      partitionNameToReplicaId.remove(replica.getPartitionId().toPathString());
+      logger.info("Failed to load initialized blob store for Partition {}", replica.getPartitionId());
       return false;
     }
-    logger.info("Initialized store in successfully loaded");
+    logger.info("Initialized store in successfully loaded for Partition {}", replica.getPartitionId());
     return true;
   }
 
