@@ -12,7 +12,7 @@ Ambry is a distributed object store that supports storage of trillions of small 
 4. Cost effective
 5. Easy to use
 
-Requires at least JDK 1.8.
+Requires JDK version 1.11 - 1.14.
 
 ## Documentation
 Detailed documentation is available at https://github.com/linkedin/ambry/wiki
@@ -99,3 +99,29 @@ In addition to the simple APIs demonstrated above, Ambry provides support for `G
 Other features of interest include:
 * **Time To Live (TTL)**: During `POST`, a TTL in seconds can be provided through the addition of a header named `x-ambry-ttl`. This means that Ambry will stop serving the blob after the TTL has expired. On `GET`, expired blobs behave the same way as deleted blobs.
 * **Private**: During `POST`, providing a header named `x-ambry-private` with the value `true` will mark the blob as private. API behavior can be configured based on whether a blob is public or private.
+
+## Testing
+>**WARNING**: Tests currently can take upwards of 40 minutes to run
+
+Ambry requires [azurite](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azurite?tabs=npm%2Cblob-storage)
+and MySQL for testing. To install on MacOS:
+
+azurite:
+```
+$ npm install -g azurite
+$ azurite
+```
+
+mysql:
+```
+$ brew install mysql
+$ brew services start mysql
+$ mysql -uroot
+mysql> CREATE USER 'travis'@'localhost';
+mysql> GRANT ALL PRIVILEGES ON *.* to 'travis'@'localhost';
+mysql> FLUSH PRIVILEGES;
+mysql> CREATE DATABASE AmbryRepairRequests;
+mysql> USE AmbryRepairRequests; SOURCE ./ambry-mysql/src/main/resources/AmbryRepairRequests.ddl;
+```
+
+Then run `./gradlew build` to build and run all unit tests.

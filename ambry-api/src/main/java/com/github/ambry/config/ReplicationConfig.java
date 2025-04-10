@@ -354,6 +354,35 @@ public class ReplicationConfig {
   @Config(BACKUP_CHECKER_REPORT_DIR)
   public final int maxBackupCheckerReportFd;
 
+  public static final String DISRUPTION_LOOKAHEAD_WINDOW_MS = "disruption.lookahead.window.ms";
+  @Config(DISRUPTION_LOOKAHEAD_WINDOW_MS)
+  @Default("28800000")
+  public final long diruptionReadinessWindowInMS;
+
+  public static final String PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES = "prioritization.scheduler.interval.minutes";
+  @Config(PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES)
+  @Default("15")
+  public final int scheduledIntervalMinutes;
+
+  public static final String PRIORITIZED_PARTITIONS_BATCH_SIZE = "prioritization.batch.size";
+  @Config(PRIORITIZED_PARTITIONS_BATCH_SIZE)
+  @Default("150")
+  public final int highPriorityPartitionsBatchSize;
+
+  public static final String ENABLE_REPLICATION_PRIORITIZATION = "enable.replication.prioritization";
+  @Config(ENABLE_REPLICATION_PRIORITIZATION)
+  @Default("false")
+  public final boolean enableReplicationPrioritization;
+
+  /**
+   * The factory class the disruption service
+   */
+  public static final String DEFAULT_DISRUPTION_FACTORY = "com.github.ambry.replica.prioritization.disruption.factory.DefaultDisruptionFactory";
+  public static final String DISRUPTION_SERVICE_FACTORY = "disruption.service.factory";
+  @Config(DISRUPTION_SERVICE_FACTORY)
+  @Default(DEFAULT_DISRUPTION_FACTORY)
+  public final String disruptionServiceFactory;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -434,5 +463,15 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
     replicationUsingNonblockingNetworkClientForLocalColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO, false);
+    diruptionReadinessWindowInMS =
+        verifiableProperties.getLong(DISRUPTION_LOOKAHEAD_WINDOW_MS, 28800000);
+    scheduledIntervalMinutes =
+        verifiableProperties.getInt(PRIORITIZATION_SCHEDULER_INTERVAL_MINUTES, 15);
+    highPriorityPartitionsBatchSize
+        = verifiableProperties.getInt(PRIORITIZED_PARTITIONS_BATCH_SIZE, 150);
+    enableReplicationPrioritization =
+        verifiableProperties.getBoolean(ENABLE_REPLICATION_PRIORITIZATION, false);
+    disruptionServiceFactory =
+        verifiableProperties.getString(DISRUPTION_SERVICE_FACTORY, DEFAULT_DISRUPTION_FACTORY);
   }
 }
