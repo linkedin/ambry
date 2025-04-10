@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer;
 
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,6 +25,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.ReentrantLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /**
  * A thread pool manager that handles file copy operations with disk-aware thread allocation.
@@ -49,6 +53,8 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   private final ReentrantLock threadQueueLock;
   private boolean isRunning;
   private final CountDownLatch shutdownLatch;
+
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Constructor to initialize the thread pool manager with specified disk IDs and number of threads.
@@ -103,13 +109,20 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   @Override
   public void submitReplicaForHydration(ReplicaId replicaId, FileCopyStatusListener fileCopyStatusListener,
       FileCopyHandler fileCopyHandler) {
-    threadQueueLock.lock();
-    DiskId diskId = replicaId.getDiskId();
-    FileCopyThread fileCopyThread = new FileCopyThread(fileCopyHandler, fileCopyStatusListener);
-    fileCopyThread.start();
-    runningThreads.get(diskId).add(fileCopyThread);
-    replicaToFileCopyThread.put(replicaId, fileCopyThread);
-    threadQueueLock.unlock();
+    try {
+      threadQueueLock.lock();
+      DiskId diskId = replicaId.getDiskId();
+      FileCopyThread fileCopyThread = new FileCopyThread(fileCopyHandler, fileCopyStatusListener);
+      fileCopyThread.start();
+      runningThreads.get(diskId).add(fileCopyThread);
+      replicaToFileCopyThread.put(replicaId, fileCopyThread);
+    } catch (Exception e) {
+      logger.error("Error while submitting replica {} for hydration: {}", replicaId, e.getMessage());
+      throw new StateTransitionException("Error while submitting replica " + replicaId + " for hydration",
+          StateTransitionException.TransitionErrorCode.FileCopyProtocolFailure);
+    } finally {
+      threadQueueLock.unlock();
+    }
   }
 
   /**
@@ -121,11 +134,19 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   @Override
   public void stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId) throws InterruptedException {
     threadQueueLock.lock();
+    logger.info("Stopping and removing replica {} from thread pool", replicaId);
     FileCopyThread fileCopyThread = replicaToFileCopyThread.get(replicaId);
+
     if (fileCopyThread == null || !fileCopyThread.isAlive()) {
+      logger.info("No thread found for replica {}. Nothing to stop.", replicaId);
+      threadQueueLock.unlock();
       return;
     }
+    long threadShutDownInitiationTime = System.currentTimeMillis();
+    logger.info("Stopping thread for replica {}", replicaId);
     fileCopyThread.shutDown();
+    logger.info("Thread for replica {} stopped in {} ms", replicaId,
+        System.currentTimeMillis() - threadShutDownInitiationTime);
     threadQueueLock.unlock();
   }
 

@@ -31,10 +31,10 @@ public class FileCopyInfo {
    * The client id of the request
    */
   private final String clientId;
-
   /**
    * The source replica id
    */
+
   private final ReplicaId sourceReplicaId;
 
   /**
@@ -44,8 +44,6 @@ public class FileCopyInfo {
 
   /**
    * Constructor to create FileCopyInfo
-   * @param correlationId The correlation id of the request
-   * @param clientId The client id of the request
    * @param sourceReplicaId The source replica id
    * @param targetReplicaId The target replica id
    */
