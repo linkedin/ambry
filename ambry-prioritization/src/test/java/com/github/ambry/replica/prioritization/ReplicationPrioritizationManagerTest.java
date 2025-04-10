@@ -138,7 +138,10 @@ public class ReplicationPrioritizationManagerTest {
     long currentTime = System.currentTimeMillis();
     when(operation1.getStartTime()).thenReturn(currentTime + TimeUnit.MINUTES.toMillis(75)); // Within window
     when(operation2.getStartTime()).thenReturn(currentTime + TimeUnit.MINUTES.toMillis(45)); // Outside window
-    when(operation3.getStartTime()).thenReturn(currentTime + TimeUnit.DAYS.toMillis(1));    // Within window
+    when(operation3.getStartTime()).thenReturn(currentTime + TimeUnit.DAYS.toMillis(1));// Within window
+
+    when(dataNodeId.getDatacenterName()).thenReturn(datacenterName);
+
     // Create manager instance with system time
     manager = new ReplicationPrioritizationManager(
         replicationEngine, clusterMap, dataNodeId, scheduler, storageManager, replicationConfig, clusterManagerQueryHelper, disruptionService);
