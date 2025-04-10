@@ -56,6 +56,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import javax.sql.DataSource;
 import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
@@ -73,6 +74,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
 
   private final Time time;
+  private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
+  private static final String MULT_VERSION_PLACE_HOLDER = "MULT_VERSION_PLACE_HOLDER";
   private static final int VERSION_BASE = 100000;
   // table name
   private static final String NAMED_BLOBS_V2 = "named_blobs_v2";
@@ -98,7 +101,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   /**
    * Select a record that matches a blob name (lookup by primary key).
    */
-  private static final String GET_QUERY_V2 =
+  private static final String GET_QUERY =
       String.format("SELECT %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION, DELETED_TS,
           NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
@@ -120,7 +123,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Similar like LIST_QUERY_V2, but this query is used when user don't provide the prefix and want to list all records.
    */
   // @formatter:off
-  private static final String LIST_ALL_QUERY_V2 = String.format(""
+  private static final String LIST_ALL_QUERY = String.format(""
       + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
       + "FROM named_blobs_v2 t1 "
       + "INNER JOIN "
@@ -142,29 +145,33 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Attempt to insert a new mapping into the database. The 'modified_ts' column in the DB will be auto-populated on
    * the server side
    */
-  private static final String INSERT_QUERY_V2 =
+  private static final String INSERT_QUERY =
       String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS, VERSION, BLOB_STATE, BLOB_SIZE);
 
   /**
    * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.
-   * This select call also allows the current blob ID to be retrieved prior to a delete.
+   * This select call also allows the current blob ID to be retrieved prior to a delete. Notice that the lock will not
+   * prevent other transactions from inserting new records for the same blob name. So when deleting the rows, we need to
+   * be specific about the version to delete.
    */
-  private static final String SELECT_FOR_SOFT_DELETE_QUERY_V2 =
+  private static final String SELECT_FOR_DELETE_QUERY =
       String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s ORDER BY %s DESC FOR UPDATE", BLOB_ID, VERSION,
           DELETED_TS, CURRENT_TIME, BLOB_STATE, NAMED_BLOBS_V2, PK_MATCH, VERSION);
 
   /**
    * Soft delete a blob by setting the delete timestamp to the current time for a specific version.
    */
-  private static final String SOFT_DELETE_WITH_VERSION_QUERY_V2 =
+  private static final String SOFT_DELETE_WITH_VERSION_QUERY =
       String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH_VERSION);
 
-  /**
-   * Soft delete a blob by setting the delete timestamp to the current time for all versions.
-   */
-  private static final String SOFT_DELETE_QUERY_V2 =
-      String.format("UPDATE %s SET %s = ? WHERE %s AND %s IS NOT NULL", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH);
+  private static final String SOFT_DELETE_MULTIPLE_VERSIONS_QUERY_TEMPLATE =
+      String.format("UPDATE %s SET %s = ? WHERE %s AND %s IN ( " + MULT_VERSION_PLACE_HOLDER + ")", NAMED_BLOBS_V2,
+          DELETED_TS, PK_MATCH, VERSION);
+
+  private static final String HARD_DELETE_MULTIPLE_VERSIONS_QUERY_TEMPLATE =
+      String.format("DELETE FROM %s WHERE %s AND %s IN ( " + MULT_VERSION_PLACE_HOLDER + ")", NAMED_BLOBS_V2, PK_MATCH,
+          VERSION);
 
   /**
    * Set named blob state to be READY and delete timestamp to null for TtlUpdate case
@@ -253,17 +260,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     switch (config.listNamedBlobsSQLOption) {
       case 1:
         // old query that joins the entire table with a few selected rows
-        return String.format(""
-            + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
-            + "FROM named_blobs_v2 t1 "
-            + "INNER JOIN "
-            + "(SELECT account_id, container_id, blob_name, max(version) as version "
-            + "FROM named_blobs_v2 "
-            + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
-            + "        GROUP BY account_id, container_id, blob_name) t2 "
-            + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-            + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
+        return String.format(
+            "" + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
+                + "FROM named_blobs_v2 t1 " + "INNER JOIN "
+                + "(SELECT account_id, container_id, blob_name, max(version) as version " + "FROM named_blobs_v2 "
+                + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+                + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
+                + "        GROUP BY account_id, container_id, blob_name) t2 "
+                + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+                + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?", STATE_MATCH,
+            CURRENT_TIME);
       case 2:
         /**
          * List named-blobs query, given a prefix.
@@ -272,35 +278,24 @@ class MySqlNamedBlobDb implements NamedBlobDb {
          * Finally, we join and select a version for each blob, that is ready to serve.
          * This can be the most recent version if it is not deleted, or nothing.
          */
-        return String.format(""
-          + " WITH "
-          + "  BlobsAllVersion AS ( "
-          + "   SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
-          + "   FROM named_blobs_v2 "
-          + "   WHERE account_id = ? " // 1
-          + "     AND container_id = ? " // 2
-          + "     AND %1$s " // blob_state = x
-          + "     AND blob_name LIKE ? " // 3
-          + "     AND blob_name >= ? " // 4
-          + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
-          + " ), "
-          + " BlobsMaxVersion AS ( "
-          + "   SELECT blob_name, MAX(version) as version "
-          + "   FROM named_blobs_v2 "
-          + "   WHERE account_id = ? " // 5
-          + "     AND container_id = ? " // 6
-          + "     AND %1$s " // blob_state = x
-          + "     AND blob_name LIKE ? " // 7
-          + "     AND blob_name >= ? " // 8
-          + "   GROUP BY blob_name "
-          + " ) "
-          + " SELECT BlobsAllVersion.* "
-          + " FROM BlobsAllVersion "
-          + " INNER JOIN BlobsMaxVersion "
-          + " ON (BlobsAllVersion.blob_name = BlobsMaxVersion.blob_name "
-          + "   AND BlobsAllVersion.version = BlobsMaxVersion.version) "
-          + " ORDER BY BlobsAllVersion.blob_name "
-          + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
+        return String.format("" + " WITH " + "  BlobsAllVersion AS ( "
+            + "   SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts " + "   FROM named_blobs_v2 "
+            + "   WHERE account_id = ? " // 1
+            + "     AND container_id = ? " // 2
+            + "     AND %1$s " // blob_state = x
+            + "     AND blob_name LIKE ? " // 3
+            + "     AND blob_name >= ? " // 4
+            + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) " + " ), " + " BlobsMaxVersion AS ( "
+            + "   SELECT blob_name, MAX(version) as version " + "   FROM named_blobs_v2 " + "   WHERE account_id = ? "
+            // 5
+            + "     AND container_id = ? " // 6
+            + "     AND %1$s " // blob_state = x
+            + "     AND blob_name LIKE ? " // 7
+            + "     AND blob_name >= ? " // 8
+            + "   GROUP BY blob_name " + " ) " + " SELECT BlobsAllVersion.* " + " FROM BlobsAllVersion "
+            + " INNER JOIN BlobsMaxVersion " + " ON (BlobsAllVersion.blob_name = BlobsMaxVersion.blob_name "
+            + "   AND BlobsAllVersion.version = BlobsMaxVersion.version) " + " ORDER BY BlobsAllVersion.blob_name "
+            + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
     }
@@ -400,8 +395,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       GetOption option, boolean localGet) {
     TransactionStateTracker transactionStateTracker = null;
     if (!localGet) {
-      transactionStateTracker =
-          new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+      transactionStateTracker = new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     }
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
@@ -431,10 +425,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         (accountId, containerId, connection) -> {
           long startTime = this.time.milliseconds();
           // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
-          logger.trace(
-              "NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}', dbRelyOnNewTable='{}', isUpsert='{}'",
-              accountId, containerId, record.getBlobName(), config.dbRelyOnNewTable, isUpsert);
-          if (!(config.dbRelyOnNewTable && isUpsert)) {
+          logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}', isUpsert='{}'", accountId,
+              containerId, record.getBlobName(), isUpsert);
+          if (!isUpsert) {
             NamedBlobRecord recordCurrent = null;
             try {
               recordCurrent =
@@ -445,7 +438,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                   "Skip exception in pulling data from db: accountId='{}', containerId='{}', blobName='{}': {}",
                   accountId, containerId, record.getBlobName(), e);
             }
-            if (recordCurrent != null && !isUpsert) {
+            if (recordCurrent != null) {
               logger.error(
                   "PUT conflict: Named blob {} already exist, the existing blob id is {}, the new blob id is {}",
                   record.getBlobName(), recordCurrent.getBlobId(), record.getBlobId());
@@ -500,8 +493,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       long startTime = this.time.milliseconds();
       for (StaleNamedBlob record : staleRecords) {
         applySoftDeleteWithVersion(record.getAccountId(), record.getContainerId(), record.getBlobName(),
-            record.getVersion(),
-            record.getDeleteTs(), connection);
+            record.getVersion(), record.getDeleteTs(), connection);
       }
       metricsRecoder.namedBlobCleanupTimeInMs.update(this.time.milliseconds() - startTime);
       return staleRecords.size();
@@ -667,7 +659,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private NamedBlobRecord run_get_v2(String accountName, String containerName, String blobName, GetOption option,
       short accountId, short containerId, Connection connection) throws Exception {
     String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(GET_QUERY_V2)) {
+    try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, blobName);
@@ -700,7 +692,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
     String query = "";
-    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY_V2 : LIST_NAMED_BLOBS_SQL;
+    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY : LIST_NAMED_BLOBS_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       if (blobNamePrefix == null) {
@@ -756,7 +748,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       Connection connection) throws Exception {
     String query = "";
     NamedBlobRecord updatedRecord;
-    try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
+    try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, record.getBlobName());
@@ -767,9 +759,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setTimestamp(5, null);
       }
       final long newVersion = buildVersion();
-      updatedRecord =
-          new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-              record.getBlobId(), record.getExpirationTimeMs(), newVersion);
+      updatedRecord = new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+          record.getBlobId(), record.getExpirationTimeMs(), newVersion);
       statement.setLong(6, newVersion);
       statement.setInt(7, state.ordinal());
       statement.setLong(8, record.getBlobSize());
@@ -812,12 +803,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       short containerId, Connection connection) throws Exception {
     String blobId;
     long version;
-    Timestamp currentDeleteTime;
+    Timestamp currentDeleteTime = null;
     boolean alreadyDeleted;
     List<DeleteResult.BlobVersion> blobVersions = new ArrayList<>();
-    boolean allDeleted = true;
+    List<Long> versionsToDelete = new ArrayList<>();
     String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY_V2)) {
+    try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_DELETE_QUERY)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, blobName);
@@ -825,25 +816,29 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       logger.debug("Deleting blob name in MySql. Query {}", query);
       metricsRecoder.namedBlobDeleteRate.mark();
       try (ResultSet resultSet = statement.executeQuery()) {
-        if (!resultSet.next()) {
+        while (resultSet.next()) {
+          blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+          version = resultSet.getLong(2);
+          Timestamp originalDeletionTime = resultSet.getTimestamp(3);
+          currentDeleteTime = resultSet.getTimestamp(4);
+          alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
+          blobVersions.add(new DeleteResult.BlobVersion(blobId, version, alreadyDeleted));
+          if (!alreadyDeleted) {
+            versionsToDelete.add(version);
+          }
+        }
+        if (blobVersions.isEmpty()) {
           throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
               blobName);
         }
-        blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-        version = resultSet.getLong(2);
-        Timestamp originalDeletionTime = resultSet.getTimestamp(3);
-        currentDeleteTime = resultSet.getTimestamp(4);
-        alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
-        blobVersions.add(new DeleteResult.BlobVersion(blobId, version, alreadyDeleted));
-        allDeleted = allDeleted && alreadyDeleted;
       }
     } catch (SQLException e) {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
     // only need to issue an update statement if the row was not already marked as deleted.
-    if (!allDeleted) {
-      applySoftDelete(accountId, containerId, blobName, currentDeleteTime, connection);
+    if (!versionsToDelete.isEmpty()) {
+      applyDelete(accountId, containerId, blobName, currentDeleteTime, versionsToDelete, connection);
     }
     return new DeleteResult(blobVersions);
   }
@@ -879,10 +874,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private void applySoftDeleteWithVersion(short accountId, short containerId, String blobName, long version,
-      Timestamp deleteTs,
-      Connection connection) throws Exception {
+      Timestamp deleteTs, Connection connection) throws Exception {
     String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_WITH_VERSION_QUERY_V2)) {
+    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_WITH_VERSION_QUERY)) {
       // use the current time
       statement.setTimestamp(1, deleteTs);
       statement.setInt(2, accountId);
@@ -898,17 +892,35 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
   }
 
-  private void applySoftDelete(short accountId, short containerId, String blobName, Timestamp deletedTs,
-      Connection connection) throws Exception {
+  private String renderMultiVersionTemplate(String template, int numberOfVersions) {
+    if (numberOfVersions > MAX_NUMBER_OF_VERSIONS_IN_DELETE) {
+      throw new IllegalArgumentException("Too many versions requested: " + numberOfVersions);
+    }
+    String placeholder = IntStream.range(0, numberOfVersions).mapToObj(i -> "? ").collect(Collectors.joining(", "));
+    return template.replace(MULT_VERSION_PLACE_HOLDER, placeholder);
+  }
+
+  private void applyDelete(short accountId, short containerId, String blobName, Timestamp deletedTs,
+      List<Long> versions, Connection connection) throws Exception {
     String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
+    String deleteTemplate = config.enableHardDelete ? HARD_DELETE_MULTIPLE_VERSIONS_QUERY_TEMPLATE
+        : SOFT_DELETE_MULTIPLE_VERSIONS_QUERY_TEMPLATE;
+    String deleteStatement = renderMultiVersionTemplate(deleteTemplate, versions.size());
+    try (PreparedStatement statement = connection.prepareStatement(deleteStatement)) {
       // use the current time
-      statement.setTimestamp(1, deletedTs);
-      statement.setInt(2, accountId);
-      statement.setInt(3, containerId);
-      statement.setString(4, blobName);
+      int paramInd = 1;
+      if (!config.enableHardDelete) {
+        // Update statement requies a delete timestamp as first parameter
+        statement.setTimestamp(paramInd++, deletedTs);
+      }
+      statement.setInt(paramInd++, accountId);
+      statement.setInt(paramInd++, containerId);
+      statement.setString(paramInd++, blobName);
+      for (long version : versions) {
+        statement.setLong(paramInd++, version);
+      }
       query = statement.toString();
-      logger.debug("Soft deleting blob in MySql. Query {}", query);
+      logger.debug("Deleting blob in MySql. Query {}", query);
       statement.executeUpdate();
     } catch (SQLException e) {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
@@ -923,7 +935,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private long buildVersion() {
     long currentTime = this.time.milliseconds();
     UUID uuid = UUID.randomUUID();
-    return currentTime * VERSION_BASE + Long.parseLong(uuid.toString().split("-")[0],16) % VERSION_BASE;
+    return currentTime * VERSION_BASE + Long.parseLong(uuid.toString().split("-")[0], 16) % VERSION_BASE;
   }
 
   /**

@@ -26,47 +26,27 @@ import java.util.Objects;
  */
 public class DeleteResult {
   private final List<BlobVersion> blobVersions;
-  private final String blobId;
-  private final boolean alreadyDeleted;
 
   /**
    * @param blobId the blob ID from the deleted record.
    * @param alreadyDeleted {@code true} if the record indicated that the blob was already deleted before this call.
    */
   public DeleteResult(String blobId, boolean alreadyDeleted) {
-    this.blobId = blobId;
-    this.alreadyDeleted = alreadyDeleted;
-    blobVersions = new ArrayList<>();
-    blobVersions.add(new BlobVersion(blobId, 0, alreadyDeleted));
+    this(Collections.singletonList(new BlobVersion(blobId, 0, alreadyDeleted)));
   }
 
   public DeleteResult(List<BlobVersion> blobVersions) {
+    Objects.requireNonNull(blobVersions, "blobVersions cannot be null");
     this.blobVersions = Collections.unmodifiableList(new ArrayList<>(blobVersions));
-    this.blobId = this.blobVersions.size() > 0 ? this.blobVersions.get(0).getBlobId() : null;
-    this.alreadyDeleted = this.blobVersions.size() > 0 ? this.blobVersions.get(0).isAlreadyDeleted() : false;
   }
 
   public List<BlobVersion> getBlobVersions() {
     return blobVersions;
   }
 
-  public String getBlobIdsForAllVersions() {
+  public String getBlobIds() {
     // BlobId is in base64 format, "," character is not allowed in base64 encoding.
     return blobVersions.stream().map(BlobVersion::getBlobId).reduce((a, b) -> a + "," + b).orElse("");
-  }
-
-  /**
-   * @return the blob ID from the deleted record.
-   */
-  public String getBlobId() {
-    return blobId;
-  }
-
-  /**
-   * @return {@code true} if the record indicated that the blob was already deleted before this call.
-   */
-  public boolean isAlreadyDeleted() {
-    return alreadyDeleted;
   }
 
   @Override
@@ -78,12 +58,12 @@ public class DeleteResult {
       return false;
     }
     DeleteResult record = (DeleteResult) o;
-    return Objects.equals(blobId, record.blobId) && Objects.equals(alreadyDeleted, record.alreadyDeleted);
+    return Objects.equals(blobVersions, record.blobVersions);
   }
 
   @Override
   public String toString() {
-    return "DeleteResult[blobId=" + getBlobId() + ",isAlreadyDeleted=" + isAlreadyDeleted() + "]";
+    return "DeleteResult[BlobVersions=" + blobVersions + "]";
   }
 
   public static class BlobVersion {
@@ -107,6 +87,23 @@ public class DeleteResult {
 
     public boolean isAlreadyDeleted() {
       return alreadyDeleted;
+    }
+
+    @Override
+    public String toString() {
+      return "BlobVersion[blobId=" + blobId + ",version=" + version + ",isAlreadyDeleted=" + isAlreadyDeleted() + "]";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      BlobVersion that = (BlobVersion) o;
+      return version == that.version && alreadyDeleted == that.alreadyDeleted && Objects.equals(blobId, that.blobId);
     }
   }
 }
