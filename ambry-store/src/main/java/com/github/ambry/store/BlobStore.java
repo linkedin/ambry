@@ -292,6 +292,7 @@ public class BlobStore implements Store {
         }
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
         initialized = true;
       } catch (Exception e) {
         if (fileLock != null) {
@@ -318,7 +319,7 @@ public class BlobStore implements Store {
         throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
       }
       try {
-        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
+        log.init();
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
             accountService, remoteTokenTracker, diskMetrics);
@@ -1663,7 +1664,7 @@ public class BlobStore implements Store {
    * @throws StoreException
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    checkStarted();
+    checkStarted(); // change this to is BlobStore initialized
     DiskSpaceRequirements requirements =
         log.isLogSegmented() ? new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
             log.getSegmentCapacity(), log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse().length)

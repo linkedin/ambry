@@ -220,9 +220,13 @@ public class DiskManager {
 
       // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
       // from each store.
+      // This flow will not be called during bootstrap, replicas would be empty
+      // blob stores are created in the constructor or in the case of bootstrapping of a new partition it is done in addBlobStore()
       List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
       for (BlobStore blobStore : stores.values()) {
-        if (blobStore.isStarted()) {
+        if (blobStore.isStarted()) { // blobStore.isInitialized()
+          // isStarted is being checked, because Log file is created only once the blob store is started
+          // since we moved it to the load part of the BlobStore, we should be able to start after load
           DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
           if (requirements != null) {
             requirementsList.add(requirements);
@@ -509,10 +513,14 @@ public class DiskManager {
         BlobStore store = new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
             diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
             replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
-        store.start();
+//        store.start();
+        // store.init();
         // collect store segment requirements and add into DiskSpaceAllocator
+
+        // this code should run before file copy and only after file copy is done store needs to start
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
         diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
+
         // add store into CompactionManager
         compactionManager.addBlobStore(store);
         // add new created store into in-memory data structures.
