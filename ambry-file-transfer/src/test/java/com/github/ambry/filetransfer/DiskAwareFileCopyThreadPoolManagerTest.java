@@ -23,6 +23,7 @@ import com.github.ambry.filecopy.MockFileCopyHandlerFactory;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -71,26 +72,28 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
           }
 
           @Override
+          public ReplicaId getReplicaId() {
+            return replicaId;
+          }
+
+          @Override
           public void onFileCopyFailure(Exception e) {
             successFailCount.put("fail", successFailCount.get("fail") + 1);
           }
         };
 
+
+        Thread.sleep(3000);
         FileCopyHandler handler = new MockFileCopyHandlerFactory().getFileCopyHandler();
         threadPoolManager.submitReplicaForHydration(replicaId, listener, handler);
       }
     }
 
-    // Wait for threads to complete
-    Thread.sleep(1000);
-
-    // Verify results
-    assertEquals("All copy operations should succeed", 4, successFailCount.get("success").intValue());
-    assertEquals("No operations should fail", 0, successFailCount.get("fail").intValue());
-
     // Cleanup
     threadPoolManager.shutdown();
     threadPoolManagerThread.join();
+    assertEquals("All copy operations should succeed", 4, successFailCount.get("success").intValue());
+    assertEquals("No operations should fail", 0, successFailCount.get("fail").intValue());
   }
 
   /**
@@ -118,9 +121,10 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
 
     for (int i = 0; i < threadsPerDisk; i++) {
       threadPoolManager.submitReplicaForHydration(replicaId,
-          new MockFileCopyStatusListener(),
+          new MockFileCopyStatusListener(replicaId),
           new MockFileCopyHandlerFactory().getFileCopyHandler());
     }
+
 
     // Verify no more disks are available for hydration
     availableDisks = threadPoolManager.getDiskIdsToHydrate();
@@ -131,8 +135,18 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
    * Helper class for testing
    */
   private static class MockFileCopyStatusListener implements FileCopyStatusListener {
+    ReplicaId _replicaId;
+
+    MockFileCopyStatusListener(ReplicaId replicaId){
+      this._replicaId = replicaId;
+    }
     @Override
     public void onFileCopySuccess() {
+    }
+
+    @Override
+    public ReplicaId getReplicaId() {
+      return _replicaId;
     }
 
     @Override

@@ -20,7 +20,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.store.FileStore;
 import com.github.ambry.store.StoreException;
 import java.util.Properties;
 import org.junit.After;
@@ -64,7 +63,8 @@ public class StoreFileCopyHandlerTest {
   @Mock
   private final FileCopyGetMetaDataResponse metadataResponse = new FileCopyGetMetaDataResponse(ServerErrorCode.NoError);
 
-  protected final FileCopyHandlerConfig fileCopyHandlerConfig = new FileCopyHandlerConfig(new VerifiableProperties(new Properties()));
+  protected final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(
+      new VerifiableProperties(new Properties()));
 
   protected StoreFileCopyHandler handler;
 
@@ -76,7 +76,7 @@ public class StoreFileCopyHandlerTest {
    */
   @Before
   public void setUp() throws StoreException {
-    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyHandlerConfig);
+    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
 

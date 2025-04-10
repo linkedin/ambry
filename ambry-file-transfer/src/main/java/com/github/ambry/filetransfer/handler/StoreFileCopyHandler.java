@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer.handler;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.filetransfer.FileChunkInfo;
 import com.github.ambry.filetransfer.FileCopyInfo;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
@@ -58,7 +59,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   /**
    * The configuration for the file copy handler.
    */
-  private final FileCopyHandlerConfig config;
+  private final FileCopyBasedReplicationConfig config;
 
   /**
    * The cluster map to use for getting the {@link PartitionId}.
@@ -88,7 +89,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       @Nonnull ConnectionPool connectionPool,
       @Nonnull StoreManager storeManager,
       @Nonnull ClusterMap clusterMap,
-      @Nonnull FileCopyHandlerConfig config) {
+      @Nonnull FileCopyBasedReplicationConfig config) {
     Objects.requireNonNull(connectionPool, "ConnectionPool cannot be null");
     Objects.requireNonNull(storeManager, "StoreManager cannot be null");
     Objects.requireNonNull(clusterMap, "ClusterMap cannot be null");

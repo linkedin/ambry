@@ -22,19 +22,14 @@ import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.FileStore;
-import com.github.ambry.store.FileStoreException;
 import com.github.ambry.store.LogSegmentName;
-import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
-import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
@@ -57,7 +52,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
-import org.mockito.stubbing.OngoingStubbing;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -84,8 +78,6 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   public void setUp() throws StoreException {
     super.setUp();
 
-    FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(
-        new VerifiableProperties(new Properties()));
     FileStore fileStore = new FileStore(fileCopyBasedReplicationConfig, "");
     fileStore.start();
     when(handler.getStoreManager().getFileStore(any())).thenReturn(fileStore);
@@ -205,11 +197,11 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
         .getFileCopyGetMetaDataResponse(any());
 
     List<FileCopyGetChunkResponse> chunkResponses = new ArrayList<>();
-    int chunksInLogSegment = (int) Math.ceil((double) logSegment.length() / fileCopyHandlerConfig.getFileCopyHandlerChunkSize);
+    int chunksInLogSegment = (int) Math.ceil((double) logSegment.length() / fileCopyBasedReplicationConfig.getFileCopyHandlerChunkSize);
 
     for (int i = 0; i < chunksInLogSegment; i++) {
-      int startOffset = i * fileCopyHandlerConfig.getFileCopyHandlerChunkSize;
-      int sizeInBytes = (int)Math.min(fileCopyHandlerConfig.getFileCopyHandlerChunkSize, logSegment.length() - startOffset);
+      int startOffset = i * fileCopyBasedReplicationConfig.getFileCopyHandlerChunkSize;
+      int sizeInBytes = (int)Math.min(fileCopyBasedReplicationConfig.getFileCopyHandlerChunkSize, logSegment.length() - startOffset);
 
       chunkResponses.add(getFileCopyGetChunkResponse(logSegment, startOffset, sizeInBytes));
     }
