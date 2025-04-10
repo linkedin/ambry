@@ -201,7 +201,6 @@ public class AmbryServer {
 
   public void startup() throws InstantiationException {
     try {
-
       logger.info("starting");
       clusterParticipants = clusterAgentsFactory.getClusterParticipants();
       if (clusterParticipants == null || clusterParticipants.isEmpty()) {
