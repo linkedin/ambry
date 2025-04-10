@@ -89,6 +89,8 @@ public class StoreFileCopyHandlerTest {
     when(fileCopyInfo.getTargetReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
     when(fileCopyInfo.getSourceReplicaId()).thenReturn(mock(ReplicaId.class));
     when(fileCopyInfo.getSourceReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
+
+    when(metadataResponse.getError()).thenReturn(ServerErrorCode.NoError);
   }
 
   /**
