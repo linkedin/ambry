@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.AmbryReplica;
 import com.github.ambry.clustermap.ClusterManagerQueryHelper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.ReplicationConfig;
@@ -30,6 +29,7 @@ import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,15 +77,15 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final ScheduledExecutorService scheduler;
   /**
    * Creates a new ReplicationPrioritizationManager.
+   *
    * @param replicationEngine The ReplicationEngine to control partition replication.
-   * @param clusterMap The ClusterMap to get partition and replica information.
-   * @param dataNodeId The DataNodeId of the local node.
-   * @param scheduler The scheduler to run periodic tasks.
-   * @param datacenterName The name of the local datacenter.
+   * @param clusterMap        The ClusterMap to get partition and replica information.
+   * @param dataNodeId        The DataNodeId of the local node.
+   * @param scheduler         The scheduler to run periodic tasks.
    */
 
-  ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
-      ScheduledExecutorService scheduler, String datacenterName, StorageManager storageManager,
+  public ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
+      ScheduledExecutorService scheduler, StorageManager storageManager,
       ReplicationConfig replicationConfig, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
       clusterManagerQueryHelper, DisruptionService disruptionService) {
     this.replicationEngine = replicationEngine;
@@ -97,7 +97,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.currentlyReplicatingPriorityPartitions = ConcurrentHashMap.newKeySet();
     this.disabledReplicationPartitions = ConcurrentHashMap.newKeySet();
     this.allBootstrappingPartitions = ConcurrentHashMap.newKeySet();
-    this.datacenterName = datacenterName;
+    this.datacenterName = dataNodeId.getDatacenterName();
     this.minBatchSizeForHighPriorityPartitions = replicationConfig.highPriorityPartitionsBatchSize;
     this.isHighPriorityReplicationRunning = new AtomicBoolean(false);
     this.completedPartitions = ConcurrentHashMap.newKeySet();
@@ -128,6 +128,22 @@ public class ReplicationPrioritizationManager implements Runnable {
   @Override
   public void run() {
     startPrioritizationCycle();
+  }
+
+  public void shutdown() {
+    if (!scheduler.isTerminated()) {
+      logger.info("Shutting down ReplicationPrioritizationManager");
+      Utils.shutDownExecutorService(scheduler, 5, TimeUnit.SECONDS);
+      // clear all maps
+      currentlyReplicatingPriorityPartitions.clear();
+      disabledReplicationPartitions.clear();
+      allBootstrappingPartitions.clear();
+      completedPartitions.clear();
+      prioritizedPartitions.clear();
+      isHighPriorityReplicationRunning.set(false);
+    } else {
+      logger.info("ReplicationPrioritizationManager already shut down");
+    }
   }
 
   /**
