@@ -76,6 +76,7 @@ import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.replica.prioritization.ReplicationPrioritizationManager;
 import com.github.ambry.replica.prioritization.disruption.DisruptionService;
+import com.github.ambry.replica.prioritization.disruption.factory.DisruptionServiceFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
@@ -474,7 +475,8 @@ public class AmbryServer {
 
         if (replicationConfig.enableReplicationPrioritization) {
           HelixClusterManager helixClusterManager = (HelixClusterManager) clusterAgentsFactory.getClusterMap();
-          DisruptionService disruptionService = Utils.getObj(replicationConfig.disruptionServiceFactory, properties);
+          DisruptionServiceFactory disruptionServiceFactory = Utils.getObj(replicationConfig.disruptionServiceFactory, properties, nodeId.getDatacenterName());
+          DisruptionService disruptionService = disruptionServiceFactory.getDisruptionService();
           ScheduledExecutorService scheduledExecutorService = Utils.newScheduler(1, "ambry-prioritization", false);
           replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager, clusterMap, nodeId, scheduledExecutorService, storageManager, replicationConfig,
           helixClusterManager.getManagerQueryHelper(), disruptionService);

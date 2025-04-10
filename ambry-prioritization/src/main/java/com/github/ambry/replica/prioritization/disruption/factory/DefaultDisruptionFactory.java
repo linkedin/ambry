@@ -21,9 +21,11 @@ import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 public class DefaultDisruptionFactory implements DisruptionServiceFactory {
 
   private final VerifiableProperties verifiableProperties;
+  private final String datacenterName;
 
-  public DefaultDisruptionFactory(VerifiableProperties verifiableProperties) {
+  public DefaultDisruptionFactory(VerifiableProperties verifiableProperties, String datacenterName) {
     this.verifiableProperties = verifiableProperties;
+    this.datacenterName = datacenterName;
   }
 
   @Override
