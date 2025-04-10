@@ -23,7 +23,6 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.cloud.BackupIntegrityMonitor;
 import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.cloud.RecoveryNetworkClientFactory;
-import com.github.ambry.clustermap.AmbryDataNode;
 import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -106,7 +105,6 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import org.apache.logging.log4j.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -477,8 +475,8 @@ public class AmbryServer {
         if (replicationConfig.enableReplicationPrioritization) {
           HelixClusterManager helixClusterManager = (HelixClusterManager) clusterAgentsFactory.getClusterMap();
           DisruptionService disruptionService = Utils.getObj(replicationConfig.disruptionServiceFactory, properties);
-          replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager,
-          clusterMap, nodeId, new ScheduledThreadPoolExecutor(1), nodeId.getDatacenterName(), storageManager, replicationConfig,
+          ScheduledExecutorService scheduledExecutorService = Utils.newScheduler(1, "ambry-prioritization", false);
+          replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager, clusterMap, nodeId, scheduledExecutorService, storageManager, replicationConfig,
           helixClusterManager.getManagerQueryHelper(), disruptionService);
         }
 
