@@ -43,11 +43,9 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
-import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
-import com.github.ambry.config.ReplicaPrioritizationConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
@@ -226,8 +224,6 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
-      FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(properties);
-      ReplicaPrioritizationConfig replicaPrioritizationConfig = new ReplicaPrioritizationConfig(properties);
       // verify the configs
       properties.verify();
 
