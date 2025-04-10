@@ -76,19 +76,12 @@ public class StoreFileCopyHandlerTest {
    */
   @Before
   public void setUp() throws StoreException {
-    FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(new Properties()));
-    FileStore fileStore = new FileStore(fileCopyBasedReplicationConfig, "");
-    fileStore.start();
-    when(storeManager.getFileStore(any())).thenReturn(fileStore);
-
     handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyHandlerConfig);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
 
     when(fileCopyInfo.getTargetReplicaId()).thenReturn(mock(ReplicaId.class));
     when(fileCopyInfo.getTargetReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
-    when(fileCopyInfo.getSourceReplicaId()).thenReturn(mock(ReplicaId.class));
-    when(fileCopyInfo.getSourceReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
 
     when(metadataResponse.getError()).thenReturn(ServerErrorCode.NoError);
   }

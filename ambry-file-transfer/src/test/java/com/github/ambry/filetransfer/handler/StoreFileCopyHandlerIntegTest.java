@@ -13,10 +13,15 @@
  */
 package com.github.ambry.filetransfer.handler;
 
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.FileInfo;
+import com.github.ambry.store.FileStore;
 import com.github.ambry.store.FileStoreException;
 import com.github.ambry.store.LogSegmentName;
 import com.github.ambry.store.StoreErrorCodes;
@@ -44,11 +49,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.stubbing.OngoingStubbing;
 
 import static org.junit.Assert.*;
@@ -57,6 +65,7 @@ import static org.mockito.Mockito.*;
 /**
  * Integration tests for {@link StoreFileCopyHandler}.
  */
+@RunWith(MockitoJUnitRunner.class)
 public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   final Path tempDir = Files.createTempDirectory("StoreFileCopyHandlerIntegTest-" +
       new Random().nextInt(1000)).toFile().toPath();
@@ -75,8 +84,18 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   public void setUp() throws StoreException {
     super.setUp();
 
+    FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(
+        new VerifiableProperties(new Properties()));
+    FileStore fileStore = new FileStore(fileCopyBasedReplicationConfig, "");
+    fileStore.start();
+    when(handler.getStoreManager().getFileStore(any())).thenReturn(fileStore);
+
     File sourceDir = tempDir.resolve("source").toFile();
     File targetDir = tempDir.resolve("target").toFile();
+
+    when(fileCopyInfo.getSourceReplicaId()).thenReturn(mock(ReplicaId.class));
+    when(fileCopyInfo.getSourceReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
+    when(fileCopyInfo.getSourceReplicaId().getMountPath()).thenReturn(sourceDir.getAbsolutePath());
 
     sourcePartitionDir = tempDir.resolve(sourceDir.toPath() + File.separator +
         fileCopyInfo.getSourceReplicaId().getPartitionId().getId()).toFile();
@@ -85,9 +104,6 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
 
     assertTrue(sourcePartitionDir.mkdirs());
     assertTrue(targetPartitionDir.mkdirs());
-
-    when(fileCopyInfo.getSourceReplicaId().getMountPath()).thenReturn(sourceDir.getAbsolutePath());
-    when(fileCopyInfo.getTargetReplicaId().getMountPath()).thenReturn(targetDir.getAbsolutePath());
   }
 
   @After

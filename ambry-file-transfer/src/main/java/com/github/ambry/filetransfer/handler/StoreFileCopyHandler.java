@@ -125,6 +125,14 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   }
 
   /**
+   * Get the Handler's StoreManager
+   * @return the store manager of type {@link StoreManager}
+   */
+  public StoreManager getStoreManager() {
+    return storeManager;
+  }
+
+  /**
    * Get the operation retry handler
    * @return the operation retry handler of type {@link OperationRetryHandler}
    */
@@ -150,7 +158,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
 
-    PartitionFileStore fileStore = storeManager.getFileStore(fileCopyInfo.getSourceReplicaId().getPartitionId());
+    final PartitionFileStore fileStore = storeManager.getFileStore(fileCopyInfo.getSourceReplicaId().getPartitionId());
     final String partitionToMountFilePath = fileCopyInfo.getSourceReplicaId().getMountPath() + File.separator +
         fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
     final FileCopyGetMetaDataResponse metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
@@ -248,8 +256,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private void processIndexFile(FileInfo indexFile, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
       PartitionFileStore fileStore) {
-    FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
-    FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME,
+    final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
+    final FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME,
         fileCopyInfo, fileChunkInfo,false);
 
     String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
@@ -279,7 +287,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           ", Chunk=" + (i + 1) + "]";
       FileChunkInfo fileChunkInfo = new FileChunkInfo(logFileInfo.getFileName(), startOffset, sizeInBytes, true);
 
-      FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, true);
+      final FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo,
+          fileChunkInfo, true);
       String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
     }
