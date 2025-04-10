@@ -356,7 +356,13 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       int defaultCatchUpTarget =
           currentState == ReplicaState.BOOTSTRAP ? clusterMapConfig.clustermapReplicaCatchupTarget
               : clusterMapConfig.clustermapReplicaCatchupTargetForDownwardTransition;
-      catchupTarget = Math.max(defaultCatchUpTarget, localDcPeerReplicaAndLag.size());
+
+      if (clusterMapConfig.clustermapReplicaCatchupTargetCountLocalPeers) {
+        catchupTarget = Math.max(defaultCatchUpTarget, localDcPeerReplicaAndLag.size());
+      } else {
+        catchupTarget = defaultCatchUpTarget;
+      }
+
       logger.info(
           "LocalReplicaLagInfo: Partition {}, current state {}, LocalDcPeers {}, RemoteDcPeers: {}, defaultCatchupTarget: {}, catchupTarget: {}",
           localReplica.getPartitionId().toPathString(), currentState, localDcPeerReplicaAndLag.keySet(),
