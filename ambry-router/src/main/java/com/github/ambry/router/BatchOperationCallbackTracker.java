@@ -56,6 +56,7 @@ class BatchOperationCallbackTracker {
    * @param callback the {@link Callback} to be triggered once acks are received for all blobs
    * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
    * @param finalOperation The operation to call on the {@code finalBlobId}.
+   * @param exceptionMapper A function to map a given exception to another in the callback.
    * @param nonBlockingRouter The non-blocking router object
    */
   BatchOperationCallbackTracker(Collection<String> blobIds, String finalBlobId, FutureResult<Void> futureResult,
@@ -75,6 +76,16 @@ class BatchOperationCallbackTracker {
     this.exceptionMapper = exceptionMapper;
   }
 
+  /**
+   * Constructor
+   * @param blobIds the BlobIds being tracked
+   * @param finalBlobId the final BlobId to send after all the {@code blobids} are acked.
+   * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
+   * @param callback the {@link Callback} to be triggered once acks are received for all blobs
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
+   * @param finalOperation The operation to call on the {@code finalBlobId}.
+   * @param nonBlockingRouter The non-blocking router object
+   */
   BatchOperationCallbackTracker(Collection<String> blobIds, String finalBlobId, FutureResult<Void> futureResult,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, BiConsumer<String, Callback> finalOperation,
       NonBlockingRouter nonBlockingRouter) {
@@ -82,6 +93,15 @@ class BatchOperationCallbackTracker {
         nonBlockingRouter);
   }
 
+  /**
+   * Constructor
+   * @param blobIds the BlobIds being tracked
+   * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
+   * @param callback the {@link Callback} to be triggered once acks are received for all blobs
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
+   * @param exceptionMapper A function to map a given exception to another in the callback.
+   * @param nonBlockingRouter The non-blocking router object
+   */
   BatchOperationCallbackTracker(Collection<String> blobIds, FutureResult<Void> futureResult, Callback<Void> callback,
       QuotaChargeCallback quotaChargeCallback, Function<Exception, Exception> exceptionMapper,
       NonBlockingRouter nonBlockingRouter) {

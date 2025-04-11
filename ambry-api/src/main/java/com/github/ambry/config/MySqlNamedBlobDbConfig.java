@@ -93,6 +93,9 @@ public class MySqlNamedBlobDbConfig {
   @Config(TRANSACTION_ISOLATION_LEVEL)
   public final TransactionIsolationLevel transactionIsolationLevel;
 
+  /**
+   * True to use DELETE sql statement to remove rows from table, otherwise, update the deleted_ts in each row.
+   */
   @Config(ENABLE_HARD_DELETE)
   public final boolean enableHardDelete;
 

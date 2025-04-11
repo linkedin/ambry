@@ -35,15 +35,28 @@ public class DeleteResult {
     this(Collections.singletonList(new BlobVersion(blobId, 0, alreadyDeleted)));
   }
 
+  /**
+   * Constructor to create a DeleteResult.
+   * @param blobVersions The list of {@link BlobVersion} that were deleted
+   */
   public DeleteResult(List<BlobVersion> blobVersions) {
     Objects.requireNonNull(blobVersions, "blobVersions cannot be null");
     this.blobVersions = Collections.unmodifiableList(new ArrayList<>(blobVersions));
   }
 
+  /**
+   * Return the list of {@link BlobVersion} that were deleted.
+   * @return
+   */
   public List<BlobVersion> getBlobVersions() {
     return blobVersions;
   }
 
+  /**
+   * Return the list of blob ids that were deleted in a comma separated string. If there is no blob ids, then
+   * an empty string would be returned.
+   * @return
+   */
   public String getBlobIds() {
     // BlobId is in base64 format, "," character is not allowed in base64 encoding.
     return blobVersions.stream().map(BlobVersion::getBlobId).reduce((a, b) -> a + "," + b).orElse("");
@@ -66,6 +79,9 @@ public class DeleteResult {
     return "DeleteResult[BlobVersions=" + blobVersions + "]";
   }
 
+  /**
+   * The class to represent the blob id and version of the blob that was deleted.
+   */
   public static class BlobVersion {
     private final String blobId;
     private final long version;
