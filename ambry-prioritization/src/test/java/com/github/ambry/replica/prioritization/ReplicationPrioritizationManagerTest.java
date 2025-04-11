@@ -94,7 +94,7 @@ public class ReplicationPrioritizationManagerTest {
   private final int minBatchSize = 3;
   private final long scheduleIntervalMinutes = 5;
   private final long disruptionReadinessWindowInMS = TimeUnit.HOURS.toMillis(1);
-
+  private final long prioritizationSchedulerInitialDelay = 1;
   private Map<PartitionId, Store> partitionToStoreMap;
   // Test partitions
   private PartitionId partition1, partition2, partition3, partition4, partition5;
@@ -106,6 +106,7 @@ public class ReplicationPrioritizationManagerTest {
     properties.setProperty("disruption.lookahead.window.ms", Long.toString(disruptionReadinessWindowInMS));
     properties.setProperty("prioritization.scheduler.interval.minutes", Long.toString(scheduleIntervalMinutes));
     properties.setProperty("prioritization.batch.size", Integer.toString(minBatchSize));
+    properties.setProperty("prioritization.scheduler.initial.delay.minutes", Long.toString(prioritizationSchedulerInitialDelay));
     replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
 
     // Create test partitions
@@ -170,7 +171,7 @@ public class ReplicationPrioritizationManagerTest {
   public void testConstructorInitialization() {
     // Verify the scheduler was called with correct parameters
     verify(scheduler).scheduleAtFixedRate(
-        eq(manager), eq(0L), eq(scheduleIntervalMinutes), eq(TimeUnit.MINUTES));
+        eq(manager), eq(prioritizationSchedulerInitialDelay), eq(scheduleIntervalMinutes), eq(TimeUnit.MINUTES));
   }
 
   @Test
