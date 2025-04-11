@@ -472,8 +472,8 @@ public class AmbryServer {
         }
 
 
-        if (replicationConfig.enableReplicationPrioritization) {
-          HelixClusterManager helixClusterManager = (HelixClusterManager) clusterAgentsFactory.getClusterMap();
+        if (replicationConfig.enableReplicationPrioritization && clusterMap instanceof HelixClusterManager) {
+          HelixClusterManager helixClusterManager = (HelixClusterManager) clusterMap;
           DisruptionService disruptionService = Utils.getObj(replicationConfig.disruptionServiceFactory, properties);
           ScheduledExecutorService scheduledExecutorService = Utils.newScheduler(1, "ambry-prioritization", false);
           replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager, clusterMap, nodeId, scheduledExecutorService, storageManager, replicationConfig,
