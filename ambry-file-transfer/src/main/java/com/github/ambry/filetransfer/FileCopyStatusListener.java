@@ -13,6 +13,7 @@
  */
 package com.github.ambry.filetransfer;
 
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
 
 
@@ -26,6 +27,11 @@ public interface FileCopyStatusListener {
    * no exception from {@link FileCopyHandler}
    */
   void onFileCopySuccess();
+
+  /**
+   * @return the {@link ReplicaId} of the replica under hydration
+   */
+  ReplicaId getReplicaId();
 
   /**
    * This will be called when file copy is failed i.e.

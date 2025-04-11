@@ -12,16 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.replica.prioritization;
+package com.github.ambry.config;
 
-import com.github.ambry.config.ReplicaPrioritizationStrategy;
-
-/**
- * Interface for Factory class which returns the {@link PrioritizationManager} depending on the implementation
- */
-public interface PrioritizationManagerFactory {
-  /**
-   * @return returns the {@link PrioritizationManager}
-   */
-  PrioritizationManager getPrioritizationManager(ReplicaPrioritizationStrategy replicaPrioritizationStrategy);
+public enum ReplicaPrioritizationStrategy {
+  FirstComeFirstServe,
+  ACMAdvanceNotificationsBased
 }

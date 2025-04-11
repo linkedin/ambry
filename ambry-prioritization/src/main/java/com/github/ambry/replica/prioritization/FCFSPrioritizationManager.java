@@ -65,10 +65,13 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
 
     List<ReplicaId> replicaListForDisk = diskToReplicaMap.get(diskId);
 
-    if(replicaListForDisk == null)
+    if(replicaListForDisk == null){
+      logger.error("No replicas found for disk {}", diskId);
       return null;
+    }
 
     int numberOfReplicasToBeRemoved = Math.min(numberOfReplicasPerDisk, replicaListForDisk.size());
+    logger.info("Getting {} replicas for disk {}", numberOfReplicasToBeRemoved, diskId.getMountPath());
 
     return replicaListForDisk.subList(0, numberOfReplicasToBeRemoved);
   }
@@ -76,7 +79,6 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
   @Override
   public synchronized boolean addReplica(ReplicaId replicaId) {
     validateIfPzManagerIsRunningOrThrowException(replicaId);
-
     diskToReplicaMap.putIfAbsent(replicaId.getDiskId(), new LinkedList<>());
     diskToReplicaMap.get(replicaId.getDiskId()).add(replicaId);
     logger.info("Added partition {} to prioritization Manager For Disk {}", replicaId.getReplicaPath(),
