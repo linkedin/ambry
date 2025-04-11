@@ -109,8 +109,11 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.prioritizedPartitions = new EnumMap<>(PriorityTier.class);
     this.scheduler = scheduler;
 
+    // We require this delay to ensure StoreManager is able to init all stores with correct state.
+    // Otherwise, on server start all partitions store will be in BOOTSTRAP
+    long initialDelay = replicationConfig.prioritizationSchedulerInitialDelayMinutes;
     // Schedule periodic runs for prioritization run
-    this.scheduler.scheduleAtFixedRate(this, 0, scheduleIntervalMinutes, TimeUnit.MINUTES);
+    this.scheduler.scheduleAtFixedRate(this, initialDelay, scheduleIntervalMinutes, TimeUnit.MINUTES);
 
     logger.info("ReplicationPrioritizationManager initialized with prioritization window of {} hours, schedule interval of {} minutes, " +
             "and min batch size of {} partitions", prioritizationWindowMs, scheduleIntervalMinutes,
@@ -380,6 +383,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       logger.info("No currently replicating partitions, disabling high-priority replication");
       isHighPriorityReplicationRunning.set(false);
     }
+    completedPartitions.clear();
   }
 
   /**

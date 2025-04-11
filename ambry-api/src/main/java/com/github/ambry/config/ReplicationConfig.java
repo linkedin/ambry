@@ -383,6 +383,11 @@ public class ReplicationConfig {
   @Default(DEFAULT_DISRUPTION_FACTORY)
   public final String disruptionServiceFactory;
 
+  public static final String PRIORITIZATION_SCHEDULER_INITIAL_DELAY_MINUTES = "prioritization.scheduler.initial.delay.minutes";
+  @Config(PRIORITIZATION_SCHEDULER_INITIAL_DELAY_MINUTES)
+  @Default("10")
+  public final int prioritizationSchedulerInitialDelayMinutes;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     maxReplicationRetryCount =
@@ -473,5 +478,7 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(ENABLE_REPLICATION_PRIORITIZATION, false);
     disruptionServiceFactory =
         verifiableProperties.getString(DISRUPTION_SERVICE_FACTORY, DEFAULT_DISRUPTION_FACTORY);
+    prioritizationSchedulerInitialDelayMinutes =
+        verifiableProperties.getInt(PRIORITIZATION_SCHEDULER_INITIAL_DELAY_MINUTES, 10);
   }
 }
