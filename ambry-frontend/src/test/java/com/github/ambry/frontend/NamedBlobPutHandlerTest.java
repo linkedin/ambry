@@ -25,6 +25,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.InMemNamedBlobDbFactory;
 import com.github.ambry.config.FrontendConfig;
@@ -51,6 +52,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -65,6 +67,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -107,14 +110,13 @@ public class NamedBlobPutHandlerTest {
       ACCOUNT_SERVICE.updateAccounts(Collections.singleton(newAccount));
       REF_ACCOUNT = ACCOUNT_SERVICE.getAccountById(newAccount.getId());
       REF_CONTAINER_NO_UPDATE = new ContainerBuilder((short) 11, "noUpdate", Container.ContainerStatus.ACTIVE, "",
-              REF_ACCOUNT.getId()).setNamedBlobMode(Container.NamedBlobMode.NO_UPDATE).build();
+          REF_ACCOUNT.getId()).setNamedBlobMode(Container.NamedBlobMode.NO_UPDATE).build();
       ACCOUNT_SERVICE.updateContainers(REF_ACCOUNT.getName(), Arrays.asList(REF_CONTAINER_NO_UPDATE));
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
       REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
       ACCOUNT_SERVICE.addDataset(
           new DatasetBuilder(REF_ACCOUNT.getName(), REF_CONTAINER.getName(), DATASET_NAME).setRetentionTimeInSeconds(
-                  (long) -1)
-              .build());
+              (long) -1).build());
       ACCOUNT_SERVICE.addDataset(new DatasetBuilder(REF_ACCOUNT.getName(), REF_CONTAINER_WITH_TTL_REQUIRED.getName(),
           DATASET_NAME).setRetentionTimeInSeconds((long) -1).build());
       ACCOUNT_SERVICE.addDatasetVersion(REF_ACCOUNT.getName(), REF_CONTAINER.getName(), DATASET_NAME, VERSION, -1,
@@ -129,7 +131,7 @@ public class NamedBlobPutHandlerTest {
   private final MockTime time = new MockTime();
   private final FrontendMetrics metrics;
   private final InMemoryRouter router;
-  private final FrontendTestIdConverterFactory idConverterFactory;
+  private final NamedBlobHandlerTestAmbryIdConverterFactory idConverterFactory;
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
   private final AccountAndContainerInjector injector;
   private final IdSigningService idSigningService;
@@ -140,25 +142,30 @@ public class NamedBlobPutHandlerTest {
   private final String dataset_version_request_path;
 
   public NamedBlobPutHandlerTest() throws Exception {
-    idConverterFactory = new FrontendTestIdConverterFactory();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
     CommonTestUtils.populateRequiredRouterProps(props);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    idSigningService = new AmbryIdSigningService();
+    NamedBlobDbFactory namedBlobDbFactory =
+        new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+    namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
+    idConverterFactory =
+        new NamedBlobHandlerTestAmbryIdConverterFactory(verifiableProperties, CLUSTER_MAP.getMetricRegistry(),
+            idSigningService, namedBlobDb);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP, idConverterFactory);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
     metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
-    idSigningService = new AmbryIdSigningService();
     request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + BLOBNAME;
-    request_noupdate_path = NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER_NO_UPDATE.getName() + SLASH + BLOBNAME;
+    request_noupdate_path =
+        NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER_NO_UPDATE.getName() + SLASH
+            + BLOBNAME;
     dataset_version_request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + DATASET_NAME
             + SLASH + VERSION;
-    NamedBlobDbFactory namedBlobDbFactory =
-        new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
-    namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
+
     initNamedBlobPutHandler(props);
   }
 
@@ -167,10 +174,9 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void updateNamedBlobAllowedTest() throws Exception {
-    idConverterFactory.returnInputIfTranslationNull = true;
     JSONObject headers = new JSONObject();
-    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(), SERVICE_ID,
-        CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
     headers.put(RestUtils.Headers.NAMED_UPSERT, false);
     byte[] content = TestUtils.getRandomBytes(1024);
     RestRequest request = getRestRequest(headers, request_noupdate_path, content);
@@ -180,6 +186,9 @@ public class NamedBlobPutHandlerTest {
     namedBlobPutHandler.handle(request, restResponseChannel, future::done);
 
     future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+    // in id converter, the callback is invoked before the lastConvertedId is set, we need to wait
+    // for a while before we can check the lastConvertedId.
+    Thread.sleep(100);
     assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
         restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
     InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
@@ -190,12 +199,11 @@ public class NamedBlobPutHandlerTest {
     assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
   }
 
-
   @Test
   public void testStripPrefixAndExtension() throws Exception {
     String EXTENSION = ".bin";
     Properties properties = new Properties();
-    properties.setProperty("frontend.path.prefixes.to.remove",  PATH_PREFIX_TO_REMOVE);
+    properties.setProperty("frontend.path.prefixes.to.remove", PATH_PREFIX_TO_REMOVE);
     initNamedBlobPutHandler(properties);
 
     String blobId = CLUSTER_NAME + "/" + CONVERTED_ID + EXTENSION;
@@ -216,10 +224,9 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void updateNamedBlobNotAllowedTest() throws Exception {
-    idConverterFactory.returnInputIfTranslationNull = true;
     JSONObject headers = new JSONObject();
-    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(), SERVICE_ID,
-        CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
     headers.put(RestUtils.Headers.NAMED_UPSERT, true);
     byte[] content = TestUtils.getRandomBytes(1024);
     RestRequest request = getRestRequest(headers, request_noupdate_path, content);
@@ -236,7 +243,6 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void putNamedBlobTest() throws Exception {
-    idConverterFactory.returnInputIfTranslationNull = true;
     putBlobAndVerify(null, TestUtils.TTL_SECS);
     putBlobAndVerify(null, Utils.Infinite_Time);
   }
@@ -247,28 +253,33 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void ttlRequiredEnforcementTest() throws Exception {
-    idConverterFactory.returnInputIfTranslationNull = true;
     Properties properties = new Properties();
 
     // ttl required in container, config asks not to fail. If TTL does not conform, look for non compliance warning
     properties.setProperty(FrontendConfig.FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, "false");
     initNamedBlobPutHandler(properties);
     // ok
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1, true);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1,
+        true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired,
+        true);
     // not ok
     doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, Utils.Infinite_Time, true);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1,
+        true);
 
     // ttl required in container, config asks to fail. If TTL does not conform, look for failure
     properties.setProperty(FrontendConfig.FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, "true");
     initNamedBlobPutHandler(properties);
     // ok
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1, true);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1,
+        true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired,
+        true);
     // not ok
     doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, Utils.Infinite_Time, false);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1, false);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1,
+        false);
 
     // ttl not required in container, any ttl works and no exceptions or warnings
     doTtlRequiredEnforcementTest(REF_CONTAINER, Utils.Infinite_Time, false);
@@ -283,7 +294,6 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void stitchDatasetVersionTest() throws Exception {
-    idConverterFactory.translation = CONVERTED_ID;
     String uploadSession = UUID.randomUUID().toString();
     long creationTimeMs = System.currentTimeMillis();
     String[] prefixToTest = new String[]{"/" + CLUSTER_NAME, ""};
@@ -304,7 +314,6 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void stitchNamedBlobTest() throws Exception {
-    idConverterFactory.translation = CONVERTED_ID;
     long creationTimeMs = System.currentTimeMillis();
     time.setCurrentMilliseconds(creationTimeMs);
     //success case
@@ -343,7 +352,7 @@ public class NamedBlobPutHandlerTest {
           restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
       // differing containers
       signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
-          uploadChunksViaRouter(creationTimeMs, REF_CONTAINER_WITH_TTL_REQUIRED, 50).stream())
+              uploadChunksViaRouter(creationTimeMs, REF_CONTAINER_WITH_TTL_REQUIRED, 50).stream())
           .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
           .collect(Collectors.toList());
       stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
@@ -352,15 +361,15 @@ public class NamedBlobPutHandlerTest {
       Container altAccountContainer =
           ACCOUNT_SERVICE.createAndAddRandomAccount().getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
       signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
-          uploadChunksViaRouter(creationTimeMs, altAccountContainer, 50).stream())
+              uploadChunksViaRouter(creationTimeMs, altAccountContainer, 50).stream())
           .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
           .collect(Collectors.toList());
       stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
           restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
       // invalid blob ID
-      stitchBlobAndVerify(
-          getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1, null), uploadSession))),
-          null, restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      stitchBlobAndVerify(getStitchRequestBody(
+              Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1, null), uploadSession))), null,
+          restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
       // unsigned ID
       stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
           restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
@@ -384,7 +393,8 @@ public class NamedBlobPutHandlerTest {
    * @param blobTtlSecs the TTL to set for the blob
    * @throws Exception
    */
-  private void doTtlRequiredEnforcementTest(Container container, long blobTtlSecs, boolean hasNamedBlobVersion) throws Exception {
+  private void doTtlRequiredEnforcementTest(Container container, long blobTtlSecs, boolean hasNamedBlobVersion)
+      throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !container.isCacheable(), SERVICE_ID,
         CONTENT_TYPE, OWNER_ID, null, null, null);
@@ -467,6 +477,9 @@ public class NamedBlobPutHandlerTest {
       idConverterFactory.lastConvertedId = null;
       namedBlobPutHandler.handle(request, restResponseChannel, future::done);
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      // in id converter, the callback is invoked before the lastConvertedId is set, we need to wait
+      // for a while before we can check the lastConvertedId.
+      Thread.sleep(100);
       assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
           restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
@@ -510,6 +523,9 @@ public class NamedBlobPutHandlerTest {
       namedBlobPutHandler.handle(request, restResponseChannel, future::done);
       if (errorChecker == null) {
         future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+        // in id converter, the callback is invoked before the lastConvertedId is set, we need to wait
+        // for a while before we can check the lastConvertedId.
+        Thread.sleep(100);
         assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
             restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
         InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
@@ -619,6 +635,9 @@ public class NamedBlobPutHandlerTest {
     namedBlobPutHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      // in id converter, the callback is invoked before the lastConvertedId is set, we need to wait
+      // for a while before we can check the lastConvertedId.
+      Thread.sleep(100);
       assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
           restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
@@ -658,5 +677,64 @@ public class NamedBlobPutHandlerTest {
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     return request;
+  }
+
+  private static class NamedBlobHandlerTestAmbryIdConverterFactory extends AmbryIdConverterFactory {
+    volatile String lastInput = null;
+    volatile String lastConvertedId = null;
+    volatile BlobProperties lastBlobProperties = null;
+
+    NamedBlobHandlerTestAmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry registry,
+        IdSigningService idSigningService, NamedBlobDb namedBlobDb) {
+      super(verifiableProperties, registry, idSigningService, namedBlobDb);
+    }
+
+    @Override
+    public IdConverter getIdConverter() {
+      return new TestIdConverter(super.getIdConverter());
+    }
+
+    private class TestIdConverter implements IdConverter {
+      private final IdConverter parentIdConverter;
+
+      public TestIdConverter(IdConverter parentIdConverter) {
+        this.parentIdConverter = parentIdConverter;
+      }
+
+      @Override
+      public Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties,
+          Callback<String> callback) {
+        lastInput = input;
+        lastBlobProperties = blobProperties;
+        Future<String> result = parentIdConverter.convert(restRequest, input, blobProperties, callback);
+        FutureResult<String> futureResult = new FutureResult<>();
+        try {
+          lastConvertedId = result.get();
+          futureResult.done(lastConvertedId, null);
+        } catch (Exception e) {
+          if (e instanceof ExecutionException) {
+            futureResult.done(null, (Exception) e.getCause());
+          } else {
+            futureResult.done(null, e);
+          }
+        }
+        return futureResult;
+      }
+
+      @Override
+      public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
+        return convert(restRequest, input, null, callback);
+      }
+
+      @Override
+      public NamedBlobDb getNamedBlobDb() throws RestServiceException {
+        return parentIdConverter.getNamedBlobDb();
+      }
+
+      @Override
+      public void close() throws IOException {
+        parentIdConverter.close();
+      }
+    }
   }
 }

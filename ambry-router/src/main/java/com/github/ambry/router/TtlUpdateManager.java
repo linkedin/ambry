@@ -127,10 +127,10 @@ class TtlUpdateManager {
 
     // If we are here, that means the blob is a composite blob. So we will do a batch operation.
     BatchOperationCallbackTracker tracker =
-        new BatchOperationCallbackTracker(chunkIds, blobId, futureResult, callback, quotaChargeCallback,
+        new BatchOperationCallbackTracker(chunkIdStrs, blobIdStr, futureResult, callback, quotaChargeCallback,
             (finalBlobId, callBack) -> {
               TtlUpdateOperation ttlUpdateOperation =
-                  new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, finalBlobId, serviceId, expiresAtMs,
+                  new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs,
                       time.milliseconds(), callBack, time, BatchOperationCallbackTracker.DUMMY_FUTURE,
                       quotaChargeCallback, nonBlockingRouter);
               ttlUpdateOperations.add(ttlUpdateOperation);
@@ -139,7 +139,7 @@ class TtlUpdateManager {
     for (BlobId chunkId : chunkIds) {
       TtlUpdateOperation ttlUpdateOperation =
           new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, chunkId, serviceId, expiresAtMs,
-              operationTimeMs, tracker.getCallback(chunkId), time, BatchOperationCallbackTracker.DUMMY_FUTURE,
+              operationTimeMs, tracker.getCallback(chunkId.getID()), time, BatchOperationCallbackTracker.DUMMY_FUTURE,
               quotaChargeCallback, nonBlockingRouter);
       ttlUpdateOperations.add(ttlUpdateOperation);
     }

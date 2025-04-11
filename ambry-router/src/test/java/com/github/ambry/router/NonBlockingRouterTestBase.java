@@ -23,6 +23,7 @@ import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.IdConverterFactory;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -220,6 +221,11 @@ public class NonBlockingRouterTestBase {
    */
   protected void setRouter(Properties props, MockServerLayout serverLayout, NotificationSystem notificationSystem)
       throws Exception {
+    setRouterWithIdConverterFactory(props, serverLayout, notificationSystem, null);
+  }
+
+  protected void setRouterWithIdConverterFactory(Properties props, MockServerLayout serverLayout,
+      NotificationSystem notificationSystem, IdConverterFactory idConverterFactory) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
@@ -231,7 +237,7 @@ public class NonBlockingRouterTestBase {
     router = new NonBlockingRouter(routerConfig, factory, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
-        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null, null);
+        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null, idConverterFactory);
   }
 
   protected void setRouterWithMetadataCache(Properties props, AmbryCacheStats ambryCacheStats) throws Exception {

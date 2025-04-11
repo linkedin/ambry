@@ -34,7 +34,6 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -43,6 +42,7 @@ import com.google.common.cache.CacheBuilder;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -50,6 +50,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,6 +86,7 @@ public class NonBlockingRouter implements Router {
 
   private RepairRequestsDb repairRequestsDb = null;
   private IdConverter idConverter = null;
+  private final ClusterMap clusterMap;
 
   /**
    * Constructs a NonBlockingRouter.
@@ -112,9 +115,11 @@ public class NonBlockingRouter implements Router {
       NonBlockingRouterMetrics routerMetrics, NetworkClientFactory networkClientFactory,
       NotificationSystem notificationSystem, ClusterMap clusterMap, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, AccountService accountService, Time time,
-      String defaultPartitionClass, AmbryCache blobMetadataCache, IdConverterFactory idConverterFactory) throws IOException, ReflectiveOperationException {
+      String defaultPartitionClass, AmbryCache blobMetadataCache, IdConverterFactory idConverterFactory)
+      throws IOException, ReflectiveOperationException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
+    this.clusterMap = clusterMap;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     this.kms = kms;
     this.cryptoJobHandler = cryptoJobHandler;
@@ -238,8 +243,8 @@ public class NonBlockingRouter implements Router {
    * @param exception {@link Exception} encountered while performing the operation (if any).
    * @param decrementOperationsCount if {@code true}, decrements current outstanding operations count.
    */
-  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
-      Exception exception, boolean decrementOperationsCount) {
+  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult, Exception exception,
+      boolean decrementOperationsCount) {
     if (decrementOperationsCount) {
       currentOperationsCount.decrementAndGet();
     }
@@ -362,8 +367,9 @@ public class NonBlockingRouter implements Router {
    * @return A future that would contain the BlobId eventually.
    */
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata,
+      ReadableStreamChannel channel, PutBlobOptions options, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
@@ -379,7 +385,8 @@ public class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback)
+            : callback;
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, wrappedCallback,
           quotaChargeCallback);
@@ -426,7 +433,7 @@ public class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     if (serviceId.equals(DeleteOperation.class.getSimpleName())) {
       routerMetrics.replicateBlobOperationOnDeleteRate.mark();
-    } else if (serviceId.equals(TtlUpdateOperation.class.getSimpleName())){
+    } else if (serviceId.equals(TtlUpdateOperation.class.getSimpleName())) {
       routerMetrics.replicateBlobOperationOnTtlUpdateRate.mark();
     }
 
@@ -501,8 +508,21 @@ public class NonBlockingRouter implements Router {
             if (exception != null) {
               callback.onCompletion(null, exception);
             } else {
-              // Call proceedWithTtlUpdate once blobId is available
-              proceedWithDelete(convertedBlobId, serviceId, callback, futureResult, quotaChargeCallback);
+              List<String> blobIds = Arrays.stream(convertedBlobId.split(",")).collect(Collectors.toList());
+              if (blobIds.size() == 1) {
+                proceedWithDelete(blobIds.get(0), serviceId, callback, futureResult, quotaChargeCallback);
+              } else {
+                Function<Exception, Exception> allowNotFound = ex -> ex != null && ex instanceof RouterException
+                    && ((RouterException) ex).getErrorCode() == RouterErrorCode.BlobDoesNotExist ? null : ex;
+
+                BatchOperationCallbackTracker tracker =
+                    new BatchOperationCallbackTracker(blobIds, futureResult, callback, quotaChargeCallback,
+                        allowNotFound, NonBlockingRouter.this);
+                for (String blobId : blobIds) {
+                  proceedWithDelete(blobId, serviceId, tracker.getCallback(blobId),
+                      BatchOperationCallbackTracker.DUMMY_FUTURE, quotaChargeCallback);
+                }
+              }
             }
           }
         });
@@ -608,8 +628,8 @@ public class NonBlockingRouter implements Router {
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     //TODO: once the id converter logic moved in for router.updateTTL, we need to pass in internal header with blob id,
     //and use it to gate if we want to convert to get the blob id before the actual blob updated ttl.
     if (blobId == null) {
@@ -696,9 +716,8 @@ public class NonBlockingRouter implements Router {
         initiateBackgroundDeletes(deleteRequests);
         if (blobMetadataCache != null) {
           boolean deleteResult = blobMetadataCache.deleteObject(blobIdStr);
-          logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = Background delete operation, result = {}", blobMetadataCache.getCacheId(),
-              blobIdStr, deleteResult);
-
+          logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = Background delete operation, result = {}",
+              blobMetadataCache.getCacheId(), blobIdStr, deleteResult);
         }
       }
       currentBackgroundOperationsCount.decrementAndGet();

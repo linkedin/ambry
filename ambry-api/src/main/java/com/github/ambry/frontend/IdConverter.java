@@ -13,12 +13,11 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestServiceException;
 import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
