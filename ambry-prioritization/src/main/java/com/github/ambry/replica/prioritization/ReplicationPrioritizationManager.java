@@ -75,6 +75,7 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final DisruptionService disruptionService;
   private Map<PriorityTier, Set<PartitionId>> prioritizedPartitions;
   private final ScheduledExecutorService scheduler;
+  private final ReplicationConfig replicationConfig;
   /**
    * Creates a new ReplicationPrioritizationManager.
    *
@@ -108,6 +109,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.disruptionService = disruptionService;
     this.prioritizedPartitions = new EnumMap<>(PriorityTier.class);
     this.scheduler = scheduler;
+    this.replicationConfig = replicationConfig;
 
     // Schedule periodic runs for prioritization run
     this.scheduler.scheduleAtFixedRate(this, 0, scheduleIntervalMinutes, TimeUnit.MINUTES);
@@ -237,6 +239,14 @@ public class ReplicationPrioritizationManager implements Runnable {
    */
   private Map<PartitionId, List<Operation>> fetchDisruptions(List<PartitionId> partitionIds) {
     Map<PartitionId, List<Operation>> disruptionsByPartition = new HashMap<>();
+
+    if (!replicationConfig.enableDisruptionService) {
+      for (PartitionId partitionId : partitionIds) {
+        disruptionsByPartition.computeIfAbsent(partitionId, k -> new ArrayList<>());
+      }
+      return disruptionsByPartition;
+    }
+
     try {
       // 3. Fetch disruptions for all partitions
       disruptionsByPartition =
