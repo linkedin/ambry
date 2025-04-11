@@ -374,6 +374,11 @@ public class ReplicationConfig {
   @Default("false")
   public final boolean enableReplicationPrioritization;
 
+  public static final String ENABLE_DISRUPTION_SERVICE = "enable.disruption.service";
+  @Config(ENABLE_DISRUPTION_SERVICE)
+  @Default("true")
+  public final boolean enableDisruptionService;
+
   /**
    * The factory class the disruption service
    */
@@ -473,5 +478,7 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(ENABLE_REPLICATION_PRIORITIZATION, false);
     disruptionServiceFactory =
         verifiableProperties.getString(DISRUPTION_SERVICE_FACTORY, DEFAULT_DISRUPTION_FACTORY);
+    enableDisruptionService =
+        verifiableProperties.getBoolean(ENABLE_DISRUPTION_SERVICE, true);
   }
 }
