@@ -383,6 +383,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       logger.info("No currently replicating partitions, disabling high-priority replication");
       isHighPriorityReplicationRunning.set(false);
     }
+    completedPartitions.clear();
   }
 
   /**
