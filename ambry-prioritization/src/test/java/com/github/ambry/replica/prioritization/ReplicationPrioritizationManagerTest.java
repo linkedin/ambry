@@ -10,6 +10,7 @@
  */
 package com.github.ambry.replica.prioritization;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.AmbryDataNode;
 import com.github.ambry.clustermap.AmbryDisk;
 import com.github.ambry.clustermap.AmbryPartition;
@@ -88,6 +89,9 @@ public class ReplicationPrioritizationManagerTest {
   @Mock
   private DisruptionService disruptionService;
 
+  @Mock
+  private MetricRegistry metricRegistry;
+
   private ReplicationPrioritizationManager manager;
   private ReplicationPrioritizationManager managerWithMockTime;
   private final String datacenterName = "testDC";
@@ -145,14 +149,16 @@ public class ReplicationPrioritizationManagerTest {
 
     // Create manager instance with system time
     manager = new ReplicationPrioritizationManager(
-        replicationEngine, clusterMap, dataNodeId, scheduler, storageManager, replicationConfig, clusterManagerQueryHelper, disruptionService);
+        replicationEngine, clusterMap, dataNodeId, scheduler, storageManager,
+        replicationConfig, clusterManagerQueryHelper, disruptionService, metricRegistry);
 
     // Initialize mock time
    // when(mockTime.milliseconds()).thenReturn(System.currentTimeMillis());
 
     // Create manager instance with mock time for testing timeouts
     managerWithMockTime = new ReplicationPrioritizationManager(
-        replicationEngine, clusterMap, dataNodeId, scheduler, storageManager, replicationConfig, clusterManagerQueryHelper, disruptionService);
+        replicationEngine, clusterMap, dataNodeId, scheduler, storageManager,
+        replicationConfig, clusterManagerQueryHelper, disruptionService, metricRegistry);
 
     // Need to use reflection to set the private time field
     try {
