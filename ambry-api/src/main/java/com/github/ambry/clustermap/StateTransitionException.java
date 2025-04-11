@@ -87,6 +87,8 @@ public class StateTransitionException extends RuntimeException {
 
     ReplicaSetUpFailure,
 
-    PrioritizationManagerRunningFailure
+    PrioritizationManagerRunningFailure,
+
+    FileCopyBasedReplicationManagerNotRunning
   }
 }

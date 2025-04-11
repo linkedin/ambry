@@ -15,6 +15,7 @@ package com.github.ambry.filetransfer.handler;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
@@ -33,7 +34,6 @@ import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.junit.Assert.*;
@@ -55,7 +55,7 @@ public class StoreFileCopyHandlerTest {
   private ClusterMap clusterMap;
 
   @Mock
-  private FileCopyInfo fileCopyInfo;
+  protected FileCopyInfo fileCopyInfo;
 
   @Mock
   private OperationRetryHandler retryHandler;
@@ -63,7 +63,10 @@ public class StoreFileCopyHandlerTest {
   @Mock
   private final FileCopyGetMetaDataResponse metadataResponse = new FileCopyGetMetaDataResponse(ServerErrorCode.NoError);
 
-  private StoreFileCopyHandler handler;
+  protected final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(
+      new VerifiableProperties(new Properties()));
+
+  protected StoreFileCopyHandler handler;
 
   /**
    * Set up the pre-requisites:
@@ -73,14 +76,14 @@ public class StoreFileCopyHandlerTest {
    */
   @Before
   public void setUp() throws StoreException {
-    FileCopyHandlerConfig fileCopyHandlerConfig = new FileCopyHandlerConfig(new VerifiableProperties(new Properties()));
-
-    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyHandlerConfig);
+    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
 
-    when(fileCopyInfo.getTargetReplicaId()).thenReturn(Mockito.mock(ReplicaId.class));
-    when(fileCopyInfo.getTargetReplicaId().getPartitionId()).thenReturn(Mockito.mock(PartitionId.class));
+    when(fileCopyInfo.getTargetReplicaId()).thenReturn(mock(ReplicaId.class));
+    when(fileCopyInfo.getTargetReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
+
+    when(metadataResponse.getError()).thenReturn(ServerErrorCode.NoError);
   }
 
   /**

@@ -14,7 +14,7 @@
 package com.github.ambry.filetransfer.workflow;
 
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
@@ -41,14 +41,14 @@ public class BaseWorkFlow {
   /**
    * The {@link FileCopyHandlerConfig} that contains the configuration required to send the request.
    */
-  private final FileCopyHandlerConfig config;
+  private final FileCopyBasedReplicationConfig config;
 
   /**
    * Constructor to create BaseWorkFlow
    * @param connectionPool The connection pool to use to get connections to the target replica.
    * @param config The {@link FileCopyHandlerConfig} that contains the configuration required to send the request.
    */
-  public BaseWorkFlow(@Nonnull ConnectionPool connectionPool, @Nonnull FileCopyHandlerConfig config) {
+  public BaseWorkFlow(@Nonnull ConnectionPool connectionPool, @Nonnull FileCopyBasedReplicationConfig config) {
     Objects.requireNonNull(connectionPool, "connectionPool param cannot be null");
     Objects.requireNonNull(config, "config param cannot be null");
 

@@ -13,8 +13,8 @@
  */
 package com.github.ambry.filetransfer.workflow;
 
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.filetransfer.FileCopyInfo;
-import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.network.*;
 import com.github.ambry.protocol.*;
@@ -46,7 +46,7 @@ public class GetMetadataWorkflow extends BaseWorkFlow implements OperationRetryH
   public GetMetadataWorkflow(
       @Nonnull ConnectionPool connectionPool,
       @Nonnull FileCopyInfo fileCopyInfo,
-      @Nonnull FileCopyHandlerConfig config) {
+      @Nonnull FileCopyBasedReplicationConfig config) {
     super(connectionPool, config);
 
     Objects.requireNonNull(connectionPool, "connectionPool param cannot be null");
