@@ -537,6 +537,8 @@ public class StorageManager implements StoreManager {
   }
 
   DiskManager addDisk(DiskId diskId) {
+    // only in case of bootstrapping of a node, we would create a new DiskManager and then start it.
+    // otherwise we would have this already computed and stored in diskToDiskManager.
     return diskToDiskManager.computeIfAbsent(diskId, disk -> {
       try {
         DiskManager newDiskManager =

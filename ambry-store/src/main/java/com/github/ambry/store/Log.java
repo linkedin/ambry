@@ -79,7 +79,11 @@ class Log implements Write {
     this.diskMetrics = diskMetrics;
     this.segmentNameAndFileNameIterator = Collections.emptyIterator();
     storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
+  }
 
+  // in the normal flow this would create the first segment
+  // in the case of file copy, it will be called after segments have been copied
+  void init() throws StoreException {
     File dir = new File(dataDir);
     File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
     if (segmentFiles == null) {
@@ -108,6 +112,7 @@ class Log implements Write {
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
+  // Not changing this constructor since this is only being called from compactor
   Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
       StoreMetrics metrics, boolean isLogSegmented, List<LogSegment> segmentsToLoad,
       Iterator<Pair<LogSegmentName, String>> segmentNameAndFileNameIterator, DiskMetrics diskMetrics)
@@ -212,7 +217,7 @@ class Log implements Write {
    */
   long getSegmentCapacity() {
     // all segments same size
-    return getFirstSegment().getCapacityInBytes();
+    return config.storeSegmentSizeInBytes;
   }
 
   /**
