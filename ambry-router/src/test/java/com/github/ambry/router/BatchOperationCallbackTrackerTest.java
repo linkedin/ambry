@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -156,5 +157,48 @@ public class BatchOperationCallbackTrackerTest extends NonBlockingRouterTestBase
     Assert.assertTrue(trackerException instanceof RouterException);
     Assert.assertFalse(finalOperationCalled.get());
     Assert.assertEquals(RouterErrorCode.UnexpectedInternalError, ((RouterException) trackerException).getErrorCode());
+  }
+
+  @Test
+  public void testNoFinalOperation() {
+    BatchOperationCallbackTracker tracker =
+        new BatchOperationCallbackTracker(chunkIds, new FutureResult<>(), callback, quotaChargeCallback, null, router);
+
+    // update all data chunks and ensure that tracker isn't marked as complete.
+    for (int i = 0; i < NUM_CHUNKS; i++) {
+      tracker.getCallback(chunkIds.get(i)).onCompletion(null, null);
+      if (i == NUM_CHUNKS - 1) {
+        Assert.assertTrue(tracker.isCompleted());
+        Assert.assertNull(trackerException);
+      } else {
+        Assert.assertFalse(tracker.isCompleted());
+      }
+    }
+  }
+
+  @Test
+  public void testNotFinalOperationWithExceptionMapper() {
+    Function<Exception, Exception> exceptionMapper = e -> {
+      if (e != null && e instanceof RouterException
+          && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
+        return null;
+      }
+      return e;
+    };
+    BatchOperationCallbackTracker tracker =
+        new BatchOperationCallbackTracker(chunkIds, new FutureResult<>(), callback, quotaChargeCallback,
+            exceptionMapper, router);
+
+    // update all data chunks and ensure that tracker isn't marked as complete.
+    for (int i = 0; i < NUM_CHUNKS; i++) {
+      Exception e = i == 0 ? new RouterException("test", RouterErrorCode.BlobDoesNotExist) : null;
+      tracker.getCallback(chunkIds.get(i)).onCompletion(null, e);
+      if (i == NUM_CHUNKS - 1) {
+        Assert.assertTrue(tracker.isCompleted());
+        Assert.assertNull(trackerException);
+      } else {
+        Assert.assertFalse(tracker.isCompleted());
+      }
+    }
   }
 }

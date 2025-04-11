@@ -345,7 +345,11 @@ public class InMemoryRouter implements Router {
                   future.get();
                 } catch (Exception e) {
                   // Handle error in delete operation
-                  callback.onCompletion(null, e);
+                  RouterException routerException = Utils.getRootCause(e, RouterException.class);
+                  if (routerException == null) {
+                    routerException = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+                  }
+                  callback.onCompletion(null, routerException);
                   return;
                 }
               }
