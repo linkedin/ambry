@@ -172,7 +172,6 @@ public class ReplicationPrioritizationManager implements Runnable {
       Set<PartitionId> partitionIds = new HashSet<>(allBootstrappingPartitions);
       if (partitionIds.isEmpty()) {
         logger.info("Bootstrapping partition list from StorageManager is empty");
-        return;
       }
 
       partitionIds.removeAll(currentlyReplicatingPriorityPartitions);
@@ -194,10 +193,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       prioritizedPartitions.keySet().forEach(priorityTier -> logger.info("Found {} partitions in {} category", prioritizedPartitions.get(priorityTier).size(), priorityTier));
 
       // 5. Update replication priorities
-      if (prioritizedPartitions.entrySet().stream().
-          filter(entry -> entry.getKey() != PriorityTier.NORMAL).
-          allMatch(entry -> entry.getValue().isEmpty())
-          && !isHighPriorityReplicationRunning.get()) {
+      if (shouldResetReplication()) {
         logger.info("No new high-priority partitions identified "
             + "and no existing high priority run, enabling replication for disabled partitions");
 
@@ -230,6 +226,17 @@ public class ReplicationPrioritizationManager implements Runnable {
     } catch (Exception e) {
       logger.error("Error in partition prioritization task", e);
     }
+  }
+
+  /**
+   * Checks if replication should be reset to normal operation.
+   * @return true if replication should be reset, false otherwise
+   */
+  private boolean shouldResetReplication() {
+    return (prioritizedPartitions.entrySet().stream().
+        filter(entry -> entry.getKey() != PriorityTier.NORMAL).
+        allMatch(entry -> entry.getValue().isEmpty()) || !disabledReplicationPartitions.isEmpty())
+        && !isHighPriorityReplicationRunning.get();
   }
 
   /**

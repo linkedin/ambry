@@ -1508,6 +1508,95 @@ public class ReplicationPrioritizationManagerTest {
     assertTrue("Partition3 should be in batch", enabledPartitions.contains(partition3));
   }
 
+  /**
+   * Test when initially all partitions are in BOOTSTRAP state and some are disabled.
+   * In next run some partitions complete replication and there are no further bootstrapping partitions
+   * Then disabled partitions should be enabled.
+   */
+  @Test
+  public void testNoBootstrapPartitionsWithDisabledPartitions() {
+    // First setup scenario with all partitions bootstrapping
+    Set<PartitionId> partitions =
+        new HashSet<>(Arrays.asList(partition1, partition2, partition3, partition4, partition5));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are in BOOTSTRAP state
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store4.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store5.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Partition1 has replica count below threshold (high priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(2);
+    mockReplicaStates(partition1, 2); // 2 replicas <= threshold of 2
+
+    // Other partitions 2 and 3 are at MIN_ACTIVE_REPLICA
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(2);
+    mockReplicaStates(partition2, 2);
+    mockReplicaStates(partition3, 2);
+
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition4)).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition5)).thenReturn(2);
+    mockReplicaStates(partition4, 3);
+    mockReplicaStates(partition5, 3);
+
+    // First run - establishes baseline
+    manager.startPrioritizationCycle();
+
+    // Verify that replicationEngine was called with appropriate sets
+    ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
+    ArgumentCaptor<Boolean> enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(partitionCaptor.capture(),
+        eq(Collections.emptyList()), enableCaptor.capture());
+
+    // Find enabled and disabled partition sets
+    Set<PartitionId> enabledPartitions = null;
+    Set<PartitionId> disabledPartitions = null;
+
+    for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+      if (enableCaptor.getAllValues().get(i)) {
+        enabledPartitions = partitionCaptor.getAllValues().get(i);
+      } else {
+        disabledPartitions = partitionCaptor.getAllValues().get(i);
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions", enabledPartitions);
+    assertNotNull("Should have disabled some partitions", disabledPartitions);
+    assertEquals(3, enabledPartitions.size());
+    assertEquals(2, disabledPartitions.size());
+
+    // Reset mocks for clean verification in second run
+    reset(replicationEngine);
+
+    // Now partition1 completes replication
+    when(store1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+
+    // Second run - should recognize partition1 as completed
+    manager.startPrioritizationCycle();
+
+    partitionCaptor = ArgumentCaptor.forClass(Set.class);
+    enableCaptor = ArgumentCaptor.forClass(Boolean.class);
+    enabledPartitions = null;
+    verify(replicationEngine, atLeastOnce()).controlReplicationForPartitions(partitionCaptor.capture(),
+        eq(Collections.emptyList()), enableCaptor.capture());
+
+    for (int i = 0; i < enableCaptor.getAllValues().size(); i++) {
+      if (enableCaptor.getAllValues().get(i)) {
+        enabledPartitions = partitionCaptor.getAllValues().get(i);
+        break;
+      }
+    }
+
+    assertNotNull("Should have enabled some partitions in second run", enabledPartitions);
+    assertEquals("Should have enabled 2 partitions in second run", 2, enabledPartitions.size());
+  }
+
 
   /**
    * Helper method to mock replica states for a partition
