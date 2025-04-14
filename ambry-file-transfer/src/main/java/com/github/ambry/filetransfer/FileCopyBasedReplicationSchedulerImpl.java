@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
 
 
 class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler{
-  private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
+   final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
   private final FileCopyHandlerFactory fileCopyHandlerFactory;
   private final ClusterMap clusterMap;
   private final FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager;
@@ -184,9 +184,21 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
               continue;
             }
 
+            try{
+              /**
+               * Use FileCopyTemporaryDirectoryName to create a temporary directory for file copy.
+               * This will be used to write the files which are not yet written and can be cleaned
+               * up without
+               */
+              createTemporaryDirectoryForFileCopyIfAbsent(replicaId, fileCopyBasedReplicationConfig);
+            } catch (IOException e){
+              logger.error("Error Creating Temporary Directory For Replica: " + replicaId.getPartitionId().toPathString());
+              fileCopyStatusListener.onFileCopyFailure(e);
+              continue;
+            }
+
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
                 fileCopyStatusListener, fileCopyHandler);
-
             replicaToStatusListenerMap.put(replicaId, fileCopyStatusListener);
             inFlightReplicas.add(replicaId);
             replicaToStartTimeMap.put(replicaId, System.currentTimeMillis()/1000);
@@ -209,6 +221,13 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     File fileCopyInProgressFileName = new File(replica.getReplicaPath(), storeConfig.storeFileCopyInProgressFileName);
     if (!fileCopyInProgressFileName.exists()) {
       fileCopyInProgressFileName.createNewFile();
+    }
+  }
+
+  void createTemporaryDirectoryForFileCopyIfAbsent(ReplicaId replica, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig) throws IOException {
+    File fileCopyTemporaryDirectory = new File(replica.getReplicaPath(), fileCopyBasedReplicationConfig.fileCopyTemporaryDirectoryName);
+    if (!fileCopyTemporaryDirectory.exists()) {
+      fileCopyTemporaryDirectory.mkdirs();
     }
   }
 
@@ -251,6 +270,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       replicaToStartTimeMap.remove(replicaId);
       prioritizationManager.removeReplica(replicaId.getDiskId(), replicaId);
       deleteFileCopyInProgressFile(replicaId);
+      deleteTemporaryDirectoryAfterFileCopyHasFinished(replicaId, fileCopyBasedReplicationConfig);
     }
 
     void deleteFileCopyInProgressFile(ReplicaId replicaId){
@@ -262,6 +282,18 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
         // if deletion fails, we log here without throwing exception. Next time when server restarts,
         // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
         logger.error("Failed to delete {}", fileCopyInProgressFile.getName(), e);
+      }
+    }
+
+    void deleteTemporaryDirectoryAfterFileCopyHasFinished(ReplicaId replicaId, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig){
+      File fileCopyTemporaryDirectory = new File(replicaId.getReplicaPath(), fileCopyBasedReplicationConfig.fileCopyTemporaryDirectoryName);
+      try {
+        Utils.deleteFileOrDirectory(fileCopyTemporaryDirectory);
+      } catch (IOException e) {
+        // if deletion fails, we log here without throwing exception. Next time when server restarts,
+        // the store should complete OFFLINE -> BOOTSTRAP transition quickly and attempt restart normal
+        // replication in that case.
+        logger.error("Failed to delete {}", fileCopyTemporaryDirectory.getName(), e);
       }
     }
   }

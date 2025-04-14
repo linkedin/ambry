@@ -88,6 +88,7 @@ public class FileCopyBasedReplicationManager {
     this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 
     this.prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
+    prioritizationManager.start();
     if(!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
