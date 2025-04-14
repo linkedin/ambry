@@ -42,6 +42,7 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
   }
   @Override
   public void start() {
+    System.out.println("FCFS Pz Manager has Started");
     isRunning = true;
   }
 

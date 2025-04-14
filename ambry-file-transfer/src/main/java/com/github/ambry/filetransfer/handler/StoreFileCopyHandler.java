@@ -78,6 +78,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
   private static final Logger logger = LoggerFactory.getLogger(StoreFileCopyHandler.class);
 
+  boolean x;
+
   /**
    * Constructor to create StoreFileCopyHandler
    * @param connectionPool the {@link ConnectionPool} to use for making requests.
@@ -100,6 +102,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     this.clusterMap = clusterMap;
     this.config = config;
     this.operationRetryHandler = new OperationRetryHandler(config);
+    x = (config.getFileCopyHandlerChunkSize != 0);
   }
 
   /**
@@ -156,6 +159,11 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws IOException {
+    System.out.println("Copy Started for:  " +  fileCopyInfo.getSourceReplicaId().getPartitionId().toPathString());
+    if(x) {
+      System.out.println("Copy Completed for " + fileCopyInfo.getSourceReplicaId().getPartitionId().toPathString());
+      return;
+    }
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
 

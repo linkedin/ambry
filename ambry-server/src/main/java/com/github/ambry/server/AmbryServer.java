@@ -518,7 +518,7 @@ public class AmbryServer {
       FileCopyBasedReplicationManager fileCopyBasedReplicationManager = new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig,
           storageManager, clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant, fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory,
           prioritizationManagerFactory, storeConfig, replicaPrioritizationConfig);
-      //testE2EFlow(fileCopyBasedReplicationManager);
+      testE2EFlow(fileCopyBasedReplicationManager);
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
     } catch (Exception e) {
@@ -531,11 +531,9 @@ public class AmbryServer {
   public void testE2EFlow(FileCopyBasedReplicationManager fileCopyBasedReplicationManager){
     try {
       fileCopyBasedReplicationManager.start();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    } catch (IOException e) {
-      logger.error("File Copy Based Replication Manager Failred to Start");
-      throw new RuntimeException(e);
+    } catch (Exception e) {
+      logger.error("FCBRM Failed");
+      logger.error(e.toString());
     }
   }
   /**

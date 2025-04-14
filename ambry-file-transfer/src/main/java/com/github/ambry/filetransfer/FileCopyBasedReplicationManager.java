@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -31,7 +32,10 @@ import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,6 +92,7 @@ public class FileCopyBasedReplicationManager {
     this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 
     this.prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
+    prioritizationManager.start();
     if(!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
@@ -102,6 +107,15 @@ public class FileCopyBasedReplicationManager {
     fileCopyBasedReplicationScheduler.start();
     isRunning = true;
     logger.info("FileCopyBasedReplicationManager started");
+    PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
+    List<Integer> partitionIds = new ArrayList<>();
+    partitionIds.add(20);
+    List<PartitionId> partitionIdList =
+        storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
+    //Integrate clean up.
+    for(PartitionId partitionId: partitionIdList.toArray(new PartitionId[0])){
+      partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionId.getId()));
+    }
   }
 
   public void shutdown() throws InterruptedException {
@@ -140,6 +154,8 @@ public class FileCopyBasedReplicationManager {
       }
 
       logger.info("Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}", replicaId.getPartitionId().toPathString());
+      if(noofreplias is less)
+          return;
       replicaSyncUpManager.initiateFileCopy(replicaId);
 
       logger.info("Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
