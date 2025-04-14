@@ -1226,6 +1226,7 @@ public class StorageManager implements StoreManager {
           .collect(Collectors.toList())
           .size();
       if (tooManyFailedDisks(unavailableDiskCount)) {
+        storeMainMetrics.disksMoreThanThresholdFailureCount.inc();
         System.exit(1);
       }
 
