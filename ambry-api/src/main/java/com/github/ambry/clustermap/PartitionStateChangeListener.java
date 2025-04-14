@@ -18,6 +18,12 @@ package com.github.ambry.clustermap;
  */
 public interface PartitionStateChangeListener {
 
+  default void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
+  }
+
+  default void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
+  }
+
   /**
    * Action to take when partition becomes bootstrap from offline.
    * @param partitionName of the partition.

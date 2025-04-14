@@ -831,6 +831,16 @@ public class StorageManager implements StoreManager {
     }
 
     @Override
+    public void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
+
+    }
+
+    @Override
+    public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
+
+    }
+
+    @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       // check if partition exists on current node
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);

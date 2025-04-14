@@ -856,6 +856,16 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return dataNodeConfig;
   }
 
+
+  @Override
+  public void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
+
+  }
+
+  @Override
+  public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
+  }
+
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
