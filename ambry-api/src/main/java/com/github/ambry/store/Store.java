@@ -46,6 +46,10 @@ public interface Store {
    */
   void start() throws StoreException;
 
+  /**
+   * Returns the PartitionFileStore associated with the BlobStore
+   * @throws StoreException exception
+   */
   default PartitionFileStore getFileStore() throws StoreException {
     return null;
   }
