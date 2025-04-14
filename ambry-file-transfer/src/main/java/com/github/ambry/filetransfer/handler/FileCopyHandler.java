@@ -31,7 +31,7 @@ public interface FileCopyHandler {
    * @throws Exception exception
    */
   void copy(@Nonnull FileCopyInfo fileCopyInfo)
-      throws IOException, ConnectionPoolTimeoutException, InterruptedException;
+      throws Exception;
 
   void shutdown() throws InterruptedException;
 

@@ -14,7 +14,6 @@
 
 package com.github.ambry.store;
 
-import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.store.FileStoreException.FileStoreErrorCode;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
@@ -22,7 +21,6 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -39,6 +37,7 @@ import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 /**
  * FileStore provides file system operations for the File Copy Protocol in Ambry.
@@ -71,36 +70,24 @@ public class FileStore implements PartitionFileStore {
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
 
   // Flag to track the running state of the FileStore
-  private static boolean isRunning = false;
+  private boolean isRunning = false;
 
   // Handles serialization/deserialization of file metadata
   // Initialize metadata serializer and store config
-  private final FileMetadataSerde fileMetadataSerde = new FileMetadataSerde();;
+  private final FileMetadataSerde fileMetadataSerde = new FileMetadataSerde();
 
-  // Configuration for file copy operations
   private final String partitionToMountPath;
 
-  // File object for temporary metadata file writing
-  private final File tempMetadataFile;
-
-  // File object for actual metadata file writing
-  private final File actualMetadataFile;
   // Lock for write operations in Filestore
   private final Object storeWriteLock = new Object();
 
-
   /**
    * Creates a new FileStore instance.
-   * @param fileCopyBasedReplicationConfig Configuration for file copy operations
    * @param partitionToMountPath partition path for Filestore to access
    * @throws NullPointerException if fileCopyConfig is null
    */
-  public FileStore(FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, String partitionToMountPath) {
+  public FileStore(String partitionToMountPath) {
     this.partitionToMountPath = partitionToMountPath;
-
-    // Create temporary and actual file paths for metadata persistence
-    tempMetadataFile = new File(partitionToMountPath, fileCopyBasedReplicationConfig.fileCopyMetaDataFileName + ".tmp");
-    actualMetadataFile = new File(partitionToMountPath, fileCopyBasedReplicationConfig.fileCopyMetaDataFileName);
   }
 
   /**
@@ -156,7 +143,7 @@ public class FileStore implements PartitionFileStore {
     }
     try (RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r")) {
       // Verify if offset + size is lesser than the filesize to avoid EOF exceptions
-      if (offset + size > randomAccessFile.length()){
+      if (offset + size > randomAccessFile.length()) {
         throw new IndexOutOfBoundsException("Read offset and size exceeds the filesize for file: " + fileName);
       }
       // Seek to the specified offset
@@ -181,9 +168,10 @@ public class FileStore implements PartitionFileStore {
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + "while reading chunk for FileCopy", e, errorCode);
-    } catch (Exception e){
+    } catch (Exception e) {
       logger.error("Error while reading chunk from file: {}", fileName, e);
-      throw new FileStoreException("Error while reading chunk from file: " + fileName, e, FileStoreErrorCode.FileStoreReadError);
+      throw new FileStoreException("Error while reading chunk from file: " + fileName, e,
+          FileStoreErrorCode.FileStoreReadError);
     }
   }
 
@@ -195,99 +183,41 @@ public class FileStore implements PartitionFileStore {
    * @throws FileStoreException       if the service is not running
    * @throws IllegalArgumentException if fileInputStream is null
    */
-  public void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk)
-      throws IOException {
-      // Verify service is running
-      validateIfFileStoreIsRunning();
-
-      // Validate input
-      Objects.requireNonNull(storeFileChunk, "storeFileChunk must not be null");
-      Objects.requireNonNull(storeFileChunk.getStream(), "dataInputStream in storeFileChunk must not be null");
-
-      // Can add buffered streaming to avoid memory overusage if multiple threads calling FileStore.
-      // Read the entire file content into memory
-      int fileSize = storeFileChunk.getStream().available();
-      byte[] content = Utils.readBytesFromStream(storeFileChunk.getStream(), fileSize);
-
-      try {
-        synchronized (storeWriteLock) {
-          Path outputPath = Paths.get(outputFilePath);
-          Path parentDir = outputPath.getParent();
-
-          // Validate if parent directory exists
-          if (parentDir != null && !Files.exists(parentDir)) {
-            // Throwing IOException if the parent directory does not exist
-            throw new IOException("Parent directory does not exist: " + parentDir);
-          }
-          // Write content to file with create and append options, which will create a new file if file doesn't exist
-          // and append to the existing file if file exists
-          Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        }
-      } catch (Exception e){
-        logger.error("Error while writing chunk to file: {}", outputFilePath, e);
-        throw new FileStoreException("Error while writing chunk to file: " + outputFilePath, FileStoreErrorCode.FileStoreWriteError);
-      }
-      logger.info("Write successful for chunk to file: {} with size: {}", outputFilePath, content.length);
-  }
-
-  /**
-   * Persists metadata for a list of logs to a file.
-   * @param logInfoList List of log information to persist
-   * @throws IOException              if there are issues writing the metadata
-   * @throws FileStoreException       if the service is not running
-   * @throws IllegalArgumentException if logInfoList is null
-   */
-  public void writeMetaDataFileToDisk(List<LogInfo> logInfoList) throws IOException {
+  public void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException {
     // Verify service is running
     validateIfFileStoreIsRunning();
 
     // Validate input
-    Objects.requireNonNull(logInfoList, "logInfoList must not be null");
+    Objects.requireNonNull(storeFileChunk, "storeFileChunk must not be null");
+    Objects.requireNonNull(storeFileChunk.getStream(), "dataInputStream in storeFileChunk must not be null");
+
+    // Can add buffered streaming to avoid memory overusage if multiple threads calling FileStore.
+    // Read the entire file content into memory
+    int fileSize = storeFileChunk.getStream().available();
+    byte[] content = Utils.readBytesFromStream(storeFileChunk.getStream(), fileSize);
+
     try {
-      synchronized (storeWriteLock){
-        // Write metadata to temporary file first
-        try (FileOutputStream fileStream = new FileOutputStream(tempMetadataFile)) {
-          fileMetadataSerde.persist(logInfoList, fileStream);
+      synchronized (storeWriteLock) {
+        Path outputPath = Paths.get(outputFilePath);
+        Path parentDir = outputPath.getParent();
+
+        // Validate if parent directory exists
+        if (parentDir != null && !Files.exists(parentDir)) {
+          // Throwing IOException if the parent directory does not exist
+          throw new IOException("Parent directory does not exist: " + parentDir);
         }
-        logger.info("FileCopyMetadata file serialized and written to temp file: {}", tempMetadataFile.getAbsolutePath());
-
-        // Atomically rename temp file to actual file
-        tempMetadataFile.renameTo(actualMetadataFile);
-        logger.info("Completed writing filecopy metadata to file {}", actualMetadataFile.getAbsolutePath());
+        // Write content to file with create and append options, which will create a new file if file doesn't exist
+        // and append to the existing file if file exists
+        Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
       }
-    } catch (IOException e) {
-      logger.error("IO error while persisting filecopy metadata to disk {}", tempMetadataFile.getAbsoluteFile());
-      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.FileStoreWriteError);
     } catch (Exception e) {
-      logger.error("Error while writing metadata to disk", e);
-      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.UnknownError);
+      logger.error("Error while writing chunk to file: {}", outputFilePath, e);
+      throw new FileStoreException("Error while writing chunk to file: " + outputFilePath,
+          FileStoreErrorCode.FileStoreWriteError);
     }
+    logger.info("Write successful for chunk to file: {} with size: {}", outputFilePath, content.length);
   }
 
-  /**
-   * Reads metadata from a file.
-   * @return List of LogInfo objects containing the metadata
-   * @throws IOException        if there are issues reading the metadata
-   * @throws FileStoreException if the service is not running
-   */
-  public List<LogInfo> readMetaDataFileFromDisk() throws IOException, StoreException {
-    // Verify service is running
-    validateIfFileStoreIsRunning();
-    validateAndGetFile(actualMetadataFile.getName());
-    try {
-      // Read metadata from file
-      try (FileInputStream fileStream = new FileInputStream(actualMetadataFile)) {
-        logger.info("Attempting reading from file: {}", actualMetadataFile.getAbsolutePath());
-        return fileMetadataSerde.retrieve(fileStream);
-      }
-    } catch (IOException e) {
-      logger.error("IO error while reading filecopy metadata from disk {}", actualMetadataFile.getAbsoluteFile());
-      throw new FileStoreException("Error while reading metadata from disk", e, FileStoreErrorCode.FileStoreReadError);
-    } catch (Exception e) {
-      logger.error("Error while reading metadata from disk", e);
-      throw new FileStoreException("Error while writing metadata to disk", e, FileStoreErrorCode.UnknownError);
-    }
-  }
 
   /**
    * Performs cleanup operations when shutting down the FileStore.
@@ -342,8 +272,7 @@ public class FileStore implements PartitionFileStore {
      * @param outputStream The output stream to write to
      * @throws IOException if there are issues during serialization
      */
-    public void persist(List<LogInfo> logInfoList, OutputStream outputStream)
-        throws IOException {
+    public void persist(List<LogInfo> logInfoList, OutputStream outputStream) throws IOException {
       // Create CRC output stream to calculate checksum while writing
       CrcOutputStream crcOutputStream = new CrcOutputStream(outputStream);
       DataOutputStream writer = new DataOutputStream(crcOutputStream);
@@ -360,7 +289,7 @@ public class FileStore implements PartitionFileStore {
 
           // Write index segments information
           writer.writeInt(logInfo.getIndexSegments().size());
-          for(FileInfo fileInfo : logInfo.getIndexSegments()){
+          for (FileInfo fileInfo : logInfo.getIndexSegments()) {
             writer.writeLong(fileInfo.getFileSize());
             writer.writeLong(fileInfo.getFileName().getBytes().length);
             writer.write(fileInfo.getFileName().getBytes());
@@ -368,7 +297,7 @@ public class FileStore implements PartitionFileStore {
 
           // Write bloom filters information
           writer.writeInt(logInfo.getBloomFilters().size());
-          for(FileInfo fileInfo: logInfo.getBloomFilters()){
+          for (FileInfo fileInfo : logInfo.getBloomFilters()) {
             writer.writeLong(fileInfo.getFileSize());
             writer.writeLong(fileInfo.getFileName().getBytes().length);
             writer.write(fileInfo.getFileName().getBytes());
@@ -410,7 +339,7 @@ public class FileStore implements PartitionFileStore {
           // Read number of log info entries
           int logInfoListSize = stream.readInt();
 
-          for(int i = 0; i < logInfoListSize; i++){
+          for (int i = 0; i < logInfoListSize; i++) {
             // Read sealed segment information
             Long logSegmentSize = stream.readLong();
             byte[] logSegmentNameBytes = new byte[(int) stream.readLong()];
@@ -421,7 +350,7 @@ public class FileStore implements PartitionFileStore {
             // Read index segments
             int indexSegmentsSize = stream.readInt();
             List<FileInfo> indexSegments = new ArrayList<>();
-            for(int j = 0; j < indexSegmentsSize; j++){
+            for (int j = 0; j < indexSegmentsSize; j++) {
               Long fileSize = stream.readLong();
               byte[] indexSegmentNameBytes = new byte[(int) stream.readLong()];
               stream.readFully(indexSegmentNameBytes);
@@ -432,7 +361,7 @@ public class FileStore implements PartitionFileStore {
             // Read bloom filters
             int bloomFiltersSize = stream.readInt();
             List<FileInfo> bloomFilters = new ArrayList<>();
-            for(int j = 0; j < bloomFiltersSize; j++){
+            for (int j = 0; j < bloomFiltersSize; j++) {
               Long fileSize = stream.readLong();
               byte[] bloomFilterNameBytes = new byte[(int) stream.readLong()];
               stream.readFully(bloomFilterNameBytes);
@@ -449,8 +378,8 @@ public class FileStore implements PartitionFileStore {
         long computedCrc = crcStream.getValue();
         long readCrc = stream.readLong();
         if (computedCrc != readCrc) {
-          logger.error("Crc mismatch during filecopy metadata deserialization, computed " +
-                      computedCrc + ", read " + readCrc);
+          logger.error(
+              "Crc mismatch during filecopy metadata deserialization, computed " + computedCrc + ", read " + readCrc);
           return new ArrayList<>();
         }
         return logInfoList;
