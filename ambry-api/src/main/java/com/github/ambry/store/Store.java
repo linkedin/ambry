@@ -46,7 +46,9 @@ public interface Store {
    */
   void start() throws StoreException;
 
-  PartitionFileStore getFileStore() throws StoreException;
+  default PartitionFileStore getFileStore() throws StoreException {
+    return null;
+  }
 
   /**
    * Returns the store info for the given ids
