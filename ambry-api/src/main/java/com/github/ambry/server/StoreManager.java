@@ -88,10 +88,10 @@ public interface StoreManager {
   /**
    *
    * @param id the {@link PartitionId} to find the store for.
-   * @return the {@link FileStore} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
+   * @return the {@link PartitionFileStore} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
    *         that partition, or that store was not started.
    */
-  PartitionFileStore getFileStore(PartitionId partitionId);
+  PartitionFileStore getFileStore(PartitionId id) throws Exception;
 
   /**
    * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific

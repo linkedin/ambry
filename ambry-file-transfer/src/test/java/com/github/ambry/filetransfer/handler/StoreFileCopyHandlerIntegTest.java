@@ -75,10 +75,10 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
    * source and target directories further contain partition sub-directory
    */
   @Before
-  public void setUp() throws StoreException {
+  public void setUp() throws Exception {
     super.setUp();
 
-    FileStore fileStore = new FileStore(fileCopyBasedReplicationConfig, "");
+    FileStore fileStore = new FileStore( "");
     fileStore.start();
     when(handler.getStoreManager().getFileStore(any())).thenReturn(fileStore);
 
@@ -109,7 +109,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
    * and then verifies that the files are copied correctly to the source directory.
    */
   @Test
-  public void testFileCopiedIndexFilesAreValid() throws IOException {
+  public void testFileCopiedIndexFilesAreValid() throws Exception {
     // Arrange -
     // 1. Clean up source and target directories
     // 2. Create 2 index files in the target directory. Index file 1 is of size 1KB and index file 2 is of size 50KB.
@@ -171,7 +171,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
    * and then verifies that the file is copied correctly to the source directory.
    */
   @Test
-  public void testFileCopiedLogSegmentIsValid() throws IOException {
+  public void testFileCopiedLogSegmentIsValid() throws Exception {
     // Arrange -
     // 1. Clean up source and target directories
     // 2. Create a log segment file in the target directory of size 25MB.

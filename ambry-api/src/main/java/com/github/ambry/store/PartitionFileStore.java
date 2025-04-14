@@ -41,22 +41,5 @@ public interface PartitionFileStore {
    * @param storeFileChunk the StoreFileChunk object representing chunk stream of the file to put.
    * @throws IOException
    */
-  void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk)
-      throws IOException;
-
-  /**
-   * Persist metadata for a partition. This metadata contains information about log segments, associated index segments and bloom filters.
-   * @param logInfoList the list of LogInfo objects to persist.
-   * @throws IOException
-   */
-  void writeMetaDataFileToDisk(List<LogInfo> logInfoList)
-      throws IOException;
-
-  /**
-   * Read metadata from a partition. This metadata contains information about log segments, associated index segments and bloom filters.
-   * @return
-   * @throws IOException
-   */
-  List<LogInfo> readMetaDataFileFromDisk()
-      throws IOException, StoreException;
+  void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException;
 }

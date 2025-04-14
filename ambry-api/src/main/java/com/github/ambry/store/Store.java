@@ -46,6 +46,8 @@ public interface Store {
    */
   void start() throws StoreException;
 
+  PartitionFileStore getFileStore() throws StoreException;
+
   /**
    * Returns the store info for the given ids
    * @param ids The list of ids whose messages need to be retrieved

@@ -75,7 +75,7 @@ public class StoreFileCopyHandlerTest {
    * @throws StoreException
    */
   @Before
-  public void setUp() throws StoreException {
+  public void setUp() throws Exception {
     handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();

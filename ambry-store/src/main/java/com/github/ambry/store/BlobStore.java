@@ -108,6 +108,7 @@ public class BlobStore implements Store {
   private BlobStoreStats blobStoreStats;
   private boolean started;
   private boolean initialized;
+  private final FileStore fileStore;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
   private volatile ReplicaState previousState;
@@ -254,6 +255,7 @@ public class BlobStore implements Store {
         this.sealThresholdBytesLow, this.partialSealThresholdBytesHigh, this.partialSealThresholdBytesLow);
     // if there is a decommission file in store dir, that means previous decommission didn't complete successfully.
     recoverFromDecommission = isDecommissionInProgress();
+    fileStore = new FileStore(dataDir);
   }
 
   @Override
@@ -293,6 +295,7 @@ public class BlobStore implements Store {
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
         initialized = true;
+        fileStore.start();
       } catch (Exception e) {
         if (fileLock != null) {
           // Release the file lock
@@ -377,6 +380,10 @@ public class BlobStore implements Store {
         context.stop();
       }
     }
+  }
+
+  public FileStore getFileStore(){
+    return fileStore;
   }
 
   /**
@@ -1593,6 +1600,7 @@ public class BlobStore implements Store {
         } catch (IOException e) {
           logger.error("Store : {} IO Exception while trying to close the file lock", dataDir, e);
         }
+        fileStore.shutdown();
         metrics.storeShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
       }
       initialized = false;

@@ -155,7 +155,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @throws IOException
    */
   @Override
-  public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws IOException {
+  public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
 
