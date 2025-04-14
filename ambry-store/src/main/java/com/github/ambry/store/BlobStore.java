@@ -57,7 +57,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -294,8 +293,8 @@ public class BlobStore implements Store {
         }
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
-        initialized = true;
         fileStore.start();
+        initialized = true;
       } catch (Exception e) {
         if (fileLock != null) {
           // Release the file lock

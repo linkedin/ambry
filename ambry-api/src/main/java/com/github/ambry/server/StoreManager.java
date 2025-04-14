@@ -84,7 +84,6 @@ public interface StoreManager {
    */
   Store getStore(PartitionId id);
 
-
   /**
    *
    * @param id the {@link PartitionId} to find the store for.

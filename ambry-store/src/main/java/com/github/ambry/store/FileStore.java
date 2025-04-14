@@ -70,7 +70,7 @@ public class FileStore implements PartitionFileStore {
   private static final Logger logger = LoggerFactory.getLogger(FileStore.class);
 
   // Flag to track the running state of the FileStore
-  private static boolean isRunning = false;
+  private boolean isRunning = false;
 
   // Handles serialization/deserialization of file metadata
   // Initialize metadata serializer and store config

@@ -356,7 +356,11 @@ public class StorageManager implements StoreManager {
 
   @Override
   public PartitionFileStore getFileStore(PartitionId id) throws Exception {
-    return getStore(id, true).getFileStore();
+    Store store = getStore(id, true);
+    if (store == null) {
+      return null;
+    }
+    return store.getFileStore();
   }
 
   /**
