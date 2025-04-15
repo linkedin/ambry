@@ -90,6 +90,7 @@ class Log implements Write {
     } else {
       long segmentCapacity = Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
       if (segmentFiles.length == 0) {
+        // checks only if we are bootstrapping
         if (capacityInBytes <= 0 || config.storeSegmentSizeInBytes <= 0) {
           throw new IllegalArgumentException(
               "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes ["
@@ -381,20 +382,20 @@ class Log implements Write {
   /**
    * Checks the provided arguments for consistency and allocates the first segment file and creates the
    * {@link LogSegment} instance for it.
-   * @param segmentSize the intended capacity of each segment of the log.
+   * @param segmentCapacity the intended capacity of each segment of the log.
    * @param needSwapSegment whether a swap segment is needed by {@link BlobStoreCompactor}
    * @return the {@link LogSegment} instance that is created.
    * @throws StoreException if there is store exception when creating the segment files or creating {@link LogSegment} instances.
    */
-  private LogSegment checkArgsAndGetFirstSegment(long segmentSize, boolean needSwapSegment) throws StoreException {
-    long numSegments = capacityInBytes / segmentSize;
+  private LogSegment getFirstSegment(long segmentCapacity, boolean needSwapSegment) throws StoreException {
+    long numSegments = capacityInBytes / segmentCapacity;
     Pair<LogSegmentName, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
     logger.info("Allocating first segment with name [{}], back by file {} and capacity {} bytes. Total number of "
-            + "segments is {}", segmentNameAndFilename.getFirst(), segmentNameAndFilename.getSecond(), segmentSize,
+            + "segments is {}", segmentNameAndFilename.getFirst(), segmentNameAndFilename.getSecond(), segmentCapacity,
         numSegments);
-    File segmentFile = allocate(segmentNameAndFilename.getSecond(), segmentSize, needSwapSegment);
+    File segmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity, needSwapSegment);
     // to be backwards compatible, headers are not written for a log segment if it is the only log segment.
-    return new LogSegment(segmentNameAndFilename.getFirst(), segmentFile, segmentSize, config, metrics,
+    return new LogSegment(segmentNameAndFilename.getFirst(), segmentFile, segmentCapacity, config, metrics,
         isLogSegmented);
   }
 
@@ -443,7 +444,7 @@ class Log implements Write {
     if (segmentsToLoad.size() == 0) {
       // bootstrapping log.
       segmentsToLoad =
-          Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes, mayNeedSwapSegment));
+          Collections.singletonList(getFirstSegment(segmentCapacityInBytes, mayNeedSwapSegment));
     }
 
     LogSegment anySegment = segmentsToLoad.get(0);
