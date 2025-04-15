@@ -37,8 +37,7 @@ public class InMemoryAccountServiceFactory implements AccountServiceFactory {
    * @param verifiableProperties The properties to get a {@link HelixAccountService} instance. Cannot be {@code null}.
    * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
    */
-  public InMemoryAccountServiceFactory(VerifiableProperties verifiableProperties,
-      MetricRegistry metricRegistry) {
+  public InMemoryAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     inMemoryAccountConfig = new InMemoryAccountConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
     accountFile = Paths.get(inMemoryAccountConfig.inMemoryAccountFilePath);
@@ -47,7 +46,8 @@ public class InMemoryAccountServiceFactory implements AccountServiceFactory {
   @Override
   public AccountService getAccountService() {
     logger.info("Starting an InMemoryAccountService.");
-    InMemoryAccountService inMemoryAccountService = new InMemoryAccountService(accountFile, accountServiceMetrics, inMemoryAccountConfig);
+    InMemoryAccountService inMemoryAccountService =
+        new InMemoryAccountService(accountFile, accountServiceMetrics, inMemoryAccountConfig);
     inMemoryAccountService.init();
     return inMemoryAccountService;
   }
