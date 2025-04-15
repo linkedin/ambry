@@ -1192,7 +1192,7 @@ public class HelixAccountServiceTest {
         assertTrue("Account update not received by consumers", expectedAccounts.contains(account));
       }
       TestUtils.assertException(UnsupportedOperationException.class,
-          () -> accounts.add(InMemoryUnknownAccountService.UNKNOWN_ACCOUNT), null);
+          () -> accounts.add(InMemoryAccountService.UNKNOWN_ACCOUNT), null);
     }
   }
 

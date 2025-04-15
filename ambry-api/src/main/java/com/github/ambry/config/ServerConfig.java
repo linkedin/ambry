@@ -111,7 +111,7 @@ public class ServerConfig {
    * Implementation class for accountServiceFactory
    */
   @Config("server.account.service.factory")
-  @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
+  @Default("com.github.ambry.account.InMemoryAccountServiceFactory")
   public final String serverAccountServiceFactory;
 
   /**
@@ -179,7 +179,7 @@ public class ServerConfig {
     serverEnableBlobPartitionJourneyLogs =
         verifiableProperties.getBoolean("server.enable.blob.partition.journey.logs", false);
     serverAccountServiceFactory = verifiableProperties.getString("server.account.service.factory",
-        "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
+        "com.github.ambry.account.InMemoryAccountServiceFactory");
     serverParticipantsConsistencyCheckerPeriodSec =
         verifiableProperties.getLong("server.participants.consistency.checker.period.sec", 0);
     serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",
