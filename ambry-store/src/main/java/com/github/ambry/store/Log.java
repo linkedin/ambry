@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 class Log implements Write {
   private final String dataDir;
   private final long capacityInBytes;
+  private final long segmentCapacity;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final StoreConfig config;
   private final StoreMetrics metrics;
@@ -87,14 +88,9 @@ class Log implements Write {
     if (segmentFiles == null) {
       throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
     } else {
+      segmentCapacity = validateArgsAndGetSegmentCapacity(config.storeSegmentSizeInBytes);
       if(this.isLogSegmented) {
-        // if the log is segmented, then the number of segments should be equal to the total capacity divided by the
-        // segment size.
-        totalSegments = totalCapacityInBytes / config.storeSegmentSizeInBytes;
-        if (totalCapacityInBytes % config.storeSegmentSizeInBytes != 0) {
-          throw new IllegalArgumentException("Total capacity [" + totalCapacityInBytes + "] is not a perfect multiple of "
-              + "segment size [" + config.storeSegmentSizeInBytes + "]");
-        }
+        totalSegments = totalCapacityInBytes / segmentCapacity;
       } else {
         // if the log is not segmented, then there should be only one segment.
         totalSegments = 1;
@@ -146,6 +142,7 @@ class Log implements Write {
       throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
+    this.segmentCapacity = validateArgsAndGetSegmentCapacity(config.storeSegmentSizeInBytes);
     this.isLogSegmented = isLogSegmented;
     this.diskSpaceAllocator = diskSpaceAllocator;
     this.config = config;
@@ -243,7 +240,7 @@ class Log implements Write {
    */
   long getSegmentCapacity() {
     // all segments same size
-    return Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
+    return segmentCapacity;
   }
 
   /**
@@ -373,19 +370,7 @@ class Log implements Write {
    * @throws StoreException if there is store exception when creating the segment files or creating {@link LogSegment} instances.
    */
   private LogSegment checkArgsAndGetFirstSegment(long segmentCapacity, boolean needSwapSegment) throws StoreException {
-    if (capacityInBytes <= 0 || segmentCapacity <= 0) {
-      throw new IllegalArgumentException(
-          "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes [" + segmentCapacity
-              + "] is <=0");
-    }
-    segmentCapacity = Math.min(capacityInBytes, segmentCapacity);
-    // all segments should be the same size.
     long numSegments = capacityInBytes / segmentCapacity;
-    if (capacityInBytes % segmentCapacity != 0) {
-      throw new IllegalArgumentException(
-          "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity [" + segmentCapacity
-              + "]");
-    }
     Pair<LogSegmentName, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
     logger.info("Allocating first segment with name [{}], back by file {} and capacity {} bytes. Total number of "
             + "segments is {}", segmentNameAndFilename.getFirst(), segmentNameAndFilename.getSecond(), segmentCapacity,
@@ -394,6 +379,24 @@ class Log implements Write {
     // to be backwards compatible, headers are not written for a log segment if it is the only log segment.
     return new LogSegment(segmentNameAndFilename.getFirst(), segmentFile, segmentCapacity, config, metrics,
         isLogSegmented);
+  }
+
+  private long validateArgsAndGetSegmentCapacity(long segmentSize) {
+    if (capacityInBytes <= 0 || segmentSize <= 0) {
+      throw new IllegalArgumentException(
+          "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes [" + segmentCapacity
+              + "] is <=0");
+    }
+
+    segmentSize = Math.min(capacityInBytes, segmentSize);
+    // all segments should be the same size.
+    if (capacityInBytes % segmentSize != 0) {
+      throw new IllegalArgumentException(
+          "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity [" + segmentCapacity
+              + "]");
+    }
+
+    return segmentSize;
   }
 
   /**
