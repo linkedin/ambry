@@ -92,6 +92,9 @@ public class TtlUpdateHandlerTest {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "localDC");
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dcName");
+    props.setProperty("clustermap.host.name", "localhost");
     router = new InMemoryRouter(new VerifiableProperties(props), CLUSTER_MAP, idConverterFactory);
     blobId = router.putBlob(null, BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null,
         QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);

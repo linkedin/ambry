@@ -30,6 +30,9 @@ public class CommonTestUtils {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "localDC");
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dcName");
+    props.setProperty("clustermap.host.name", "localhost");
     return new RouterConfig(new VerifiableProperties(props)).routerBlobidCurrentVersion;
   }
 

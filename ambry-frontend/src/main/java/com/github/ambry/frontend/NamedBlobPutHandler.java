@@ -284,7 +284,7 @@ public class NamedBlobPutHandler {
         BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
         router.stitchBlob(restRequest, propertiesForRouterUpload, blobInfo.getUserMetadata(),
             getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
-            routerStitchBlobCallback(blobInfo),
+            routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -295,10 +295,11 @@ public class NamedBlobPutHandler {
      * @param blobInfo                       the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
+    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo, BlobProperties propertiesForRouterUpload) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
+        blobInfo.getBlobProperties().setBlobSize(propertiesForRouterUpload.getBlobSize());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
         String blobIdClean = stripPrefixAndExtension(blobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
