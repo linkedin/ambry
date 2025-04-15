@@ -294,6 +294,11 @@ public class BlobStore implements Store {
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
         fileStore.start();
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
+        compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
+            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
+            accountService, remoteTokenTracker, diskMetrics);
+
         initialized = true;
       } catch (Exception e) {
         if (fileLock != null) {
@@ -320,10 +325,8 @@ public class BlobStore implements Store {
         throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
       }
       try {
-        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
-        compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
-            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
-            accountService, remoteTokenTracker, diskMetrics);
+        log.init();
+        compactor.init();
         index = new PersistentIndex(dataDir, storeId, indexPersistScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
