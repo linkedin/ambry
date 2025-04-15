@@ -49,7 +49,8 @@ public class InMemoryAccountServiceTest {
     Properties cfg = new Properties();
     cfg.setProperty(InMemoryAccountConfig.FILE_PATH, "nowhere.json");
     VerifiableProperties verifiableProperties = new VerifiableProperties(cfg);
-    InMemoryAccountServiceFactory factoryWithBadFile = new InMemoryAccountServiceFactory(verifiableProperties, new MetricRegistry());
+    InMemoryAccountServiceFactory factoryWithBadFile =
+        new InMemoryAccountServiceFactory(verifiableProperties, new MetricRegistry());
     AccountService accountService = factoryWithBadFile.getAccountService();
 
     assertEquals(1, accountService.getAllAccounts().size());
@@ -71,13 +72,16 @@ public class InMemoryAccountServiceTest {
 
   @Test
   public void addAccount() throws Exception {
-    ContainerBuilder containerA = new ContainerBuilder((short) 1, "containerA", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
-    ContainerBuilder containerB = new ContainerBuilder((short) 2, "containerB", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
+    ContainerBuilder containerA =
+        new ContainerBuilder((short) 1, "containerA", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
+    ContainerBuilder containerB =
+        new ContainerBuilder((short) 2, "containerB", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
     ArrayList<Container> containers = new ArrayList<>();
     containers.add(containerA.build());
     containers.add(containerB.build());
     ArrayList<Account> accountsToUpdate = new ArrayList<>();
-    accountsToUpdate.add(new Account((short) 2345, "test", Account.AccountStatus.ACTIVE, true, 0, containers, Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
+    accountsToUpdate.add(new Account((short) 2345, "test", Account.AccountStatus.ACTIVE, true, 0, containers,
+        Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
 
     AccountService accountService = accountServiceFactory.getAccountService();
     accountService.updateAccounts(accountsToUpdate);
@@ -86,28 +90,53 @@ public class InMemoryAccountServiceTest {
   }
 
   @Test(expected = AccountServiceException.class)
-  public void addAccountConflict() throws AccountServiceException {
-    ContainerBuilder containerA = new ContainerBuilder((short) 1, "containerA", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
-    ContainerBuilder containerB = new ContainerBuilder((short) 2, "containerB", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
+  public void addAccountConflictDuplicateInRequest() throws AccountServiceException {
+    ContainerBuilder containerA =
+        new ContainerBuilder((short) 1, "containerA", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
+    ContainerBuilder containerB =
+        new ContainerBuilder((short) 2, "containerB", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
     ArrayList<Container> containers = new ArrayList<>();
     containers.add(containerA.build());
     containers.add(containerB.build());
     ArrayList<Account> accountsToUpdate = new ArrayList<>();
-    accountsToUpdate.add(new Account((short) 2345, "s3tests", Account.AccountStatus.ACTIVE, true, 0, containers, Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
+    accountsToUpdate.add(new Account((short) 2345, "s3tests", Account.AccountStatus.ACTIVE, true, 0, containers,
+        Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
+    accountsToUpdate.add(new Account((short) 2345, "s3tests", Account.AccountStatus.ACTIVE, true, 0, containers,
+        Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
 
     AccountService accountService = accountServiceFactory.getAccountService();
     accountService.updateAccounts(accountsToUpdate);
   }
 
   @Test(expected = AccountServiceException.class)
-  public void addContainerConflict() throws AccountServiceException {
-    ContainerBuilder containerA = new ContainerBuilder((short) 1, "s3testbucket", Container.ContainerStatus.ACTIVE, "test", (short) 1234);
-    ContainerBuilder containerB = new ContainerBuilder((short) 2, "containerB", Container.ContainerStatus.ACTIVE, "test", (short) 1234);
+  public void addAccountConflictAlreadyExists() throws AccountServiceException {
+    ContainerBuilder containerA =
+        new ContainerBuilder((short) 1, "containerA", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
+    ContainerBuilder containerB =
+        new ContainerBuilder((short) 2, "containerB", Container.ContainerStatus.ACTIVE, "test", (short) 2345);
     ArrayList<Container> containers = new ArrayList<>();
     containers.add(containerA.build());
     containers.add(containerB.build());
     ArrayList<Account> accountsToUpdate = new ArrayList<>();
-    accountsToUpdate.add(new Account((short) 1234, "s3tests", Account.AccountStatus.ACTIVE, true, 0, containers, Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
+    accountsToUpdate.add(new Account((short) 2345, "s3tests", Account.AccountStatus.ACTIVE, true, 0, containers,
+        Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
+
+    AccountService accountService = accountServiceFactory.getAccountService();
+    accountService.updateAccounts(accountsToUpdate);
+  }
+
+  @Test(expected = AccountServiceException.class)
+  public void addContainerConflictAlreadyExists() throws AccountServiceException {
+    ContainerBuilder containerA =
+        new ContainerBuilder((short) 1, "s3testbucket", Container.ContainerStatus.ACTIVE, "test", (short) 1234);
+    ContainerBuilder containerB =
+        new ContainerBuilder((short) 2, "containerB", Container.ContainerStatus.ACTIVE, "test", (short) 1234);
+    ArrayList<Container> containers = new ArrayList<>();
+    containers.add(containerA.build());
+    containers.add(containerB.build());
+    ArrayList<Account> accountsToUpdate = new ArrayList<>();
+    accountsToUpdate.add(new Account((short) 1234, "s3tests", Account.AccountStatus.ACTIVE, true, 0, containers,
+        Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
 
     AccountService accountService = accountServiceFactory.getAccountService();
     accountService.updateAccounts(accountsToUpdate);

@@ -14,7 +14,7 @@
 
 package com.github.ambry.config;
 
-public class InMemoryAccountConfig extends AccountServiceConfig{
+public class InMemoryAccountConfig extends AccountServiceConfig {
   /** Prefix used for all configuration options of the in-memory account service.*/
   public static final String IN_MEMORY_ACCOUNT_PREFIX = "inmemory.account.";
 
