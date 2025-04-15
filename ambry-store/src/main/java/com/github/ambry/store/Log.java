@@ -104,8 +104,13 @@ class Log implements Write {
     }
   }
 
-  // this populates segmentsByName and assigns activeSegment
-  // in case of bootstrapping this creates the first segment
+  /**
+   * Initializes the log by loading existing log segments from the specified directory.
+   * If no segments are found, it creates the first segment. Otherwise, it sets up the log structure
+   * and sets the active segment
+   *
+   * @throws StoreException if there is any store exception loading the segment files.
+   */
   void init() throws StoreException {
     File dir = new File(dataDir);
     File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
