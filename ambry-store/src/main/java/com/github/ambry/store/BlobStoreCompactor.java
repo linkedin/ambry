@@ -157,8 +157,12 @@ class BlobStoreCompactor {
     } else {
       validEntryFilter = new IndexSegmentValidEntryFilterWithUndelete();
     }
-    fixStateIfRequired();
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
+  }
+
+  void init() throws IOException, StoreException {
+    fixStateIfRequired();
+    logger.trace("BlobStoreCompactor inited");
   }
 
   /**
