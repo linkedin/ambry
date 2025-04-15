@@ -160,6 +160,11 @@ class BlobStoreCompactor {
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
 
+  /**
+   * Initializes the compactor. This method is called when the {@link BlobStore} is loaded.
+   * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
+   * @throws StoreException if the commit failed during recovery.
+   */
   void init() throws IOException, StoreException {
     fixStateIfRequired();
     logger.trace("BlobStoreCompactor inited");
