@@ -318,7 +318,9 @@ public class ParanoidDurabilityOperationTrackerTest {
     props.setProperty(RouterConfig.ROUTER_PUT_REMOTE_SUCCESS_TARGET, Integer.toString(remoteSuccessTarget));
     props.setProperty(RouterConfig.ROUTER_PUT_REMOTE_ATTEMPT_LIMIT, Integer.toString(remoteAttemptLimit));
     props.setProperty(RouterConfig.ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET, Boolean.toString(useDynamicSuccessTarget));
-
+    props.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    props.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    props.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     return new ParanoidDurabilityOperationTracker(routerConfig, mockPartition, localDcName, routerMetrics);

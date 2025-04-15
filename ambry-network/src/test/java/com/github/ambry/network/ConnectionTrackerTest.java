@@ -52,6 +52,9 @@ public class ConnectionTrackerTest {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "DC1");
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dcName");
+    props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("router.scaling.unit.max.connections.per.port.plain.text", "3");
     props.setProperty("router.scaling.unit.max.connections.per.port.ssl", "2");
     verifiableProperties = new VerifiableProperties((props));

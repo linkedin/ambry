@@ -286,7 +286,7 @@ public class NamedBlobPutHandler {
         BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
         router.stitchBlob(restRequest, propertiesForRouterUpload, blobInfo.getUserMetadata(),
             getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
-            routerStitchBlobCallback(blobInfo),
+            routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -297,12 +297,13 @@ public class NamedBlobPutHandler {
      * @param blobInfo                       the {@link BlobInfo} to use for security checks.
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
+    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo, BlobProperties propertiesForRouterUpload) {
+      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, convertedBlobId -> {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
-        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
-        String blobIdClean = stripPrefixAndExtension(blobId);
+        blobInfo.getBlobProperties().setBlobSize(propertiesForRouterUpload.getBlobSize());
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        String blobIdClean = stripPrefixAndExtension(convertedBlobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
@@ -310,7 +311,7 @@ public class NamedBlobPutHandler {
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(restRequest, blobIdClean, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-              routerTtlUpdateCallbackForStitch(blobInfo, blobId));
+              routerTtlUpdateCallbackForStitch(blobInfo));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
@@ -357,22 +358,10 @@ public class NamedBlobPutHandler {
      * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @param blobId the {@link String} to use for blob id.
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
-    private Callback<Void> routerTtlUpdateCallbackForStitch(BlobInfo blobInfo, String blobId) {
+    private Callback<Void> routerTtlUpdateCallbackForStitch(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
-        // Set the named blob state to be 'READY' after the Ttl update succeed
-        if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
-          throw new RestServiceException("Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION
-              + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
-        }
-        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        NamedBlobRecord record =
-            NamedBlobRecord.forUpdate(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                namedBlobPath.getBlobName(), namedBlobVersion);
-        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(

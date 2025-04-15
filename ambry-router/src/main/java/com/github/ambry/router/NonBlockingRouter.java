@@ -502,10 +502,6 @@ public class NonBlockingRouter implements Router {
           callback.onCompletion(null, exception);
         }
       } else {
-        // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
-        // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
-        blobProperties.setBlobSize(blobProperties.getBlobSize());
-        //restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
         try {
           idConverter.convert(restRequest, blobId, blobProperties, callback);

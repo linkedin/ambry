@@ -249,6 +249,9 @@ public class GetBlobOperationTest {
     routerProperties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES,
         Integer.toString(RouterConfig.MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT));
     routerProperties.setProperty(CompressionConfig.COMPRESSION_ENABLED, Boolean.toString(enableCompression));
+    routerProperties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    routerProperties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    routerProperties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     this.enableMetadataCache = enableMetadataCache;
     VerifiableProperties vprops = new VerifiableProperties(routerProperties);
     routerConfig = new RouterConfig(vprops);
@@ -2658,6 +2661,9 @@ public class GetBlobOperationTest {
     properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     properties.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
     properties.setProperty("router.get.blob.operation.share.memory", "true");
+    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     return properties;
   }
 }

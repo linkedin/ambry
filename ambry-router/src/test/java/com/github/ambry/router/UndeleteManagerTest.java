@@ -419,6 +419,9 @@ public class UndeleteManagerTest {
     properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, LOCAL_DC);
     properties.setProperty(RouterConfig.ROUTER_UNDELETE_REQUEST_PARALLELISM, Integer.toString(parallelism));
     properties.setProperty(RouterConfig.ROUTER_UNDELETE_SUCCESS_TARGET, Integer.toString(DEFAULT_SUCCESS_TARGET));
+    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     return properties;
   }
 
