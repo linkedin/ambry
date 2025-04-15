@@ -1677,8 +1677,8 @@ public class BlobStore implements Store {
     checkStarted();
     DiskSpaceRequirements requirements =
         log.isLogSegmented() ? new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
-            log.getSegmentCapacity(), log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse().length)
-            : null;
+            Math.min(log.getCapacityInBytes(), config.storeSegmentSizeInBytes), log.getRemainingUnallocatedSegments(),
+            compactor.getSwapSegmentsInUse().length) : null;
     logger.info("Store {} has disk space requirements: {}", storeId, requirements);
     return requirements;
   }
