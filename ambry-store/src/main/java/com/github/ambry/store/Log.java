@@ -238,7 +238,7 @@ class Log implements Write {
    */
   long getSegmentCapacity() {
     // all segments same size
-    return getFirstSegment().getCapacityInBytes();
+    return Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
   }
 
   /**
