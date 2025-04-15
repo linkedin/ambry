@@ -82,6 +82,33 @@ class Log implements Write {
 
     File dir = new File(dataDir);
     File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
+    long totalSegments;
+
+    if (segmentFiles == null) {
+      throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
+    } else {
+      if(this.isLogSegmented) {
+        // if the log is segmented, then the number of segments should be equal to the total capacity divided by the
+        // segment size.
+        totalSegments = totalCapacityInBytes / config.storeSegmentSizeInBytes;
+        if (totalCapacityInBytes % config.storeSegmentSizeInBytes != 0) {
+          throw new IllegalArgumentException("Total capacity [" + totalCapacityInBytes + "] is not a perfect multiple of "
+              + "segment size [" + config.storeSegmentSizeInBytes + "]");
+        }
+      } else {
+        // if the log is not segmented, then there should be only one segment.
+        totalSegments = 1;
+      }
+
+      remainingUnallocatedSegments.set(totalSegments - segmentFiles.length);
+    }
+  }
+
+  // this populates segmentsByName and assigns activeSegment
+  // in case of bootstrapping this creates the first segment
+  void init() throws StoreException {
+    File dir = new File(dataDir);
+    File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
     if (segmentFiles == null) {
       throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
     } else {
@@ -121,7 +148,6 @@ class Log implements Write {
     this.diskMetrics = diskMetrics;
     this.segmentNameAndFileNameIterator = segmentNameAndFileNameIterator;
     storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
-
     initialize(segmentsToLoad, config.storeSegmentSizeInBytes, true);
   }
 
