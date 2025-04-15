@@ -151,6 +151,8 @@ public class RouterConfig {
       "router.operation.tracker.check.all.originating.replicas.for.not.found";
   public static final String RESERVED_METADATA_ENABLED = "router.reserved.metadata.enabled";
   public static final String CLUSTERMAP_CLUSTER_NAME = ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME;
+  public static final String CLUSTERMAP_DATACENTER_NAME = ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME;
+  public static final String CLUSTERMAP_HOST_NAME = ClusterMapConfig.CLUSTERMAP_HOST_NAME;
   public static final String ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS =
       "router.get.operation.deprioritize.bootstrap.replicas";
 
@@ -800,11 +802,7 @@ public class RouterConfig {
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    Properties clusterMapProperty = new Properties();
-    clusterMapProperty.setProperty("clustermap.cluster.name", "test");
-    clusterMapProperty.setProperty("clustermap.datacenter.name", "dcName");
-    clusterMapProperty.setProperty("clustermap.host.name", "localhost");
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(clusterMapProperty));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     idConverterFactory = frontendConfig.idConverterFactory;
     idSigningServiceFactory = frontendConfig.idSigningServiceFactory;
     namedBlobDbFactory = frontendConfig.namedBlobDbFactory;

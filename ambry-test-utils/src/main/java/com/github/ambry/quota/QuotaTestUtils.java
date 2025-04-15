@@ -68,6 +68,8 @@ public class QuotaTestUtils {
     properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
     properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, "DEV");
     properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "ambry-test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
+    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
     return new RouterConfig(new VerifiableProperties(properties));
   }
 

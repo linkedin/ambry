@@ -902,6 +902,9 @@ public class PutOperationTest {
     properties.setProperty("router.compression.minimal.ratio", "1.0");
     properties.setProperty("router.compression.minimal.content.size", "1");
     properties.setProperty("router.reserved.metadata.enabled", Boolean.toString(isReservedMetadataEnabled));
+    properties.setProperty("clustermap.cluster.name", "test");
+    properties.setProperty("clustermap.datacenter.name", "dcName");
+    properties.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties vProps = new VerifiableProperties(properties);
     return new RouterConfig(vProps);
   }
