@@ -60,7 +60,8 @@ public class InMemAccountService implements AccountService {
   private final ScheduledExecutorService scheduler;
   private boolean shouldUpdateSucceed = true;
   private final Map<Pair<String, String>, Map<String, Dataset>> nameToDatasetMap = new HashMap<>();
-  private final Map<Pair<Short, Short>, Map<Pair<String, String>, DatasetVersionRecord>> idToDatasetVersionMap = new HashMap<>();
+  private final Map<Pair<Short, Short>, Map<Pair<String, String>, DatasetVersionRecord>> idToDatasetVersionMap =
+      new HashMap<>();
 
   /**
    * Constructor.
@@ -197,8 +198,8 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized void deleteDatasetVersion(String accountName, String containerName,
-      String datasetName, String version) throws AccountServiceException {
+  public synchronized void deleteDatasetVersion(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
@@ -351,14 +352,15 @@ public class InMemAccountService implements AccountService {
       throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
     }
     DatasetVersionRecord updatedDatasetVersionRecord =
-        new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time, datasetVersionRecord.getRenameFrom());
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time,
+            datasetVersionRecord.getRenameFrom());
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
         .put(new Pair<>(datasetName, version), updatedDatasetVersionRecord);
   }
 
   @Override
-  public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName, String containerName,
-      String datasetName) {
+  public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName,
+      String containerName, String datasetName) {
     List<DatasetVersionRecord> datasetVersionRecords = new ArrayList<>();
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
@@ -379,7 +381,7 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized void updateDatasetVersionState (String accountName, String containerName, String datasetName,
+  public synchronized void updateDatasetVersionState(String accountName, String containerName, String datasetName,
       String version, DatasetVersionState datasetVersionState) {
     //no-op
   }
