@@ -359,6 +359,7 @@ public class BlobStore implements Store {
             logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
           }
         }
+        initialized = false;
         String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
         throw new StoreException(err, e, StoreErrorCodes.InitializationError);
       }
