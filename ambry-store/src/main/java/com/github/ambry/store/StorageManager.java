@@ -893,7 +893,7 @@ public class StorageManager implements StoreManager {
           // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
           // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
           // at some point). Then a brand new store associated with this replica should be created and started.
-          if (!addBlobStore(replicaToAdd)) {
+          if (!initializeBlobStore(replicaToAdd)) {
             // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
             // back since addition of store failed.
             replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
@@ -911,20 +911,6 @@ public class StorageManager implements StoreManager {
           }
         } while (!replicaAdded);
 
-        if (primaryClusterParticipant != null) {
-          // update InstanceConfig in Helix
-          try {
-            if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
-              logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
-              throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
-                  StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
-            }
-            logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
-          } catch (IllegalStateException e) {
-            throw new StateTransitionException(e.getMessage(),
-                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
-          }
-        }
         // if addBlobStore succeeds, it is guaranteed that store is started and thus getStore result is not null.
         store = getStore(replicaToAdd.getPartitionId(), true);
 
@@ -976,16 +962,36 @@ public class StorageManager implements StoreManager {
           }
         }
       }
-
     }
 
     @Override
     public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       Store store = getStore(replica.getPartitionId(), true);
+      if(store == null){
+        throw new StateTransitionException("Store not initialized",
+            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+      }
       try {
         if (!store.isStarted()) {
-          store.load();
+
+          if (primaryClusterParticipant != null) {
+            // update InstanceConfig in Helix
+            try {
+              if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replica, true)) {
+                logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
+                throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
+                    StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+              }
+              logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
+            } catch (IllegalStateException e) {
+              throw new StateTransitionException(e.getMessage(),
+                  StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+            }
+          }
+          if(!loadBlobStore(replica) ){
+            throw new StateTransitionException("loading failed for store", StateTransitionException.TransitionErrorCode.StoreNotStarted);
+          }
         }
       } catch (Exception e) {
         throw new StateTransitionException(e.getMessage(),
