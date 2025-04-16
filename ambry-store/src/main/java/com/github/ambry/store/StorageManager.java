@@ -832,16 +832,6 @@ public class StorageManager implements StoreManager {
 
     @Override
     public void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
-
-    }
-
-    @Override
-    public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
-
-    }
-
-    @Override
-    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       // check if partition exists on current node
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       Store store;
@@ -896,7 +886,7 @@ public class StorageManager implements StoreManager {
           }
         }
         // if addBlobStore succeeds, it is guaranteed that store is started and thus getStore result is not null.
-        store = getStore(replicaToAdd.getPartitionId(), false);
+        store = getStore(replicaToAdd.getPartitionId(), true);
 
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
         // able to get new replica from storageManager without querying Helix
@@ -911,7 +901,7 @@ public class StorageManager implements StoreManager {
         // For case 3, we should throw exception to make replica stay in ERROR state (thus, frontends won't pick this replica)
         // For case 4, we check it's current used capacity and put it in BOOTSTRAP state if necessary. This is to ensure
         //             it catches up with peers before serving PUT traffic (or being selected as LEADER)
-        store = getStore(replica.getPartitionId(), false);
+        store = getStore(replica.getPartitionId(), true);
         if (store == null) {
           throw new StateTransitionException(
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
@@ -946,6 +936,22 @@ public class StorageManager implements StoreManager {
           }
         }
       }
+
+    }
+
+    @Override
+    public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      Store store = getStore(replica.getPartitionId(), true);
+      try {
+        if (!store.isStarted()) {
+          store.load();
+        }
+      } catch (Exception e) {
+        throw new StateTransitionException(e.getMessage(),
+            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+      }
+
       if (isPrimaryClusterManagerListener) {
         // Only update store state if this is a state transition for primary participant. Since replication Manager
         // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
@@ -956,6 +962,13 @@ public class StorageManager implements StoreManager {
           store.setCurrentState(ReplicaState.BOOTSTRAP);
         }
       }
+    }
+
+    @Override
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      onPartitionBecomePreBootstrapFromOffline(partitionName);
+      // filcopy
+      onPartitionBecomeBootstrapFromPreBootStrap(partitionName);
     }
 
     @Override
