@@ -132,6 +132,7 @@ public class IndexWritePerformance {
       props.setProperty("store.segment.size.in.bytes", "10");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       Log log = new Log(System.getProperty("user.dir"), 10, diskSpaceAllocator, config, metrics, null);
+      log.init();
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);
 

@@ -199,6 +199,7 @@ class CuratedLogIndexState {
     metrics = new StoreMetrics(metricRegistry);
     log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(segmentCapacity, true), metrics, null);
+    log.init();
     properties.put("store.index.max.number.of.inmem.elements",
         Integer.toString(CuratedLogIndexState.DEFAULT_MAX_IN_MEM_ELEMENTS));
     properties.put("store.enable.hard.delete", Boolean.toString(hardDeleteEnabled));
@@ -1101,6 +1102,7 @@ class CuratedLogIndexState {
     log.close(false);
     log = new Log(tempDirStr, LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(segmentCapacity, true), metrics, null);
+    log.init();
     index = null;
     if (initIndex) {
       initIndex(null);

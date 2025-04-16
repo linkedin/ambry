@@ -93,6 +93,7 @@ public class StoreMessageReadSetTest {
     int segCapacity = 1000;
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(segCapacity, setFilePermissionEnabled), metrics, null);
+    log.init();
     try {
       LogSegment firstSegment = log.getFirstSegment();
       int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());
@@ -240,6 +241,7 @@ public class StoreMessageReadSetTest {
     for (int segCapacity : segCapacities) {
       Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
           createStoreConfig(segCapacity, setFilePermissionEnabled), metrics, null);
+      log.init();
       try {
         LogSegment firstSegment = log.getFirstSegment();
         int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());
