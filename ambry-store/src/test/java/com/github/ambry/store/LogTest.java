@@ -140,7 +140,7 @@ public class LogTest {
     for (Pair<Long, Long> logAndSegmentSize : logAndSegmentSizes) {
       try {
         new Log(tempDir.getAbsolutePath(), logAndSegmentSize.getFirst(), StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-            createStoreConfig(logAndSegmentSize.getSecond(), setFilePermissionEnabled), metrics, null);
+            createStoreConfig(logAndSegmentSize.getSecond(), setFilePermissionEnabled), metrics, null).init();
         fail("Construction should have failed");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -151,7 +151,7 @@ public class LogTest {
     File file = create(LogSegmentName.generateFirstSegmentName(false).toFilename());
     try {
       new Log(file.getAbsolutePath(), 1, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-          createStoreConfig(1, setFilePermissionEnabled), metrics, null);
+          createStoreConfig(1, setFilePermissionEnabled), metrics, null).init();
       fail("Construction should have failed");
     } catch (StoreException e) {
       // expected. Nothing to do.
@@ -181,6 +181,7 @@ public class LogTest {
   public void appendErrorCasesTest() throws IOException, StoreException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, null);
+    log.init();
     try {
       // write exceeds size of a single segment.
       ByteBuffer buffer =
@@ -212,6 +213,7 @@ public class LogTest {
   public void setActiveSegmentBadArgsTest() throws IOException, StoreException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, null);
+    log.init();
     long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
     try {
       log.setActiveSegment(LogSegmentName.fromPositionAndGeneration(numSegments + 1, 0));
@@ -232,6 +234,7 @@ public class LogTest {
   public void getNextSegmentBadArgsTest() throws IOException, StoreException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, null);
+    log.init();
     LogSegment segment = getLogSegment(LogSegmentName.fromPositionAndGeneration(1, 1), SEGMENT_CAPACITY, true);
     try {
       log.getNextSegment(segment);
@@ -252,6 +255,7 @@ public class LogTest {
   public void getPrevSegmentBadArgsTest() throws IOException, StoreException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, null);
+    log.init();
     LogSegment segment = getLogSegment(LogSegmentName.fromPositionAndGeneration(1, 1), SEGMENT_CAPACITY, true);
     try {
       log.getPrevSegment(segment);
@@ -272,6 +276,7 @@ public class LogTest {
   public void getFileSpanForMessageBadArgsTest() throws IOException, StoreException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, null);
+    log.init();
     try {
       LogSegment firstSegment = log.getFirstSegment();
       log.setActiveSegment(firstSegment.getName());
@@ -655,6 +660,7 @@ public class LogTest {
     long numSegments = (logCapacity - 1) / segmentCapacity + 1;
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(segmentCapacity, setFilePermissionEnabled), metrics, null);
+    log.init();
     assertEquals("Total capacity not as expected", logCapacity, log.getCapacityInBytes());
     assertEquals("Segment capacity not as expected", Math.min(logCapacity, segmentCapacity), log.getSegmentCapacity());
     try {
@@ -820,6 +826,7 @@ public class LogTest {
     for (long newConfig : newConfigs) {
       Log log = new Log(tempDir.getAbsolutePath(), originalLogCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
           createStoreConfig(newConfig, true), metrics, null);
+      log.init();
       try {
         // the new config should be ignored.
         checkLog(log, originalSegmentCapacity, allSegmentNames);

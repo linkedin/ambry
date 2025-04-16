@@ -261,6 +261,7 @@ public class CompactionVerifier implements Closeable {
     srcLog =
         new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, srcMetrics,
             null);
+    srcLog.init();
     srcIndex = new PersistentIndex(srcDir.getAbsolutePath(), "src", null, srcLog, storeConfig, storeKeyFactory, null,
         hardDelete, diskIOScheduler, srcMetrics, SystemTime.getInstance(), sessionId, incarnationId);
 
@@ -268,6 +269,7 @@ public class CompactionVerifier implements Closeable {
     tgtLog =
         new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, tgtMetrics,
             null);
+    tgtLog.init();
     tgtIndex = new PersistentIndex(tgtDir.getAbsolutePath(), "tgt", null, tgtLog, storeConfig, storeKeyFactory, null,
         hardDelete, diskIOScheduler, tgtMetrics, SystemTime.getInstance(), sessionId, incarnationId);
   }
