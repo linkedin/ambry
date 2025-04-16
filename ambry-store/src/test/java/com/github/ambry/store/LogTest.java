@@ -509,6 +509,40 @@ public class LogTest {
     }
   }
 
+  @Test
+  public void testLogInitWithNoSegments() throws Exception {
+    int totalSegments = 2;
+    long totalCapacity = totalSegments * SEGMENT_CAPACITY;
+
+    DiskSpaceAllocator mockDiskSpaceAllocator = mock(DiskSpaceAllocator.class);
+    StoreConfig storeConfig = createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled);
+    StoreMetrics mockMetrics = mock(StoreMetrics.class);
+    DiskMetrics mockDiskMetrics = mock(DiskMetrics.class);
+
+    Log log = new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, mockMetrics, mockDiskMetrics);
+    assertEquals("Remaining unallocated segments mismatch", totalSegments, log.getRemainingUnallocatedSegments());
+  }
+
+  @Test
+  public void testLogInitWithExistingSegments() throws Exception {
+    int totalSegments = 5, existingSegments = 2;
+    long totalCapacity = totalSegments * SEGMENT_CAPACITY;
+
+    for (int i = 0; i < existingSegments; i++) {
+      File segmentFile = new File(tempDir, LogSegmentName.fromPositionAndGeneration(i, 0).toFilename());
+      assert segmentFile.createNewFile();
+    }
+    DiskSpaceAllocator mockDiskSpaceAllocator = mock(DiskSpaceAllocator.class);
+    StoreConfig storeConfig = createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled);
+    StoreMetrics mockMetrics = mock(StoreMetrics.class);
+    DiskMetrics mockDiskMetrics = mock(DiskMetrics.class);
+
+    Log log = new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, mockMetrics, mockDiskMetrics);
+
+    long expectedRemainingSegments = totalSegments - existingSegments;
+    assertEquals("Remaining unallocated segments mismatch", expectedRemainingSegments, log.getRemainingUnallocatedSegments());
+  }
+
   // helpers
 
   // general
