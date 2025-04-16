@@ -510,6 +510,11 @@ public class DiskManager {
             diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
             replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
         store.initialize();
+
+        // collect store segment requirements and add into DiskSpaceAllocator
+        List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
+        diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
+
         // add new created store into in-memory data structures.
         stores.put(replica.getPartitionId(), store);
 
@@ -538,9 +543,6 @@ public class DiskManager {
       } else {
         BlobStore store = stores.get(replica.getPartitionId());
         store.load();
-        // collect store segment requirements and add into DiskSpaceAllocator
-        List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
-        diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
         // add store into CompactionManager
         compactionManager.addBlobStore(store);
 
