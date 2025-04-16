@@ -160,6 +160,58 @@ public class FileStoreTest {
   }
 
   /**
+   * Tests moving regular files from a source directory to destination.
+   * @throws Exception if any file operatio fail
+   */
+  @Test
+  public void testMoveRegularFiles() throws StoreException, Exception {
+    File srcDir = new File(tempDir, "src");
+    File destDir = new File(tempDir, "dest");
+
+    // Ensure directories exists.
+    srcDir.mkdirs();
+    destDir.mkdirs();
+
+    // Create 10 test files in srcDir
+    for (int i = 0; i < 10; i++) {
+      File file = new File(srcDir, "file_to_move_" + i);
+      try (FileOutputStream fos = new FileOutputStream(file)) {
+        fos.write(("test data " + i).getBytes());
+      }
+    }
+
+    // Invoke files move helper
+    fileStore.moveAllRegularFiles(srcDir.getAbsolutePath(), destDir.getAbsolutePath());
+
+    // Verify that all files were moved successfully
+    for (int i = 0; i < 10; i++) {
+      File srcFile = new File(srcDir, "file_to_move_" + i);
+      File destFile = new File(destDir, "file_to_move_" + i);
+
+      assertFalse("File should not exist in source dir: " + srcFile.getName(), srcFile.exists());
+      assertTrue("File should exist in dest dir: " + destFile.getName(), destFile.exists());
+
+      String content = new String(Files.readAllBytes(destFile.toPath()));
+      assertEquals("test data " + i, content);
+    }
+
+    // Negative test: If file already exists with same name in destination, then should throw an exception.
+    File commonFileSrc = new File(srcDir, "common_file");
+    File commonFileDest = new File(destDir, "common_file");
+    try (FileOutputStream fos = new FileOutputStream(commonFileSrc)) {
+      fos.write("common data".getBytes());
+    }
+    try (FileOutputStream fos = new FileOutputStream(commonFileDest)) {
+      fos.write("common data".getBytes());
+    }
+
+    // Invoke files move helper
+    expectedException.expect(FileStoreException.class);
+    fileStore.moveAllRegularFiles(srcDir.getAbsolutePath(), destDir.getAbsolutePath());
+    expectedException.expectMessage("Error while moving files");
+  }
+
+  /**
    * Helper method to create test LogInfo objects.
    * Generates multiple LogInfo entries with unique names and sizes.
    * @return List of LogInfo objects for testing
