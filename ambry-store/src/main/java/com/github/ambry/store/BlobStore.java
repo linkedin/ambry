@@ -1674,7 +1674,7 @@ public class BlobStore implements Store {
    * @throws StoreException
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    checkStarted();
+    checkInitialized();
     DiskSpaceRequirements requirements =
         log.isLogSegmented() ? new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
             Math.min(log.getCapacityInBytes(), config.storeSegmentSizeInBytes), log.getRemainingUnallocatedSegments(),
