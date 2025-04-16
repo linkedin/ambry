@@ -98,7 +98,7 @@ class Log implements Write {
         }
 
         // all segments should be the same size.
-        if (capacityInBytes % config.storeSegmentSizeInBytes != 0) {
+        if (capacityInBytes % segmentCapacity != 0) {
           throw new IllegalArgumentException(
               "Capacity of log [" + segmentCapacity + "] should be a multiple of segment capacity ["
                   + segmentCapacity + "]");
@@ -387,7 +387,8 @@ class Log implements Write {
    * @return the {@link LogSegment} instance that is created.
    * @throws StoreException if there is store exception when creating the segment files or creating {@link LogSegment} instances.
    */
-  private LogSegment getFirstSegment(long segmentCapacity, boolean needSwapSegment) throws StoreException {
+  private LogSegment createFirstSegment(long segmentCapacity, boolean needSwapSegment) throws StoreException {
+    segmentCapacity = Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
     long numSegments = capacityInBytes / segmentCapacity;
     Pair<LogSegmentName, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
     logger.info("Allocating first segment with name [{}], back by file {} and capacity {} bytes. Total number of "
@@ -444,7 +445,7 @@ class Log implements Write {
     if (segmentsToLoad.size() == 0) {
       // bootstrapping log.
       segmentsToLoad =
-          Collections.singletonList(getFirstSegment(segmentCapacityInBytes, mayNeedSwapSegment));
+          Collections.singletonList(createFirstSegment(segmentCapacityInBytes, mayNeedSwapSegment));
     }
 
     LogSegment anySegment = segmentsToLoad.get(0);
