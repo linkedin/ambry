@@ -91,17 +91,17 @@ class Log implements Write {
       long segmentCapacity = Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
       if (segmentFiles.length == 0) {
         // checks only if we are bootstrapping
-        if (capacityInBytes <= 0 || config.storeSegmentSizeInBytes <= 0) {
+        if (capacityInBytes <= 0 || segmentCapacity <= 0) {
           throw new IllegalArgumentException(
               "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes ["
-                  + config.storeSegmentSizeInBytes + "] is <=0");
+                  + segmentCapacity + "] is <=0");
         }
 
         // all segments should be the same size.
         if (capacityInBytes % config.storeSegmentSizeInBytes != 0) {
           throw new IllegalArgumentException(
-              "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity ["
-                  + config.storeSegmentSizeInBytes + "]");
+              "Capacity of log [" + segmentCapacity + "] should be a multiple of segment capacity ["
+                  + segmentCapacity + "]");
         }
       }
 
