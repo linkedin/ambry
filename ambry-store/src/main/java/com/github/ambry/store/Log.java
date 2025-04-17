@@ -251,6 +251,13 @@ class Log implements Write {
   }
 
   /**
+   * @return the capacity of a single segment just by config.
+   */
+  long getSegmentSize() {
+    return Math.min(getCapacityInBytes(), config.storeSegmentSizeInBytes);
+  }
+
+  /**
    * @return return the current number of log segment.
    */
   int getLogSegmentCount() {
