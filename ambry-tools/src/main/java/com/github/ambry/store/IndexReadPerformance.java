@@ -150,7 +150,6 @@ public class IndexReadPerformance {
       props.setProperty("store.segment.size.in.bytes", "1000");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       Log log = new Log(System.getProperty("user.dir"), 1000, diskSpaceAllocator, config, metrics, null);
-      log.init();
 
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);

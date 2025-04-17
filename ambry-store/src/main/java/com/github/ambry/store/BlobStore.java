@@ -294,10 +294,10 @@ public class BlobStore implements Store {
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
         fileStore.start();
-        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics, false);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
-            accountService, remoteTokenTracker, diskMetrics);
+            accountService, remoteTokenTracker, diskMetrics, false);
 
         initialized = true;
       } catch (Exception e) {
