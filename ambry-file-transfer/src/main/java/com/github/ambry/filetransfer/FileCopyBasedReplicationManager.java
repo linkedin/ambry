@@ -33,6 +33,7 @@ import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -49,6 +50,8 @@ public class FileCopyBasedReplicationManager {
   private final ClusterParticipant clusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final FileCopyBasedReplicationScheduler fileCopyBasedReplicationScheduler;
+
+  private  Thread _thread;
   private  final NetworkClientFactory networkClientFactory;
   private final ClusterMap clusterMap;
   private final StoreConfig storeConfig;
@@ -59,7 +62,7 @@ public class FileCopyBasedReplicationManager {
      StoreManager storeManager, ClusterMap clusterMap,
       NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, ClusterParticipant clusterParticipant,
       FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory,
-      FileCopyHandlerFactory fileCopyHandlerFactory, PrioritizationManagerFactory prioritizationManagerFactory,
+      FileCopyHandlerFactory fileCopyHandlerFactory, PrioritizationManager prioritizationManager,
       StoreConfig storeConfig, ReplicaPrioritizationConfig replicaPrioritizationConfig)
       throws InstantiationException {
 
@@ -70,7 +73,7 @@ public class FileCopyBasedReplicationManager {
     Objects.requireNonNull(networkClientFactory, "NetworkClientFactory cannot be null");
     Objects.requireNonNull(metricRegistry, "MetricRegistry cannot be null");
     Objects.requireNonNull(fileCopyBasedReplicationSchedulerFactory, "FileCopyBasedReplicationSchedulerFactory cannot be null");
-    Objects.requireNonNull(prioritizationManagerFactory, "PrioritizationManagerFactory cannot be null");
+    Objects.requireNonNull(prioritizationManager, "PrioritizationManagerFactory cannot be null");
     Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
     Objects.requireNonNull(fileCopyHandlerFactory, "FileCopyHandlerFactory cannot be null");
     Objects.requireNonNull(replicaPrioritizationConfig, "ReplicaPrioritizationConfig cannot be null");
@@ -78,24 +81,25 @@ public class FileCopyBasedReplicationManager {
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.storeManager = storeManager;
 
-    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
     this.clusterParticipant = clusterParticipant;
     this.fileCopyHandlerFactory = fileCopyHandlerFactory;
 
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.FileCopyManagerListener,
           new PartitionStateChangeListenerImpl());
-      logger.info("File Copy Manager's state change listener registered!");
+      logger.info("FCH TEST: File Copy Manager's state change listener registered!");
     } else {
       throw new InstantiationException("File Copy Manager cannot be instantiated without a ClusterParticipant");
     }
     this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 
-    this.prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
+    this.prioritizationManager = prioritizationManager;
+    logger.info("FCH TEST: Starting FCFS Prioritization Manager");
     prioritizationManager.start();
     if(!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
+    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
 
     this.networkClientFactory = networkClientFactory;
     this.clusterMap = clusterMap;
@@ -103,26 +107,35 @@ public class FileCopyBasedReplicationManager {
   }
 
   public void start() throws InterruptedException, IOException {
-    logger.info("Starting FileCopyBasedReplicationManager");
-    fileCopyBasedReplicationScheduler.start();
+    logger.info("FCH TEST: Starting FileCopyBasedReplicationManager");
+    _thread = new Thread(fileCopyBasedReplicationScheduler);
+
+    _thread.start();
+
     isRunning = true;
-    logger.info("FileCopyBasedReplicationManager started");
+    logger.info("FCH TEST: FileCopyBasedReplicationManager started");
     PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
-    List<Integer> partitionIds = new ArrayList<>();
-    partitionIds.add(20);
+    List<Long> partitionIds = Arrays.asList(20l, 127l);
+
+    logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
+        PartitionId::getId).collect(Collectors.toList()));
+
     List<PartitionId> partitionIdList =
         storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
+
+    logger.info("FCH TEST: Partitions to be hydrated up: {}", partitionIdList);
     //Integrate clean up.
-    for(PartitionId partitionId: partitionIdList.toArray(new PartitionId[0])){
+    for(PartitionId partitionId: partitionIdList){
       partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionId.getId()));
     }
   }
 
   public void shutdown() throws InterruptedException {
-    logger.info("Shutting down FileCopyBasedReplicationManager");
+    logger.info("FCH TEST: Shutting down FileCopyBasedReplicationManager");
     fileCopyBasedReplicationScheduler.shutdown();
+    _thread.join();
     isRunning = false;
-    logger.info("FileCopyBasedReplicationManager shutdown");
+    logger.info("FCH TEST: FileCopyBasedReplicationManager shutdown");
   }
 
   class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
@@ -130,7 +143,7 @@ public class FileCopyBasedReplicationManager {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       if(!isRunning){
-        logger.info("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
+        logger.info("FCH TEST: FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
         throw new StateTransitionException("FileCopyBasedReplicationManager is not running. Ignoring state "
             + "change for partition: " + partitionName, StateTransitionException.
             TransitionErrorCode.FileCopyBasedReplicationManagerNotRunning);
@@ -149,22 +162,21 @@ public class FileCopyBasedReplicationManager {
        * If the file copy was already completed, then no need to do it again.
        */
       if(storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName)){
-        logger.info("File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
+        logger.info("FCH TEST: File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
         return;
       }
 
-      logger.info("Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}", replicaId.getPartitionId().toPathString());
-      if(noofreplias is less)
-          return;
+      logger.info("FCH TEST: Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}", replicaId.getPartitionId().toPathString());
+
       replicaSyncUpManager.initiateFileCopy(replicaId);
 
-      logger.info("Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
+      logger.info("FCH TEST: Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
       prioritizationManager.addReplica(replicaId);
 
       try {
-        logger.info("Waiting for File Copy to be completed for Replica: {}", replicaId.getPartitionId().toPathString());
+        logger.info("FCH TEST: Waiting for File Copy to be completed for Replica: {}", replicaId.getPartitionId().toPathString());
         replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
-        logger.info("File Copy Completed for Replica: {}", replicaId.getPartitionId().toPathString());
+        logger.info("FCH TEST: File Copy Completed for Replica: {}", replicaId.getPartitionId().toPathString());
       } catch (InterruptedException e) {
         logger.error("File copy for partition {} was interrupted", partitionName);
         throw new StateTransitionException("File copy for partition " + partitionName + " was interrupted",

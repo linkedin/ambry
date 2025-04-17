@@ -94,7 +94,7 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
         fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileChunkInfo.getFileName(),
         fileChunkInfo.getStartOffset(), fileChunkInfo.getChunkLengthInBytes(), fileChunkInfo.isChunked());
 
-    logger.info("Sending FileCopyGetChunkRequest: {}", request);
+    logger.info("FCH TEST: Sending FileCopyGetChunkRequest: {}", request);
     long startTimeMs = System.currentTimeMillis();
 
     ConnectedChannel connectedChannel = getChannel(fileCopyInfo.getTargetReplicaId().getDataNodeId());
@@ -102,7 +102,7 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
     ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
     FileCopyGetChunkResponse response = FileCopyGetChunkResponse.readFrom(channelOutput.getInputStream(), clusterMap);
 
-    logger.info("Received FileCopyGetChunkResponse in {} ms", System.currentTimeMillis() - startTimeMs);
+    logger.info("FCH TEST: Received FileCopyGetChunkResponse in {} ms", System.currentTimeMillis() - startTimeMs);
     return response;
   }
 }

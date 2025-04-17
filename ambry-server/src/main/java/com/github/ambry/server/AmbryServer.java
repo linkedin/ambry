@@ -509,15 +509,17 @@ public class AmbryServer {
       FileCopyHandlerFactory
           fileCopyHandlerFactory = new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap, fileCopyBasedReplicationConfig);
 
-      PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
       PrioritizationManager prioritizationManager = new FCFSPrioritizationManager();
+      logger.info("starting FCFS PZ MANAGER");
+      prioritizationManager.start();
+      logger.info("started FCFS PZ MANAGER");
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
 
       FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory = new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory,
-          fileCopyBasedReplicationConfig, clusterMap, prioritizationManagerFactory, storageManager, storeConfig, nodeId, clusterParticipant );
+          fileCopyBasedReplicationConfig, clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant );
       FileCopyBasedReplicationManager fileCopyBasedReplicationManager = new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig,
           storageManager, clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant, fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory,
-          prioritizationManagerFactory, storeConfig, replicaPrioritizationConfig);
+          prioritizationManager, storeConfig, replicaPrioritizationConfig);
       testE2EFlow(fileCopyBasedReplicationManager);
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
