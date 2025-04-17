@@ -514,7 +514,8 @@ public class LogTest {
     StoreMetrics mockMetrics = mock(StoreMetrics.class);
     DiskMetrics mockDiskMetrics = mock(DiskMetrics.class);
 
-    Log log = new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, mockMetrics, mockDiskMetrics);
+    Log log = new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, mockMetrics,
+        mockDiskMetrics, false);
     assertEquals("Remaining unallocated segments mismatch", totalSegments, log.getRemainingUnallocatedSegments());
   }
 
@@ -532,10 +533,12 @@ public class LogTest {
     StoreMetrics mockMetrics = mock(StoreMetrics.class);
     DiskMetrics mockDiskMetrics = mock(DiskMetrics.class);
 
-    Log log = new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, mockMetrics, mockDiskMetrics);
+    Log log = new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, mockMetrics,
+        mockDiskMetrics, false);
 
     long expectedRemainingSegments = totalSegments - existingSegments;
-    assertEquals("Remaining unallocated segments mismatch", expectedRemainingSegments, log.getRemainingUnallocatedSegments());
+    assertEquals("Remaining unallocated segments mismatch", expectedRemainingSegments,
+        log.getRemainingUnallocatedSegments());
   }
 
   // helpers
