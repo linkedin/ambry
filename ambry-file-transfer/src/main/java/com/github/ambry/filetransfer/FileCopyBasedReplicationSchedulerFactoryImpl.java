@@ -41,14 +41,14 @@ public class FileCopyBasedReplicationSchedulerFactoryImpl implements FileCopyBas
 
   public FileCopyBasedReplicationSchedulerFactoryImpl(FileCopyHandlerFactory fileCopyHandlerFactory,
       FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMap clusterMap,
-      PrioritizationManagerFactory prioritizationManagerFactory, StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId, ClusterParticipant clusterParticipant) {
+      PrioritizationManager prioritizationManager, StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId, ClusterParticipant clusterParticipant) {
 
     Objects.requireNonNull(clusterParticipant, "ClusterParticipant cannot be null");
 
     this.fileCopyHandlerFactory = fileCopyHandlerFactory;
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.clusterMap = clusterMap;
-    this.prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(ReplicaPrioritizationStrategy.FirstComeFirstServe);
+    this.prioritizationManager = prioritizationManager;
     this.storeManager = storeManager;
     this.storeConfig = storeConfig;
     this.dataNodeId = dataNodeId;

@@ -45,6 +45,7 @@ public class FileCopyBasedReplicationManager {
   private final ClusterParticipant clusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final FileCopyBasedReplicationScheduler fileCopyBasedReplicationScheduler;
+  private final Thread fileCopyBasedReplicationSchedulerThread;
   private  final NetworkClientFactory networkClientFactory;
   private final ClusterMap clusterMap;
   private final StoreConfig storeConfig;
@@ -55,7 +56,7 @@ public class FileCopyBasedReplicationManager {
      StoreManager storeManager, ClusterMap clusterMap,
       NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, ClusterParticipant clusterParticipant,
       FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory,
-      FileCopyHandlerFactory fileCopyHandlerFactory, PrioritizationManagerFactory prioritizationManagerFactory,
+      FileCopyHandlerFactory fileCopyHandlerFactory, PrioritizationManager prioritizationManager,
       StoreConfig storeConfig, ReplicaPrioritizationConfig replicaPrioritizationConfig)
       throws InstantiationException {
 
@@ -66,7 +67,7 @@ public class FileCopyBasedReplicationManager {
     Objects.requireNonNull(networkClientFactory, "NetworkClientFactory cannot be null");
     Objects.requireNonNull(metricRegistry, "MetricRegistry cannot be null");
     Objects.requireNonNull(fileCopyBasedReplicationSchedulerFactory, "FileCopyBasedReplicationSchedulerFactory cannot be null");
-    Objects.requireNonNull(prioritizationManagerFactory, "PrioritizationManagerFactory cannot be null");
+    Objects.requireNonNull(prioritizationManager, "PrioritizationManagerFactory cannot be null");
     Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
     Objects.requireNonNull(fileCopyHandlerFactory, "FileCopyHandlerFactory cannot be null");
     Objects.requireNonNull(replicaPrioritizationConfig, "ReplicaPrioritizationConfig cannot be null");
@@ -74,7 +75,6 @@ public class FileCopyBasedReplicationManager {
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.storeManager = storeManager;
 
-    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
     this.clusterParticipant = clusterParticipant;
     this.fileCopyHandlerFactory = fileCopyHandlerFactory;
 
@@ -87,7 +87,9 @@ public class FileCopyBasedReplicationManager {
     }
     this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 
-    this.prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
+    this.prioritizationManager = prioritizationManager;
+    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
+    this.fileCopyBasedReplicationSchedulerThread = new Thread(fileCopyBasedReplicationScheduler);
     if(!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
@@ -99,7 +101,7 @@ public class FileCopyBasedReplicationManager {
 
   public void start() throws InterruptedException, IOException {
     logger.info("Starting FileCopyBasedReplicationManager");
-    fileCopyBasedReplicationScheduler.start();
+    fileCopyBasedReplicationSchedulerThread.start();
     isRunning = true;
     logger.info("FileCopyBasedReplicationManager started");
   }
@@ -107,6 +109,7 @@ public class FileCopyBasedReplicationManager {
   public void shutdown() throws InterruptedException {
     logger.info("Shutting down FileCopyBasedReplicationManager");
     fileCopyBasedReplicationScheduler.shutdown();
+    fileCopyBasedReplicationSchedulerThread.join();
     isRunning = false;
     logger.info("FileCopyBasedReplicationManager shutdown");
   }

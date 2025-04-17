@@ -52,6 +52,14 @@ public interface PrioritizationManager {
   List<ReplicaId> getPartitionListForDisk(DiskId diskId, int numberOfReplicasPerDisk);
 
   /**
+   * Get the list of partitions that are in progress for the given disk.
+   * @param diskId the {@link DiskId} for which the list of partitions are in progress.
+   * @return the list of {@link ReplicaId} that are in progress for the given disk.
+   */
+  List<ReplicaId> getInProgressReplicaIdsForDisk(DiskId diskId);
+
+
+  /**
    * Add a replica to the prioritization manager.
    * @param replicaId the {@link ReplicaId} to add.
    */
@@ -64,6 +72,14 @@ public interface PrioritizationManager {
    * @return {@code true} if the replica was removed, {@code false} otherwise.
    */
   boolean removeReplica(DiskId diskId, ReplicaId replicaId);
+
+  /**
+   * Remove the list of replicas that are in progress.
+   * @param diskId the {@link DiskId} that the replicas are on.
+   * @param replicaId the {@link ReplicaId} to remove.
+   * @return {@code true} if the replica was removed, {@code false} otherwise.
+   */
+  boolean removeInProgressReplica(DiskId diskId, ReplicaId replicaId);
 
   /**
    * Returns the number of disks that are currently in the prioritization manager.
