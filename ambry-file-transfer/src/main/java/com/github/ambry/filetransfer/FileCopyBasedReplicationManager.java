@@ -67,7 +67,7 @@ public class FileCopyBasedReplicationManager {
     Objects.requireNonNull(networkClientFactory, "NetworkClientFactory cannot be null");
     Objects.requireNonNull(metricRegistry, "MetricRegistry cannot be null");
     Objects.requireNonNull(fileCopyBasedReplicationSchedulerFactory, "FileCopyBasedReplicationSchedulerFactory cannot be null");
-    Objects.requireNonNull(prioritizationManager, "PrioritizationManagerFactory cannot be null");
+    Objects.requireNonNull(prioritizationManager, "PrioritizationManager cannot be null");
     Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
     Objects.requireNonNull(fileCopyHandlerFactory, "FileCopyHandlerFactory cannot be null");
     Objects.requireNonNull(replicaPrioritizationConfig, "ReplicaPrioritizationConfig cannot be null");
