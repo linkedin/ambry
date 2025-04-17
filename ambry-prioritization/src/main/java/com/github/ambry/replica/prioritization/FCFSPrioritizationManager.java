@@ -17,6 +17,7 @@ package com.github.ambry.replica.prioritization;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateTransitionException;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,11 +36,15 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
   private boolean isRunning;
   private final ConcurrentHashMap<DiskId, List<ReplicaId>> diskToReplicaMap;
 
+  private final ConcurrentHashMap<DiskId, List<ReplicaId>> inProgressReplicas;
+
   protected final Logger logger = LoggerFactory.getLogger(getClass());
+
 
   public FCFSPrioritizationManager() {
     System.out.println("FCFS Inititalized");
     diskToReplicaMap = new ConcurrentHashMap<>();
+    inProgressReplicas = new ConcurrentHashMap<>();
   }
   @Override
   public void start() {
@@ -76,13 +81,21 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
     logger.info("FCH TEST: Getting {} replicas for disk {}", numberOfReplicasToBeRemoved, diskId.getMountPath());
 
 
-    // Retrieve and remove the replicas
     List<ReplicaId> replicasToReturn = new LinkedList<>(replicaListForDisk.subList(0, numberOfReplicasToBeRemoved));
+
+    inProgressReplicas.putIfAbsent(diskId, new ArrayList<>());
+    inProgressReplicas.get(diskId).addAll(replicasToReturn);
     replicaListForDisk.subList(0, numberOfReplicasToBeRemoved).clear();
-    logger.info("FCH TEST: Returning {} replicas for disk {}", numberOfReplicasToBeRemoved, diskId.getMountPath());
-    logger.info("FCH TEST: Remaining replicas for disk {} are {}", diskId.getMountPath(), replicaListForDisk.size());
-    logger.info("FCH TEST: Remaining replicas for disk {} are {}", diskId.getMountPath(), replicaListForDisk);
+
+    logger.info("Returning {} replicas for disk {}", numberOfReplicasToBeRemoved, diskId.getMountPath());
+    logger.info("Remaining replicas for disk {} are {}", diskId.getMountPath(), replicaListForDisk);
+
     return replicasToReturn;
+  }
+
+  @Override
+  public List<ReplicaId> getInProgressReplicaIdsForDisk(DiskId diskId) {
+    return inProgressReplicas.get(diskId);
   }
 
   @Override
@@ -97,31 +110,40 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
     return true;
   }
 
-  boolean validateIfPzManagerIsRunningOrThrowException(ReplicaId replicaId){
+  void validateIfPzManagerIsRunningOrThrowException(ReplicaId replicaId){
     if(!isRunning){
       logger.error("Partition {} failed adding to prioritization Manager", replicaId.getReplicaPath());
       throw new StateTransitionException("Partition " + replicaId.getReplicaPath() + " failed adding to "
           + "prioritization Manager", PrioritizationManagerRunningFailure);
     }
-    else
-      return true;
+  }
+
+  @Override
+  public synchronized boolean removeInProgressReplica(DiskId diskId, ReplicaId replicaId){
+    return removeReplicaFromMap(diskId, replicaId, true);
   }
 
   @Override
   public synchronized boolean removeReplica(DiskId diskId, ReplicaId replicaId) {
-    if(!isRunning){
-      logger.error("Partition {} failed removing from prioritization Manager", replicaId.getReplicaPath());
-      throw new StateTransitionException("Partition " + replicaId.getReplicaPath() + " failed removing from "
-          + "prioritization Manager", PrioritizationManagerRunningFailure);
-    }
+    return removeReplicaFromMap(diskId, replicaId, false);
+  }
 
-    List<ReplicaId> replicaListForDisk = diskToReplicaMap.get(diskId);
-    if(replicaListForDisk == null || replicaListForDisk.isEmpty()){
+  private boolean removeReplicaFromMap(DiskId diskId, ReplicaId replicaId, boolean removeInProgress) {
+    validateIfPzManagerIsRunningOrThrowException(replicaId);
+
+    List<ReplicaId> replicaListForDisk;
+    if(removeInProgress)
+        replicaListForDisk = inProgressReplicas.get(diskId);
+    else
+        replicaListForDisk = diskToReplicaMap.get(diskId);
+
+    if (replicaListForDisk == null || replicaListForDisk.isEmpty()) {
       return false;
     }
-    logger.info("FCH TEST: Removed partition {} from prioritization Manager For Disk {}", replicaId.getReplicaPath(),
+    logger.info("Removed {} partition {} from prioritization Manager For Disk {}", removeInProgress? "InProgress": "", replicaId.getReplicaPath(),
         diskId.getMountPath());
     return replicaListForDisk.remove(replicaId);
+
   }
 
   @Override
@@ -132,5 +154,6 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
   @Override
   public void reset() {
     diskToReplicaMap.clear();
+    inProgressReplicas.clear();
   }
 }

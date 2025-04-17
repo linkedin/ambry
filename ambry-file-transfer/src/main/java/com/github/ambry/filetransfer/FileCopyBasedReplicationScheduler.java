@@ -21,11 +21,6 @@ package com.github.ambry.filetransfer;
  */
 public interface FileCopyBasedReplicationScheduler extends Runnable{
   /**
-   * Start the scheduler.
-   */
-  void startScheduler() throws InterruptedException;
-
-  /**
    * Shutdown the scheduler.
    */
   void shutdown() throws InterruptedException;

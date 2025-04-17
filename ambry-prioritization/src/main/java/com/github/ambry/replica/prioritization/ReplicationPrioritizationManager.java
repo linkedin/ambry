@@ -109,8 +109,11 @@ public class ReplicationPrioritizationManager implements Runnable {
     this.prioritizedPartitions = new EnumMap<>(PriorityTier.class);
     this.scheduler = scheduler;
 
+    // We require this delay to ensure StoreManager is able to init all stores with correct state.
+    // Otherwise, on server start all partitions store will be in BOOTSTRAP
+    long initialDelay = replicationConfig.prioritizationSchedulerInitialDelayMinutes;
     // Schedule periodic runs for prioritization run
-    this.scheduler.scheduleAtFixedRate(this, 0, scheduleIntervalMinutes, TimeUnit.MINUTES);
+    this.scheduler.scheduleAtFixedRate(this, initialDelay, scheduleIntervalMinutes, TimeUnit.MINUTES);
 
     logger.info("FCH TEST: ReplicationPrioritizationManager initialized with prioritization window of {} hours, schedule interval of {} minutes, " +
             "and min batch size of {} partitions", prioritizationWindowMs, scheduleIntervalMinutes,
@@ -168,8 +171,12 @@ public class ReplicationPrioritizationManager implements Runnable {
 
       Set<PartitionId> partitionIds = new HashSet<>(allBootstrappingPartitions);
       if (partitionIds.isEmpty()) {
+<<<<<<< HEAD
         logger.info("FCH TEST: Bootstrapping partition list from StorageManager is empty");
         return;
+=======
+        logger.info("Bootstrapping partition list from StorageManager is empty");
+>>>>>>> d63232d73ead0831dc5a293f833df84ba9138516
       }
 
       partitionIds.removeAll(currentlyReplicatingPriorityPartitions);
@@ -191,11 +198,16 @@ public class ReplicationPrioritizationManager implements Runnable {
       prioritizedPartitions.keySet().forEach(priorityTier -> logger.info("FCH TEST: Found {} partitions in {} category", prioritizedPartitions.get(priorityTier).size(), priorityTier));
 
       // 5. Update replication priorities
+<<<<<<< HEAD
       if (prioritizedPartitions.entrySet().stream().
           filter(entry -> entry.getKey() != PriorityTier.NORMAL).
           allMatch(entry -> entry.getValue().isEmpty())
           && !isHighPriorityReplicationRunning.get()) {
         logger.info("FCH TEST: No new high-priority partitions identified "
+=======
+      if (shouldResetReplication()) {
+        logger.info("No new high-priority partitions identified "
+>>>>>>> d63232d73ead0831dc5a293f833df84ba9138516
             + "and no existing high priority run, enabling replication for disabled partitions");
 
         if (disabledReplicationPartitions.isEmpty()) {
@@ -227,6 +239,17 @@ public class ReplicationPrioritizationManager implements Runnable {
     } catch (Exception e) {
       logger.error("Error in partition prioritization task", e);
     }
+  }
+
+  /**
+   * Checks if replication should be reset to normal operation.
+   * @return true if replication should be reset, false otherwise
+   */
+  private boolean shouldResetReplication() {
+    return (prioritizedPartitions.entrySet().stream().
+        filter(entry -> entry.getKey() != PriorityTier.NORMAL).
+        allMatch(entry -> entry.getValue().isEmpty()) || !disabledReplicationPartitions.isEmpty())
+        && !isHighPriorityReplicationRunning.get();
   }
 
   /**
@@ -380,6 +403,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       logger.info("FCH TEST: No currently replicating partitions, disabling high-priority replication");
       isHighPriorityReplicationRunning.set(false);
     }
+    completedPartitions.clear();
   }
 
   /**

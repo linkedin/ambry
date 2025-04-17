@@ -50,8 +50,7 @@ public class FileCopyBasedReplicationManager {
   private final ClusterParticipant clusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final FileCopyBasedReplicationScheduler fileCopyBasedReplicationScheduler;
-
-  private  Thread _thread;
+  private final Thread fileCopyBasedReplicationSchedulerThread;
   private  final NetworkClientFactory networkClientFactory;
   private final ClusterMap clusterMap;
   private final StoreConfig storeConfig;
@@ -73,7 +72,7 @@ public class FileCopyBasedReplicationManager {
     Objects.requireNonNull(networkClientFactory, "NetworkClientFactory cannot be null");
     Objects.requireNonNull(metricRegistry, "MetricRegistry cannot be null");
     Objects.requireNonNull(fileCopyBasedReplicationSchedulerFactory, "FileCopyBasedReplicationSchedulerFactory cannot be null");
-    Objects.requireNonNull(prioritizationManager, "PrioritizationManagerFactory cannot be null");
+    Objects.requireNonNull(prioritizationManager, "PrioritizationManager cannot be null");
     Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
     Objects.requireNonNull(fileCopyHandlerFactory, "FileCopyHandlerFactory cannot be null");
     Objects.requireNonNull(replicaPrioritizationConfig, "ReplicaPrioritizationConfig cannot be null");
@@ -94,8 +93,9 @@ public class FileCopyBasedReplicationManager {
     this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 
     this.prioritizationManager = prioritizationManager;
-    logger.info("FCH TEST: Starting FCFS Prioritization Manager");
-    prioritizationManager.start();
+    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
+    this.fileCopyBasedReplicationSchedulerThread = new Thread(fileCopyBasedReplicationScheduler);
+
     if(!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
@@ -107,11 +107,8 @@ public class FileCopyBasedReplicationManager {
   }
 
   public void start() throws InterruptedException, IOException {
-    logger.info("FCH TEST: Starting FileCopyBasedReplicationManager");
-    _thread = new Thread(fileCopyBasedReplicationScheduler);
-
-    _thread.start();
-
+    logger.info("Starting FileCopyBasedReplicationManager");
+    fileCopyBasedReplicationSchedulerThread.start();
     isRunning = true;
     logger.info("FCH TEST: FileCopyBasedReplicationManager started");
     PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
@@ -133,7 +130,7 @@ public class FileCopyBasedReplicationManager {
   public void shutdown() throws InterruptedException {
     logger.info("FCH TEST: Shutting down FileCopyBasedReplicationManager");
     fileCopyBasedReplicationScheduler.shutdown();
-    _thread.join();
+    fileCopyBasedReplicationSchedulerThread.join();
     isRunning = false;
     logger.info("FCH TEST: FileCopyBasedReplicationManager shutdown");
   }

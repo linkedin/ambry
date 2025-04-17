@@ -50,7 +50,6 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -777,6 +776,41 @@ public class BlobStoreTest {
     blobStore.load();
     verifyLoadFailure(blobStore, StoreErrorCodes.StoreAlreadyStarted);
     blobStore.shutdown();
+    assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
+  }
+
+  /**
+   * Tests the behaviour of {@link FileStore} associated with {@link  BlobStore}
+   * 1. When {@link  BlobStore} gets created, {@link  FileStore} should be created
+   * 2. When {@link  BlobStore} gets initialized, {@link  FileStore} should be started
+   * 3. When {@link  BlobStore} shuts down, {@link  FileStore} should be stopped.
+   * @throws Exception exception
+   */
+  @Test
+  public void fileStoreTest() throws Exception {
+    // Since store creation can fail in this test before the metric has initialized, set the memory usage metric to false.
+    properties.put("store.enable.index.direct.memory.usage.metric", "false");
+    enableIndexDirectMemoryUsageMetric = false;
+
+    String nonExistentDir = new File(tempDir, TestUtils.getRandomString(10)).getAbsolutePath();
+    File createdDir = new File(nonExistentDir);
+
+    ReplicaId replicaIdWithNonExistentDir = getMockReplicaId(nonExistentDir);
+
+    // Create BlobStore and check FileStore
+    BlobStore blobStore = createBlobStore(replicaIdWithNonExistentDir);
+    FileStore fileStore = blobStore.getFileStore();
+
+    assertNotNull("FileStore should not be null", fileStore);
+    assertFalse("FileStore should not be running", fileStore.isRunning());
+
+    // Initialize the BlobStore and check if FileStore is running.
+    blobStore.initialize();
+    assertTrue("FileStore should be running", fileStore.isRunning());
+
+    // Shut down the BlobStore and check if FileStore is shutdown.
+    blobStore.shutdown();
+    assertFalse("FileStore should be shutDown", fileStore.isRunning());
     assertTrue("Directory could not be deleted", cleanDirectory(createdDir, true));
   }
 

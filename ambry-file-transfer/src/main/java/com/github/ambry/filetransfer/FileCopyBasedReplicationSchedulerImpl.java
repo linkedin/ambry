@@ -87,10 +87,15 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   }
 
   @Override
-  public void startScheduler() throws InterruptedException {
+  public void run(){
     isRunning = true;
-    logger.info("FCH TEST: FileCopyBasedReplicationSchedulerImpl Started");
-    scheduleFileCopy();
+    logger.info("FileCopyBasedReplicationSchedulerImpl Started");
+    try {
+      scheduleFileCopy();
+    } catch (InterruptedException e) {
+      logger.error("Failed to start FileCopy Scheduler", e);
+      throw new RuntimeException(e);
+    }
   }
 
   /**
@@ -223,15 +228,6 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     return fileCopyBasedReplicationThreadPoolManager.getThreadPoolSize();
   }
 
-  @Override
-  public void run() {
-    try {
-      startScheduler();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   class FileCopyStatusListenerImpl implements FileCopyStatusListener {
 
     private final ReplicaSyncUpManager replicaSyncUpManager;
@@ -265,7 +261,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     void removeReplicaFromFileCopy(ReplicaId replicaId){
       inFlightReplicas.remove(replicaId);
       replicaToStartTimeMap.remove(replicaId);
-      prioritizationManager.removeReplica(replicaId.getDiskId(), replicaId);
+      prioritizationManager.removeInProgressReplica(replicaId.getDiskId(), replicaId);
       deleteFileCopyInProgressFile(replicaId);
     }
 

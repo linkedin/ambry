@@ -62,7 +62,7 @@ public class RestServerConfig {
    * The AccountServiceFactory that needs to be used by FrontendRestRequestService to get account-related information.
    */
   @Config("rest.server.account.service.factory")
-  @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
+  @Default("com.github.ambry.account.InMemoryAccountServiceFactory")
   public final String restServerAccountServiceFactory;
 
   /**
@@ -120,7 +120,7 @@ public class RestServerConfig {
     restServerResponseHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerAccountServiceFactory = verifiableProperties.getString("rest.server.account.service.factory",
-        "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
+        "com.github.ambry.account.InMemoryAccountServiceFactory");
     restServerRouterFactory = verifiableProperties.getString("rest.server.router.factory",
         "com.github.ambry.router.NonBlockingRouterFactory");
     restServerPublicAccessLogRequestHeaders =

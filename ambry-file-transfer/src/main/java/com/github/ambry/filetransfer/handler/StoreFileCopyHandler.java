@@ -159,7 +159,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @throws IOException
    */
   @Override
-  public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws IOException {
+  public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
     try {
       Thread.sleep(60000);
     } catch (InterruptedException e) {
