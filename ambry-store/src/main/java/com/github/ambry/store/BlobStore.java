@@ -1674,9 +1674,9 @@ public class BlobStore implements Store {
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
     checkInitialized();
-    DiskSpaceRequirements requirements = new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
-        Math.min(log.getCapacityInBytes(), config.storeSegmentSizeInBytes), log.getRemainingUnallocatedSegments(),
-        compactor.getSwapSegmentsInUse().length);
+    DiskSpaceRequirements requirements =
+        new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(), log.getSegmentSize(),
+            log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse().length);
     logger.info("Store {} has disk space requirements: {}", storeId, requirements);
     return requirements;
   }
