@@ -1349,7 +1349,7 @@ public class BlobStore implements Store {
     }
 
     // Step 2: if segmented, delete remaining store segments in reserve pool
-    if (log != null && log.isLogSegmented()) {
+    if (log != null) {
       logger.info("Deleting remaining segments associated with store {} in reserve pool", storeId);
       diskSpaceAllocator.deleteAllSegmentsForStoreIds(
           Collections.singletonList(replicaId.getPartitionId().toPathString()));

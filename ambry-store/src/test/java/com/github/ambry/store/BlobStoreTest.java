@@ -2381,27 +2381,42 @@ public class BlobStoreTest {
    */
   @Test
   public void diskSpaceRequirementsTest() throws Exception {
-    // expect three log segments to be already allocated (from setup process)
-    int segmentsAllocated = 3;
-    doDiskSpaceRequirementsTest(segmentsAllocated, 0);
+    if(isLogSegmented) {
+      // This test is only applicable when the log is segmented
+      // expect three log segments to be already allocated (from setup process)
+      int segmentsAllocated = 3;
+      doDiskSpaceRequirementsTest(store, segmentsAllocated, 0);
 
-    // try adding fake swap segment log segment.
-    File tempFile = File.createTempFile("sample-swap",
-        LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, tempDir);
-    doDiskSpaceRequirementsTest(segmentsAllocated, 1);
-    assertTrue("Could not delete temp file", tempFile.delete());
+      // try adding fake swap segment log segment.
+      File tempFile =
+          File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+              tempDir);
+      doDiskSpaceRequirementsTest(store, segmentsAllocated, 1);
+      assertTrue("Could not delete temp file", tempFile.delete());
 
-    addCuratedData(SEGMENT_CAPACITY, true);
-    segmentsAllocated += 1;
-    doDiskSpaceRequirementsTest(segmentsAllocated, 0);
+      addCuratedData(SEGMENT_CAPACITY, true);
+      segmentsAllocated += 1;
+      doDiskSpaceRequirementsTest(store, segmentsAllocated, 0);
 
-    File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
-        tempDir).deleteOnExit();
-    File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
-        tempDir).deleteOnExit();
-    addCuratedData(SEGMENT_CAPACITY, true);
-    segmentsAllocated += 1;
-    doDiskSpaceRequirementsTest(segmentsAllocated, 2);
+      File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+          tempDir).deleteOnExit();
+      File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+          tempDir).deleteOnExit();
+      addCuratedData(SEGMENT_CAPACITY, true);
+      segmentsAllocated += 1;
+      doDiskSpaceRequirementsTest(store, segmentsAllocated, 2);
+    } else {
+      // This test is only applicable when the log is not segmented
+      // expect log is already present (from setup process)
+      int segmentsAllocated = 1;
+      doDiskSpaceRequirementsTest(store, segmentsAllocated, 0);
+      // try adding fake swap segment log segment.
+      File tempFile =
+          File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+              tempDir);
+      doDiskSpaceRequirementsTest(store, segmentsAllocated, 1);
+      assertTrue("Could not delete temp file", tempFile.delete());
+    }
   }
 
   /**
@@ -4698,15 +4713,16 @@ public class BlobStoreTest {
    * @param numSwapSegments the number of swap segments currently used by the blob store.
    * @throws Exception
    */
-  private void doDiskSpaceRequirementsTest(int segmentsAllocated, int numSwapSegments) throws Exception {
+  private void doDiskSpaceRequirementsTest(BlobStore store, int segmentsAllocated, int numSwapSegments) throws Exception {
     DiskSpaceRequirements requirements = store.getDiskSpaceRequirements();
     if (!isLogSegmented) {
-      assertNull("Expected null DiskSpaceRequirements for non segmented log", requirements);
+      assertEquals(LOG_CAPACITY, requirements.getSegmentSizeInBytes());
+      assertEquals(1 - segmentsAllocated, requirements.getSegmentsNeeded());
     } else {
       assertEquals(SEGMENT_CAPACITY, requirements.getSegmentSizeInBytes());
       assertEquals((LOG_CAPACITY / SEGMENT_CAPACITY) - segmentsAllocated, requirements.getSegmentsNeeded());
-      assertEquals(numSwapSegments, requirements.getSwapSegmentsInUse());
     }
+    assertEquals(numSwapSegments, requirements.getSwapSegmentsInUse());
   }
 
   /**
