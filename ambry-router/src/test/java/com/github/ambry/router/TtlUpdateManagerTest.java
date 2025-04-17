@@ -605,6 +605,9 @@ public class TtlUpdateManagerTest {
     properties.setProperty("router.datacenter.name", localDc);
     properties.setProperty("router.ttl.update.success.target", Integer.toString(successTarget));
     properties.setProperty("router.ttl.update.request.parallelism", Integer.toString(parallelism));
+    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     return properties;
   }
 

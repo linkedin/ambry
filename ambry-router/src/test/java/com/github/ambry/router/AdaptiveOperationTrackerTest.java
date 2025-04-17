@@ -106,6 +106,9 @@ public class AdaptiveOperationTrackerTest {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", localDcName);
+    props.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    props.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    props.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     defaultRouterConfig = new RouterConfig(new VerifiableProperties(props));
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, defaultRouterConfig);
     localColoTracker = routerMetrics.getBlobLocalDcLatencyMs;
@@ -756,6 +759,9 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.operation.tracker.metric.scope", "Invalid Scope");
     props.setProperty("router.get.success.target", Integer.toString(1));
     props.setProperty("router.get.request.parallelism", Integer.toString(1));
+    props.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    props.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    props.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     RouterConfig routerConfig = null;
     try {
       routerConfig = new RouterConfig(new VerifiableProperties(props));
@@ -845,6 +851,9 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.operation.tracker.max.inflight.requests", Integer.toString(maxInflightNum));
     props.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     props.setProperty(RouterConfig.ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE, "true");
+    props.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    props.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    props.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     if (customPercentiles != null) {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
     }

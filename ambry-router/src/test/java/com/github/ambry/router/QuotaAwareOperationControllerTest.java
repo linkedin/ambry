@@ -105,6 +105,9 @@ public class QuotaAwareOperationControllerTest {
     Properties properties = new Properties();
     properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, "test");
     properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     quotaAwareOperationController =

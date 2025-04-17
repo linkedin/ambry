@@ -244,6 +244,9 @@ public class ChunkFillTest {
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     return new VerifiableProperties(properties);
   }
 
