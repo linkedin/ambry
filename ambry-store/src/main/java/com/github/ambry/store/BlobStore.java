@@ -1669,16 +1669,14 @@ public class BlobStore implements Store {
 
   /**
    * @return the {@link DiskSpaceRequirements} for this store to provide to
-   * {@link DiskSpaceAllocator#initializePool(Collection)}. This will be {@code null} if this store uses a non-segmented
-   * log. This is because it does not require any additional/swap segments.
+   * {@link DiskSpaceAllocator#initializePool(Collection)}.
    * @throws StoreException
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
     checkInitialized();
-    DiskSpaceRequirements requirements =
-        log.isLogSegmented() ? new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
-            Math.min(log.getCapacityInBytes(), config.storeSegmentSizeInBytes), log.getRemainingUnallocatedSegments(),
-            compactor.getSwapSegmentsInUse().length) : null;
+    DiskSpaceRequirements requirements = new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
+        Math.min(log.getCapacityInBytes(), config.storeSegmentSizeInBytes), log.getRemainingUnallocatedSegments(),
+        compactor.getSwapSegmentsInUse().length);
     logger.info("Store {} has disk space requirements: {}", storeId, requirements);
     return requirements;
   }

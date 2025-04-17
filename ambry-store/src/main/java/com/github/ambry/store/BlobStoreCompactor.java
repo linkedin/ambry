@@ -188,8 +188,8 @@ class BlobStoreCompactor {
     }
     if (shouldInit) {
       init();
-      logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
     }
+    logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
 
   /**
