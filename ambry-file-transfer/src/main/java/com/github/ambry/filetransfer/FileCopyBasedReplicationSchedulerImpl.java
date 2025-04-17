@@ -86,11 +86,15 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     this.replicaToStatusListenerMap = new ConcurrentHashMap<>();
   }
 
-  @Override
-  public void start() throws InterruptedException {
+  public void run(){
     isRunning = true;
     logger.info("FileCopyBasedReplicationSchedulerImpl Started");
-    scheduleFileCopy();
+    try {
+      scheduleFileCopy();
+    } catch (InterruptedException e) {
+      logger.error("Failed to start FileCopy Scheduler", e);
+      throw new RuntimeException(e);
+    }
   }
 
   /**
@@ -249,7 +253,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     void removeReplicaFromFileCopy(ReplicaId replicaId){
       inFlightReplicas.remove(replicaId);
       replicaToStartTimeMap.remove(replicaId);
-      prioritizationManager.removeReplica(replicaId.getDiskId(), replicaId);
+      prioritizationManager.removeInProgressReplica(replicaId.getDiskId(), replicaId);
       deleteFileCopyInProgressFile(replicaId);
     }
 
