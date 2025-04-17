@@ -974,6 +974,9 @@ public class PutManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
+    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
+    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     return new VerifiableProperties(properties);
   }
 
