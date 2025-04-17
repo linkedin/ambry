@@ -99,7 +99,6 @@ public class FileCopyBasedReplicationManager {
     if(!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
-    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
 
     this.networkClientFactory = networkClientFactory;
     this.clusterMap = clusterMap;
