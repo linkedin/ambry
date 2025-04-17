@@ -193,7 +193,6 @@ public class HardDeleterTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(props));
     log = new Log(rootDirectory.getAbsolutePath(), 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, config, metrics,
         null);
-    log.init();
     StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
     time = new MockTime(SystemTime.getInstance().milliseconds());
 
