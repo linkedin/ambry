@@ -69,6 +69,10 @@ public class FileStoreException extends RuntimeException {
      */
     FileStoreReadError,
     /**
+     * Indicates that the FileStore service encountered an error during files move
+     */
+    FileStoreMoveFilesError,
+    /**
      * Indicates that the FileStore service encountered an error during delete
      */
     UnknownError
