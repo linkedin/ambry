@@ -537,11 +537,6 @@ public class RestUtils {
      * Is the request a list request
      */
     public static final String LIST_REQUEST = KEY_PREFIX + "is-list-request";
-
-    /**
-     * Used to determine if the ttlUpdate need to go through id convert to get blobId from blobName;
-     */
-    public static final String BLOB_ID = KEY_PREFIX + "blob-id";
   }
 
   /**
