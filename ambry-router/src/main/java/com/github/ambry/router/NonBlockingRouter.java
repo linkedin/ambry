@@ -663,9 +663,6 @@ public class NonBlockingRouter implements Router {
   @Override
   public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
-    if (restRequest != null && restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-      blobId = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
-    }
     FutureResult<Void> futureResult = new FutureResult<>();
     Callback<String> stringCallback = (result, exception) -> {
       // Create a new Callback<Void> and call it, ignoring the String result.
