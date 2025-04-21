@@ -425,6 +425,31 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected blob Id", blobIdWithClusterName, restResponseChannel.getHeader(LOCATION));
   }
 
+  @Test
+  public void testNamedBlobPost() throws Exception {
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    String blobName = "blobName";
+    String namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    setAmbryHeadersForPut(headers, -1, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+        null, null);
+    RestRequest restRequest = createRestRequest(RestMethod.POST, namedBlobPathUri, headers, body);
+
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+    } catch (RestServiceException e) {
+      assertEquals(ResponseStatus.MethodNotAllowed, restResponseChannel.getStatus());
+    }
+  }
+
   /**
    * Checks for reactions of all methods in {@link FrontendRestRequestService} to null arguments.
    * @throws Exception

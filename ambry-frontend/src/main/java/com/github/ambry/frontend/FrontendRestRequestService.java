@@ -352,7 +352,15 @@ class FrontendRestRequestService implements RestRequestService {
   @Override
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
+      if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+        submitResponse(
+            restRequest,
+            restResponseChannel,
+            null,
+            new RestServiceException("POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB, RestServiceErrorCode.NotAllowed)
+        );
+      }
+      else if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
         postDatasetsHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
