@@ -328,8 +328,6 @@ public class InMemoryRouter implements Router {
         }
       } else {
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
-        // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
-        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         // Call idConverter.convert after putBlob succeeds
         try {
           idConverter.convert(restRequest, blobId, blobProperties, callback);
@@ -398,10 +396,6 @@ public class InMemoryRouter implements Router {
   @Override
   public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
-    //if put before update ttl, this will help avoid go through id converter
-    if (restRequest != null && restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
-      blobId = restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID).toString();
-    }
     FutureResult<Void> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
@@ -413,7 +407,7 @@ public class InMemoryRouter implements Router {
     Callback<Void> wrappedCallback =
         restRequest != null ? createIdConverterCallbackForTtlUpdate(restRequest, blobId, futureResult, stringCallback)
             : callback;
-    if (restRequest == null || restRequest.getArgs().get(RestUtils.InternalKeys.BLOB_ID) != null) {
+    if (restRequest == null) {
       proceedWithTtlUpdate(blobId, serviceId, expiresAtMs, wrappedCallback, futureResult);
     } else {
       try {
@@ -626,7 +620,6 @@ public class InMemoryRouter implements Router {
         }
       } else {
         // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
-        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID, blobId);
         blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         // Call idConverter.convert after putBlob succeeds
         try {
