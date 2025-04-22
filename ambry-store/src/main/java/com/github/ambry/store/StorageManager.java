@@ -945,22 +945,6 @@ public class StorageManager implements StoreManager {
           logger.info("Old decommission file is deleted for replica {}", replica.getReplicaPath());
           ((BlobStore) store).setRecoverFromDecommission(false);
         }
-
-        // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
-        // it to stay in BOOTSTRAP state when catching up with peers.
-        long storeUsedCapacity = store.getSizeInBytes();
-        if (storeUsedCapacity <= HEADER_SIZE) {
-          logger.info(
-              "Store {} has used capacity {} less than or equal to {} bytes, consider it recently created and make it go through bootstrap process.",
-              partitionName, storeUsedCapacity, HEADER_SIZE);
-          try {
-            createBootstrapFileIfAbsent(replica);
-          } catch (IOException e) {
-            logger.error("Failed to create bootstrap file for store {}", partitionName);
-            throw new StateTransitionException("Failed to create bootstrap file for " + partitionName,
-                ReplicaOperationFailure);
-          }
-        }
       }
     }
 
@@ -968,7 +952,7 @@ public class StorageManager implements StoreManager {
     public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       Store store = getStore(replica.getPartitionId(), true);
-      if(store == null){
+      if (store == null) {
         throw new StateTransitionException("Store not initialized",
             StateTransitionException.TransitionErrorCode.StoreNotStarted);
       }
@@ -989,13 +973,30 @@ public class StorageManager implements StoreManager {
                   StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
             }
           }
-          if(!loadBlobStore(replica) ){
-            throw new StateTransitionException("loading failed for store", StateTransitionException.TransitionErrorCode.StoreNotStarted);
+          if (!loadBlobStore(replica)) {
+            throw new StateTransitionException("loading failed for store",
+                StateTransitionException.TransitionErrorCode.StoreNotStarted);
           }
         }
       } catch (Exception e) {
         throw new StateTransitionException(e.getMessage(),
             StateTransitionException.TransitionErrorCode.StoreNotStarted);
+      }
+
+      // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
+      // it to stay in BOOTSTRAP state when catching up with peers.
+      long storeUsedCapacity = store.getSizeInBytes();
+      if (storeUsedCapacity <= HEADER_SIZE) {
+        logger.info(
+            "Store {} has used capacity {} less than or equal to {} bytes, consider it recently created and make it go through bootstrap process.",
+            partitionName, storeUsedCapacity, HEADER_SIZE);
+        try {
+          createBootstrapFileIfAbsent(replica);
+        } catch (IOException e) {
+          logger.error("Failed to create bootstrap file for store {}", partitionName);
+          throw new StateTransitionException("Failed to create bootstrap file for " + partitionName,
+              ReplicaOperationFailure);
+        }
       }
 
       if (isPrimaryClusterManagerListener) {

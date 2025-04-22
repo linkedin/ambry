@@ -35,7 +35,6 @@ public interface StoreManager {
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
   boolean addBlobStoreForFileCopy(ReplicaId replica);
-
   /**
    * Add a new BlobStore with given {@link ReplicaId}.
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
