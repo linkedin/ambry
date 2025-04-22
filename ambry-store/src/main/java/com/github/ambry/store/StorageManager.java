@@ -374,6 +374,11 @@ public class StorageManager implements StoreManager {
     return diskManager != null ? diskManager.getStore(id, skipStateCheck) : null;
   }
 
+  Store getInitializedStore(PartitionId id){
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null ? diskManager.getInitializedStore(id) : null;
+  }
+
   /**
    * True is the replica is on a failed disk
    * @param replicaId
@@ -911,9 +916,6 @@ public class StorageManager implements StoreManager {
           }
         } while (!replicaAdded);
 
-        // if addBlobStore succeeds, it is guaranteed that store is started and thus getStore result is not null.
-        store = getStore(replicaToAdd.getPartitionId(), true);
-
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
         // able to get new replica from storageManager without querying Helix
       } else {
@@ -927,7 +929,7 @@ public class StorageManager implements StoreManager {
         // For case 3, we should throw exception to make replica stay in ERROR state (thus, frontends won't pick this replica)
         // For case 4, we check it's current used capacity and put it in BOOTSTRAP state if necessary. This is to ensure
         //             it catches up with peers before serving PUT traffic (or being selected as LEADER)
-        store = getStore(replica.getPartitionId(), true);
+        store = getInitializedStore(replica.getPartitionId());
         if (store == null) {
           throw new StateTransitionException(
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
@@ -951,36 +953,32 @@ public class StorageManager implements StoreManager {
     @Override
     public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
-      Store store = getStore(replica.getPartitionId(), true);
+      Store store = getInitializedStore(replica.getPartitionId());
       if (store == null) {
         throw new StateTransitionException("Store not initialized",
             StateTransitionException.TransitionErrorCode.StoreNotStarted);
       }
-      try {
-        if (!store.isStarted()) {
 
-          if (primaryClusterParticipant != null) {
-            // update InstanceConfig in Helix
-            try {
-              if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replica, true)) {
-                logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
-                throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
-                    StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
-              }
-              logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
-            } catch (IllegalStateException e) {
-              throw new StateTransitionException(e.getMessage(),
+      if (!store.isStarted()) {
+
+        if (primaryClusterParticipant != null) {
+          // update InstanceConfig in Helix
+          try {
+            if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replica, true)) {
+              logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
+              throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
                   StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
             }
-          }
-          if (!loadBlobStore(replica)) {
-            throw new StateTransitionException("loading failed for store",
-                StateTransitionException.TransitionErrorCode.StoreNotStarted);
+            logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
+          } catch (IllegalStateException e) {
+            throw new StateTransitionException(e.getMessage(),
+                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
           }
         }
-      } catch (Exception e) {
-        throw new StateTransitionException(e.getMessage(),
-            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+        if (!loadBlobStore(replica)) {
+          throw new StateTransitionException("loading failed for store",
+              StateTransitionException.TransitionErrorCode.StoreNotStarted);
+        }
       }
 
       // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force

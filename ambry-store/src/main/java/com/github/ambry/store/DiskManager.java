@@ -381,6 +381,18 @@ public class DiskManager {
     return storeToReturn;
   }
 
+  Store getInitializedStore(PartitionId id) {
+    BlobStore storeToReturn;
+    rwLock.readLock().lock();
+    try {
+      BlobStore store = stores.get(id);
+      storeToReturn = (running && store != null && (store.isInitialized())) ? store : null;
+    } finally {
+      rwLock.readLock().unlock();
+    }
+    return storeToReturn;
+  }
+
   /**
    * @return {@code true} if the compaction thread is running. {@code false} otherwise.
    */
