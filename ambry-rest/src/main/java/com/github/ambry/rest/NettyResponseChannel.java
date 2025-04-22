@@ -649,7 +649,8 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   private boolean shouldSendFailureReason(HttpResponseStatus status, RestServiceException exception) {
-    if (status.code() < HttpResponseStatus.INTERNAL_SERVER_ERROR.code() || exception.shouldIncludeExceptionMessageInResponse()) {
+    if (status == HttpResponseStatus.BAD_REQUEST || status == HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE
+        || exception.shouldIncludeExceptionMessageInResponse()) {
       return true;
     }
     return request != null && request.getArgs().containsKey(RestUtils.InternalKeys.SEND_FAILURE_REASON)
