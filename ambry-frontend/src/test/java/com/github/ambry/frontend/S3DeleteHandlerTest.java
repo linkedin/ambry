@@ -23,10 +23,9 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.InMemNamedBlobDbFactory;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
-import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
-import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -40,17 +39,22 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.ThrowingFunction;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
 
+@RunWith(Parameterized.class)
 public class S3DeleteHandlerTest {
   private static final InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
   private static final String CONTENT_TYPE = "text/plain";
@@ -61,8 +65,15 @@ public class S3DeleteHandlerTest {
   private FrontendConfig frontendConfig;
   private NamedBlobPutHandler namedBlobPutHandler;
   private S3DeleteHandler s3DeleteHandler;
+  private final boolean dbEnableHardDelete;
 
-  public S3DeleteHandlerTest() throws Exception {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  public S3DeleteHandlerTest(boolean dbEnabledHardDelete) throws Exception {
+    this.dbEnableHardDelete = dbEnabledHardDelete;
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
     container = new ContainerBuilder().setName("container-a")
         .setId((short) 10)
@@ -77,24 +88,32 @@ public class S3DeleteHandlerTest {
 
   @Test
   public void deleteObjectTest() throws Exception {
+    ThrowingFunction<String, Void> deleteAndValidate = key -> {
+      String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), key);
+      RestRequest request =
+          FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, new JSONObject(), null);
+      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      FutureResult<Void> futureResult = new FutureResult<>();
+      request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+          RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+      s3DeleteHandler.handle(request, restResponseChannel, futureResult::done);
+      assertNull(futureResult.get());
+      assertEquals("Mismatch on status", ResponseStatus.NoContent, restResponseChannel.getStatus());
+      return null;
+    };
     // 1. Delete the object
-    String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
-    RestRequest request =
-        FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, new JSONObject(), null);
-    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<Void> futureResult = new FutureResult<>();
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
-        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
-    s3DeleteHandler.handle(request, restResponseChannel, futureResult::done);
-
-    // 2. Verify results
-    assertNull(futureResult.get());
-    assertEquals("Mismatch on status", ResponseStatus.NoContent, restResponseChannel.getStatus());
+    deleteAndValidate.apply(KEY_NAME);
+    // 2. Delete this key again, delete should be idempotent
+    deleteAndValidate.apply(KEY_NAME);
+    // 3. Delete a non-existent key, it should be a noop
+    deleteAndValidate.apply(KEY_NAME + "non-existent");
   }
+
 
   private void setup() throws Exception {
     Properties properties = new Properties();
     CommonTestUtils.populateRequiredRouterProps(properties);
+    properties.setProperty(MySqlNamedBlobDbConfig.ENABLE_HARD_DELETE, Boolean.toString(dbEnableHardDelete));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);

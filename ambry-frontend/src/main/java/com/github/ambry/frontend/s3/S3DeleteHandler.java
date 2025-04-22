@@ -15,15 +15,13 @@
 package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
-import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.DeleteBlobHandler;
 import com.github.ambry.frontend.FrontendMetrics;
-import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.ThrowingConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +43,8 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
    *
    * @param deleteBlobHandler the generic {@link DeleteBlobHandler} delegated to by the underlying delete object handler.
    */
-  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler, S3MultipartUploadHandler s3MultipartUploadHandler, FrontendMetrics metrics) {
+  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler, S3MultipartUploadHandler s3MultipartUploadHandler,
+      FrontendMetrics metrics) {
     this.metrics = metrics;
     this.objectHandler = new S3DeleteObjectHandler(deleteBlobHandler);
     this.s3MultipartUploadHandler = s3MultipartUploadHandler;
@@ -62,7 +61,7 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
    */
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
-    if(S3MultipartUploadHandler.isMultipartAbortUploadRequest(restRequest)) {
+    if (S3MultipartUploadHandler.isMultipartAbortUploadRequest(restRequest)) {
       s3MultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       objectHandler.handle(restRequest, restResponseChannel, callback);
@@ -79,12 +78,33 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
 
     private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> finalCallback)
         throws RestServiceException {
+      // Callback for successful case.
       ThrowingConsumer<Void> successAction = (r) -> {
         restResponseChannel.setStatus(ResponseStatus.NoContent);
         finalCallback.onCompletion(null, null);
       };
-      deleteBlobHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3DeleteHandleMetrics,
-          successAction, restRequest.getUri(), LOGGER, finalCallback));
+      // Callback for failure case, Since S3 delete should be idempotent, we should return 204 on 404.
+      Callback<Void> failureCallback = (r, e) -> {
+        Exception finalException = e;
+        try {
+          if (e instanceof RestServiceException) {
+            RestServiceException restServiceException = (RestServiceException) e;
+            if (restServiceException.getErrorCode() == RestServiceErrorCode.NotFound) {
+              finalException = null;
+              successAction.accept(null);
+            }
+          }
+        } catch (Exception ex) {
+          finalException = ex;
+        } finally {
+          if (finalException != null) {
+            finalCallback.onCompletion(r, finalException);
+          }
+        }
+      };
+
+      deleteBlobHandler.handle(restRequest, restResponseChannel,
+          buildCallback(metrics.s3DeleteHandleMetrics, successAction, restRequest.getUri(), LOGGER, failureCallback));
     }
   }
 }

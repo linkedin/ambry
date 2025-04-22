@@ -48,11 +48,13 @@ public class InMemNamedBlobDb implements NamedBlobDb {
   private final Map<String, Map<String, TreeMap<String, List<NamedBlobRow>>>> allRecords = new HashMap<>();
   private final Time time;
   private final int listMaxResults;
+  private final boolean enableHardDelete;
   private Exception exception;
 
-  public InMemNamedBlobDb(Time time, int listMaxResults) {
+  public InMemNamedBlobDb(Time time, int listMaxResults, boolean enableHardDelete) {
     this.time = time;
     this.listMaxResults = listMaxResults;
+    this.enableHardDelete = enableHardDelete;
   }
 
   @Override
@@ -200,6 +202,9 @@ public class InMemNamedBlobDb implements NamedBlobDb {
           updateExpirationTimeMs(row, time.milliseconds());
         }
         blobVersions.add(blobVersion);
+      }
+      if (enableHardDelete) {
+        allRecords.get(accountName).get(containerName).remove(blobName); // remove the blob from the db
       }
       future.complete(new DeleteResult(blobVersions));
     }

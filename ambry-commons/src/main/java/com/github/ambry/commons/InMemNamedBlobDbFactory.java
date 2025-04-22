@@ -28,7 +28,7 @@ public class InMemNamedBlobDbFactory implements NamedBlobDbFactory {
   public InMemNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       AccountService accountService) {
     InternalConfig config = new InternalConfig(verifiableProperties);
-    namedBlobDb = new InMemNamedBlobDb(SystemTime.getInstance(), config.listMaxResults);
+    namedBlobDb = new InMemNamedBlobDb(SystemTime.getInstance(), config.listMaxResults, config.enableHardDelete);
   }
 
   @Override
@@ -38,10 +38,12 @@ public class InMemNamedBlobDbFactory implements NamedBlobDbFactory {
 
   class InternalConfig {
     public final int listMaxResults;
+    public final boolean enableHardDelete;
 
     public InternalConfig(VerifiableProperties verifiableProperties) {
       this.listMaxResults =
           verifiableProperties.getIntInRange(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
+      this.enableHardDelete = verifiableProperties.getBoolean(MySqlNamedBlobDbConfig.ENABLE_HARD_DELETE, false);
     }
   }
 }
