@@ -1699,9 +1699,11 @@ public class AmbryRequests implements RequestAPI {
     try {
       fileCopyGetMetaDataRequest =
           FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+      logger.info("FCH TEST: Trying to get Meta Data For Partiton:" + fileCopyGetMetaDataRequest.getPartitionId().toPathString());
 
       ServerErrorCode error = validateRequest(fileCopyGetMetaDataRequest.getPartitionId(),
               RequestOrResponseType.FileCopyGetMetaDataRequest, false);
+      logger.info("FCH TEST: Request is Validated");
       if (error != ServerErrorCode.NoError) {
         logger.error("Validating FileCopyGetMetaDataRequest failed with error {} for request {}",
             error, fileCopyGetMetaDataRequest);
@@ -1714,7 +1716,7 @@ public class AmbryRequests implements RequestAPI {
           throw new StoreException("BlobStore is not available for partition " +
               fileCopyGetMetaDataRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
         }
-        List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(false);
+        List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(true);
 
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,

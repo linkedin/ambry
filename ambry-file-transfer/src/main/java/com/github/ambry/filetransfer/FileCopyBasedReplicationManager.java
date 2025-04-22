@@ -36,6 +36,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,8 +123,16 @@ public class FileCopyBasedReplicationManager {
 
     logger.info("FCH TEST: Partitions to be hydrated up: {}", partitionIdList);
     //Integrate clean up.
-    for(PartitionId partitionId: partitionIdList){
-      partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionId.getId()));
+    ExecutorService executor = Executors.newFixedThreadPool(4); // use appropriate number of threads
+
+    for (PartitionId partitionId : partitionIdList) {
+      executor.execute(() -> {
+        try {
+          partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionId.getId()));
+        } catch (Exception e) {
+          logger.error("FCH TEST: Failed to build state for file copy for partition {}", partitionId, e);
+        }
+      });
     }
   }
 

@@ -76,7 +76,9 @@ public class GetMetadataWorkflow extends BaseWorkFlow implements OperationRetryH
     logger.info("FCH TEST: Sending FileCopyGetMetaDataRequest: {}", request);
     long startTimeMs = System.currentTimeMillis();
     ChannelOutput channelOutput = connectedChannel.sendAndReceive(request);
+
     FileCopyGetMetaDataResponse response = FileCopyGetMetaDataResponse.readFrom(channelOutput.getInputStream());
+    logger.info("FCH TEST: Response Is: {}" , response.toString());
     logger.info("FCH TEST: Received FileCopyGetMetaDataResponse in {} ms", System.currentTimeMillis() - startTimeMs);
 
     return response;

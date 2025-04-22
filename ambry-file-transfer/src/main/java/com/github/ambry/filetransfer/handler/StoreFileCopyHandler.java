@@ -160,14 +160,6 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
-    try {
-      Thread.sleep(60000);
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    }
-
-    if(x)
-      return;
     logger.info("FCH TEST: Mount Path is {}, DataNode is {}", fileCopyInfo.getSourceReplicaId().getMountPath(), fileCopyInfo.getTargetReplicaId().getDataNodeId());
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();

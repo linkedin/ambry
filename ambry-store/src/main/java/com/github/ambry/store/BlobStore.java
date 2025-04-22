@@ -1419,6 +1419,7 @@ public class BlobStore implements Store {
    * Param includeActiveLogSegment is used to determine if the active log segment should be included in the result.
    */
   private List<FileInfo> getLogSegments(boolean includeActiveLogSegment) {
+    logger.info("FCH TEST: Returning Log Segments: {}", log.getAllLogSegmentNames().stream().map(x -> x.toString()));
     return log.getAllLogSegmentNames().stream()
         .filter(segmentName -> includeActiveLogSegment || !segmentName.equals(log.getActiveSegment().getName()))
         .map(segmentName -> log.getSegment(segmentName))
