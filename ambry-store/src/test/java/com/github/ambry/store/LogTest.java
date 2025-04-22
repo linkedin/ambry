@@ -504,6 +504,79 @@ public class LogTest {
     }
   }
 
+  /**
+   * Tests the initialization of a segmented log when no segments exist in the directory.
+   * @throws Exception if an error occurs during the test.
+   */
+  @Test
+  public void testSegmentedLogInitWithNoSegments() throws Exception {
+    int totalSegments = 2;
+    long totalCapacity = totalSegments * SEGMENT_CAPACITY;
+
+    DiskSpaceAllocator mockDiskSpaceAllocator = mock(DiskSpaceAllocator.class);
+    StoreConfig storeConfig = createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled);
+
+    Log log =
+        new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, metrics, null, false);
+    assertEquals("Remaining unallocated segments mismatch", totalSegments, log.getRemainingUnallocatedSegments());
+  }
+
+  /**
+   * Tests the initialization of a segmented log when segments exist in the directory.
+   * @throws Exception if an error occurs during the test.
+   */
+  @Test
+  public void testSegmentedLogInitWithExistingSegments() throws Exception {
+    int totalSegments = 5, existingSegments = 2;
+    long totalCapacity = totalSegments * SEGMENT_CAPACITY;
+
+    for (int i = 0; i < existingSegments; i++) {
+      File segmentFile = new File(tempDir, LogSegmentName.fromPositionAndGeneration(i, 0).toFilename());
+      assert segmentFile.createNewFile();
+    }
+    DiskSpaceAllocator mockDiskSpaceAllocator = mock(DiskSpaceAllocator.class);
+    StoreConfig storeConfig = createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled);
+
+    Log log =
+        new Log(tempDir.getAbsolutePath(), totalCapacity, mockDiskSpaceAllocator, storeConfig, metrics, null, false);
+
+    long expectedRemainingSegments = totalSegments - existingSegments;
+    assertEquals("Remaining unallocated segments mismatch", expectedRemainingSegments,
+        log.getRemainingUnallocatedSegments());
+  }
+
+  /**
+   * Tests the initialization of an unsegmented log when no segment exists in the directory.
+   * Verifies that the remaining unallocated segments is set to 1, as the log is unsegmented.
+   * @throws Exception if an error occurs during the test.
+   */
+  @Test
+  public void testUnsegmentedLogInitWithNoSegment() throws Exception {
+    DiskSpaceAllocator mockDiskSpaceAllocator = mock(DiskSpaceAllocator.class);
+    StoreConfig storeConfig = createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled);
+
+    Log log =
+        new Log(tempDir.getAbsolutePath(), SEGMENT_CAPACITY, mockDiskSpaceAllocator, storeConfig, metrics, null, false);
+    assertEquals("Remaining unallocated segments mismatch", 1, log.getRemainingUnallocatedSegments());
+  }
+
+  /**
+   * Tests the initialization of an unsegmented log when a segment already exists in the directory.
+   * Verifies that the remaining unallocated segments is set to 0, as the segment already exists.
+   * @throws Exception if an error occurs during the test.
+   */
+  @Test
+  public void testUnsegmentedLogInitWithExistingSegment() throws Exception {
+    File segmentFile = new File(tempDir, LogSegmentName.fromPositionAndGeneration(0, 0).toFilename());
+    assert segmentFile.createNewFile();
+    DiskSpaceAllocator mockDiskSpaceAllocator = mock(DiskSpaceAllocator.class);
+    StoreConfig storeConfig = createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled);
+
+    Log log =
+        new Log(tempDir.getAbsolutePath(), SEGMENT_CAPACITY, mockDiskSpaceAllocator, storeConfig, metrics, null, false);
+    assertEquals("Remaining unallocated segments mismatch", 0, log.getRemainingUnallocatedSegments());
+  }
+
   // helpers
 
   // general
