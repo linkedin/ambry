@@ -28,9 +28,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -218,6 +220,74 @@ public class FileStore implements PartitionFileStore {
     logger.info("Write successful for chunk to file: {} with size: {}", outputFilePath, content.length);
   }
 
+  /**
+   * Moves all regular files from the given source directory to the destination directory. This throws an exception in
+   * case any file already exists with the same name in the destination.
+   * Note: Both 'srcDirPath' and 'destDirPath' must be subpaths of 'partitionToMountPath'.
+   *
+   * @param srcDirPath   the path to the source directory
+   * @param destDirPath  the path to the destination directory
+   * @throws IOException if an I/O error occurs during the move operation
+   */
+  public void moveAllRegularFiles(String srcDirPath, String destDirPath) throws IOException {
+    // Verify service is running.
+    validateIfFileStoreIsRunning();
+
+    // Validate inputs.
+    Objects.requireNonNull(srcDirPath, "srcDirPath must not be null");
+    Objects.requireNonNull(destDirPath, "destDirPath must not be null");
+
+    try {
+      synchronized (storeWriteLock) {
+        // Ensure both source and destination are under the 'partitionToMountPath'.
+        if (!srcDirPath.startsWith(partitionToMountPath +  File.separator)) {
+          throw new IOException("Source directory is not under mount path: " + partitionToMountPath);
+        }
+        if (!destDirPath.startsWith(partitionToMountPath + File.separator)) {
+          throw new IOException("Destination directory is not under mount path: " + partitionToMountPath);
+        }
+
+        Path source = Paths.get(srcDirPath);
+        Path destination = Paths.get(destDirPath);
+
+        // Validate if source directory exists.
+        if (!Files.exists(source)) {
+          throw new IOException("Source directory does not exist: " + srcDirPath);
+        }
+        // Validate if destination directory exists.
+        if (!Files.exists(destination)) {
+          throw new IOException("Destination directory does not exist: " + destDirPath);
+        }
+
+        // 1. Check there are no regular files exist with the same name in the destination.
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(source)) {
+          for (Path file : stream) {
+            if (Files.isRegularFile(file)) {
+              Path destFile = destination.resolve(file.getFileName());
+              if (Files.exists(destFile)) {
+                throw new IOException("File with the same name already exists: " + destFile);
+              }
+            }
+          }
+        }
+
+        // 2. Move all regular files from the source directory.
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(source)) {
+          for (Path file : stream) {
+            if (Files.isRegularFile(file)) {
+              Path destFile = destination.resolve(file.getFileName());
+              Files.move(file, destFile);
+              logger.info("Moved file: {}", file.getFileName());
+            }
+          }
+        }
+      }
+    } catch (Exception e) {
+      logger.error("Unexpected error while moving files from: {} to {}", srcDirPath, destDirPath, e);
+      throw new FileStoreException("Error while moving files from: " + srcDirPath + " to: " + destDirPath, FileStoreErrorCode.FileStoreMoveFilesError);
+    }
+    logger.info("All regular files are moved from: {} to: {}", srcDirPath, destDirPath);
+  }
 
   /**
    * Performs cleanup operations when shutting down the FileStore.

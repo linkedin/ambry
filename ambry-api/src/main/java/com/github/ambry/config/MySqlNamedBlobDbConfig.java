@@ -27,11 +27,12 @@ public class MySqlNamedBlobDbConfig {
   public static final String DB_RELY_ON_NEW_TABLE = PREFIX + "db.rely.on.new.table";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
-  public static final String  LIST_MAX_RESULTS = PREFIX + "list.max.results";
-  public static final String  QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
-  public static final String  STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
+  public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
+  public static final String QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
+  public static final String STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
+  public static final String ENABLE_HARD_DELETE = PREFIX + "enable.hard.delete";
 
   /**
    * Option to pick the SQL query to use for listing named blobs.
@@ -42,7 +43,6 @@ public class MySqlNamedBlobDbConfig {
   public static final int MIN_LIST_NAMED_BLOBS_SQL_OPTION = 1;
   public static final int MAX_LIST_NAMED_BLOBS_SQL_OPTION = 2;
   public final int listNamedBlobsSQLOption;
-
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -87,38 +87,34 @@ public class MySqlNamedBlobDbConfig {
   public final int staleDataRetentionDays;
 
   /**
-   * A flag on whether to turn on DB Transition run
-   */
-  @Config(DB_TRANSITION)
-  public final boolean dbTransition;
-
-  /**
-   * A flag on whether to use new table data
-   */
-  @Config(DB_RELY_ON_NEW_TABLE)
-  @Default("false")
-  public final boolean dbRelyOnNewTable;
-
-  /**
    * Transaction isolation level to be set on DB Connection. When nothing is set, default MySQL DB transaction level
    * (REPEATABLE_READ) will take effect.
    */
   @Config(TRANSACTION_ISOLATION_LEVEL)
   public final TransactionIsolationLevel transactionIsolationLevel;
 
+  /**
+   * True to use DELETE sql statement to remove rows from table, otherwise, update the deleted_ts in each row.
+   */
+  @Config(ENABLE_HARD_DELETE)
+  public final boolean enableHardDelete;
+
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
-    this.listNamedBlobsSQLOption = verifiableProperties.getIntInRange(LIST_NAMED_BLOBS_SQL_OPTION,
-        DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION, MIN_LIST_NAMED_BLOBS_SQL_OPTION, MAX_LIST_NAMED_BLOBS_SQL_OPTION);
+    this.listNamedBlobsSQLOption =
+        verifiableProperties.getIntInRange(LIST_NAMED_BLOBS_SQL_OPTION, DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION,
+            MIN_LIST_NAMED_BLOBS_SQL_OPTION, MAX_LIST_NAMED_BLOBS_SQL_OPTION);
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
-    this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
-    this.queryStaleDataMaxResults = verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
-    this.staleDataRetentionDays = verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
-    this.dbTransition = verifiableProperties.getBoolean(DB_TRANSITION, false);
-    this.dbRelyOnNewTable = verifiableProperties.getBoolean(DB_RELY_ON_NEW_TABLE, false);
+    this.listMaxResults =
+        verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
+    this.queryStaleDataMaxResults =
+        verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
+    this.staleDataRetentionDays =
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);
+    this.enableHardDelete = verifiableProperties.getBoolean(ENABLE_HARD_DELETE, false);
   }
 }

@@ -170,9 +170,19 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     final FileCopyGetMetaDataResponse metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
 
     metadataResponse.getLogInfos().forEach(logInfo -> {
+      // Process the respective files and copy it to the temporary path.
+      final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + config.fileCopyTemporaryDirectoryName;
       logInfo.getIndexSegments().forEach(indexFile ->
-        processIndexFile(indexFile, partitionToMountFilePath, fileCopyInfo, fileStore));
-      processLogSegment(logInfo, partitionToMountFilePath, fileCopyInfo, fileStore);
+        processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, fileStore));
+      processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, fileStore);
+
+      // Move all files to actual path.
+      try {
+        fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
+      } catch (IOException e) {
+        logMessageAndThrow("MoveFilesOperation", "Error moving files", e,
+            FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
+      }
     });
   }
 

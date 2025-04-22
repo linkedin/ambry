@@ -153,7 +153,12 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
         .getFileCopyGetChunkResponse(any(), any(), any(), anyBoolean());
 
     // Act - Run FCHandler.copy using Spy handler
+    // TODO: Temporary directory should have been created before FileCopyHandler.copy() is called.
+    File fileCopyTempDirectory = new File(sourcePartitionDir, "fileCopyTempDirectory");
+    assertFalse("Temporary directory already exists!", fileCopyTempDirectory.exists());
+    assertTrue(fileCopyTempDirectory.mkdirs());
     spyHandler.copy(fileCopyInfo);
+    assertTrue(fileCopyTempDirectory.delete());
 
     // Assert -
     // 1. Check that no sub-directories are created in the source directory
@@ -214,7 +219,12 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
         .getFileCopyGetChunkResponse(any(), any(), any(), anyBoolean());
 
     // Act - Run FCHandler.copy using Spy handler
+    // TODO: Temporary directory should have been created before FileCopyHandler.copy() is called.
+    File fileCopyTempDirectory = new File(sourcePartitionDir, "fileCopyTempDirectory");
+    assertFalse("Temporary directory already exists!", fileCopyTempDirectory.exists());
+    assertTrue(fileCopyTempDirectory.mkdirs());
     spyHandler.copy(fileCopyInfo);
+    assertTrue(fileCopyTempDirectory.delete());
 
     // Assert -
     // 1. Check that no sub-directories are created in the source directory
