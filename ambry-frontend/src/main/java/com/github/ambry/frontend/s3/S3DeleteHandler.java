@@ -83,7 +83,11 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
         restResponseChannel.setStatus(ResponseStatus.NoContent);
         finalCallback.onCompletion(null, null);
       };
+
       // Callback for failure case, Since S3 delete should be idempotent, we should return 204 on 404.
+      // TODO: deleteBlobHandler returns 400 if the account or container does not exist, but s3
+      // should return 404 with xml error content in the response body. We should return compatible response
+      // as s3.
       Callback<Void> failureCallback = (r, e) -> {
         Exception finalException = e;
         try {
