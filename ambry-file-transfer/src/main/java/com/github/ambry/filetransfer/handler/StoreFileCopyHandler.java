@@ -178,7 +178,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
       // Move all files to actual path.
       try {
-        fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
+        //fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
       } catch (IOException e) {
         logMessageAndThrow("MoveFilesOperation", "Error moving files", e,
             FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
