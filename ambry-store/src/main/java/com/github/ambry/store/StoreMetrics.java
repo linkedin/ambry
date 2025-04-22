@@ -122,6 +122,8 @@ public class StoreMetrics {
   public final Timer compactionCopyRecordTimeInMs;
   public final Timer compactionCopyDataByIndexSegmentTimeInMs;
   public final Timer compactionCopyDataByLogSegmentTimeInMs;
+  public final Timer fullScanCompactionFinishedForAStoreTimeInMs;
+  public final Timer partialRangeCompactionFinishedForStoreTimeInMs;
 
   // BlobStoreStats metrics
   public final Counter blobStoreStatsIndexScannerErrorCount;
@@ -275,6 +277,10 @@ public class StoreMetrics {
         MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyDataByIndexSegmentTimeInMs"));
     compactionCopyDataByLogSegmentTimeInMs =
         registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyDataByLogSegmentTimeInMs"));
+    fullScanCompactionFinishedForAStoreTimeInMs =
+        registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionFinishedForAStoreTimeInMs"));
+    partialRangeCompactionFinishedForStoreTimeInMs =
+        registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "PartialRangeCompactionFinishedForAStoreTimeInMs"));
     blobStoreStatsIndexScannerErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
     blobStoreRecoverCompactionPolicySwitchInfoErrorCount = registry.counter(
