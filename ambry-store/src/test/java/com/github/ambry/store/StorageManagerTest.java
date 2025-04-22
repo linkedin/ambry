@@ -2008,7 +2008,7 @@ public class StorageManagerTest {
     doReturn(newReplica1, newReplica2).when(spyClusterMap).getBootstrapReplica(any(), any());
 
     // 4. Invoke bootstrap ST. It should pass on 2nd attempt.
-    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition1.toPathString());
+    mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(newPartition1.toPathString());
 
     // 5. Verify getBootstrap replica is called 2 times
     verify(spyClusterMap, times(2)).getBootstrapReplica(anyString(), any());
@@ -2071,7 +2071,7 @@ public class StorageManagerTest {
     }).when(spyDiskSpaceAllocator).createReserveFile(anyLong(), any());
 
     // 5. Invoke bootstrap ST. It should pass on 2nd attempt.
-    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition1.toPathString());
+    mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(newPartition1.toPathString());
 
     // 6. Verify getBootstrap replica is called 2 times
     verify(spyClusterMap, times(2)).getBootstrapReplica(anyString(), any());
