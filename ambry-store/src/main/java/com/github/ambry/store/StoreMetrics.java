@@ -122,7 +122,7 @@ public class StoreMetrics {
   public final Timer compactionCopyRecordTimeInMs;
   public final Timer compactionCopyDataByIndexSegmentTimeInMs;
   public final Timer compactionCopyDataByLogSegmentTimeInMs;
-  public final Timer fullScanCompactionFinishedForAStoreTimeInMs;
+  public final Timer fullScanCompactionFinishedForStoreTimeInMs;
   public final Timer partialRangeCompactionFinishedForStoreTimeInMs;
 
   // BlobStoreStats metrics
@@ -277,7 +277,7 @@ public class StoreMetrics {
         MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyDataByIndexSegmentTimeInMs"));
     compactionCopyDataByLogSegmentTimeInMs =
         registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyDataByLogSegmentTimeInMs"));
-    fullScanCompactionFinishedForAStoreTimeInMs =
+    fullScanCompactionFinishedForStoreTimeInMs =
         registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionFinishedForAStoreTimeInMs"));
     partialRangeCompactionFinishedForStoreTimeInMs =
         registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "PartialRangeCompactionFinishedForAStoreTimeInMs"));

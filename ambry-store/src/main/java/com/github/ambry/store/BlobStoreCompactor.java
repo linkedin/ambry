@@ -344,8 +344,8 @@ class BlobStoreCompactor {
       runningLatch.countDown();
       logger.trace("resumeCompaction() ended for {}", storeId);
 
-      if (compactionLog.getCompactionDetails().isFullRange()) {
-        srcMetrics.fullScanCompactionFinishedForAStoreTimeInMs.update(
+      if (currentCompactionDetails.get().isFullRange()) {
+        srcMetrics.fullScanCompactionFinishedForStoreTimeInMs.update(
             SystemTime.getInstance().milliseconds() - startTime, TimeUnit.MILLISECONDS);
       } else {
         srcMetrics.partialRangeCompactionFinishedForStoreTimeInMs.update(
