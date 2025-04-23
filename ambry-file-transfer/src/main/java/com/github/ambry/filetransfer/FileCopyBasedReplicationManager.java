@@ -126,6 +126,7 @@ public class FileCopyBasedReplicationManager {
       }
 
       ReplicaId replicaId = storeManager.getReplica(partitionName);
+
       if (replicaId == null) {
         // Replica set up should have succeeded before this state transition.
         logger.error("Replica setup for partition {} failed", partitionName);
