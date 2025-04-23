@@ -57,7 +57,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,6 +107,7 @@ public class BlobStore implements Store {
   private BlobStoreStats blobStoreStats;
   private boolean started;
   private boolean initialized;
+  private final FileStore fileStore;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
   private volatile ReplicaState previousState;
@@ -254,6 +254,7 @@ public class BlobStore implements Store {
         this.sealThresholdBytesLow, this.partialSealThresholdBytesHigh, this.partialSealThresholdBytesLow);
     // if there is a decommission file in store dir, that means previous decommission didn't complete successfully.
     recoverFromDecommission = isDecommissionInProgress();
+    fileStore = new FileStore(dataDir);
   }
 
   @Override
@@ -292,11 +293,7 @@ public class BlobStore implements Store {
         }
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
-        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
-        compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
-            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
-            accountService, remoteTokenTracker, diskMetrics);
-
+        fileStore.start();
         initialized = true;
       } catch (Exception e) {
         if (fileLock != null) {
@@ -323,8 +320,10 @@ public class BlobStore implements Store {
         throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
       }
       try {
-        log.init();
-        compactor.init();
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
+        compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
+            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
+            accountService, remoteTokenTracker, diskMetrics);
         index = new PersistentIndex(dataDir, storeId, indexPersistScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
@@ -381,6 +380,10 @@ public class BlobStore implements Store {
         context.stop();
       }
     }
+  }
+
+  public FileStore getFileStore(){
+    return fileStore;
   }
 
   /**
@@ -1597,6 +1600,7 @@ public class BlobStore implements Store {
         } catch (IOException e) {
           logger.error("Store : {} IO Exception while trying to close the file lock", dataDir, e);
         }
+        fileStore.shutdown();
         metrics.storeShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
       }
       initialized = false;

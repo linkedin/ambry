@@ -105,6 +105,7 @@ public class StoreMetrics {
   public final Counter handleDiskFailureErrorCount;
   public final Histogram handleDiskFailureDuration;
   public final Counter handleDiskFailureRetryLockCount;
+  public final Counter disksMoreThanThresholdFailureCount;
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
@@ -287,6 +288,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(StorageManager.class, "HandleDiskFailureErrorCount"));
     handleDiskFailureRetryLockCount =
         registry.counter(MetricRegistry.name(StorageManager.class, "HandleDiskFailureRetryLockCount"));
+    disksMoreThanThresholdFailureCount =
+        registry.counter(MetricRegistry.name(StorageManager.class, "disksMoreThanThresholdFailureCount"));
     blobStoreStatsQueueProcessorErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsQueueProcessorErrorCount"));
     statsOnDemandScanTotalTimeMs =

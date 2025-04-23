@@ -19,12 +19,7 @@ package com.github.ambry.filetransfer;
  * schedules the replication of files from one node to another
  * based on the Priority of the Partition.
  */
-public interface FileCopyBasedReplicationScheduler {
-  /**
-   * Start the scheduler.
-   */
-  void start() throws InterruptedException;
-
+public interface FileCopyBasedReplicationScheduler extends Runnable{
   /**
    * Shutdown the scheduler.
    */

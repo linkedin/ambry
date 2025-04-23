@@ -47,6 +47,14 @@ public interface Store {
   void start() throws StoreException;
 
   /**
+   * Returns the PartitionFileStore associated with the BlobStore
+   * @throws StoreException exception
+   */
+  default PartitionFileStore getFileStore() throws StoreException {
+    return null;
+  }
+
+  /**
    * Returns the store info for the given ids
    * @param ids The list of ids whose messages need to be retrieved
    * @param storeGetOptions A set of additional options that the store needs to use while getting the message

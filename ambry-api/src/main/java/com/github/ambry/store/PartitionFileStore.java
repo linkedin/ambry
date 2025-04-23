@@ -41,22 +41,15 @@ public interface PartitionFileStore {
    * @param storeFileChunk the StoreFileChunk object representing chunk stream of the file to put.
    * @throws IOException
    */
-  void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk)
-      throws IOException;
+  void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException;
 
   /**
-   * Persist metadata for a partition. This metadata contains information about log segments, associated index segments and bloom filters.
-   * @param logInfoList the list of LogInfo objects to persist.
-   * @throws IOException
+   * Moves all regular files from the given source directory to the destination directory. This throws an exception in
+   * case any file already exists with the same name in the destination.
+   *
+   * @param srcDirPath   the path to the source directory
+   * @param destDirPath  the path to the destination directory
+   * @throws IOException if an I/O error occurs during the move operation
    */
-  void writeMetaDataFileToDisk(List<LogInfo> logInfoList)
-      throws IOException;
-
-  /**
-   * Read metadata from a partition. This metadata contains information about log segments, associated index segments and bloom filters.
-   * @return
-   * @throws IOException
-   */
-  List<LogInfo> readMetaDataFileFromDisk()
-      throws IOException, StoreException;
+  void moveAllRegularFiles(String srcDirPath, String destDirPath) throws IOException;
 }

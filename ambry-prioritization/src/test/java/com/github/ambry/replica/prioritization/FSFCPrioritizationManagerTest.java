@@ -17,16 +17,13 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateTransitionException;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -103,15 +100,112 @@ public class FSFCPrioritizationManagerTest {
      for(int diskId=1; diskId <= 10; diskId++){
        for(int numPartitions=0 ; numPartitions < 5; numPartitions++){
          PartitionId partition = diskToPartitionMap.get(diskId).get(numPartitions);
-         System.out.println(diskId);
-         System.out.println(numPartitions);
          assertTrue(prioritizationManager.removeReplica(partition.getReplicaIds().get(0).getDiskId(),
              partition.getReplicaIds().get(0)));
-         assertEquals(prioritizationManager.getNumberOfDisks(), 10);
-
-         assertEquals(prioritizationManager.getPartitionListForDisk(partition.
-                 getReplicaIds().get(0).getDiskId(), 5).size(), 4-numPartitions);
        }
      }
    }
+
+  @Test
+  public void testOrderOfPartitionsAddedAndRemoved() {
+    prioritizationManager.start();
+
+    // Create and add partitions in a specific order
+    int partitionId1 = 1;
+    int partitionId2 = 2;
+    int partitionId3 = 3;
+    PartitionId partition1 = new MockPartitionId(partitionId1, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+    PartitionId partition2 = new MockPartitionId(partitionId2, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+    PartitionId partition3 = new MockPartitionId(partitionId3, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+
+    assertTrue(prioritizationManager.addReplica(partition1.getReplicaIds().get(0)));
+    assertTrue(prioritizationManager.addReplica(partition2.getReplicaIds().get(0)));
+    assertTrue(prioritizationManager.addReplica(partition3.getReplicaIds().get(0)));
+
+    // Retrieve and remove partitions in the same order
+    List<ReplicaId> replicas = prioritizationManager.getPartitionListForDisk(
+        partition1.getReplicaIds().get(0).getDiskId(), 3);
+
+    assertEquals("First partition should match", partition1.getReplicaIds().get(0), replicas.get(0));
+    assertEquals("Second partition should match", partition2.getReplicaIds().get(0), replicas.get(1));
+    assertEquals("Third partition should match", partition3.getReplicaIds().get(0), replicas.get(2));
+    prioritizationManager.reset();
+  }
+
+  @Test
+  public void testRemainingReplicasInPrioritizationManager() {
+    prioritizationManager.start();
+
+    // Create and add replicas
+    int partitionId1 = 1;
+    int partitionId2 = 2;
+    int partitionId3 = 3;
+    PartitionId partition1 = new MockPartitionId(partitionId1, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+    PartitionId partition2 = new MockPartitionId(partitionId2, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+    PartitionId partition3 = new MockPartitionId(partitionId3, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+
+    assertTrue(prioritizationManager.addReplica(partition1.getReplicaIds().get(0)));
+    assertTrue(prioritizationManager.addReplica(partition2.getReplicaIds().get(0)));
+    assertTrue(prioritizationManager.addReplica(partition3.getReplicaIds().get(0)));
+
+    // Remove one replica
+    assertTrue(prioritizationManager.removeReplica(partition1.getReplicaIds().get(0).getDiskId(),
+        partition1.getReplicaIds().get(0)));
+
+    // Check remaining replicas
+    List<ReplicaId> remainingReplicas = prioritizationManager.getPartitionListForDisk(
+        partition2.getReplicaIds().get(0).getDiskId(), 10);
+
+    assertEquals("Remaining replicas count should match", 2, remainingReplicas.size());
+    assertTrue("Remaining replicas should contain partition2", remainingReplicas.contains(partition2.getReplicaIds().get(0)));
+    assertTrue("Remaining replicas should contain partition3", remainingReplicas.contains(partition3.getReplicaIds().get(0)));
+    prioritizationManager.reset();
+  }
+
+  @Test
+  public void testInProgressReplicaAssertion() {
+    prioritizationManager.start();
+
+    // Create and add replicas
+    int partitionId1 = 1;
+    int partitionId2 = 2;
+    PartitionId partition1 = new MockPartitionId(partitionId1, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+    PartitionId partition2 = new MockPartitionId(partitionId2, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        clusterMap.getDataNodes(), 0);
+
+    assertTrue(prioritizationManager.addReplica(partition1.getReplicaIds().get(0)));
+    assertTrue(prioritizationManager.addReplica(partition2.getReplicaIds().get(0)));
+
+    // Move replicas to in-progress
+    List<ReplicaId> inProgressReplicas = prioritizationManager.getPartitionListForDisk(
+        partition1.getReplicaIds().get(0).getDiskId(), 2);
+
+    // Assert in-progress replicas
+    List<ReplicaId> retrievedInProgressReplicas = prioritizationManager.getInProgressReplicaIdsForDisk(
+        partition1.getReplicaIds().get(0).getDiskId());
+
+    assertEquals("In-progress replicas count should match", 2, retrievedInProgressReplicas.size());
+    assertTrue("In-progress replicas should contain partition1",
+        retrievedInProgressReplicas.contains(partition1.getReplicaIds().get(0)));
+    assertTrue("In-progress replicas should contain partition2",
+        retrievedInProgressReplicas.contains(partition2.getReplicaIds().get(0)));
+
+    // Remove in-progress replicas and verify
+    assertTrue(prioritizationManager.removeInProgressReplica(partition1.getReplicaIds().get(0).getDiskId(),
+        partition1.getReplicaIds().get(0)));
+    assertTrue(prioritizationManager.removeInProgressReplica(partition2.getReplicaIds().get(0).getDiskId(),
+        partition2.getReplicaIds().get(0)));
+
+    List<ReplicaId> remainingInProgressReplicas = prioritizationManager.getInProgressReplicaIdsForDisk(
+        partition1.getReplicaIds().get(0).getDiskId());
+    assertTrue("No in-progress replicas should remain", remainingInProgressReplicas.isEmpty());
+  }
+
 }

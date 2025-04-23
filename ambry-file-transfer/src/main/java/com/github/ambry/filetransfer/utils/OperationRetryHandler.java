@@ -13,7 +13,7 @@
  */
 package com.github.ambry.filetransfer.utils;
 
-import com.github.ambry.filetransfer.handler.FileCopyHandlerConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import java.io.IOException;
 import java.util.Objects;
@@ -43,7 +43,7 @@ public class OperationRetryHandler {
    * Constructor to create OperationRetryHandler
    * @param config the configuration of type {@link FileCopyHandlerConfig}
    */
-  public OperationRetryHandler(@Nonnull FileCopyHandlerConfig config) {
+  public OperationRetryHandler(@Nonnull FileCopyBasedReplicationConfig config) {
     Objects.requireNonNull(config, "config cannot be null");
 
     maxRetries = config.fileCopyHandlerMaxApiRetries;

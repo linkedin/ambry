@@ -1,0 +1,31 @@
+[
+  {
+    "accountId": 1234,
+    "accountName": "s3tests",
+    "containers": [
+      {
+        "containerName": "s3testbucket",
+        "description": "This is my private container",
+        "isPrivate": "true",
+        "containerId": 5678,
+        "version": 2,
+        "status": "ACTIVE",
+        "parentAccountId": "1234",
+        "namedBlobMode": "OPTIONAL"
+      },
+      {
+        "containerName": "s3_emptybucket",
+        "description": "This is my empty container",
+        "isPrivate": "true",
+        "containerId": 5679,
+        "version": 2,
+        "status": "ACTIVE",
+        "parentAccountId": "1234",
+        "namedBlobMode": "OPTIONAL"
+      }
+    ],
+    "version": 1,
+    "status": "ACTIVE",
+    "quotaResourceType": "CONTAINER"
+  }
+]

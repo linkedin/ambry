@@ -482,34 +482,7 @@ public class DiskManager {
   }
 
   /**
-   * Add a new BlobStore with given {@link ReplicaId}.
-   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
-   * @return {@code true} if adding store was successful. {@code false} if not.
-   */
-  boolean addBlobStore(ReplicaId replica) {
-    rwLock.writeLock().lock();
-    boolean succeed = false;
-    try {
-      if (!running) {
-        logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
-      } else {
-        succeed = initializeBlobStore(replica);
-        if (!succeed) {
-          return false;
-        }
-        succeed = loadInitializedBlobStore(replica);
-      }
-    } catch (Exception e) {
-      logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
-          e);
-    } finally {
-      rwLock.writeLock().unlock();
-    }
-    return succeed;
-  }
-
-  /**
-   *
+   * Adds and initializes a new BlobStore with given {@link ReplicaId}
    * @param replica {@link ReplicaId}
    * @return {@code true} if initialization succeeds {@code false} otherwise.
    */
@@ -551,6 +524,11 @@ public class DiskManager {
     return succeed;
   }
 
+  /**
+   * Loads the initialized Blobstore and starts it for given {@link ReplicaId}
+   * @param replica {{@link ReplicaId}
+   * @return {@code true} if loading succeeds {@code false} otherwise.
+   */
   boolean loadInitializedBlobStore(ReplicaId replica) {
     rwLock.writeLock().lock();
     boolean succeed = false;

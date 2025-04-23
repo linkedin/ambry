@@ -111,7 +111,7 @@ public class ServerConfig {
    * Implementation class for accountServiceFactory
    */
   @Config("server.account.service.factory")
-  @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
+  @Default("com.github.ambry.account.InMemoryAccountServiceFactory")
   public final String serverAccountServiceFactory;
 
   /**
@@ -146,6 +146,8 @@ public class ServerConfig {
 
   /**
    * Decide Replication Protocol For Hydration Of Newly Added Replicas
+   * - Blob Based Replication
+   * - File Based Replication
    */
   public static final String SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION = "server.replication.protocol.for.hydration";
   @Config(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION)
@@ -177,7 +179,7 @@ public class ServerConfig {
     serverEnableBlobPartitionJourneyLogs =
         verifiableProperties.getBoolean("server.enable.blob.partition.journey.logs", false);
     serverAccountServiceFactory = verifiableProperties.getString("server.account.service.factory",
-        "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
+        "com.github.ambry.account.InMemoryAccountServiceFactory");
     serverParticipantsConsistencyCheckerPeriodSec =
         verifiableProperties.getLong("server.participants.consistency.checker.period.sec", 0);
     serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",

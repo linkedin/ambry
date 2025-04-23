@@ -674,7 +674,7 @@ public class HelixClusterManager implements ClusterMap {
   /**
    * @return {@link HelixClusterManagerQueryHelper} associated with this cluster manager.
    */
-  HelixClusterManagerQueryHelper getManagerQueryHelper() {
+  public HelixClusterManagerQueryHelper getManagerQueryHelper() {
     return helixClusterManagerQueryHelper;
   }
 
