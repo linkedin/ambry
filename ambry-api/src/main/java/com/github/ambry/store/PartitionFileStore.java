@@ -42,4 +42,14 @@ public interface PartitionFileStore {
    * @throws IOException
    */
   void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException;
+
+  /**
+   * Moves all regular files from the given source directory to the destination directory. This throws an exception in
+   * case any file already exists with the same name in the destination.
+   *
+   * @param srcDirPath   the path to the source directory
+   * @param destDirPath  the path to the destination directory
+   * @throws IOException if an I/O error occurs during the move operation
+   */
+  void moveAllRegularFiles(String srcDirPath, String destDirPath) throws IOException;
 }

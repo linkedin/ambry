@@ -13,17 +13,17 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
-import java.util.List;
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,27 +39,29 @@ class BatchOperationCallbackTracker {
   private final Callback<Void> callback;
   private final long numBlobIds;
   private final AtomicBoolean finalOperationReadyToDo = new AtomicBoolean(false);
-  private final BlobId finalBlobId;
-  private final BiConsumer<BlobId, Callback> finalOperation;
+  private final String finalBlobId;
+  private final BiConsumer<String, Callback> finalOperation;
   private final QuotaChargeCallback quotaChargeCallback;
-  private final ConcurrentMap<BlobId, Boolean> blobIdToAck = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Boolean> blobIdToAck = new ConcurrentHashMap<>();
   private final AtomicLong ackedCount = new AtomicLong(0);
   private final AtomicBoolean completed = new AtomicBoolean(false);
   private final NonBlockingRouter nonBlockingRouter;
+  private final Function<Exception, Exception> exceptionMapper;
 
   /**
    * Constructor
-   * @param blobIds the {@link BlobId}s being tracked
-   * @param finalBlobId the final {@link BlobId} to send after all the {@code blobids} are acked.
+   * @param blobIds the BlobIds being tracked
+   * @param finalBlobId the final BlobId to send after all the {@code blobids} are acked.
    * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
    * @param callback the {@link Callback} to be triggered once acks are received for all blobs
    * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
    * @param finalOperation The operation to call on the {@code finalBlobId}.
+   * @param exceptionMapper A function to map a given exception to another in the callback.
    * @param nonBlockingRouter The non-blocking router object
    */
-  BatchOperationCallbackTracker(List<BlobId> blobIds, BlobId finalBlobId, FutureResult<Void> futureResult,
-      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, BiConsumer<BlobId, Callback> finalOperation,
-      NonBlockingRouter nonBlockingRouter) {
+  BatchOperationCallbackTracker(Collection<String> blobIds, String finalBlobId, FutureResult<Void> futureResult,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, BiConsumer<String, Callback> finalOperation,
+      Function<Exception, Exception> exceptionMapper, NonBlockingRouter nonBlockingRouter) {
     numBlobIds = blobIds.size();
     blobIds.forEach(blobId -> blobIdToAck.put(blobId, false));
     if (blobIdToAck.size() != numBlobIds) {
@@ -71,34 +73,72 @@ class BatchOperationCallbackTracker {
     this.finalOperation = finalOperation;
     this.finalBlobId = finalBlobId;
     this.nonBlockingRouter = nonBlockingRouter;
+    this.exceptionMapper = exceptionMapper;
+  }
+
+  /**
+   * Constructor
+   * @param blobIds the BlobIds being tracked
+   * @param finalBlobId the final BlobId to send after all the {@code blobids} are acked.
+   * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
+   * @param callback the {@link Callback} to be triggered once acks are received for all blobs
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
+   * @param finalOperation The operation to call on the {@code finalBlobId}.
+   * @param nonBlockingRouter The non-blocking router object
+   */
+  BatchOperationCallbackTracker(Collection<String> blobIds, String finalBlobId, FutureResult<Void> futureResult,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, BiConsumer<String, Callback> finalOperation,
+      NonBlockingRouter nonBlockingRouter) {
+    this(blobIds, finalBlobId, futureResult, callback, quotaChargeCallback, finalOperation, Function.identity(),
+        nonBlockingRouter);
+  }
+
+  /**
+   * Constructor
+   * @param blobIds the BlobIds being tracked
+   * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
+   * @param callback the {@link Callback} to be triggered once acks are received for all blobs
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
+   * @param exceptionMapper A function to map a given exception to another in the callback.
+   * @param nonBlockingRouter The non-blocking router object
+   */
+  BatchOperationCallbackTracker(Collection<String> blobIds, FutureResult<Void> futureResult, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback, Function<Exception, Exception> exceptionMapper,
+      NonBlockingRouter nonBlockingRouter) {
+    this(blobIds, null, futureResult, callback, quotaChargeCallback, null, exceptionMapper, nonBlockingRouter);
   }
 
   /**
    * Gets a {@link Callback} personalized for {@code blobId}.
-   * @param blobId the {@link BlobId} for which the
+   * @param blobId BlobId for which the
    * @return the {@link Callback} to be used with the {@link TtlUpdateOperation} and {@link UndeleteOperation} for {@code blobId}.
    */
-  Callback<Void> getCallback(final BlobId blobId) {
+  Callback<Void> getCallback(final String blobId) {
     return (result, exception) -> {
+      exception = exceptionMapper != null ? exceptionMapper.apply(exception) : exception;
       if (exception == null) {
         if (!blobIdToAck.containsKey(blobId)) {
-          complete(new RouterException("Ack for unknown " + blobId + " arrived",
-              RouterErrorCode.UnexpectedInternalError));
+          complete(
+              new RouterException("Ack for unknown " + blobId + " arrived", RouterErrorCode.UnexpectedInternalError));
         } else if (blobIdToAck.put(blobId, true)) {
           // already acked once
           complete(new RouterException("Ack for " + blobId + " arrived more than once",
               RouterErrorCode.UnexpectedInternalError));
         } else if (ackedCount.incrementAndGet() >= numBlobIds) {
           // acked for the first time for this blob id and all the blob ids have been acked
-          if(finalOperationReadyToDo.compareAndSet(false, true)) {
-            // if final operation hasn't been started yet, then start it.
-            blobIdToAck.put(finalBlobId, false);
-            nonBlockingRouter.currentOperationsCount.incrementAndGet();
-            finalOperation.accept(finalBlobId, getCallback(finalBlobId));
-          }
-
-          if(blobId.equals(finalBlobId)) {
+          if (finalBlobId != null && finalOperation != null) {
+            if (finalOperationReadyToDo.compareAndSet(false, true)) {
+              // if final operation hasn't been started yet, then start it.
+              blobIdToAck.put(finalBlobId, false);
+              nonBlockingRouter.currentOperationsCount.incrementAndGet();
+              finalOperation.accept(finalBlobId, getCallback(finalBlobId));
+            }
+            if (blobId.equals(finalBlobId)) {
               complete(null);
+            }
+          } else {
+            // There is no final blob id to process, just complete it.
+            complete(null);
           }
         }
       } else {

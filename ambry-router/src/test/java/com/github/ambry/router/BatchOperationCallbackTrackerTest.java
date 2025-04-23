@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -40,11 +41,11 @@ public class BatchOperationCallbackTrackerTest extends NonBlockingRouterTestBase
   private static final QuotaChargeCallback quotaChargeCallback = new QuotaTestUtils.TestQuotaChargeCallback();
   private static final int NUM_CHUNKS = 5;
   private static Exception trackerException;
-  private final List<BlobId> chunkIds;
-  private final BlobId finalBlobId;
+  private final List<String> chunkIds;
+  private final String finalBlobId;
   private final Callback<Void> callback;
   private final AtomicBoolean finalOperationCalled = new AtomicBoolean(false);
-  private final BiConsumer<BlobId, Callback> finalOperation = (b, c) -> {
+  private final BiConsumer<String, Callback> finalOperation = (b, c) -> {
     finalOperationCalled.set(true);
   };
 
@@ -58,12 +59,12 @@ public class BatchOperationCallbackTrackerTest extends NonBlockingRouterTestBase
       chunkIds.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), new Partition(i, "test", PartitionState.READ_WRITE, 1073741824),
-          false, BlobId.BlobDataType.DATACHUNK));
+          false, BlobId.BlobDataType.DATACHUNK).getID());
     }
     finalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), new Partition(6, "test", PartitionState.READ_WRITE, 1073741824), false,
-        BlobId.BlobDataType.DATACHUNK);
+        BlobId.BlobDataType.DATACHUNK).getID();
 
     callback = (Void result, Exception exception) -> {
       trackerException = exception;
@@ -156,5 +157,48 @@ public class BatchOperationCallbackTrackerTest extends NonBlockingRouterTestBase
     Assert.assertTrue(trackerException instanceof RouterException);
     Assert.assertFalse(finalOperationCalled.get());
     Assert.assertEquals(RouterErrorCode.UnexpectedInternalError, ((RouterException) trackerException).getErrorCode());
+  }
+
+  @Test
+  public void testNoFinalOperation() {
+    BatchOperationCallbackTracker tracker =
+        new BatchOperationCallbackTracker(chunkIds, new FutureResult<>(), callback, quotaChargeCallback, null, router);
+
+    // update all data chunks and ensure that tracker isn't marked as complete.
+    for (int i = 0; i < NUM_CHUNKS; i++) {
+      tracker.getCallback(chunkIds.get(i)).onCompletion(null, null);
+      if (i == NUM_CHUNKS - 1) {
+        Assert.assertTrue(tracker.isCompleted());
+        Assert.assertNull(trackerException);
+      } else {
+        Assert.assertFalse(tracker.isCompleted());
+      }
+    }
+  }
+
+  @Test
+  public void testNotFinalOperationWithExceptionMapper() {
+    Function<Exception, Exception> exceptionMapper = e -> {
+      if (e != null && e instanceof RouterException
+          && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
+        return null;
+      }
+      return e;
+    };
+    BatchOperationCallbackTracker tracker =
+        new BatchOperationCallbackTracker(chunkIds, new FutureResult<>(), callback, quotaChargeCallback,
+            exceptionMapper, router);
+
+    // update all data chunks and ensure that tracker isn't marked as complete.
+    for (int i = 0; i < NUM_CHUNKS; i++) {
+      Exception e = i == 0 ? new RouterException("test", RouterErrorCode.BlobDoesNotExist) : null;
+      tracker.getCallback(chunkIds.get(i)).onCompletion(null, e);
+      if (i == NUM_CHUNKS - 1) {
+        Assert.assertTrue(tracker.isCompleted());
+        Assert.assertNull(trackerException);
+      } else {
+        Assert.assertFalse(tracker.isCompleted());
+      }
+    }
   }
 }
