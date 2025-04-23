@@ -342,7 +342,7 @@ class BlobStoreCompactor {
       getDeprecatedContainers();
       logger.info("Deprecated containers are {} for {}", deprecatedContainers, storeId);
     }
-    long startTime = SystemTime.getInstance().milliseconds();
+    long startTime = time.milliseconds();
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
