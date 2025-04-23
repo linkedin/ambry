@@ -344,12 +344,17 @@ class BlobStoreCompactor {
       runningLatch.countDown();
       logger.trace("resumeCompaction() ended for {}", storeId);
 
-      if (currentCompactionDetails.get().isFullRange()) {
-        srcMetrics.fullScanCompactionFinishedForStoreTimeInMs.update(
-            SystemTime.getInstance().milliseconds() - startTime, TimeUnit.MILLISECONDS);
-      } else {
-        srcMetrics.partialRangeCompactionFinishedForStoreTimeInMs.update(
-            SystemTime.getInstance().milliseconds() - startTime, TimeUnit.MILLISECONDS);
+      if (currentCompactionDetails.get() != null) {
+        // currentCompactionDetails could be null in test context
+        if (currentCompactionDetails.get().isFullRange()) {
+          // Measure time for full range compaction
+          srcMetrics.fullScanCompactionFinishedForStoreTimeInMs.update(
+              SystemTime.getInstance().milliseconds() - startTime, TimeUnit.MILLISECONDS);
+        } else {
+          // Measure time for partial range compaction
+          srcMetrics.partialRangeCompactionFinishedForStoreTimeInMs.update(
+              SystemTime.getInstance().milliseconds() - startTime, TimeUnit.MILLISECONDS);
+        }
       }
     }
     this.bundleReadBuffer = null;
