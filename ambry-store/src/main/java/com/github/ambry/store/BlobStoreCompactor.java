@@ -390,11 +390,11 @@ class BlobStoreCompactor {
         if (currentCompactionDetails.get().isFullRange()) {
           // Measure time for full range compaction
           srcMetrics.fullScanCompactionFinishedForStoreTimeInMs.update(
-              SystemTime.getInstance().milliseconds() - startTime, TimeUnit.MILLISECONDS);
+              time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
         } else {
           // Measure time for partial range compaction
           srcMetrics.partialRangeCompactionFinishedForStoreTimeInMs.update(
-              SystemTime.getInstance().milliseconds() - startTime, TimeUnit.MILLISECONDS);
+              time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
         }
       }
     }
