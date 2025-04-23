@@ -818,9 +818,6 @@ public class DeleteManagerTest {
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", localDc);
     properties.setProperty("router.delete.request.parallelism", DELETE_PARALLELISM);
-    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
-    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
-    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     return properties;
   }
 

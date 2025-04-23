@@ -1547,9 +1547,6 @@ public class OperationTrackerTest {
     props.setProperty("router.put.success.target", "2");
     props.setProperty("router.delete.success.target", "2");
     props.setProperty("router.ttl.update.success.target", "2");
-    props.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
-    props.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
-    props.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     initialize();
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
@@ -2090,9 +2087,6 @@ public class OperationTrackerTest {
         Boolean.toString(chooseDcWithMostReplicas));
     props.setProperty(RouterConfig.ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS,
         Boolean.toString(includeDownReplicas));
-    props.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
-    props.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
-    props.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     OperationTracker tracker;

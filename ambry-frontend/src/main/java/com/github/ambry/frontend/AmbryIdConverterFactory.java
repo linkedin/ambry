@@ -189,16 +189,29 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption, localGetHeader).thenApply(NamedBlobRecord::getBlobId);
         }
-      } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
+      } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)
+          || RestUtils.isNamedBlobTtlUpdateRequest(restRequest)) {
         if (restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
           long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-          NamedBlobPath namedBlobPath =
-              NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          String blobIdClean = RestUtils.stripSlashAndExtensionFromId(input);
+          String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
+          NamedBlobPath namedBlobPath;
+          if (blobIdStr != null) {
+            if (!RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
+              throw new RestServiceException("Expecting named blob in blob id", RestServiceErrorCode.InvalidArgs);
+            } else {
+              namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
+            }
+          } else {
+            namedBlobPath =
+                NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          }
           NamedBlobRecord record =
               NamedBlobRecord.forUpdate(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
                   namedBlobPath.getBlobName(), namedBlobVersion);
-          conversionFuture = namedBlobDb.updateBlobTtlAndStateToReady(record)
-              .thenApply(result -> result.getInsertedRecord().getBlobId());
+          conversionFuture = namedBlobDb.updateBlobTtlAndStateToReady(record).thenApply(result -> {
+            return result.getInsertedRecord().getBlobId();
+          });
         } else {
           Objects.requireNonNull(blobProperties, "blobProperties cannot be null.");
           NamedBlobPath namedBlobPath =

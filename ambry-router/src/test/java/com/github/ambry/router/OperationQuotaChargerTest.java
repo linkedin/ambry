@@ -44,9 +44,6 @@ public class OperationQuotaChargerTest {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "dc");
-    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
-    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
-    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     routerConfig = new RouterConfig(new VerifiableProperties(properties));
   }
 

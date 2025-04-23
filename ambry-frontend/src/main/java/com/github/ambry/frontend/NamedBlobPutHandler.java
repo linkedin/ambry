@@ -28,7 +28,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
-import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;

@@ -408,16 +408,16 @@ public class FrontendRestRequestServiceTest {
     String blobIdWithClusterName = "/" + CLUSTER_NAME + "/" + blobIdFromRouter + ".bin";
     reset(namedBlobDb);
     NamedBlobRecord namedBlobRecord =
-        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName, blobIdWithClusterName, 3600);
-    NamedBlobRecord namedBlobRecordAfterTtlUpdate =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName, blobIdFromRouter, 3600);
+    NamedBlobRecord namedBlobRecordWithClusterPrefix =
         new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName, blobIdWithClusterName,
             Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
-        CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName, GetOption.None,
-        false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecordWithClusterPrefix)));
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName,
+        GetOption.None, false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
-        CompletableFuture.completedFuture(new PutResult(namedBlobRecordAfterTtlUpdate)));
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);

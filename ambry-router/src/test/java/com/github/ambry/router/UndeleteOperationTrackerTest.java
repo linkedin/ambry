@@ -377,9 +377,6 @@ public class UndeleteOperationTrackerTest {
     props.setProperty(RouterConfig.ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED,
         Boolean.toString(replicasStateEnabled));
     props.setProperty(RouterConfig.ROUTER_UNDELETE_REQUEST_PARALLELISM, Integer.toString(parallelism));
-    props.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
-    props.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
-    props.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     return new UndeleteOperationTracker(routerConfig, mockPartition, originatingDcName, routerMetrics);
