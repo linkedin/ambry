@@ -22,6 +22,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.frontend.IdConverterFactory;
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.frontend.PutBlobMetaInfo;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -291,8 +292,8 @@ public class InMemoryRouter implements Router {
       return futureResult;
     }
     Callback<String> wrappedCallback =
-        restRequest != null ? createIdConverterCallbackForPut(restRequest, blobProperties, futureResult, callback)
-            : callback;
+        restRequest != null ? createIdConverterCallbackForPutAndStitch(restRequest, blobProperties, futureResult,
+            callback) : callback;
     PostData postData =
         new PostData(blobProperties, usermetadata, channel, null, options, wrappedCallback, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
@@ -301,41 +302,22 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
     Callback<String> wrappedCallback =
-        restRequest != null && idConverter != null ? createIdConverterCallbackForStitch(restRequest, blobProperties, futureResult, callback) : callback;
+        restRequest != null && idConverter != null ? createIdConverterCallbackForPutAndStitch(restRequest,
+            blobProperties, futureResult, callback) : callback;
     PostData postData =
         new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, wrappedCallback,
             futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
-  }
-
-  private Callback<String> createIdConverterCallbackForStitch(RestRequest restRequest, BlobProperties blobProperties,
-      FutureResult<String> futureResult, Callback<String> callback) {
-    return (blobId, exception) -> {
-      if (exception != null) {
-        // If putBlob fails, complete the future and callback with an error
-        futureResult.done(null, exception);
-        if (callback != null) {
-          callback.onCompletion(null, exception);
-        }
-      } else {
-        blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
-        // Call idConverter.convert after putBlob succeeds
-        try {
-          idConverter.convert(restRequest, blobId, blobProperties, callback);
-        } catch (Exception e) {
-          callback.onCompletion(null, e);
-        }
-      }
-    };
   }
 
   @Override
@@ -430,12 +412,6 @@ public class InMemoryRouter implements Router {
     return futureResult;
   }
 
-  public String stripPrefixAndExtension(String blobId) throws RestServiceException {
-    return RestUtils.stripSlashAndExtensionFromId(
-        RequestPath.parse(blobId, Collections.emptyMap(), getRouterConfig().pathPrefixesToRemove,
-            getRouterConfig().clusterName).getOperationOrBlobId(false));
-  }
-
   /**
    * Helper method to perform TTL update once blobId is available
    */
@@ -450,8 +426,7 @@ public class InMemoryRouter implements Router {
     Exception exception = null;
 
     try {
-      //make sure the blobId does not have the cluster prefix
-      blobId = stripPrefixAndExtension(blobId);
+      blobId = RestUtils.stripSlashAndExtensionFromId(blobId);
       // Check blobId before performing the update
       checkBlobId(blobId);
 
@@ -609,7 +584,7 @@ public class InMemoryRouter implements Router {
    * @param blobProperties {@link BlobProperties} for the blob.
    * @return
    */
-  private Callback<String> createIdConverterCallbackForPut(RestRequest restRequest, BlobProperties blobProperties,
+  private Callback<String> createIdConverterCallbackForPutAndStitch(RestRequest restRequest, BlobProperties blobProperties,
       FutureResult<String> futureResult, Callback<String> callback) {
     return (blobId, exception) -> {
       if (exception != null) {
@@ -620,7 +595,9 @@ public class InMemoryRouter implements Router {
         }
       } else {
         // Set internal header so ttl update don't need the converter to convert from blobName to blobId.
-        blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        if (!isStitchRequest(restRequest)) {
+          blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
+        }
         // Call idConverter.convert after putBlob succeeds
         try {
           idConverter.convert(restRequest, blobId, blobProperties, callback);
@@ -629,6 +606,11 @@ public class InMemoryRouter implements Router {
         }
       }
     };
+  }
+
+  private boolean isStitchRequest(RestRequest restRequest) {
+    return RestUtils.isNamedBlobStitchRequest(restRequest) || RestUtils.getRequestPath(restRequest)
+        .matchesOperation(Operations.STITCH);
   }
 
   /**

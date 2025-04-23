@@ -166,9 +166,6 @@ public class RestServerTest {
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "dc1");
-    properties.setProperty("clustermap.cluster.name", "test");
-    properties.setProperty("clustermap.datacenter.name", "dcName");
-    properties.setProperty("clustermap.host.name", "localhost");
   }
 
   // serverCreationWithBadInputTest() helpers

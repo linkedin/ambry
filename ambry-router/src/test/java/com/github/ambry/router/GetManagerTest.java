@@ -597,9 +597,6 @@ public class GetManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
-    properties.setProperty(RouterConfig.CLUSTERMAP_CLUSTER_NAME, "test");
-    properties.setProperty(RouterConfig.CLUSTERMAP_HOST_NAME, "localhost");
-    properties.setProperty(RouterConfig.CLUSTERMAP_DATACENTER_NAME, "dcName");
     VerifiableProperties vProps = new VerifiableProperties(properties);
     routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
