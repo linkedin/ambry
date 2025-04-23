@@ -57,7 +57,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Field;
@@ -1977,7 +1976,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void replicaFromOfflineToBootstrapFailureRetryTest() throws Exception {
+  public void replicaFromOfflineToPreBootstrapFailureRetryTest() throws Exception {
     generateConfigs(true, false);
     MockClusterMap spyClusterMap = spy(clusterMap);
     MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);
@@ -2021,7 +2020,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void replicaFromOfflineToBootstrapFailureRetryWithDiskSpaceRequirementTest() throws Exception {
+  public void replicaFromOfflineToPreBootstrapFailureRetryWithDiskSpaceRequirementTest() throws Exception {
     generateConfigs(true, false, false, 4, false, false);
     MockClusterMap spyClusterMap = spy(clusterMap);
     MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);

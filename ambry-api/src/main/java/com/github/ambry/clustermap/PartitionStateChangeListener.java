@@ -18,9 +18,19 @@ package com.github.ambry.clustermap;
  */
 public interface PartitionStateChangeListener {
 
+  /**
+   * This is not present in helix, this is internal construct in the code
+   * Action to take when partition becomes pre-bootstrap from offline
+   * @param partitionName partition name
+   */
   default void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
   }
 
+  /**
+   * This is not present in helix, this is internal construct in the code
+   * Action to take when partition becomes bootstrap from pre-bootstrap
+   * @param partitionName partition name
+   */
   default void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
   }
 

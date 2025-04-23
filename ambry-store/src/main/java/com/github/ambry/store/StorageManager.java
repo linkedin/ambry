@@ -374,7 +374,12 @@ public class StorageManager implements StoreManager {
     return diskManager != null ? diskManager.getStore(id, skipStateCheck) : null;
   }
 
-  Store getInitializedStore(PartitionId id){
+  /**
+   * @param id the {@link PartitionId} to find the store for.
+   * @return the initialized {@link Store} corresponding to given {@link PartitionId}, or {@code null} if no store was found for
+   *         that partition, or that store was not initialized.
+   */
+  Store getInitializedStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null ? diskManager.getInitializedStore(id) : null;
   }
@@ -1012,7 +1017,6 @@ public class StorageManager implements StoreManager {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       onPartitionBecomePreBootstrapFromOffline(partitionName);
-      // filcopy
       onPartitionBecomeBootstrapFromPreBootStrap(partitionName);
     }
 
