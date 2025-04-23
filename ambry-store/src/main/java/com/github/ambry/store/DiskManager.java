@@ -381,6 +381,11 @@ public class DiskManager {
     return storeToReturn;
   }
 
+  /**
+   * @param id the {@link PartitionId} to find the store for.
+   * @return the associated {@link Store}, or {@code null} if the partition is not on this disk, or the store is not
+   *         initialized.
+   */
   Store getInitializedStore(PartitionId id) {
     BlobStore storeToReturn;
     rwLock.readLock().lock();
