@@ -408,6 +408,12 @@ class Log implements Write {
     File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
     // if the files could not be read, throw an exception
     // otherwise, populate remainingUnallocatedSegments
+    if (capacityInBytes <= 0 || config.storeSegmentSizeInBytes <= 0) {
+      throw new IllegalArgumentException(
+          "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes ["
+              + config.storeSegmentSizeInBytes + "] is <=0");
+    }
+
     if (segmentFiles == null) {
       throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
     } else {
@@ -420,16 +426,10 @@ class Log implements Write {
         long segmentCapacity = Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
         if (segmentFiles.length == 0) {
           // checks only if we are bootstrapping
-          if (capacityInBytes <= 0 || config.storeSegmentSizeInBytes <= 0) {
-            throw new IllegalArgumentException(
-                "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes ["
-                    + segmentCapacity + "] is <=0");
-          }
-
           // all segments should be the same size.
           if (capacityInBytes % segmentCapacity != 0) {
             throw new IllegalArgumentException(
-                "Capacity of log [" + segmentCapacity + "] should be a multiple of segment capacity [" + segmentCapacity
+                "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity [" + segmentCapacity
                     + "]");
           }
         }
