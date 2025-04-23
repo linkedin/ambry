@@ -17,7 +17,6 @@ import com.github.ambry.router.OperationTrackerScope;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
 import java.util.stream.Collectors;
 
 
@@ -150,9 +149,6 @@ public class RouterConfig {
   public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
       "router.operation.tracker.check.all.originating.replicas.for.not.found";
   public static final String RESERVED_METADATA_ENABLED = "router.reserved.metadata.enabled";
-  public static final String CLUSTERMAP_CLUSTER_NAME = ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME;
-  public static final String CLUSTERMAP_DATACENTER_NAME = ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME;
-  public static final String CLUSTERMAP_HOST_NAME = ClusterMapConfig.CLUSTERMAP_HOST_NAME;
   public static final String ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS =
       "router.get.operation.deprioritize.bootstrap.replicas";
 
@@ -786,28 +782,14 @@ public class RouterConfig {
   public final String namedBlobDbFactory;
 
   /**
-   * This is set in frontendConfig until id converter been fully migrate to router.
-   */
-  public final List<String> pathPrefixesToRemove;
-
-  /**
-   * This is set in clusterMapConfig.
-   */
-  @Config(CLUSTERMAP_CLUSTER_NAME)
-  public String clusterName;
-
-  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     idConverterFactory = frontendConfig.idConverterFactory;
     idSigningServiceFactory = frontendConfig.idSigningServiceFactory;
     namedBlobDbFactory = frontendConfig.namedBlobDbFactory;
-    pathPrefixesToRemove = frontendConfig.pathPrefixesToRemove;
-    clusterName = clusterMapConfig.clusterMapClusterName;
     routerBlobMetadataCacheId =
         verifiableProperties.getString(ROUTER_BLOB_METADATA_CACHE_ID, "routerBlobMetadataCache");
     routerMaxNumMetadataCacheEntries =
