@@ -342,6 +342,7 @@ class BlobStoreCompactor {
       getDeprecatedContainers();
       logger.info("Deprecated containers are {} for {}", deprecatedContainers, storeId);
     }
+    long startTime = time.milliseconds();
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
@@ -383,6 +384,19 @@ class BlobStoreCompactor {
       compactionInProgress.set(false);
       runningLatch.countDown();
       logger.trace("resumeCompaction() ended for {}", storeId);
+
+      if (currentCompactionDetails.get() != null) {
+        // currentCompactionDetails could be null in test context
+        if (currentCompactionDetails.get().isFullRange()) {
+          // Measure time for full range compaction
+          srcMetrics.fullScanCompactionFinishedForStoreTimeInMs.update(
+              time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
+        } else {
+          // Measure time for partial range compaction
+          srcMetrics.partialRangeCompactionFinishedForStoreTimeInMs.update(
+              time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
+        }
+      }
     }
     this.bundleReadBuffer = null;
   }
