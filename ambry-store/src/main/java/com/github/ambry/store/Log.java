@@ -70,6 +70,25 @@ class Log implements Write {
    */
   Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
       StoreMetrics metrics, DiskMetrics diskMetrics) throws StoreException {
+    this(dataDir, totalCapacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics, true);
+  }
+
+  /**
+   * Create a Log instance and conditionally inits based on shouldInit flag.
+   * @param dataDir the directory where the segments of the log need to be loaded from.
+   * @param totalCapacityInBytes the total capacity of this log.
+   * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
+   * @param config The store config used to initialize this log.
+   * @param metrics the {@link StoreMetrics} instance to use.
+   * @param diskMetrics the {@link DiskMetrics} instance to use.
+   * @param shouldInit flag that decides if init() has to be called in constructor.
+   * @throws StoreException if there is any store exception loading the segment files.
+   * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
+   * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
+   * multiple of {@code segmentCapacityInBytes}.
+   */
+  Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
+      StoreMetrics metrics, DiskMetrics diskMetrics, boolean shouldInit) throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = totalCapacityInBytes > config.storeSegmentSizeInBytes;
@@ -79,14 +98,12 @@ class Log implements Write {
     this.diskMetrics = diskMetrics;
     this.segmentNameAndFileNameIterator = Collections.emptyIterator();
     storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
-
-    File dir = new File(dataDir);
-    File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
-    if (segmentFiles == null) {
-      throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
-    } else {
-      initialize(getSegmentsToLoad(segmentFiles), config.storeSegmentSizeInBytes, false);
-      this.isLogSegmented = isExistingLogSegmented();
+    // in case of bootstrap with normal replication, this would be updated as we do PUT calls which would call ensureCapacity
+    // in case of server restarts, since we are doing ls of the dir, we should be able to get the number of segments
+    // in case of bootstrap with file copy, on file copy as the log file is populated this would be updated
+    remainingUnallocatedSegments.set(checkArgsAndGetUnallocatedSegments());
+    if (shouldInit) {
+      init();
     }
   }
 
@@ -121,8 +138,25 @@ class Log implements Write {
     this.diskMetrics = diskMetrics;
     this.segmentNameAndFileNameIterator = segmentNameAndFileNameIterator;
     storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
-
     initialize(segmentsToLoad, config.storeSegmentSizeInBytes, true);
+  }
+
+  /**
+   * Initializes the log by loading existing log segments from the specified directory.
+   * If no segments are found, it creates the first segment. Otherwise, it sets up the log structure
+   * and sets the active segment
+   *
+   * @throws StoreException if there is any store exception loading the segment files.
+   */
+  public void init() throws StoreException {
+    File dir = new File(dataDir);
+    File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
+    if (segmentFiles == null) {
+      throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
+    } else {
+      initialize(getSegmentsToLoad(segmentFiles), config.storeSegmentSizeInBytes, false);
+      this.isLogSegmented = isExistingLogSegmented();
+    }
   }
 
   /**
@@ -213,6 +247,13 @@ class Log implements Write {
   long getSegmentCapacity() {
     // all segments same size
     return getFirstSegment().getCapacityInBytes();
+  }
+
+  /**
+   * @return the capacity of a single segment just by config.
+   */
+  long getSegmentSize() {
+    return Math.min(getCapacityInBytes(), config.storeSegmentSizeInBytes);
   }
 
   /**
@@ -341,20 +382,9 @@ class Log implements Write {
    * @return the {@link LogSegment} instance that is created.
    * @throws StoreException if there is store exception when creating the segment files or creating {@link LogSegment} instances.
    */
-  private LogSegment checkArgsAndGetFirstSegment(long segmentCapacity, boolean needSwapSegment) throws StoreException {
-    if (capacityInBytes <= 0 || segmentCapacity <= 0) {
-      throw new IllegalArgumentException(
-          "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes [" + segmentCapacity
-              + "] is <=0");
-    }
-    segmentCapacity = Math.min(capacityInBytes, segmentCapacity);
-    // all segments should be the same size.
+  private LogSegment createFirstSegment(long segmentCapacity, boolean needSwapSegment) throws StoreException {
+    segmentCapacity = Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
     long numSegments = capacityInBytes / segmentCapacity;
-    if (capacityInBytes % segmentCapacity != 0) {
-      throw new IllegalArgumentException(
-          "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity [" + segmentCapacity
-              + "]");
-    }
     Pair<LogSegmentName, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
     logger.info("Allocating first segment with name [{}], back by file {} and capacity {} bytes. Total number of "
             + "segments is {}", segmentNameAndFilename.getFirst(), segmentNameAndFilename.getSecond(), segmentCapacity,
@@ -366,11 +396,62 @@ class Log implements Write {
   }
 
   /**
-   * Creates {@link LogSegment} instances from {@code segmentFiles}.
-   * @param segmentFiles the files that form the segments of the log.
-   * @return {@code List} of {@link LogSegment} instances corresponding to {@code segmentFiles}.
-   * @throws StoreException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
+   * Validates the provided arguments and calculates the number of unallocated segments for the log.
+   * @return the number of unallocated segments.
+   * @throws StoreException if the segment files cannot be read from the directory.
+   * @throws IllegalArgumentException if the total capacity or segment size is invalid, or if the total capacity
+   *         is not a multiple of the segment size.
    */
+  private long checkArgsAndGetUnallocatedSegments() throws StoreException {
+    // retrieve log segments from the directory
+    File dir = new File(dataDir);
+    File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
+    // if the files could not be read, throw an exception
+    // otherwise, populate remainingUnallocatedSegments
+    if (capacityInBytes <= 0 || config.storeSegmentSizeInBytes <= 0) {
+      throw new IllegalArgumentException(
+          "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes ["
+              + config.storeSegmentSizeInBytes + "] is <=0");
+    }
+
+    if (segmentFiles == null) {
+      throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.FileNotFound);
+    } else {
+      long totalSegments;
+      // if the files could not be read, throw an exception
+      // otherwise, populate remainingUnallocatedSegments
+      if (segmentFiles == null) {
+        throw new StoreException("Could not read semgent files from Directory", StoreErrorCodes.FileNotFound);
+      } else {
+        long segmentCapacity = Math.min(capacityInBytes, config.storeSegmentSizeInBytes);
+        if (segmentFiles.length == 0) {
+          // checks only if we are bootstrapping
+          // all segments should be the same size.
+          if (capacityInBytes % segmentCapacity != 0) {
+            throw new IllegalArgumentException(
+                "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity [" + segmentCapacity
+                    + "]");
+          }
+        }
+
+        if (isLogSegmented) {
+          totalSegments = capacityInBytes / segmentCapacity;
+        } else {
+          // if the log is not segmented, then there should be only one segment.
+          totalSegments = 1;
+        }
+
+        return totalSegments - segmentFiles.length;
+      }
+    }
+  }
+
+    /**
+     * Creates {@link LogSegment} instances from {@code segmentFiles}.
+     * @param segmentFiles the files that form the segments of the log.
+     * @return {@code List} of {@link LogSegment} instances corresponding to {@code segmentFiles}.
+     * @throws StoreException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
+     */
   private List<LogSegment> getSegmentsToLoad(File[] segmentFiles) throws StoreException {
     List<LogSegment> segments = new ArrayList<>(segmentFiles.length);
     for (File segmentFile : segmentFiles) {
@@ -410,7 +491,7 @@ class Log implements Write {
     if (segmentsToLoad.size() == 0) {
       // bootstrapping log.
       segmentsToLoad =
-          Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes, mayNeedSwapSegment));
+          Collections.singletonList(createFirstSegment(segmentCapacityInBytes, mayNeedSwapSegment));
     }
 
     LogSegment anySegment = segmentsToLoad.get(0);

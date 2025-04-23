@@ -57,6 +57,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Field;
@@ -531,6 +532,23 @@ public class StorageManagerTest {
     // Initialize the blob store
     assertTrue("Blob store should be initialized",
         storageManager.initializeBlobStore(newPartition1.getReplicaIds().get(0)));
+
+    // Verify if Log is being constructed
+    DiskManager diskManager = storageManager.getDiskManager(newPartition1);
+    assertNotNull("DiskManager should not be null", diskManager);
+    Store store = diskManager.getStore(newPartition1, true);
+    assertNotNull("Store should not be null", store);
+    BlobStore blobStore = (BlobStore) store;
+    assertNotNull("Log should not be null", blobStore.getLog());
+
+    // Verify if segments have been added in the Reserver dir of the blob after blob store init
+    File reserveDir = new File(diskManager.getDisk().getMountPath(), diskManagerConfig.diskManagerReserveFileDirName);
+    assertTrue("reserveDir should not be null", reserveDir.exists());
+    File reserveStore = new File(reserveDir, DiskSpaceAllocator.STORE_DIR_PREFIX + newPartition1.getId());
+    assertTrue("reserveStore should not be null", reserveStore.exists());
+    File reserveSizeDir = new File(reserveStore, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + String.valueOf(storeConfig.storeSegmentSizeInBytes));
+    assertTrue("reserveSizeDir should not be null", reserveSizeDir.exists());
+    assertTrue("reserveSizeDir should not be empty", reserveSizeDir.list().length > 0);
 
     // Check accessibility of blob store
     assertNull("Blob store should not be accessible after initialization", storageManager.getStore(newPartition1));
