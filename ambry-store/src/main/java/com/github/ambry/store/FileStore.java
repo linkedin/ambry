@@ -210,7 +210,7 @@ public class FileStore implements PartitionFileStore {
         }
         // Write content to file with create and append options, which will create a new file if file doesn't exist
         // and append to the existing file if file exists
-        Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
       }
     } catch (Exception e) {
       logger.error("Error while writing chunk to file: {}", outputFilePath, e);
