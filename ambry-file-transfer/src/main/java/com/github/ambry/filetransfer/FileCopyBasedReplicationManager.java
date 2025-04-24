@@ -123,7 +123,7 @@ public class FileCopyBasedReplicationManager {
 
     logger.info("FCH TEST: Partitions to be hydrated up: {}", partitionIdList);
     //Integrate clean up.
-    ExecutorService executor = Executors.newFixedThreadPool(4); // use appropriate number of threads
+    ExecutorService executor = Executors.newFixedThreadPool(30); // use appropriate number of threads
 
     for (PartitionId partitionId : partitionIdList) {
       executor.execute(() -> {
