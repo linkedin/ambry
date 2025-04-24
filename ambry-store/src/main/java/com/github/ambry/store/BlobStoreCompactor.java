@@ -135,6 +135,35 @@ class BlobStoreCompactor {
       DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
       AccountService accountService, RemoteTokenTracker remoteTokenTracker, DiskMetrics diskMetrics)
       throws IOException, StoreException {
+    this(dataDir, storeId, storeKeyFactory, config, srcMetrics, tgtMetrics, diskIOScheduler, diskSpaceAllocator, srcLog,
+        time, sessionId, incarnationId, accountService, remoteTokenTracker, diskMetrics, true);
+  }
+
+  /**
+   * Constructs the compactor component and conditionally inits based on the shouldInit flag.
+   * @param dataDir the directory where all compactions need to be run.
+   * @param storeId the unique ID of the store.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to generate {@link StoreKey} instances.
+   * @param config the {@link StoreConfig} that defines configuration parameters.
+   * @param srcMetrics the {@link StoreMetrics} to use to record metrics for the compactor.
+   * @param tgtMetrics the {@link StoreMetrics} to use to record metrics for the temporarily created log and index.
+   * @param diskIOScheduler the {@link DiskIOScheduler} to schedule I/O.
+   * @param srcLog the {@link Log} to copy data from.
+   * @param time the {@link Time} instance to use.
+   * @param sessionId the sessionID of the store.
+   * @param incarnationId the incarnation ID of the store.
+   * @param accountService the {@link AccountService} instance to use.
+   * @param remoteTokenTracker the {@link RemoteTokenTracker} that tracks tokens from all peer replicas.
+   * @param diskMetrics the {@link DiskMetrics}
+   * @param shouldInit flag that decides if init() has to be called in constructor.
+   * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
+   * @throws StoreException if the commit failed during recovery.
+   */
+  BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
+      StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
+      AccountService accountService, RemoteTokenTracker remoteTokenTracker, DiskMetrics diskMetrics, boolean shouldInit)
+      throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.diskMetrics = diskMetrics;
     this.storeId = storeId;
@@ -157,8 +186,20 @@ class BlobStoreCompactor {
     } else {
       validEntryFilter = new IndexSegmentValidEntryFilterWithUndelete();
     }
-    fixStateIfRequired();
+    if (shouldInit) {
+      init();
+    }
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
+  }
+
+  /**
+   * Initializes the compactor. This method is called when the {@link BlobStore} is loaded.
+   * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
+   * @throws StoreException if the commit failed during recovery.
+   */
+  void init() throws IOException, StoreException {
+    fixStateIfRequired();
+    logger.trace("BlobStoreCompactor inited");
   }
 
   /**
@@ -301,6 +342,7 @@ class BlobStoreCompactor {
       getDeprecatedContainers();
       logger.info("Deprecated containers are {} for {}", deprecatedContainers, storeId);
     }
+    long startTime = time.milliseconds();
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
@@ -342,6 +384,19 @@ class BlobStoreCompactor {
       compactionInProgress.set(false);
       runningLatch.countDown();
       logger.trace("resumeCompaction() ended for {}", storeId);
+
+      if (currentCompactionDetails.get() != null) {
+        // currentCompactionDetails could be null in test context
+        if (currentCompactionDetails.get().isFullRange()) {
+          // Measure time for full range compaction
+          srcMetrics.fullScanCompactionFinishedForStoreTimeInMs.update(
+              time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
+        } else {
+          // Measure time for partial range compaction
+          srcMetrics.partialRangeCompactionFinishedForStoreTimeInMs.update(
+              time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
+        }
+      }
     }
     this.bundleReadBuffer = null;
   }
