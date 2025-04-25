@@ -701,6 +701,14 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
+  /**
+   * Test for failures in OFFLINE to PRE-BOOTSTRAP transition
+   * Starts the {@link StorageManager}
+   * Tries to transition a partition not present in cluster-map and asserts failure.
+   * Shuts down the store for a partition and tries to transition partition and asserts failure.
+   * Creates a new partition and then shuts down its disk and tries to transition and asserts failure.
+   * @throws Exception exception
+   */
   @Test
   public void replicaFromOfflineToPreBootstrapFailureTest() throws Exception {
     generateConfigs(true, false);
@@ -752,10 +760,18 @@ public class StorageManagerTest {
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
-
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
+  /**
+   * Tests for success in OFFLINE to PRE-BOOTSTRAP transition
+   * Starts the {@link StorageManager}
+   * Creates a new partition, tries to transition the partition and asserts success
+   * Writes blobs to an already present store of a partition and tries to transition partition and asserts success
+   * Tries transitioning a partition with empty blob store and asserts success
+   * Tries transitioning a partition and asserts that existing state is not reverted
+   * @throws Exception exception
+   */
   @Test
   public void replicaFromOfflineToPreBootstrapSuccessTest() throws Exception {
     generateConfigs(true, false);
@@ -776,11 +792,11 @@ public class StorageManagerTest {
     PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
     mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(newPartition.toPathString());
     BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition, true);
-    assertNotNull("There should be a started store associated with new partition", newAddedStore);
-    // verify that new added store has bootstrap file
+    assertNotNull("There should be a initialized store associated with new partition", newAddedStore);
+    assertTrue("Store should not be started,but it should be initialized",
+        newAddedStore.isInitialized() && !newAddedStore.isStarted());
 
-    assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.OFFLINE,
-        newAddedStore.getCurrentState());
+    assertEquals("The store's current state should be OFFLINE", ReplicaState.OFFLINE, newAddedStore.getCurrentState());
 
     // 2. test that state transition should succeed for existing non-empty replicas (we write some data into store beforehand)
     MockId id = new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), Utils.getRandomShort(TestUtils.RANDOM),
@@ -792,21 +808,18 @@ public class StorageManagerTest {
     Store storeToWrite = storageManager.getStore(localReplicas.get(1).getPartitionId());
     storeToWrite.put(writeSet);
     mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(localReplicas.get(1).getPartitionId().toPathString());
-    assertFalse("There should not be any bootstrap file for existing non-empty store",
-        storeToWrite.isBootstrapInProgress());
-  assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.OFFLINE,
-        storeToWrite.getCurrentState());
 
-    // 3. test that for new created (empty) store, state transition puts it into BOOTSTRAP state
+    assertEquals("The store's current state should be OFFLINE", ReplicaState.OFFLINE, storeToWrite.getCurrentState());
+
+    // 3. test that for new created (empty) store, state stays in OFFLINE state
     ReplicaId replicaId = localReplicas.get(0);
     Store localStore = storageManager.getStore(replicaId.getPartitionId(), true);
     mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
-  /*  assertTrue("There should be a bootstrap file because store is empty and probably recreated",
-        localStore.isBootstrapInProgress()); */
- //   assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP, localStore.getCurrentState());
+
+    assertEquals("The store's current state should be OFFLINE", ReplicaState.OFFLINE, localStore.getCurrentState());
 
     // 4. test that when an existing store is already leader or standby, state transition is not going to change it
-    // back to BOOTSTRAP
+    // back to OFFLINE
     storageManager.getStore(localReplicas.get(0).getPartitionId()).setCurrentState(ReplicaState.STANDBY);
     mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
     assertEquals("The store's current state should be STANDBY", ReplicaState.STANDBY, localStore.getCurrentState());
@@ -816,8 +829,6 @@ public class StorageManagerTest {
 
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
-
-
 
     /**
      * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE (update
