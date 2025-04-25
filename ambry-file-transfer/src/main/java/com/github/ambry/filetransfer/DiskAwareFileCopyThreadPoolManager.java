@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  *
  * This implementation is thread-safe and uses locks to coordinate access to shared resources.
  */
-public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicationThreadPoolManager {
+public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicationThreadPoolManager, Runnable {
 
   private final Map<ReplicaId, FileCopyThread> replicaToFileCopyThread;
   private final Map<DiskId, Set<FileCopyThread>> runningThreads;
@@ -160,19 +160,7 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     while (isRunning || areThreadsRunning()) {
       threadQueueLock.lock();
       runningThreads.forEach((diskId, fileCopyThreads) -> {
-        fileCopyThreads.forEach(fileCopyThread -> {
-          if (!isRunning || !fileCopyThread.isAlive()) {
-            try {
-              fileCopyThread.shutDown();
-            } catch (InterruptedException e) {
-              logger.error("Error while shutting down thread {}", fileCopyThread.threadName, e);
-            } finally {
-                fileCopyThreads.remove(fileCopyThread);
-                replicaToFileCopyThread.values().remove(fileCopyThread);
-                logger.info("Removed thread {} for disk {}", fileCopyThread.threadName, diskId);
-            }
-          }
-        });
+        fileCopyThreads.removeIf(fileCopyThread -> !fileCopyThread.isAlive());
       });
       threadQueueLock.unlock();
     }
@@ -194,6 +182,20 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   @Override
   public void shutdown() throws InterruptedException {
     isRunning = false;
+    logger.info("Shutting down DiskAwareFileCopyThreadPoolManager");
+    threadQueueLock.lock();
+    runningThreads.forEach((diskId, fileCopyThreads) -> {
+      fileCopyThreads.forEach(fileCopyThread -> {
+        try {
+          // Attempt to shut down the thread.
+          fileCopyThread.shutDown();
+        } catch (Exception e) {
+          // Log the error and ensure the thread is interrupted.
+          logger.error("Error while shutting down thread {}", fileCopyThread.threadName, e);
+        }
+      });
+    });
+    threadQueueLock.unlock();
     shutdownLatch.await();
   }
 }
