@@ -923,6 +923,21 @@ public class StorageManager implements StoreManager {
 
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
         // able to get new replica from storageManager without querying Helix
+
+        if (primaryClusterParticipant != null) {
+          // update InstanceConfig in Helix
+          try {
+            if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
+              logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
+              throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
+                  StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+            }
+            logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
+          } catch (IllegalStateException e) {
+            throw new StateTransitionException(e.getMessage(),
+                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+          }
+        }
       } else {
         // if the replica is already on current node, there are 4 cases need to discuss:
         // 1. replica was initially present in clustermap and this is a regular reboot.
@@ -965,21 +980,6 @@ public class StorageManager implements StoreManager {
       }
 
       if (!store.isStarted()) {
-
-        if (primaryClusterParticipant != null) {
-          // update InstanceConfig in Helix
-          try {
-            if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replica, true)) {
-              logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
-              throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
-                  StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
-            }
-            logger.info("Partition {} is successfully added into InstanceConfig of current node", partitionName);
-          } catch (IllegalStateException e) {
-            throw new StateTransitionException(e.getMessage(),
-                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
-          }
-        }
         if (!loadBlobStore(replica)) {
           throw new StateTransitionException("loading failed for store",
               StateTransitionException.TransitionErrorCode.StoreNotStarted);

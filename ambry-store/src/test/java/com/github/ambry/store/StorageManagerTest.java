@@ -778,13 +778,9 @@ public class StorageManagerTest {
     BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition, true);
     assertNotNull("There should be a started store associated with new partition", newAddedStore);
     // verify that new added store has bootstrap file
-  /*  assertFalse("There should  not be a bootstrap file indicating store is in BOOTSTRAP state",
-        newAddedStore.isBootstrapInProgress());
-    assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
-        newAddedStore.getCurrentState()); */
-    // verify that compaction is disabled for the new replica
-   /* assertTrue("The store's compaction should be disabled",
-        storageManager.compactionDisabledForBlobStore(newPartition)); */
+
+    assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.OFFLINE,
+        newAddedStore.getCurrentState());
 
     // 2. test that state transition should succeed for existing non-empty replicas (we write some data into store beforehand)
     MockId id = new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), Utils.getRandomShort(TestUtils.RANDOM),
@@ -798,8 +794,8 @@ public class StorageManagerTest {
     mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(localReplicas.get(1).getPartitionId().toPathString());
     assertFalse("There should not be any bootstrap file for existing non-empty store",
         storeToWrite.isBootstrapInProgress());
-  /*  assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
-        storeToWrite.getCurrentState()); */
+  assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.OFFLINE,
+        storeToWrite.getCurrentState());
 
     // 3. test that for new created (empty) store, state transition puts it into BOOTSTRAP state
     ReplicaId replicaId = localReplicas.get(0);
@@ -1212,7 +1208,7 @@ public class StorageManagerTest {
     helixAdmin.addCluster(CLUSTER_NAME);
     helixAdmin.addInstance(CLUSTER_NAME, instanceConfig);
     // test success case
-    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(newPartition.toPathString());
     instanceConfig = helixAdmin.getInstanceConfig(CLUSTER_NAME, instanceName);
     // verify that new replica info is present in InstanceConfig
     Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
