@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  *
  * This implementation is thread-safe and uses locks to coordinate access to shared resources.
  */
-public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicationThreadPoolManager, Runnable {
+public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicationThreadPoolManager {
 
   private final Map<ReplicaId, FileCopyThread> replicaToFileCopyThread;
   private final Map<DiskId, Set<FileCopyThread>> runningThreads;
@@ -160,7 +160,19 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     while (isRunning || areThreadsRunning()) {
       threadQueueLock.lock();
       runningThreads.forEach((diskId, fileCopyThreads) -> {
-        fileCopyThreads.removeIf(fileCopyThread -> !fileCopyThread.isAlive());
+        fileCopyThreads.forEach(fileCopyThread -> {
+          if (!isRunning || !fileCopyThread.isAlive()) {
+            try {
+              fileCopyThread.shutDown();
+            } catch (InterruptedException e) {
+              logger.error("Error while shutting down thread {}", fileCopyThread.threadName, e);
+            } finally {
+                fileCopyThreads.remove(fileCopyThread);
+                replicaToFileCopyThread.values().remove(fileCopyThread);
+                logger.info("Removed thread {} for disk {}", fileCopyThread.threadName, diskId);
+            }
+          }
+        });
       });
       threadQueueLock.unlock();
     }
