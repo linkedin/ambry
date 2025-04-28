@@ -180,6 +180,7 @@ class FrontendRestRequestService implements RestRequestService {
   public void setupResponseHandler(RestResponseHandler responseHandler) {
     this.responseHandler = responseHandler;
   }
+
   @Override
   public void start() throws InstantiationException {
     if (responseHandler == null) {
@@ -214,7 +215,8 @@ class FrontendRestRequestService implements RestRequestService {
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);
     deleteDatasetHandler =
-        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector, deleteBlobHandler);
+        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector,
+            deleteBlobHandler);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
@@ -548,13 +550,10 @@ class FrontendRestRequestService implements RestRequestService {
       logger.trace("Handling {} request - {}", restRequest.getRestMethod(), restRequest.getUri());
       RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
       // Reject POST requests for non-S3 named blob requests, named blob uploads happen via PUT
-      if (restRequest.getRestMethod() == RestMethod.POST
-          && requestPath.matchesOperation(Operations.NAMED_BLOB)
+      if (restRequest.getRestMethod() == RestMethod.POST && requestPath.matchesOperation(Operations.NAMED_BLOB)
           && !isS3Request(restRequest)) {
-        throw new RestServiceException(
-            "POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
-            RestServiceErrorCode.NotAllowed, true, false, null
-        );
+        throw new RestServiceException("POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
+            RestServiceErrorCode.NotAllowed, true, false, null);
       }
 
       checkAvailable();
