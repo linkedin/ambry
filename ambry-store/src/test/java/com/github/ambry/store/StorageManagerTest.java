@@ -830,7 +830,12 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
-
+  /**
+   * Test for failures in PRE-BOOTSTRAP to BOOTSTRAP transition
+   * Starts the {@link StorageManager}
+   * Creates a new partition and tries to transition it to transition partition and asserts failure.
+   * @throws Exception exception
+   */
   @Test
   public void replicaPreBootstrapToBootstrapFailureTest() throws Exception {
     generateConfigs(true, false);
@@ -860,7 +865,13 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
-
+  /**
+   * Test for success in PRE-BOOTSTRAP to BOOTSTRAP transition
+   * Starts the {@link StorageManager}
+   * Creates a new partition, transition it from OFFLINE to PRE-BOOTSTRAP
+   * Transition it now from PRE-BOOTSTRAP to BOOTSTRAP and asserts success.
+   * @throws Exception exception
+   */
   @Test
   public void replicaPreBootstrapToBootstrapSuccessTest() throws Exception {
     generateConfigs(true, false);
@@ -889,11 +900,11 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
-    /**
-     * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE (update
-     * InstanceConfig in Helix is turned off in this test)
-     * @throws Exception
-     */
+  /**
+   * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE (update
+   * InstanceConfig in Helix is turned off in this test)
+   * @throws Exception
+   */
   @Test
   public void replicaFromOfflineToBootstrapFailureTest() throws Exception {
     generateConfigs(true, false);
