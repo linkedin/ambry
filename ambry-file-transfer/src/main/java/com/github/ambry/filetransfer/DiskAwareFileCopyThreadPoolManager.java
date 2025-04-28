@@ -187,10 +187,8 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     runningThreads.forEach((diskId, fileCopyThreads) -> {
       fileCopyThreads.forEach(fileCopyThread -> {
         try {
-          // Attempt to shut down the thread.
           fileCopyThread.shutDown();
         } catch (Exception e) {
-          // Log the error and ensure the thread is interrupted.
           logger.error("Error while shutting down thread {}", fileCopyThread.threadName, e);
         }
       });
