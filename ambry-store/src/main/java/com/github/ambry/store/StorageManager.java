@@ -971,12 +971,16 @@ public class StorageManager implements StoreManager {
     }
 
     @Override
-    public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
+    public void onPartitionBecomeBootstrapFromPreBootstrap(String partitionName) {
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+
+      if (replica == null) {
+        throw new StateTransitionException("Store not initialized", StoreNotInitialized);
+      }
+
       Store store = getInitializedStore(replica.getPartitionId());
       if (store == null) {
-        throw new StateTransitionException("Store not initialized",
-            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+        throw new StateTransitionException("Store not initialized", StoreNotInitialized);
       }
 
       if (!store.isStarted()) {
@@ -1017,7 +1021,7 @@ public class StorageManager implements StoreManager {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       onPartitionBecomePreBootstrapFromOffline(partitionName);
-      onPartitionBecomeBootstrapFromPreBootStrap(partitionName);
+      onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
     }
 
     @Override

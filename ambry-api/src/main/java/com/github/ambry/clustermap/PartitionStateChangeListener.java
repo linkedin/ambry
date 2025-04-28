@@ -31,7 +31,7 @@ public interface PartitionStateChangeListener {
    * Action to take when partition becomes bootstrap from pre-bootstrap
    * @param partitionName partition name
    */
-  default void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
+  default void onPartitionBecomeBootstrapFromPreBootstrap(String partitionName) {
   }
 
   /**

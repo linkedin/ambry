@@ -867,11 +867,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
-  public void onPartitionBecomeBootstrapFromPreBootStrap(String partitionName) {
+  public void onPartitionBecomeBootstrapFromPreBootstrap(String partitionName) {
     PartitionStateChangeListener storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
     if (storageManagerListener != null) {
-      storageManagerListener.onPartitionBecomeBootstrapFromPreBootStrap(partitionName);
+      storageManagerListener.onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
     }
   }
 
@@ -882,7 +882,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     try {
       // 1. take actions in storage manager (add new replica if necessary)
       onPartitionBecomePreBootstrapFromOffline(partitionName);
-      onPartitionBecomeBootstrapFromPreBootStrap(partitionName);
+      onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);

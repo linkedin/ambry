@@ -830,6 +830,65 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
+
+  @Test
+  public void replicaPreBootstrapToBootstrapFailureTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+
+    // 0. get listeners from Helix participant and verify there is a storageManager listener.
+    Map<StateModelListenerType, PartitionStateChangeListener> listeners =
+        mockHelixParticipant.getPartitionStateChangeListeners();
+    assertTrue("Should contain storage manager listener",
+        listeners.containsKey(StateModelListenerType.StorageManagerListener));
+
+    // 1. Test case where new replica(store) is added into StorageManager and transitions from PreBootstrap to Bootstrap
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromPreBootstrap(newPartition.toPathString());
+      fail("should fail due to initialized store not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StoreNotInitialized, e.getErrorCode());
+    }
+    BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition, true);
+    assertNull("There should be no store associated with the partition", newAddedStore);
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+
+  @Test
+  public void replicaPreBootstrapToBootstrapSuccessTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+
+    // 0. get listeners from Helix participant and verify there is a storageManager listener.
+    Map<StateModelListenerType, PartitionStateChangeListener> listeners =
+        mockHelixParticipant.getPartitionStateChangeListeners();
+    assertTrue("Should contain storage manager listener",
+        listeners.containsKey(StateModelListenerType.StorageManagerListener));
+
+    // 1. Test case where new replica(store) is added into StorageManager and transitions from PreBootstrap to Bootstrap
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(newPartition.toPathString());
+    BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition, true);
+    assertNotNull("There should be store associated with the partition", newAddedStore);
+
+    mockHelixParticipant.onPartitionBecomeBootstrapFromPreBootstrap(newPartition.toPathString());
+    newAddedStore = (BlobStore) storageManager.getStore(newPartition);
+    assertNotNull("There should be store associated with the partition", newAddedStore);
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
     /**
      * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE (update
      * InstanceConfig in Helix is turned off in this test)
