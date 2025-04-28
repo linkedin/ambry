@@ -118,10 +118,9 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   }
 
   /**
-   * Shutdown the file copy handler. Perform clean up steps in case of a graceful shutdown.
+   * Shutdown the file copy handler.
    */
   public void shutdown() {
-    connectionPool.shutdown();
     isRunning = false;
   }
 
