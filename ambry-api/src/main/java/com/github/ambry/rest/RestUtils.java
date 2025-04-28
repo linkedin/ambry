@@ -905,6 +905,17 @@ public class RestUtils {
     }
   }
 
+  public static boolean isNamedBlobTtlUpdateRequest(RestRequest restRequest) {
+    // This request has to be NamedBlob Request, which means it's PUT request and the operation in requestPath is namedBlob.
+    try {
+      String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
+      return restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+          .matchesOperation(Operations.UPDATE_TTL) && RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB);
+    } catch (RestServiceException e) {
+      return false;
+    }
+  }
+
   /**
    * Fetch time in ms for the {@code dateString} passed in, since epoch
    * @param dateString the String representation of the date that needs to be parsed
