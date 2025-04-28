@@ -949,7 +949,7 @@ public class StorageManager implements StoreManager {
         // For case 3, we should throw exception to make replica stay in ERROR state (thus, frontends won't pick this replica)
         // For case 4, we check it's current used capacity and put it in BOOTSTRAP state if necessary. This is to ensure
         //             it catches up with peers before serving PUT traffic (or being selected as LEADER)
-        store = getStore(replica.getPartitionId());
+        store = getStore(replica.getPartitionId(), false);
 
         // store should be in started if this is not a first time added replica
         // as we will start all stores on the host during a restart
