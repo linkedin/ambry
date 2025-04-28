@@ -147,6 +147,11 @@ public class ReplicationPrioritizationManagerTest {
 
     when(dataNodeId.getDatacenterName()).thenReturn(datacenterName);
 
+    when(metricRegistry.counter(anyString())).thenReturn(mock(com.codahale.metrics.Counter.class));
+    when(metricRegistry.meter(anyString())).thenReturn(mock(com.codahale.metrics.Meter.class));
+    when(metricRegistry.histogram(anyString())).thenReturn(mock(com.codahale.metrics.Histogram.class));
+    when(metricRegistry.timer(anyString())).thenReturn(mock(com.codahale.metrics.Timer.class));
+
     // Create manager instance with system time
     manager = new ReplicationPrioritizationManager(
         replicationEngine, clusterMap, dataNodeId, scheduler, storageManager,
