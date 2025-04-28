@@ -358,22 +358,9 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         postAccountsHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-        if (isS3Request(restRequest)) {
-          s3PostHandler.handle(restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        } else {
-          // for all other non-S3 named blob requests reject POST requests, named blob uploads happen via PUT
-          submitResponse(
-              restRequest,
-              restResponseChannel,
-              null,
-              new RestServiceException(
-                  "POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
-                  RestServiceErrorCode.NotAllowed, true, false, null
-              )
-          );
-        }
+      } else if (isS3Request(restRequest)) {
+        s3PostHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         postBlobHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));
@@ -559,9 +546,19 @@ class FrontendRestRequestService implements RestRequestService {
     Callback<Void> errorCallback = (r, e) -> submitResponse(restRequest, restResponseChannel, null, e);
     try {
       logger.trace("Handling {} request - {}", restRequest.getRestMethod(), restRequest.getUri());
+      RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
+      // Reject POST requests for non-S3 named blob requests, named blob uploads happen via PUT
+      if (restRequest.getRestMethod() == RestMethod.POST
+          && requestPath.matchesOperation(Operations.NAMED_BLOB)
+          && !isS3Request(restRequest)) {
+        throw new RestServiceException(
+            "POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
+            RestServiceErrorCode.NotAllowed, true, false, null
+        );
+      }
+
       checkAvailable();
       securityService.preProcessRequest(restRequest, FrontendUtils.buildCallback(preProcessingMetrics, r -> {
-        RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
         restRequest.setArg(REQUEST_PATH, requestPath);
 
         //NamedBlobPath.parse will validate the blobName length
