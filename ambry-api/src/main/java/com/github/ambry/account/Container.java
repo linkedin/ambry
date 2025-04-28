@@ -64,6 +64,7 @@ public class Container {
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
   static final boolean TTL_REQUIRED_DEFAULT_VALUE = true;
+  static final boolean DUAL_WRITE_ENABLED_DEFAULT_VALUE = false;
   static final long CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE = 0;
   static final boolean SECURE_PATH_REQUIRED_DEFAULT_VALUE = false;
   static final boolean OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE = false;
@@ -125,7 +126,6 @@ public class Container {
    * but are specified private. {@link #DEFAULT_PRIVATE_CONTAINER} is one of the containers that use it.
    */
   public static final String DEFAULT_PRIVATE_CONTAINER_NAME = "default-private-container";
-
   /**
    * The status of {@link #UNKNOWN_CONTAINER}.
    */
@@ -273,6 +273,21 @@ public class Container {
   public static final boolean DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING = TTL_REQUIRED_DEFAULT_VALUE;
 
   /**
+   * The enable dual write setting for {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_CONTAINER_ENABLE_DUAL_WRITE_SETTING = DUAL_WRITE_ENABLED_DEFAULT_VALUE;
+
+  /**
+   * The enable dual write setting for {@link #DEFAULT_PUBLIC_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_ENABLE_DUAL_WRITE_SETTING = DUAL_WRITE_ENABLED_DEFAULT_VALUE;
+
+  /**
+   * The enable dual write setting for {@link #DEFAULT_PRIVATE_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_ENABLE_DUAL_WRITE_SETTING = DUAL_WRITE_ENABLED_DEFAULT_VALUE;
+
+  /**
    * The parent account id of {@link #UNKNOWN_CONTAINER}.
    */
   public static final short UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID = Account.UNKNOWN_ACCOUNT_ID;
@@ -300,7 +315,7 @@ public class Container {
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
           UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, UNKNOWN_CONTAINER_PARANOID_DURABILITY_SETTING, null,
-          UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+          UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING, UNKNOWN_CONTAINER_ENABLE_DUAL_WRITE_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
           CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID,
           UNKNOWN_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE,
@@ -319,8 +334,8 @@ public class Container {
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PUBLIC_CONTAINER_PARANOID_DURABILITY_SETTING,
-          null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
+          null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING, DEFAULT_PUBLIC_CONTAINER_ENABLE_DUAL_WRITE_SETTING,
+          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID,
           DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
           SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
@@ -338,8 +353,8 @@ public class Container {
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PRIVATE_CONTAINER_PARANOID_DURABILITY_SETTING,
-          null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING, SECURE_PATH_REQUIRED_DEFAULT_VALUE,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
+          null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING, DEFAULT_PRIVATE_CONTAINER_ENABLE_DUAL_WRITE_SETTING,
+          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, BACKUP_ENABLED_DEFAULT_VALUE,
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME,
           LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE,
@@ -362,6 +377,7 @@ public class Container {
   private final boolean paranoidDurabilityEnabled;
   private final String replicationPolicy;
   private final boolean ttlRequired;
+  private final boolean dualWriteEnabled;
   private final boolean securePathRequired;
   @JsonProperty(OVERRIDE_ACCOUNT_ACL_KEY)
   private final boolean overrideAccountAcl;
@@ -391,6 +407,7 @@ public class Container {
    * @param paranoidDurabilityEnabled {@code true} if paranoid durability should be enabled for this container.
    * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
    * @param ttlRequired {@code true} if ttl is required on content created in this container.
+   * @param dualWriteEnabled {@code true} if dual write is enabled on this container.
    * @param securePathRequired {@code true} if secure path validation is required in this container.
    * @param contentTypeWhitelistForFilenamesOnDownload the set of content types for which the filename can be sent on
    *                                                   download.
@@ -403,7 +420,7 @@ public class Container {
    */
   public Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, boolean paranoidDurabilityEnabled,
-      String replicationPolicy, boolean ttlRequired, boolean securePathRequired,
+      String replicationPolicy, boolean ttlRequired, boolean dualWriteEnabled, boolean securePathRequired,
       Set<String> contentTypeWhitelistForFilenamesOnDownload, boolean backupEnabled, boolean overrideAccountAcl,
       NamedBlobMode namedBlobMode, short parentAccountId, long deleteTriggerTime, long lastModifiedTime,
       int snapshotVersion, String accessControlAllowOrigin, Long cacheTtlInSecond,
@@ -427,6 +444,7 @@ public class Container {
         this.replicationPolicy = null;
         this.deleteTriggerTime = CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE;
         this.ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+        this.dualWriteEnabled = DUAL_WRITE_ENABLED_DEFAULT_VALUE;
         this.securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
         this.contentTypeWhitelistForFilenamesOnDownload =
             CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
@@ -445,6 +463,7 @@ public class Container {
         this.replicationPolicy = replicationPolicy;
         this.deleteTriggerTime = deleteTriggerTime;
         this.ttlRequired = ttlRequired;
+        this.dualWriteEnabled = dualWriteEnabled;
         this.securePathRequired = securePathRequired;
         this.contentTypeWhitelistForFilenamesOnDownload =
             contentTypeWhitelistForFilenamesOnDownload == null ? Collections.emptySet()
@@ -494,7 +513,8 @@ public class Container {
         && Objects.equals(this.isSecurePathRequired(), containerToCompare.isSecurePathRequired())
         && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled())
         && Objects.equals(this.getContentTypeWhitelistForFilenamesOnDownload(), containerToCompare.getContentTypeWhitelistForFilenamesOnDownload())
-        && Objects.equals(this.isAccountAclOverridden(), containerToCompare.isAccountAclOverridden());
+        && Objects.equals(this.isAccountAclOverridden(), containerToCompare.isAccountAclOverridden())
+        && Objects.equals(this.isDualWriteEnabled(), containerToCompare.isDualWriteEnabled());
     //@formatter:on
   }
 
@@ -594,6 +614,13 @@ public class Container {
    */
   public boolean isTtlRequired() {
     return ttlRequired;
+  }
+
+  /**
+   * @return {@code true} if dual write is enabled on this container.
+   */
+  public boolean isDualWriteEnabled() {
+    return dualWriteEnabled;
   }
 
   /**
@@ -708,6 +735,7 @@ public class Container {
         && Objects.equals(description, container.description)
         && Objects.equals(replicationPolicy, container.replicationPolicy)
         && ttlRequired == container.ttlRequired
+        && dualWriteEnabled == container.dualWriteEnabled
         && securePathRequired == container.securePathRequired
         && overrideAccountAcl == container.overrideAccountAcl
         && namedBlobMode == container.namedBlobMode
