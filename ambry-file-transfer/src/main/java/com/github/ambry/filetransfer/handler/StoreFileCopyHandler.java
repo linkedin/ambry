@@ -273,10 +273,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
     String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
     writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
-    if (chunkResponse != null && chunkResponse.getChunkStream() instanceof NettyByteBufDataInputStream) {
-      // if the DataInputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
-      ((NettyByteBufDataInputStream) (chunkResponse.getChunkStream())).getBuffer().release();
-    }
+    chunkResponse.release();
   }
 
   /**
@@ -306,10 +303,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           fileChunkInfo, true);
       String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
-      if (chunkResponse != null && chunkResponse.getChunkStream() instanceof NettyByteBufDataInputStream) {
-        // if the DataInputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
-        ((NettyByteBufDataInputStream) (chunkResponse.getChunkStream())).getBuffer().release();
-      }
+      chunkResponse.release();
     }
   }
 
