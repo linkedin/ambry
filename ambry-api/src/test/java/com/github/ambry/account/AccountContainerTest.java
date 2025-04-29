@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,6 +80,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerParanoidDurabilityEnabledValues;
   private List<String> refContainerReplicationPolicyValues;
   private List<Boolean> refContainerTtlRequiredValues;
+  private List<Boolean> refContainerDualWriteEnabledValues;
   private List<Long> refContainerDeleteTriggerTime;
   private List<Boolean> refContainerSignedPathRequiredValues;
   private List<Boolean> refContainerOverrideAccountAcls;
@@ -446,6 +446,7 @@ public class AccountContainerTest {
       boolean updatedParanoidDurabilityEnabled = !container.isParanoidDurabilityEnabled();
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
+      boolean updatedDualWriteEnabled = !container.isDualWriteEnabled();
       boolean updatedSignedPathRequired = !container.isSecurePathRequired();
       String updatedAccessControlAllowOrigin = container.getAccessControlAllowOrigin() + "---updated";
       Set<String> updatedContentTypeAllowListForFilenamesOnDownloadValues =
@@ -469,6 +470,7 @@ public class AccountContainerTest {
           .setParanoidDurabilityEnabled(updatedParanoidDurabilityEnabled)
           .setReplicationPolicy(updatedReplicationPolicy)
           .setTtlRequired(updatedTtlRequired)
+          .setDualWriteEnabled(updatedDualWriteEnabled)
           .setSecurePathRequired(updatedSignedPathRequired)
           .setContentTypeWhitelistForFilenamesOnDownload(updatedContentTypeAllowListForFilenamesOnDownloadValues)
           .setAccessControlAllowOrigin(updatedAccessControlAllowOrigin)
@@ -496,6 +498,7 @@ public class AccountContainerTest {
               updatedContainer.isParanoidDurabilityEnabled());
           assertNull("Wrong replication policy", updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, updatedContainer.isTtlRequired());
+          assertEquals("Wrong dual write enabled setting", DUAL_WRITE_ENABLED_DEFAULT_VALUE, updatedContainer.isDualWriteEnabled());
           assertEquals("Wrong secure required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
               updatedContainer.isSecurePathRequired());
           assertEquals("Wrong content type allow list for filenames on download value",
@@ -513,6 +516,7 @@ public class AccountContainerTest {
               updatedContainer.isParanoidDurabilityEnabled());
           assertEquals("Wrong replication policy", updatedReplicationPolicy, updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", updatedTtlRequired, updatedContainer.isTtlRequired());
+          assertEquals("Wrong dual write enabled setting", updatedDualWriteEnabled, updatedContainer.isDualWriteEnabled());
           assertEquals("Wrong secure path required setting", updatedSignedPathRequired,
               updatedContainer.isSecurePathRequired());
           assertEquals("Wrong content type allow list for filenames on download value",
@@ -823,6 +827,7 @@ public class AccountContainerTest {
         .setParanoidDurabilityEnabled(container.isParanoidDurabilityEnabled())
         .setReplicationPolicy(container.getReplicationPolicy())
         .setTtlRequired(container.isTtlRequired())
+        .setDualWriteEnabled(container.isDualWriteEnabled())
         .setContentTypeWhitelistForFilenamesOnDownload(container.getContentTypeWhitelistForFilenamesOnDownload())
         .setDeleteTriggerTime(container.getDeleteTriggerTime())
         .setOverrideAccountAcl(container.isAccountAclOverridden())
@@ -888,6 +893,7 @@ public class AccountContainerTest {
             container.isParanoidDurabilityEnabled());
         assertNull("Wrong replication policy", container.getReplicationPolicy());
         assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, container.isTtlRequired());
+        assertEquals("Wrong dual write enabled setting", DUAL_WRITE_ENABLED_DEFAULT_VALUE, container.isDualWriteEnabled());
         assertEquals("Wrong secure path required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
             container.isSecurePathRequired());
         assertEquals("Wrong override account acl setting", OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE,
@@ -905,6 +911,7 @@ public class AccountContainerTest {
         assertEquals("Wrong replication policy", refContainerReplicationPolicyValues.get(index),
             container.getReplicationPolicy());
         assertEquals("Wrong ttl required setting", refContainerTtlRequiredValues.get(index), container.isTtlRequired());
+        assertEquals("Wrong dual write enabled setting", refContainerDualWriteEnabledValues.get(index), container.isDualWriteEnabled());
         assertEquals("Wrong secure path required setting", refContainerSignedPathRequiredValues.get(index),
             container.isSecurePathRequired());
         assertEquals("Wrong override account acl setting", refContainerOverrideAccountAcls.get(index),
@@ -993,7 +1000,7 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, false, null, false,
-          false, Collections.emptySet(), false, false, getRandomNamedBlobMode(), (short) 0, System.currentTimeMillis(),
+          false, false, Collections.emptySet(), false, false, getRandomNamedBlobMode(), (short) 0, System.currentTimeMillis(),
           System.currentTimeMillis(), 0, null, null, null);
     }, null);
   }
@@ -1029,6 +1036,7 @@ public class AccountContainerTest {
     refContainerParanoidDurabilityEnabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
     refContainerTtlRequiredValues = new ArrayList<>();
+    refContainerDualWriteEnabledValues = new ArrayList<>();
     refContainerDeleteTriggerTime = new ArrayList<>();
     refContainerSignedPathRequiredValues = new ArrayList<>();
     refContainerOverrideAccountAcls = new ArrayList<>();
@@ -1067,6 +1075,7 @@ public class AccountContainerTest {
         refContainerReplicationPolicyValues.add(null);
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
+      refContainerDualWriteEnabledValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
       refContainerOverrideAccountAcls.add(random.nextBoolean());
       refContainerNamedBlobModes.add(getRandomNamedBlobMode());
@@ -1097,7 +1106,7 @@ public class AccountContainerTest {
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerParanoidDurabilityEnabledValues.get(i), refContainerReplicationPolicyValues.get(i),
-          refContainerTtlRequiredValues.get(i), refContainerSignedPathRequiredValues.get(i),
+          refContainerTtlRequiredValues.get(i), refContainerDualWriteEnabledValues.get(i), refContainerSignedPathRequiredValues.get(i),
           refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
           refContainerOverrideAccountAcls.get(i), refContainerNamedBlobModes.get(i), refAccountId,
           refContainerDeleteTriggerTime.get(i), refContainerLastModifiedTimes.get(i),

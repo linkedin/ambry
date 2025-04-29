@@ -294,6 +294,11 @@ public class BlobStore implements Store {
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
         fileStore.start();
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics, false);
+        compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
+            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
+            accountService, remoteTokenTracker, diskMetrics, false);
+
         initialized = true;
       } catch (Exception e) {
         if (fileLock != null) {
@@ -320,10 +325,8 @@ public class BlobStore implements Store {
         throw new StoreException("Store not initialized", StoreErrorCodes.StoreNotInitialized);
       }
       try {
-        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
-        compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
-            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
-            accountService, remoteTokenTracker, diskMetrics);
+        log.init();
+        compactor.init();
         index = new PersistentIndex(dataDir, storeId, indexPersistScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
@@ -1346,7 +1349,7 @@ public class BlobStore implements Store {
     }
 
     // Step 2: if segmented, delete remaining store segments in reserve pool
-    if (log != null && log.isLogSegmented()) {
+    if (log != null) {
       logger.info("Deleting remaining segments associated with store {} in reserve pool", storeId);
       diskSpaceAllocator.deleteAllSegmentsForStoreIds(
           Collections.singletonList(replicaId.getPartitionId().toPathString()));
@@ -1667,16 +1670,14 @@ public class BlobStore implements Store {
 
   /**
    * @return the {@link DiskSpaceRequirements} for this store to provide to
-   * {@link DiskSpaceAllocator#initializePool(Collection)}. This will be {@code null} if this store uses a non-segmented
-   * log. This is because it does not require any additional/swap segments.
+   * {@link DiskSpaceAllocator#initializePool(Collection)}.
    * @throws StoreException
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    checkStarted();
+    checkInitialized();
     DiskSpaceRequirements requirements =
-        log.isLogSegmented() ? new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
-            log.getSegmentCapacity(), log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse().length)
-            : null;
+        new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(), log.getSegmentSize(),
+            log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse().length);
     logger.info("Store {} has disk space requirements: {}", storeId, requirements);
     return requirements;
   }

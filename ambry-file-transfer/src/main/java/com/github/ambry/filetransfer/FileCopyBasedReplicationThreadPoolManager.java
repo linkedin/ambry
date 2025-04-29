@@ -25,7 +25,7 @@ import java.util.List;
  * assignments of partitions for hydration to threads in the thread pool.
  */
 
-public interface FileCopyBasedReplicationThreadPoolManager {
+public interface FileCopyBasedReplicationThreadPoolManager extends Runnable {
 
   /**
    * @return the number thread pool size.

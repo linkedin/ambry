@@ -107,7 +107,6 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @throws StoreException
    */
   public void start() throws StoreException {
-    logger.info("FCH TEST: FCH TEST: File Copy handler is running for Replica");
     isRunning = true;
   }
 
@@ -119,10 +118,9 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   }
 
   /**
-   * Shutdown the file copy handler. Perform clean up steps in case of a graceful shutdown.
+   * Shutdown the file copy handler.
    */
   public void shutdown() {
-    connectionPool.shutdown();
     isRunning = false;
   }
 
@@ -270,6 +268,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     long startTimeMs = System.currentTimeMillis();
     writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
     logger.info("FCH TEST: Persisted index file {} in {} ms", indexFile.getFileName(), System.currentTimeMillis() - startTimeMs);
+    chunkResponse.release();
   }
 
   /**
@@ -305,6 +304,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       startTimeMs = System.currentTimeMillis();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
       logger.info("FCH TEST: Persisted chunk {} in {} ms", (i + 1), System.currentTimeMillis() - startTimeMs);
+      chunkResponse.release();
     }
   }
 

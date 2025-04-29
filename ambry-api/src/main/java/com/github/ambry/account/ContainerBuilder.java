@@ -46,6 +46,7 @@ public class ContainerBuilder {
   private boolean paranoidDurabilityEnabled = PARANOID_DURABILITY_ENABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+  private boolean dualWriteEnabled = DUAL_WRITE_ENABLED_DEFAULT_VALUE;
   private boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
   private boolean overrideAccountAcl = OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE;
   private NamedBlobMode namedBlobMode = NAMED_BLOB_MODE_DEFAULT_VALUE;
@@ -81,6 +82,7 @@ public class ContainerBuilder {
     paranoidDurabilityEnabled = origin.isParanoidDurabilityEnabled();
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
+    dualWriteEnabled = origin.isDualWriteEnabled();
     parentAccountId = origin.getParentAccountId();
     securePathRequired = origin.isSecurePathRequired();
     overrideAccountAcl = origin.isAccountAclOverridden();
@@ -247,6 +249,17 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the dual write enabled setting of the {@link Container}.
+   * @param dualWriteEnabled dual write enabling setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setDualWriteEnabled(boolean dualWriteEnabled) {
+    this.dualWriteEnabled = dualWriteEnabled;
+    return this;
+  }
+
+
+  /**
    * Sets the secure path validation required setting of the {@link Container}.
    * @param securePathRequired The securePathRequired setting to set.
    * @return This builder.
@@ -359,7 +372,7 @@ public class ContainerBuilder {
       throw new IllegalStateException("Container id or container name is not present");
     }
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, paranoidDurabilityEnabled, replicationPolicy, ttlRequired, securePathRequired,
+        mediaScanDisabled, paranoidDurabilityEnabled, replicationPolicy, ttlRequired, dualWriteEnabled, securePathRequired,
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
         parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime,
         lastModifiedTime, snapshotVersion, accessControlAllowOrigin, cacheTtlInSecond,

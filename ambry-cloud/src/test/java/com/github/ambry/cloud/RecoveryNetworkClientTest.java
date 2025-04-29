@@ -148,8 +148,7 @@ public class RecoveryNetworkClientTest {
         new Container(CONTAINER_ID, "testContainer", Container.ContainerStatus.ACTIVE,
             "Test Container", false,
             false, false,
-            false, false, null, false,
-            false, Collections.emptySet(),
+            false, false, null, false, false, false, Collections.emptySet(),
             false, false, Container.NamedBlobMode.DISABLED, ACCOUNT_ID, 0,
             0, 0, "",
             null, Collections.emptySet());
