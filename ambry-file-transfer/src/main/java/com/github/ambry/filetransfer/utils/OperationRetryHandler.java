@@ -69,7 +69,9 @@ public class OperationRetryHandler {
     while (true) {
       try {
         result = operation.execute();
-        logger.info("FCH TEST: {} succeeded after {} attempts", operationName, attempts);
+        if (attempts > 0) {
+          logger.info("FCH TEST: {} succeeded after {} attempts", operationName, attempts);
+        }
         return result;
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt(); // Preserve the interrupt status

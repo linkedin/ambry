@@ -78,8 +78,6 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
   private static final Logger logger = LoggerFactory.getLogger(StoreFileCopyHandler.class);
 
-  boolean x;
-
   /**
    * Constructor to create StoreFileCopyHandler
    * @param connectionPool the {@link ConnectionPool} to use for making requests.
@@ -102,7 +100,6 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     this.clusterMap = clusterMap;
     this.config = config;
     this.operationRetryHandler = new OperationRetryHandler(config);
-    x = (config.getFileCopyHandlerChunkSize != 0);
   }
 
   /**
@@ -160,14 +157,6 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
-    try {
-      Thread.sleep(60000);
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    }
-
-    if(x)
-      return;
     logger.info("FCH TEST: Mount Path is {}, DataNode is {}", fileCopyInfo.getSourceReplicaId().getMountPath(), fileCopyInfo.getTargetReplicaId().getDataNodeId());
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
@@ -175,13 +164,16 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     final PartitionFileStore fileStore = storeManager.getFileStore(fileCopyInfo.getSourceReplicaId().getPartitionId());
     final String partitionToMountFilePath = fileCopyInfo.getSourceReplicaId().getMountPath() + File.separator +
         fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
+    long startTimeMs = System.currentTimeMillis();
     final FileCopyGetMetaDataResponse metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
+    logger.info("FCH TEST: Fetched metadata in {} ms", System.currentTimeMillis() - startTimeMs);
 
     metadataResponse.getLogInfos().forEach(logInfo -> {
       logInfo.getIndexSegments().forEach(indexFile ->
         processIndexFile(indexFile, partitionToMountFilePath, fileCopyInfo, fileStore));
       processLogSegment(logInfo, partitionToMountFilePath, fileCopyInfo, fileStore);
     });
+    logger.info("FCH TEST: FCH.copy finished in {} ms", System.currentTimeMillis() - startTimeMs);
   }
 
   /**
@@ -274,8 +266,10 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     final FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME,
         fileCopyInfo, fileChunkInfo,false);
 
-    String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
+    String filePath = partitionToMountFilePath + File.separator + "tmp/" + indexFile.getFileName();
+    long startTimeMs = System.currentTimeMillis();
     writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+    logger.info("FCH TEST: Persisted index file {} in {} ms", indexFile.getFileName(), System.currentTimeMillis() - startTimeMs);
   }
 
   /**
@@ -301,10 +295,16 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           ", Chunk=" + (i + 1) + "]";
       FileChunkInfo fileChunkInfo = new FileChunkInfo(logFileInfo.getFileName(), startOffset, sizeInBytes, true);
 
+      long startTimeMs = System.currentTimeMillis();
       final FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo,
           fileChunkInfo, true);
-      String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
+      logger.info("FCH TEST: Fetched chunk {} in {} ms", (i + 1), System.currentTimeMillis() - startTimeMs);
+
+      String filePath = partitionToMountFilePath + File.separator + "tmp/" + logFileInfo.getFileName();
+
+      startTimeMs = System.currentTimeMillis();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+      logger.info("FCH TEST: Persisted chunk {} in {} ms", (i + 1), System.currentTimeMillis() - startTimeMs);
     }
   }
 
