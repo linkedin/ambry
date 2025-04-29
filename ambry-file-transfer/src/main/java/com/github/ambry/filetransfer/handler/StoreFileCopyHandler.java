@@ -34,6 +34,7 @@ import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
@@ -272,6 +273,10 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
     String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
     writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+    if (chunkResponse != null && chunkResponse.getChunkStream() instanceof NettyByteBufDataInputStream) {
+      // if the DataInputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+      ((NettyByteBufDataInputStream) (chunkResponse.getChunkStream())).getBuffer().release();
+    }
   }
 
   /**
@@ -301,6 +306,10 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           fileChunkInfo, true);
       String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+      if (chunkResponse != null && chunkResponse.getChunkStream() instanceof NettyByteBufDataInputStream) {
+        // if the DataInputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+        ((NettyByteBufDataInputStream) (chunkResponse.getChunkStream())).getBuffer().release();
+      }
     }
   }
 
