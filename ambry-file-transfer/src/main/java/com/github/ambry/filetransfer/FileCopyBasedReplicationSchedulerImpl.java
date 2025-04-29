@@ -193,6 +193,18 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
               fileCopyStatusListener.onFileCopyFailure(e);
               continue;
             }
+            try{
+              /**
+               * Use FileCopyTemporaryDirectoryName to create a temporary directory for file copy.
+               * This will be used to write the files which are not yet written and can be cleaned
+               * up without
+               */
+              createTemporaryDirectoryForFileCopyIfAbsent(replicaId, fileCopyBasedReplicationConfig);
+            } catch (IOException e){
+              logger.error("Error Creating Temporary Directory For Replica: " + replicaId.getPartitionId().toPathString());
+              fileCopyStatusListener.onFileCopyFailure(e);
+              continue;
+            }
 
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
                 fileCopyStatusListener, fileCopyHandler);
@@ -219,6 +231,14 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     File fileCopyInProgressFileName = new File(replica.getReplicaPath(), storeConfig.storeFileCopyInProgressFileName);
     if (!fileCopyInProgressFileName.exists()) {
       fileCopyInProgressFileName.createNewFile();
+    }
+  }
+
+  void createTemporaryDirectoryForFileCopyIfAbsent(ReplicaId replica, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig) throws IOException {
+    logger.info("FCH TEST: Creating Temporary Directory For File Copy: " + fileCopyBasedReplicationConfig.fileCopyTemporaryDirectoryName);
+    File fileCopyTemporaryDirectory = new File(replica.getReplicaPath(), fileCopyBasedReplicationConfig.fileCopyTemporaryDirectoryName);
+    if (!fileCopyTemporaryDirectory.exists()) {
+      fileCopyTemporaryDirectory.mkdirs();
     }
   }
 

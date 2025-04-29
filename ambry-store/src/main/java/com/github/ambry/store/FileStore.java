@@ -35,7 +35,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -193,10 +195,16 @@ public class FileStore implements PartitionFileStore {
     Objects.requireNonNull(storeFileChunk, "storeFileChunk must not be null");
     Objects.requireNonNull(storeFileChunk.getStream(), "dataInputStream in storeFileChunk must not be null");
 
+
     // Can add buffered streaming to avoid memory overusage if multiple threads calling FileStore.
     // Read the entire file content into memory
     int fileSize = storeFileChunk.getStream().available();
+    storeFileChunk.getStream().reset();
+    logger.info("FCH TEST: File size of the array is started");
+    logger.info("FCH TEST: File size of the array is {}", fileSize);
     byte[] content = Utils.readBytesFromStream(storeFileChunk.getStream(), fileSize);
+    fileSize = storeFileChunk.getStream().available();
+    logger.info("FCH TEST: File size of the array is {}", fileSize);
 
     try {
       synchronized (storeWriteLock) {
