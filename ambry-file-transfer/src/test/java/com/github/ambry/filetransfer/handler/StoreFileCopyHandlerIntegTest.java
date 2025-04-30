@@ -137,7 +137,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
         indexInfos, new ArrayList<>());
     FileCopyGetMetaDataResponse fileCopyGetMetaDataResponse = new FileCopyGetMetaDataResponse(
         FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1, 0,
-        "clientId", 1, Collections.singletonList(storeLogInfo), ServerErrorCode.NoError);
+        "clientId", 1, Collections.singletonList(storeLogInfo), ServerErrorCode.NoError, null);
 
     StoreFileCopyHandler spyHandler = spy(super.handler);
     doReturn(fileCopyGetMetaDataResponse)
@@ -194,7 +194,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
         new ArrayList<>(), new ArrayList<>());
     FileCopyGetMetaDataResponse fileCopyGetMetaDataResponse = new FileCopyGetMetaDataResponse(
         FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1, 0,
-        "clientId", 1, Collections.singletonList(storeLogInfo), ServerErrorCode.NoError);
+        "clientId", 1, Collections.singletonList(storeLogInfo), ServerErrorCode.NoError, null);
 
     StoreFileCopyHandler spyHandler = spy(super.handler);
     doReturn(fileCopyGetMetaDataResponse)
