@@ -822,7 +822,7 @@ public class RequestResponseTest {
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
 
     FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-        logInfoList, ServerErrorCode.NoError);
+        logInfoList, ServerErrorCode.NoError, null);
 
     DataInputStream requestStream1 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response1 = FileCopyGetMetaDataResponse.readFrom(requestStream1);
@@ -857,7 +857,7 @@ public class RequestResponseTest {
     response.release();
 
     response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-        logInfoList, ServerErrorCode.IOError);
+        logInfoList, ServerErrorCode.IOError, null);
     DataInputStream requestStream2 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response2 = FileCopyGetMetaDataResponse.readFrom(requestStream2);
     Assert.assertEquals(ServerErrorCode.IOError, response2.getError());
