@@ -207,6 +207,7 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.path.prefixes.to.remove", "/media");
     configProps.setProperty("frontend.enable.undelete", "true");
     configProps.setProperty(FrontendConfig.CONTAINER_METRICS_EXCLUDED_ACCOUNTS, "random-name," + excludedAccountName);
+    configProps.setProperty("frontend.enable.blob.name.rule.check", "true");
     CommonTestUtils.populateRequiredRouterProps(configProps);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
@@ -321,6 +322,27 @@ public class FrontendRestRequestServiceTest {
       }
       verifyOperationFailure(createRestRequest(method, "/", null, null), RestServiceErrorCode.ServiceUnavailable);
     }
+  }
+
+  @Test
+  public void testNamedBlobPutWithViolatedBlobName() throws Exception {
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    String blobName = "%7BblobName%7D";
+    String namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    List<ByteBuffer> body = new LinkedList<>();
+    body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    setAmbryHeadersForPut(headers, -1, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+        null, null);
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
   }
 
   @Test

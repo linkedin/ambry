@@ -144,6 +144,10 @@ public class FrontendConfig {
   @Default("")
   public final List<String> pathPrefixesToRemove;
 
+  @Config("frontend.enable.blob.name.rule.check")
+  @Default("false")
+  public final boolean enableBlobNameRuleCheck;
+
   /**
    * The secure path to validate if required for certain container.
    */
@@ -336,6 +340,7 @@ public class FrontendConfig {
         verifiableProperties.getLong("frontend.chunked.get.response.threshold.in.bytes", 8192);
     allowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
+    enableBlobNameRuleCheck = verifiableProperties.getBoolean("frontend.enable.blob.name.rule.check", false);
     attachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
     containerMetricsEnabledRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_REQUEST_TYPES,
         DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES);

@@ -55,6 +55,9 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Arrays;
 
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
@@ -70,6 +73,9 @@ import static com.github.ambry.utils.Utils.*;
 class FrontendRestRequestService implements RestRequestService {
   static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
   private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
+  private static final Set<Character> INVALID_ASCII_BLOB_NAME_CHARS = new HashSet<>(Arrays.asList(
+      '\\', '{', '}', '^', '%', '`', '[', ']', '"', '<', '>', '~', '#', '|'
+  ));
   private final Router router;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
@@ -545,12 +551,48 @@ class FrontendRestRequestService implements RestRequestService {
       securityService.preProcessRequest(restRequest, FrontendUtils.buildCallback(preProcessingMetrics, r -> {
         RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
         restRequest.setArg(REQUEST_PATH, requestPath);
+        //NamedBlobPath.parse will validate the blobName length
+        if (frontendConfig.enableBlobNameRuleCheck && requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          validateBlobName(namedBlobPath.getBlobName());
+        }
         routingAction.accept(requestPath);
       }, restRequest.getUri(), logger, errorCallback));
     } catch (Exception e) {
       errorCallback.onCompletion(null, e);
     }
   }
+
+  public static void validateBlobName(String blobName) throws RestServiceException {
+    boolean isPrevWhitespace = false;
+    for (int i = 0; i < blobName.length(); i++) {
+      char c = blobName.charAt(i);
+
+      // Check for two consecutive whitespace characters
+      if (Character.isWhitespace(c)) {
+        if (isPrevWhitespace) {
+          throw new RestServiceException("Blob name contains consecutive whitespace characters",
+              RestServiceErrorCode.BadRequest);
+        }
+        isPrevWhitespace = true;
+      } else {
+        isPrevWhitespace = false;
+      }
+
+      // Check for control characters or invalid characters
+      if (Character.isISOControl(c) || INVALID_ASCII_BLOB_NAME_CHARS.contains(c)) {
+        throw new RestServiceException("Blob name contains control or disallowed character: " + c,
+            RestServiceErrorCode.BadRequest);
+      }
+    }
+
+    // Check for disallowed path patterns
+    if (blobName.startsWith("../") || blobName.startsWith("./") || blobName.contains("/../") || blobName.contains(
+        "/./")) {
+      throw new RestServiceException("Blob name contains disallowed path pattern", RestServiceErrorCode.BadRequest);
+    }
+  }
+
 
   /**
    * Checks for bad arguments or states.
