@@ -99,6 +99,7 @@ import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -207,6 +208,8 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.path.prefixes.to.remove", "/media");
     configProps.setProperty("frontend.enable.undelete", "true");
     configProps.setProperty(FrontendConfig.CONTAINER_METRICS_EXCLUDED_ACCOUNTS, "random-name," + excludedAccountName);
+    configProps.setProperty("frontend.enable.blob.name.rule.check", "true");
+    configProps.setProperty(FrontendConfig.INVALID_ASCII_BLOB_NAME_CHARS, "\\\\,{,},^,%,`,[,],\",<,>,~,#,|\n");
     CommonTestUtils.populateRequiredRouterProps(configProps);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
@@ -320,6 +323,63 @@ public class FrontendRestRequestServiceTest {
         continue;
       }
       verifyOperationFailure(createRestRequest(method, "/", null, null), RestServiceErrorCode.ServiceUnavailable);
+    }
+  }
+
+  /**
+   * Test blob name validation logic.
+    * @throws Exception
+   */
+  @Test
+  public void testNamedBlobPutWithViolatedBlobName() throws Exception {
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+
+    List<String> invalidBlobNames = Arrays.asList(
+        "file  name.txt",         // consecutive spaces
+        "  startsWithSpaces",     // leading spaces
+        "endsWithSpaces  ",       // trailing spaces
+        "file\u0000name.txt",     // null byte
+        "line\nbreak.txt",        // newline
+        "tab\tname.txt",          // tab
+        "file|name.txt",          // |
+        "invalid<name>.txt",      // <
+        "slash\\backslash.txt",   // \
+        "curly{name}.txt",        // {
+        "quote\"name.txt",        // "
+        "caret^name.txt",         // ^
+        "percent%name.txt",       // %
+        "tick`name.txt",          // `
+        "brackets[name].txt",     // [ and ]
+        "tilde~name.txt",         // ~
+        "hash#name.txt",          // #
+        "../secret.txt",          // path traversal
+        "./relative.txt",
+        "foo/../bar.txt",
+        "foo/./bar.txt"
+    );
+
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+
+    for (String blobName : invalidBlobNames) {
+      String encodedBlobName = URLEncoder.encode(blobName, StandardCharsets.UTF_8.toString()).replace("+", "%20");
+      System.out.println("Testing invalid blobName: \"" + blobName + "\" → Encoded: " + encodedBlobName);
+
+      String namedBlobPathUri = NAMED_BLOB_PREFIX + SLASH + testAccount.getName() +
+          SLASH + testContainer.getName() + SLASH + encodedBlobName;
+
+      JSONObject headers = new JSONObject()
+          .put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+          .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+
+      setAmbryHeadersForPut(headers, -1, testContainer.isCacheable(),
+          "test", "application/octet-stream", "owner", null, null, null);
+
+      RestRequest restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+      verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
     }
   }
 
