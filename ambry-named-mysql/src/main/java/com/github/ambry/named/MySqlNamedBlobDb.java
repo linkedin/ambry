@@ -265,21 +265,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   public String getListNamedBlobsSQL(MySqlNamedBlobDbConfig config) {
     switch (config.listNamedBlobsSQLOption) {
-      case 1:
-        // old query that joins the entire table with a few selected rows
-        // @formatter:off
-        return String.format(""
-            + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
-            + "FROM named_blobs_v2 t1 "
-            + "INNER JOIN "
-            + "(SELECT account_id, container_id, blob_name, max(version) as version "
-            + "FROM named_blobs_v2 "
-            + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
-            + "        GROUP BY account_id, container_id, blob_name) t2 "
-            + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-            + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
-         // @formatter:on
       case 2:
         /**
          * List named-blobs query, given a prefix.
@@ -319,6 +304,47 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             + " ORDER BY BlobsAllVersion.blob_name "
             + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
         // @formatter:on
+      case 3:
+        /**
+         * List named-blobs query, given a prefix.
+         * The first query selects all versions of blobs with a given prefix that are not deleted, from a given account and container.
+         * The second query selects the most recent version of blobs with a given prefix, from a given account and container.
+         * Finally, we join and select a version for each blob, that is ready to serve.
+         * This can be the most recent version if it is not deleted, or nothing.
+         */
+        // @formatter:off
+        return String.format(""
+            + " WITH "
+            + "  BlobsAllVersion AS ( "
+            + "   SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
+            + "   FROM named_blobs_v2 "
+            + "   WHERE account_id = ? " // 1
+            + "     AND container_id = ? " // 2
+            + "     AND %1$s " // blob_state = x
+            + "     AND blob_name LIKE ? " // 3
+            + "     AND blob_name >= ? " // 4
+            + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
+            + " ), "
+            + " BlobsMaxVersion AS ( "
+            + "   SELECT blob_name, MAX(version) as version "
+            + "   FROM named_blobs_v2 "
+            + "   WHERE account_id = ? " // 5
+            + "     AND container_id = ? " // 6
+            + "     AND %1$s " // blob_state = x
+            + "     AND blob_name LIKE ? " // 7
+            + "     AND blob_name >= ? " // 8
+            + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
+            + "   GROUP BY blob_name "
+            + "   LIMIT ?"
+            + " ) "
+            + " SELECT BlobsAllVersion.* "
+            + " FROM BlobsAllVersion "
+            + " INNER JOIN BlobsMaxVersion "
+            + " ON (BlobsAllVersion.blob_name = BlobsMaxVersion.blob_name "
+            + "   AND BlobsAllVersion.version = BlobsMaxVersion.version) "
+            + " ORDER BY BlobsAllVersion.blob_name "
+            + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
+      // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
     }
@@ -736,6 +762,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setString(7, blobNamePrefix + "%");
         statement.setString(8, pageToken != null ? pageToken : blobNamePrefix);
         statement.setInt(9, maxKeysValue + 1);
+        if (config.listNamedBlobsSQLOption == 3) {
+          statement.setInt(10, maxKeysValue + 1);
+        }
       }
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
