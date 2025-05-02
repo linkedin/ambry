@@ -1563,6 +1563,7 @@ public class HelixClusterManager implements ClusterMap {
     private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
     private final List<ClusterMapChangeListener> clusterMapChangeListeners = new ArrayList<>();
     private volatile boolean dataNodeConfigInitialized = false;
+    private volatile boolean dataNodeConfigInitializedForLocalNode = false;
     private volatile boolean liveStateInitialized = false;
     private volatile boolean idealStateInitialized = false;
     private volatile boolean instanceConfigInitialized = false;
@@ -1635,6 +1636,17 @@ public class HelixClusterManager implements ClusterMap {
             logger.info("Data node config change triggered from helix cluster {} in datacenter {}",
                 sourceHelixClusterName, dcName);
           }
+
+          if(!dataNodeConfigInitializedForLocalNode) {
+            for (DataNodeConfig currNodeConfig : configs) {
+              String instanceName = currNodeConfig.getInstanceName();
+              if (instanceName.equals(selfInstanceName)) {
+                dataNodeConfigInitializedForLocalNode = true;
+                break;
+              }
+            }
+          }
+
           if (logger.isDebugEnabled()) {
             logger.debug("Detailed data node config from helix cluster {} in datacenter {} is: {}",
                 sourceHelixClusterName, dcName, configs);
@@ -1985,6 +1997,12 @@ public class HelixClusterManager implements ClusterMap {
       if (dataNodeConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
         for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
           listener.onReplicaAddedOrRemoved(totalAddedReplicas, totalRemovedReplicas);
+        }
+      }
+
+      if (dataNodeConfigInitializedForLocalNode) {
+        for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+          listener.onDataNodeConfigChange();
         }
       }
     }

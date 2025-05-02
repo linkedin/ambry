@@ -37,6 +37,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
@@ -78,6 +79,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final DataNodeConfigSource dataNodeConfigSource;
   private final HelixAdmin helixAdmin;
   private final MetricRegistry metricRegistry;
+  private final CountDownLatch listenerLatch;
   private volatile boolean disablePartitionsComplete = false;
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
@@ -100,6 +102,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     this.clusterManager = clusterManager;
     this.zkConnectStr = zkConnectStr;
     this.metricRegistry = metricRegistry;
+    this.listenerLatch = new CountDownLatch(3);
     participantMetrics =
         new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState,
             clusterMapConfig.clustermapEnablePartitionStateTransitionMetrics);
@@ -159,7 +162,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
       PartitionStateChangeListener partitionStateChangeListener) {
-    partitionStateChangeListeners.put(listenerType, partitionStateChangeListener);
+    partitionStateChangeListeners.computeIfAbsent(listenerType, k -> {
+      logger.info("Registering partition state change listener {}", listenerType);
+      listenerLatch.countDown();
+      return partitionStateChangeListener;
+    });
   }
 
   @Override
@@ -878,8 +885,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
     try {
+      // Since in ADD flow of Nimbus we are calling participate before StorageManager, ReplicationManager is created
+      // Blocking calling of this event until StorageManager and ReplicationManager is started.
+      logger.info("Waiting on listener latch...");
+      listenerLatch.await();
+      logger.info("Listener latch is released");
+      participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
       // 1. take actions in storage manager (add new replica if necessary)
       onPartitionBecomePreBootstrapFromOffline(partitionName);
       onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
@@ -895,6 +907,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (statsManagerListener != null) {
         statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
+    } catch (InterruptedException e) {
+      throw new RuntimeException("Thread has been interrupted while waiting for bootstrap transition", e);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
