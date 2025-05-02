@@ -48,7 +48,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -81,7 +80,7 @@ class StatsManager {
   private PartitionClassStatsPublisher partitionClassStatsPublisher = null;
   private final StatsManagerConfig config;
   private final ClusterParticipant clusterParticipant;
-  private final String datacenter;
+  private final DataNodeId currentNode;
   private final AtomicReference<DeleteTombstoneStats> aggregatedDeleteTombstoneStats =
       new AtomicReference<>(DeleteTombstoneStats.BASE);
   final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
@@ -97,20 +96,18 @@ class StatsManager {
    * @param clusterParticipant the {@link ClusterParticipant} to register state change listener.
    * @param accountStatsStore the {@link AccountStatsStore} to publish stats.
    * @param accountService the {@link AccountService} to get account ids from account names.
-   * @param datacenter of {@link DataNodeId} the current node
+   * @param dataNodeId the {@link DataNodeId} for current node
    */
   StatsManager(StorageManager storageManager, ClusterMap clustermap, List<? extends ReplicaId> replicaIds,
       MetricRegistry registry, StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant,
-      AccountStatsStore accountStatsStore, AccountService accountService, String datacenter) {
+      AccountStatsStore accountStatsStore, AccountService accountService, DataNodeId dataNodeId) {
     this.storageManager = storageManager;
     this.config = config;
     metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
-    partitionToReplicaMap =
-        replicaIds != null ? replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity())) :
-            new ConcurrentHashMap<>();
+    replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
     this.clusterParticipant = clusterParticipant;
-    this.datacenter = datacenter;
+    this.currentNode = dataNodeId;
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
           new PartitionStateChangeListenerImpl());
@@ -427,7 +424,7 @@ class StatsManager {
     public void onDataNodeRemoved(DataNodeId removedDataNode) {
       logger.info("DataNode: {} is removed from clustermap", removedDataNode);
       if (config.enableRemoveHostFromAccountStatsStore && accountStatsStore != null
-          && removedDataNode.getDatacenterName().equals(datacenter)) {
+          && removedDataNode.getDatacenterName().equals(currentNode.getDatacenterName())) {
         // 1. There are many other server nodes that received this message and are taking action now, we have to
         // use a distributed lock so there will be only one server node who is deleting this data node
         // 2. Start a new thread for this task so that we don't block the listener.

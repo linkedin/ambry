@@ -367,8 +367,7 @@ public class AmbryServer {
         logger.info("Creating StatsManager to publish stats");
         statsManager =
             new StatsManager(storageManager, clusterMap, nodeId != null ? clusterMap.getReplicaIds(nodeId) : null,
-                registry, statsConfig, time, clusterParticipant, accountStatsMySqlStore, accountService,
-                clusterMapConfig.clusterMapDatacenterName);
+                registry, statsConfig, time, clusterParticipant, accountStatsMySqlStore, accountService, nodeId);
         statsManager.start();
 
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
