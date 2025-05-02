@@ -104,8 +104,8 @@ class StatsManager {
     this.storageManager = storageManager;
     this.config = config;
     metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
-    replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
-    this.time = time;
+    partitionToReplicaMap =
+        replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.clusterParticipant = clusterParticipant;
     this.currentNode = dataNodeId;
     if (clusterParticipant != null) {

@@ -31,7 +31,6 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
-import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -208,6 +207,7 @@ public class AmbryServer {
     }
   }
 
+  // Implementation of the ClusterMapChangeListener interface to handle cluster map changes.
   class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
     @Override
     public void onDataNodeConfigChange()  {
@@ -366,7 +366,7 @@ public class AmbryServer {
 
         logger.info("Creating StatsManager to publish stats");
         statsManager =
-            new StatsManager(storageManager, clusterMap, nodeId != null ? clusterMap.getReplicaIds(nodeId) : null,
+            new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId),
                 registry, statsConfig, time, clusterParticipant, accountStatsMySqlStore, accountService, nodeId);
         statsManager.start();
 
@@ -601,6 +601,12 @@ public class AmbryServer {
     }
   }
 
+  /**
+   * Retrieves a list of AmbryStatsReport objects based on the server configuration.
+   *
+   * @param serverConfig The {@link ServerConfig} containing the server's configuration.
+   * @return A list of {@link AmbryStatsReport} objects to be published.
+   */
   private List<AmbryStatsReport> getAmbryStatsReports(ServerConfig serverConfig) {
     // Other code
     List<AmbryStatsReport> ambryStatsReports = new ArrayList<>();
