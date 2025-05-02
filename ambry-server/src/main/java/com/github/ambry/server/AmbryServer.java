@@ -120,7 +120,7 @@ import static com.github.ambry.utils.Utils.*;
 public class AmbryServer {
 
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
-  private CountDownLatch dataNodeLatch = new CountDownLatch(1);
+  private final CountDownLatch dataNodeLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
   private AmbryRequests requests = null;
   private RequestHandlerPool requestHandlerPool = null;
@@ -328,8 +328,6 @@ public class AmbryServer {
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
         logger.info("Server execution mode is DATA_SERVING_MODE");
         scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
-
-        logger.info("Creating StatsManager to publish stats");
         accountStatsMySqlStore =
             statsConfig.enableMysqlReport ? (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(properties,
                 clusterMapConfig, registry).getAccountStatsStore() : null;
@@ -344,11 +342,6 @@ public class AmbryServer {
         // In Non-Nimbus we use lipy to pre-populate Instance and DataNodeConfig
         // In Nimbus we populate Instance config with auto-registration
         // Data Node config is populated in pre-hook of ACM
-        statsManager =
-            new StatsManager(storageManager, clusterMap, null, registry, statsConfig, time,
-                clusterParticipant, accountStatsMySqlStore, accountService, clusterMapConfig.clusterMapDatacenterName);
-        statsManager.start();
-
         List<AmbryStatsReport> ambryStatsReports = getAmbryStatsReports(serverConfig);
 
         for (ClusterParticipant participant : clusterParticipants) {
@@ -365,10 +358,18 @@ public class AmbryServer {
 
         // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
         // and some components require sole participant, the first one in the list will be primary participant.
+        logger.info("Creating Storage Manager");
         storageManager =
             new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
+
+        logger.info("Creating StatsManager to publish stats");
+        statsManager =
+            new StatsManager(storageManager, clusterMap, nodeId != null ? clusterMap.getReplicaIds(nodeId) : null,
+                registry, statsConfig, time, clusterParticipant, accountStatsMySqlStore, accountService,
+                clusterMapConfig.clusterMapDatacenterName);
+        statsManager.start();
 
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
         // mismatch in sealed/stopped replica lists that maintained by each participant.
