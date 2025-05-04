@@ -658,6 +658,15 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
+   * Expose for testing, to reset ListenerLatch
+   */
+  public void resetListenerLatch() {
+    while (listenerLatch.getCount() > 0) {
+      listenerLatch.countDown();
+    }
+  }
+
+  /**
    * Mark disablePartitionsComplete = true, this is exposed for testing only.
    */
   protected void markDisablePartitionComplete() {
