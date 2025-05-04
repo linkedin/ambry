@@ -314,36 +314,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
          */
         // @formatter:off
         return String.format(""
-            + " WITH "
-            + "  BlobsAllVersion AS ( "
-            + "   SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
-            + "   FROM named_blobs_v2 "
-            + "   WHERE account_id = ? " // 1
-            + "     AND container_id = ? " // 2
-            + "     AND %1$s " // blob_state = x
-            + "     AND blob_name LIKE ? " // 3
-            + "     AND blob_name >= ? " // 4
-            + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
-            + " ), "
-            + " BlobsMaxVersion AS ( "
-            + "   SELECT blob_name, MAX(version) as version "
-            + "   FROM named_blobs_v2 "
-            + "   WHERE account_id = ? " // 5
-            + "     AND container_id = ? " // 6
-            + "     AND %1$s " // blob_state = x
-            + "     AND blob_name LIKE ? " // 7
-            + "     AND blob_name >= ? " // 8
-            + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
-            + "   GROUP BY blob_name "
-            + "   LIMIT ?"
-            + " ) "
-            + " SELECT BlobsAllVersion.* "
-            + " FROM BlobsAllVersion "
-            + " INNER JOIN BlobsMaxVersion "
-            + " ON (BlobsAllVersion.blob_name = BlobsMaxVersion.blob_name "
-            + "   AND BlobsAllVersion.version = BlobsMaxVersion.version) "
-            + " ORDER BY BlobsAllVersion.blob_name "
-            + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
+            + "SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
+            + "FROM named_blobs_v2 v1 "
+            + "WHERE v1.account_id = ? "
+            + "    AND v1.container_id = ? "
+            + "    AND v1.blob_state = %1$d "
+            + "    AND blob_name LIKE ? "
+            + "    AND blob_name >= ? "
+            + "    AND (v1.deleted_ts IS NULL OR v1.deleted_ts > %2$s) "
+            + "    AND v1.version = ( "
+            + "        SELECT MAX(v2.version) "
+            + "        FROM named_blobs_v2 v2 "
+            + "        WHERE v2.account_id = ? "
+            + "            AND v2.container_id = ? "
+            + "            AND v2.blob_name = v1.blob_name "
+            + "            AND v2.blob_state = %1$d "
+            + "    ) "
+            + "LIMIT ?", NamedBlobState.READY.ordinal(), CURRENT_TIME);
       // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
@@ -753,18 +740,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setInt(5, maxKeysValue + 1);
       } else {
         // list with prefix
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobNamePrefix + "%");
-        statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
-        statement.setInt(5, accountId);
-        statement.setInt(6, containerId);
-        statement.setString(7, blobNamePrefix + "%");
-        statement.setString(8, pageToken != null ? pageToken : blobNamePrefix);
-        statement.setInt(9, maxKeysValue + 1);
-        if (config.listNamedBlobsSQLOption == 3) {
-          statement.setInt(10, maxKeysValue + 1);
+        int idx = 1;
+        statement.setInt(idx++, accountId);
+        statement.setInt(idx++, containerId);
+        statement.setString(idx++, blobNamePrefix + "%");
+        statement.setString(idx++, pageToken != null ? pageToken : blobNamePrefix);
+        statement.setInt(idx++, accountId);
+        statement.setInt(idx++, containerId);
+        if (config.listNamedBlobsSQLOption == MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION) {
+          statement.setString(idx++, blobNamePrefix + "%");
+          statement.setString(idx++, pageToken != null ? pageToken : blobNamePrefix);
         }
+        statement.setInt(idx++, maxKeysValue + 1);
       }
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
