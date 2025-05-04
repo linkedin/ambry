@@ -95,14 +95,15 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param metricRegistry the {@link MetricRegistry} to instantiate {@link HelixParticipantMetrics}.
    * @param zkConnectStr the address identifying the zk service which this participant interacts with.
    * @param isSoleParticipant whether this is the sole participant on current node.
+   * @param listenerCount the number of listeners to be registered.
    */
   public HelixParticipant(HelixClusterManager clusterManager, ClusterMapConfig clusterMapConfig,
-      HelixFactory helixFactory, MetricRegistry metricRegistry, String zkConnectStr, boolean isSoleParticipant) {
+      HelixFactory helixFactory, MetricRegistry metricRegistry, String zkConnectStr, boolean isSoleParticipant, int listenerCount) {
     this.clusterMapConfig = clusterMapConfig;
     this.clusterManager = clusterManager;
     this.zkConnectStr = zkConnectStr;
     this.metricRegistry = metricRegistry;
-    this.listenerLatch = new CountDownLatch(3);
+    this.listenerLatch = new CountDownLatch(listenerCount);
     participantMetrics =
         new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState,
             clusterMapConfig.clustermapEnablePartitionStateTransitionMetrics);
@@ -126,6 +127,15 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     } catch (Exception exception) {
       throw new IllegalStateException("Error setting up administration facilities", exception);
     }
+  }
+
+  /**
+   * Constructor for HelixParticipant in most of the cases. Since we register 3 listeners
+   * one each for StorageManager, ReplicationManager and StatsManager
+   * */
+  public HelixParticipant(HelixClusterManager clusterManager, ClusterMapConfig clusterMapConfig,
+      HelixFactory helixFactory, MetricRegistry metricRegistry, String zkConnectStr, boolean isSoleParticipant) {
+    this(clusterManager, clusterMapConfig, helixFactory, metricRegistry, zkConnectStr, isSoleParticipant, 3);
   }
 
   @Override
