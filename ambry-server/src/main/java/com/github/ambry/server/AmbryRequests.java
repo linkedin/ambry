@@ -1721,7 +1721,7 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
-            logSegments.size(), logSegments, ServerErrorCode.NoError);
+            logSegments.size(), logSegments, ServerErrorCode.NoError, null);
       }
     } catch (Exception e) {
       if (null == fileCopyGetMetaDataRequest) {
@@ -1733,7 +1733,7 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), 0,
-            new ArrayList<>(), ServerErrorCode.UnknownError);
+            new ArrayList<>(), ServerErrorCode.UnknownError, null);
       }
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;

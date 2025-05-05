@@ -50,6 +50,10 @@ public class StateTransitionException extends RuntimeException {
      */
     ReplicaOperationFailure,
     /**
+     * If store is not initialized and unavailable for all operations
+     */
+    StoreNotInitialized,
+    /**
      * If store is not started and unavailable for specific operations.
      */
     StoreNotStarted,

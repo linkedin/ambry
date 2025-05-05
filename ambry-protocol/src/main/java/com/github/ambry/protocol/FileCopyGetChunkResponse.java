@@ -16,7 +16,9 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Utils;
+import io.netty.util.ReferenceCountUtil;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -228,6 +230,22 @@ public class FileCopyGetChunkResponse extends Response {
 
     return new FileCopyGetChunkResponse(versionId, correlationId, clientId, errorCode, partitionId, fileName,
         chunkResponseStream, startOffset, sizeInBytes, isLastChunk);
+  }
+
+  /**
+   * Override the release method from {@link RequestOrResponse}.
+   */
+  @Override
+  public boolean release() {
+    if (bufferToSend != null) {
+      ReferenceCountUtil.safeRelease(bufferToSend);
+      bufferToSend = null;
+    }
+    // If the DataInputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+    if (chunkStream != null && chunkStream instanceof NettyByteBufDataInputStream) {
+      ReferenceCountUtil.safeRelease(((NettyByteBufDataInputStream) chunkStream).getBuffer());
+    }
+    return false;
   }
 
   /**

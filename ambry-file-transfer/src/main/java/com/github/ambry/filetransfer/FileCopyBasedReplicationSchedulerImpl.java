@@ -45,6 +45,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   private final FileCopyHandlerFactory fileCopyHandlerFactory;
   private final ClusterMap clusterMap;
   private final FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager;
+  private final Thread fileCopyBasedReplicationThreadPoolManagerThread;
   private final Map<ReplicaId, Long> replicaToStartTimeMap;
 
   private final Map<ReplicaId, FileCopyStatusListener> replicaToStatusListenerMap;
@@ -77,6 +78,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     this.clusterMap = clusterMap;
     this.fileCopyBasedReplicationThreadPoolManager = new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(),
         fileCopyBasedReplicationConfig.fileCopyNumberOfFileCopyThreads);
+    this.fileCopyBasedReplicationThreadPoolManagerThread = new Thread(fileCopyBasedReplicationThreadPoolManager);
     this.replicaToStartTimeMap = new ConcurrentHashMap<>();
     this.inFlightReplicas = new LinkedList<>();
     this.prioritizationManager = prioritizationManager;
@@ -91,6 +93,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     isRunning = true;
     logger.info("FileCopyBasedReplicationSchedulerImpl Started");
     try {
+      fileCopyBasedReplicationThreadPoolManagerThread.start();
       scheduleFileCopy();
     } catch (InterruptedException e) {
       logger.error("Failed to start FileCopy Scheduler", e);
@@ -129,8 +132,11 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
   @Override
   public void shutdown() throws InterruptedException {
+    logger.info("Shutting down FileCopyBasedReplicationSchedulerImpl");
     isRunning = false;
     fileCopyBasedReplicationThreadPoolManager.shutdown();
+    fileCopyBasedReplicationThreadPoolManagerThread.join();
+    logger.info("FileCopyBasedReplicationSchedulerImpl shutdown");
   }
 
   @Override

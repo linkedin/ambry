@@ -16,7 +16,9 @@ package com.github.ambry.protocol;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.LogInfo;
 import com.github.ambry.store.StoreLogInfo;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Utils;
+import io.netty.util.ReferenceCountUtil;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -29,6 +31,11 @@ import javax.annotation.Nonnull;
  * Protocol class representing response to get metadata of a file.
  */
 public class FileCopyGetMetaDataResponse extends Response {
+  /**
+   * The stream to read metadata from.
+   */
+  private final DataInputStream stream;
+
   /**
    * The number of log files.
    */
@@ -57,15 +64,17 @@ public class FileCopyGetMetaDataResponse extends Response {
    * @param numberOfLogfiles The number of log files.
    * @param logInfos The list of log files.
    * @param errorCode The error code of the response.
+   * @param stream The stream to read metadata from.
    */
   public FileCopyGetMetaDataResponse(short versionId, int correlationId, String clientId, int numberOfLogfiles,
-      @Nonnull List<LogInfo> logInfos, ServerErrorCode errorCode) {
+      @Nonnull List<LogInfo> logInfos, ServerErrorCode errorCode, DataInputStream stream) {
     super(RequestOrResponseType.FileCopyGetMetaDataResponse, versionId, correlationId, clientId, errorCode);
     Objects.requireNonNull(logInfos, "logInfos must not be null");
 
     validateVersion(versionId);
     this.numberOfLogfiles = numberOfLogfiles;
     this.logInfos = logInfos;
+    this.stream = stream;
   }
 
   /**
@@ -75,7 +84,7 @@ public class FileCopyGetMetaDataResponse extends Response {
    * @param serverErrorCode The error code of the response.
    */
   public FileCopyGetMetaDataResponse(int correlationId, String clientId, ServerErrorCode serverErrorCode) {
-    this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), serverErrorCode);
+    this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), serverErrorCode, null);
   }
 
   /**
@@ -83,7 +92,7 @@ public class FileCopyGetMetaDataResponse extends Response {
    * @param serverErrorCode The error code of the response.
    */
   public FileCopyGetMetaDataResponse(ServerErrorCode serverErrorCode) {
-    this(CURRENT_VERSION, -1, "", 0, new ArrayList<>(), serverErrorCode);
+    this(CURRENT_VERSION, -1, "", 0, new ArrayList<>(), serverErrorCode, null);
   }
 
   /**
@@ -107,14 +116,30 @@ public class FileCopyGetMetaDataResponse extends Response {
 
     if (errorCode != ServerErrorCode.NoError) {
       //Setting the number of logfiles to 0 as there are no logfiles to be read.
-      return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, 0, new ArrayList<>(), errorCode);
+      return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, 0, new ArrayList<>(), errorCode, stream);
     }
     int numberOfLogfiles = stream.readInt();
     List<LogInfo> logInfos = new ArrayList<>();
     for (int i = 0; i < numberOfLogfiles; i++) {
       logInfos.add(StoreLogInfo.readFrom(stream));
     }
-    return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode);
+    return new FileCopyGetMetaDataResponse(versionId, correlationId, clientId, numberOfLogfiles, logInfos, errorCode, stream);
+  }
+
+  /**
+   * Override the release method from {@link RequestOrResponse}.
+   */
+  @Override
+  public boolean release() {
+    if (bufferToSend != null) {
+      ReferenceCountUtil.safeRelease(bufferToSend);
+      bufferToSend = null;
+    }
+    // If the DataInputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+    if (stream != null && stream instanceof NettyByteBufDataInputStream) {
+      ReferenceCountUtil.safeRelease(((NettyByteBufDataInputStream) stream).getBuffer());
+    }
+    return false;
   }
 
   /**

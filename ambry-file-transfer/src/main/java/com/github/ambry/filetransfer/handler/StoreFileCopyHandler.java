@@ -34,6 +34,7 @@ import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
@@ -122,10 +123,9 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   }
 
   /**
-   * Shutdown the file copy handler. Perform clean up steps in case of a graceful shutdown.
+   * Shutdown the file copy handler.
    */
   public void shutdown() {
-    connectionPool.shutdown();
     isRunning = false;
   }
 
@@ -167,24 +167,29 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     final PartitionFileStore fileStore = storeManager.getFileStore(fileCopyInfo.getSourceReplicaId().getPartitionId());
     final String partitionToMountFilePath = fileCopyInfo.getSourceReplicaId().getMountPath() + File.separator +
         fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
-    final FileCopyGetMetaDataResponse metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
-
-    metadataResponse.getLogInfos().forEach(logInfo -> {
-      // Process the respective files and copy it to the temporary path.
-      final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + config.fileCopyTemporaryDirectoryName;
-      logInfo.getIndexSegments().forEach(indexFile ->
+    FileCopyGetMetaDataResponse metadataResponse = null;
+    try {
+      metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
+      metadataResponse.getLogInfos().forEach(logInfo -> {
+        // Process the respective files and copy it to the temporary path.
+        final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + config.fileCopyTemporaryDirectoryName;
+        logInfo.getIndexSegments().forEach(indexFile ->
           processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, fileStore));
-      processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, fileStore);
+        processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, fileStore);
 
-
-      // Move all files to actual path.
-//      try {
-//        //fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
-//      } catch (IOException e) {
-//        logMessageAndThrow("MoveFilesOperation", "Error moving files", e,
-//            FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
-//      }
-    });
+        // Move all files to actual path.
+        try {
+          fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
+        } catch (IOException e) {
+          logMessageAndThrow("MoveFilesOperation", "Error moving files", e,
+              FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
+        }
+      });
+    } finally {
+      if (metadataResponse != null) {
+        metadataResponse.release();
+      }
+    }
   }
 
   /**
@@ -274,11 +279,17 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   private void processIndexFile(FileInfo indexFile, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
       PartitionFileStore fileStore) {
     final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
-    final FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME,
-        fileCopyInfo, fileChunkInfo,false);
-
-    String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
-    writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+    FileCopyGetChunkResponse chunkResponse = null;
+    try {
+      chunkResponse =
+          getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME, fileCopyInfo, fileChunkInfo,false);
+      String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
+      writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+    } finally {
+      if (chunkResponse != null) {
+        chunkResponse.release();
+      }
+    }
   }
 
   /**
@@ -304,10 +315,16 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           ", Chunk=" + (i + 1) + "]";
       FileChunkInfo fileChunkInfo = new FileChunkInfo(logFileInfo.getFileName(), startOffset, sizeInBytes, true);
 
-      final FileCopyGetChunkResponse chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo,
-          fileChunkInfo, true);
-      String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
-      writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+       FileCopyGetChunkResponse chunkResponse = null;
+       try {
+         chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, true);
+         String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
+         writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+      } finally {
+         if (chunkResponse != null) {
+            chunkResponse.release();
+         }
+      }
     }
   }
 

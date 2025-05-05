@@ -856,16 +856,33 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return dataNodeConfig;
   }
 
+
+  @Override
+  public void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomePreBootstrapFromOffline(partitionName);
+    }
+  }
+
+  @Override
+  public void onPartitionBecomeBootstrapFromPreBootstrap(String partitionName) {
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
+    }
+  }
+
+
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
     try {
       // 1. take actions in storage manager (add new replica if necessary)
-      PartitionStateChangeListener storageManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-      if (storageManagerListener != null) {
-        storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
-      }
+      onPartitionBecomePreBootstrapFromOffline(partitionName);
+      onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
