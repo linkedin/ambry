@@ -571,6 +571,11 @@ class FrontendRestRequestService implements RestRequestService {
   private void validateBlobName(String blobName) throws RestServiceException {
     // ref: https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
     boolean isPrevWhitespace = false;
+
+    Set<Character> invalidAsciiBlobNameCharsSet = frontendConfig.invalidAsciiBlobNameChars.stream()
+        .map(s -> s.charAt(0))
+        .collect(Collectors.toSet());
+
     for (int i = 0; i < blobName.length(); i++) {
       char c = blobName.charAt(i);
 
@@ -584,10 +589,6 @@ class FrontendRestRequestService implements RestRequestService {
       } else {
         isPrevWhitespace = false;
       }
-
-      Set<Character> invalidAsciiBlobNameCharsSet = frontendConfig.invalidAsciiBlobNameChars.stream()
-          .map(s -> s.charAt(0))
-          .collect(Collectors.toSet());
 
       // Check for control characters or invalid characters
       if (Character.isISOControl(c) || invalidAsciiBlobNameCharsSet.contains(c)) {

@@ -366,7 +366,6 @@ public class FrontendRestRequestServiceTest {
 
     for (String blobName : invalidBlobNames) {
       String encodedBlobName = URLEncoder.encode(blobName, StandardCharsets.UTF_8.toString()).replace("+", "%20");
-      System.out.println("Testing invalid blobName: \"" + blobName + "\" → Encoded: " + encodedBlobName);
 
       String namedBlobPathUri = NAMED_BLOB_PREFIX + SLASH + testAccount.getName() +
           SLASH + testContainer.getName() + SLASH + encodedBlobName;
