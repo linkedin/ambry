@@ -297,6 +297,35 @@ public class FileStore implements PartitionFileStore {
     logger.info("All regular files are moved from: {} to: {}", srcDirPath, destDirPath);
   }
 
+  @Override
+  public void cleanUpDirectory(String srcPath) {
+    // Verify service is running.
+    validateIfFileStoreIsRunning();
+
+    // Validate input.
+    Objects.requireNonNull(srcPath, "srcPath must not be null");
+
+    try {
+      synchronized (storeWriteLock) {
+        Path source = Paths.get(srcPath);
+        if (!Files.exists(source)) {
+          throw new IOException("Source directory does not exist: " + srcPath);
+        }
+        Files.walk(source)
+            .sorted((o1, o2) -> o2.compareTo(o1)) // Sort in reverse order to delete files before directories
+            .forEach(path -> {
+              try {
+                Files.delete(path);
+              } catch (IOException e) {
+                logger.error("Error deleting file or directory: {}", path, e);
+              }
+            });
+      }
+    } catch (Exception e) {
+      logger.error("Unexpected error while cleaning up directory: {}", srcPath, e);
+    }
+  }
+
   /**
    * Performs cleanup operations when shutting down the FileStore.
    */
@@ -468,5 +497,6 @@ public class FileStore implements PartitionFileStore {
         stream.close();
       }
     }
+
   }
 }

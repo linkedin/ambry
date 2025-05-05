@@ -200,7 +200,14 @@ public class DiskManager {
         }
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
-            partitionAndStore.getValue().start();
+            if(Arrays.asList(20l).contains(partitionAndStore.getKey().getId())) {
+              partitionAndStore.getValue().initialize();
+              logger.info("FCH TEST: Contents Of Directory Before Clean up Is: {}" + new File(partitionAndStore.getValue().getDataDir()).listFiles());
+              partitionAndStore.getValue().getFileStore().cleanUpDirectory(partitionAndStore.getValue().getDataDir());
+              logger.info("FCH TEST: Contents Of Directory After Clean up Is: {}" + new File(partitionAndStore.getValue().getDataDir()).listFiles());
+            }
+            else
+              partitionAndStore.getValue().start();
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
             logger.error("Exception while starting store for the {}", partitionAndStore.getKey(), e);

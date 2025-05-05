@@ -113,27 +113,27 @@ public class FileCopyBasedReplicationManager {
     isRunning = true;
     logger.info("FCH TEST: FileCopyBasedReplicationManager started");
     PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
-    List<Long> partitionIds = Arrays.asList(20l, 127l);
-
-    logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
-        PartitionId::getId).collect(Collectors.toList()));
-
-    List<PartitionId> partitionIdList =
-        storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
-
-    logger.info("FCH TEST: Partitions to be hydrated up: {}", partitionIdList);
-    //Integrate clean up.
-    ExecutorService executor = Executors.newFixedThreadPool(30); // use appropriate number of threads
-
-    for (PartitionId partitionId : partitionIdList) {
-      executor.execute(() -> {
-        try {
-          partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionId.getId()));
-        } catch (Exception e) {
-          logger.error("FCH TEST: Failed to build state for file copy for partition {}", partitionId, e);
-        }
-      });
-    }
+//    List<Long> partitionIds = Arrays.asList(20l, 127l);
+//
+//    logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
+//        PartitionId::getId).collect(Collectors.toList()));
+//
+//    List<PartitionId> partitionIdList =
+//        storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
+//
+//    logger.info("FCH TEST: Partitions to be hydrated up: {}", partitionIdList);
+//    //Integrate clean up.
+//    ExecutorService executor = Executors.newFixedThreadPool(30); // use appropriate number of threads
+//
+//    for (PartitionId partitionId : partitionIdList) {
+//      executor.execute(() -> {
+//        try {
+//          partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionId.getId()));
+//        } catch (Exception e) {
+//          logger.error("FCH TEST: Failed to build state for file copy for partition {}", partitionId, e);
+//        }
+//      });
+//    }
   }
 
   public void shutdown() throws InterruptedException {
@@ -148,6 +148,18 @@ public class FileCopyBasedReplicationManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      List<Long> partitionIds = Arrays.asList(20l);
+
+      logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
+          PartitionId::getId).collect(Collectors.toList()));
+
+      List<PartitionId> partitionIdList =
+          storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
+      if(!partitionIdList.stream().map(x -> x.getId()).collect(Collectors.toList()).contains(partitionName)) {
+        logger.warn("FCH TEST: Partition {} is not part of the list of partitions to be hydrated up. Ignoring state change", partitionName);
+        return;
+      }
+
       if(!isRunning){
         logger.info("FCH TEST: FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
         throw new StateTransitionException("FileCopyBasedReplicationManager is not running. Ignoring state "
