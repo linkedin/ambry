@@ -40,6 +40,50 @@ public class ReplicationPrioritizationMetrics {
   private final Gauge<Integer> minReplicaNoDisruptionCount;
   private final Gauge<Integer> normalPriorityCount;
 
+  public Gauge<Integer> getCurrentlyReplicatingPriorityPartitionsCount() {
+    return currentlyReplicatingPriorityPartitionsCount;
+  }
+
+  public Gauge<Integer> getMinReplicaNoDisruptionCount() {
+    return minReplicaNoDisruptionCount;
+  }
+
+  public Gauge<Integer> getMinReplicaWithDisruptionCount() {
+    return minReplicaWithDisruptionCount;
+  }
+
+  public Gauge<Integer> getBelowMinReplicaNoDisruptionCount() {
+    return belowMinReplicaNoDisruptionCount;
+  }
+
+  public Gauge<Integer> getBelowMinReplicaWithDisruptionCount() {
+    return belowMinReplicaWithDisruptionCount;
+  }
+
+  public Gauge<Integer> getDisabledReplicationPartitionsCount() {
+    return disabledReplicationPartitionsCount;
+  }
+
+  public Gauge<Integer> getAllBootstrappingPartitionsCount() {
+    return allBootstrappingPartitionsCount;
+  }
+
+  public Gauge<Integer> getNormalPriorityCount() {
+    return normalPriorityCount;
+  }
+
+  public Counter getPartitionsAddedToHighPriorityCount() {
+    return partitionsAddedToHighPriorityCount;
+  }
+
+  public Counter getNormalToHighPriorityTransitionCount() {
+    return normalToHighPriorityTransitionCount;
+  }
+
+  public Histogram getHighPriorityBatchSizeHistogram() {
+    return highPriorityBatchSizeHistogram;
+  }
+
   // Gauge to track currently replicating priority partitions
   private final Gauge<Integer> currentlyReplicatingPriorityPartitionsCount;
 

@@ -129,6 +129,10 @@ public class ReplicationPrioritizationManager implements Runnable {
     return currentlyReplicatingPriorityPartitions;
   }
 
+  public ReplicationPrioritizationMetrics getReplicationPrioritizationMetrics() {
+    return replicationPrioritizationMetrics;
+  }
+
   /**
    * Main entry point for the replication prioritization manager.
    */
@@ -567,12 +571,14 @@ public class ReplicationPrioritizationManager implements Runnable {
       logger.info("Disabling replication for {} non-priority partitions", partitionsToDisable.size());
       replicationEngine.controlReplicationForPartitions(partitionsToDisable, Collections.emptyList(), false);
       disabledReplicationPartitions.addAll(partitionsToDisable);
-      replicationPrioritizationMetrics.updateDisabledReplicationPartitions(disabledReplicationPartitions);
     }
+
 
     // Enable high-priority partitions
     logger.info("Enabling replication for {} high-priority partitions", currentlyReplicatingPriorityPartitions.size());
     replicationEngine.controlReplicationForPartitions(currentlyReplicatingPriorityPartitions, Collections.emptyList(), true);
+    disabledReplicationPartitions.removeAll(currentlyReplicatingPriorityPartitions);
+    replicationPrioritizationMetrics.updateDisabledReplicationPartitions(disabledReplicationPartitions);
   }
 
 
@@ -586,7 +592,7 @@ public class ReplicationPrioritizationManager implements Runnable {
 
     // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
     ReplicaState state = storageManager.getStore(partitionId).getCurrentState();
-    return state == ReplicaState.STANDBY || state == ReplicaState.LEADER;
+    return state == ReplicaState.STANDBY || state == ReplicaState.LEADER || state == ReplicaState.ERROR;
   }
 
 
