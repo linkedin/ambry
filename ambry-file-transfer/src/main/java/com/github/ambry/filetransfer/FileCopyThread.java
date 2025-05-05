@@ -63,7 +63,7 @@ public class FileCopyThread extends Thread {
 
   @Override
   public void run() {
-    logger.info("Starting FileCopyThread: {} for replicaId: {}", threadName, fileCopyStatusListener.getReplicaId());
+    logger.info("FCH TEST: Starting FileCopyThread: {} for replicaId: {}", threadName, fileCopyStatusListener.getReplicaId());
 
     try {
       ReplicaId replicaId = fileCopyStatusListener.getReplicaId();
@@ -71,12 +71,19 @@ public class FileCopyThread extends Thread {
         throw new IllegalStateException("ReplicaId cannot be null");
       }
 
+      logger.info("FCH TEST: ReplicaId Mount Path Is {}", replicaId.getMountPath());
+
       //TODO add logic to get the source and target replica id
       ReplicaId targetReplicaId = FileCopyUtils.getPeerForFileCopy(replicaId.getPartitionId(), replicaId.getDataNodeId().getDatacenterName());
-
-      if(targetReplicaId == null) {
-        throw new IllegalStateException("Target ReplicaId cannot be null");
+      if (targetReplicaId == null) {
+        logger.warn("No peer replica found for file copy for replicaId: {}", replicaId);
+        fileCopyStatusListener.onFileCopyFailure(new IOException("No peer replica found for file copy"));
+        return;
       }
+
+      logger.info("FCH TEST: Starting file copy from {} to {}", replicaId.getDataNodeId(), targetReplicaId.getDataNodeId());
+
+
 
       FileCopyInfo fileCopyInfo = new FileCopyInfo(START_CORRELATION_ID, CLIENT_ID, replicaId, targetReplicaId);
       fileCopyHandler.start();

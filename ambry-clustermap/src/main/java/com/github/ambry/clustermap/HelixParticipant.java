@@ -882,6 +882,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     try {
       // 1. take actions in storage manager (add new replica if necessary)
       onPartitionBecomePreBootstrapFromOffline(partitionName);
+
+      PartitionStateChangeListener fileCopyStateChangeListener =
+          partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
+
+      if (fileCopyStateChangeListener != null) {
+        fileCopyStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      }
+
       onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =

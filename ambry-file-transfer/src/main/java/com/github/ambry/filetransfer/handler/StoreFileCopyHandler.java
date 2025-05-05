@@ -79,6 +79,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
   private static final Logger logger = LoggerFactory.getLogger(StoreFileCopyHandler.class);
 
+  boolean x;
+
   /**
    * Constructor to create StoreFileCopyHandler
    * @param connectionPool the {@link ConnectionPool} to use for making requests.
@@ -101,6 +103,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     this.clusterMap = clusterMap;
     this.config = config;
     this.operationRetryHandler = new OperationRetryHandler(config);
+    x = (config.getFileCopyHandlerChunkSize != 0);
   }
 
   /**
@@ -108,6 +111,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @throws StoreException
    */
   public void start() throws StoreException {
+    logger.info("FCH TEST: FCH TEST: File Copy handler is running for Replica");
     isRunning = true;
   }
 
@@ -156,6 +160,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
+    logger.info("FCH TEST: Mount Path is {}, DataNode is {}", fileCopyInfo.getSourceReplicaId().getMountPath(), fileCopyInfo.getTargetReplicaId().getDataNodeId());
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
 
@@ -299,7 +304,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
         logInfo.getLogSegment().getFileSize());
     int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSize() / config.getFileCopyHandlerChunkSize);
-    logger.info("Number of chunks in log segment: {} for filename {}", chunksInLogSegment, logFileInfo.getFileName());
+    logger.info("FCH TEST: Number of chunks in log segment: {} for filename {}", chunksInLogSegment, logFileInfo.getFileName());
 
     for (int i = 0; i < chunksInLogSegment; i++) {
       long startOffset = (long) i * config.getFileCopyHandlerChunkSize;

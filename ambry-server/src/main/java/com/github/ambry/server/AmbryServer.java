@@ -41,9 +41,11 @@ import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.ReplicaPrioritizationConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
@@ -51,6 +53,11 @@ import com.github.ambry.config.ServerExecutionMode;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationManager;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactory;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactoryImpl;
+import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
+import com.github.ambry.filetransfer.handler.StoreFileCopyHandlerFactory;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -74,6 +81,10 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.replica.prioritization.FCFSPrioritizationManager;
+import com.github.ambry.replica.prioritization.FileBasedReplicationPrioritizationManagerFactory;
+import com.github.ambry.replica.prioritization.PrioritizationManager;
+import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.replica.prioritization.ReplicationPrioritizationManager;
 import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replica.prioritization.disruption.factory.DisruptionServiceFactory;
@@ -228,6 +239,8 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
+      FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(properties);
+      ReplicaPrioritizationConfig replicaPrioritizationConfig = new ReplicaPrioritizationConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -492,6 +505,22 @@ public class AmbryServer {
       }
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+
+      FileCopyHandlerFactory
+          fileCopyHandlerFactory = new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap, fileCopyBasedReplicationConfig);
+
+      PrioritizationManager prioritizationManager = new FCFSPrioritizationManager();
+      logger.info("starting FCFS PZ MANAGER");
+      prioritizationManager.start();
+      logger.info("started FCFS PZ MANAGER");
+      DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+
+      FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory = new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory,
+          fileCopyBasedReplicationConfig, clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant );
+      FileCopyBasedReplicationManager fileCopyBasedReplicationManager = new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig,
+          storageManager, clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant, fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory,
+          prioritizationManager, storeConfig, replicaPrioritizationConfig);
+      testE2EFlow(fileCopyBasedReplicationManager);
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
     } catch (Exception e) {
@@ -500,6 +529,15 @@ public class AmbryServer {
     }
   }
 
+
+  public void testE2EFlow(FileCopyBasedReplicationManager fileCopyBasedReplicationManager){
+    try {
+      fileCopyBasedReplicationManager.start();
+    } catch (Exception e) {
+      logger.error("FCBRM Failed");
+      logger.error(e.toString());
+    }
+  }
   /**
    * This method is expected to be called in the exit path as long as the AmbryServer instance construction was
    * successful. This is expected to be called even if {@link #startup()} did not succeed.

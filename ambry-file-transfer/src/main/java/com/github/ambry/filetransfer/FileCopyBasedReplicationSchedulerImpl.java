@@ -40,7 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler{
+class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler {
   private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
   private final FileCopyHandlerFactory fileCopyHandlerFactory;
   private final ClusterMap clusterMap;
@@ -88,6 +88,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     this.replicaToStatusListenerMap = new ConcurrentHashMap<>();
   }
 
+  @Override
   public void run(){
     isRunning = true;
     logger.info("FileCopyBasedReplicationSchedulerImpl Started");
@@ -113,7 +114,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
           && System.currentTimeMillis() / 1000 - replicaToStartTimeMap.get(replica)
           > fileCopyBasedReplicationConfig.fileCopyReplicaTimeoutSecs) {
 
-        logger.info("Replica: {} is starved for hydration. Time since start: {} seconds",
+        logger.info("FCH TEST: Replica: {} is starved for hydration. Time since start: {} seconds",
             replica.getPartitionId().toPathString(),
             System.currentTimeMillis() / 1000 - replicaToStartTimeMap.get(replica));
         replicasToDropFromHydration.add(replica);
@@ -140,17 +141,17 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
   @Override
   public void scheduleFileCopy() throws InterruptedException {
-    logger.info("Starting File Copy Scheduler");
+    logger.info("FCH TEST: Starting File Copy Scheduler");
     while(isRunning){
-
+      logger.info("FCH TEST: Sleeping For File Copy Scheduler Wait Time: " + fileCopyBasedReplicationConfig.fileCopySchedulerWaitTimeSecs);
       Thread.sleep(fileCopyBasedReplicationConfig.fileCopySchedulerWaitTimeSecs*1000);
 
       List<ReplicaId> replicasToDropForHydration = findStarvedReplicas();
       if(!replicasToDropForHydration.isEmpty()){
-        logger.info("Found Replicas To Drop From Hydration: " + replicasToDropForHydration.stream()
+        logger.info("FCH TEST: Found Replicas To Drop From Hydration: " + replicasToDropForHydration.stream()
             .map(replicaId -> replicaId.getPartitionId().toPathString()).collect(Collectors.toList()));
       } else{
-        logger.info("No Replicas To Drop From Hydration In Current Cycle");
+        logger.info("FCH TEST: No Replicas To Drop From Hydration In Current Cycle");
       }
 
       for(ReplicaId replica: replicasToDropForHydration){
@@ -171,9 +172,14 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       }
 
       List<DiskId> disksToHydrate = fileCopyBasedReplicationThreadPoolManager.getDiskIdsToHydrate();
+
       for(DiskId diskId: disksToHydrate){
         List<ReplicaId> replicaIds = getNextReplicaToHydrate(diskId, fileCopyBasedReplicationConfig.fileCopyParallelPartitionHydrationCountPerDisk);
-        logger.info("Starting Hydration For Disk: {} with ReplicaId: {}", diskId, replicaIds.stream().map(replicaId -> replicaId.getPartitionId().toPathString()));
+        if(replicaIds == null || replicaIds.isEmpty()){
+          logger.info("FCH TEST: No Replicas To Hydrate For Disk: " + diskId.getMountPath());
+          continue;
+        }
+        logger.info("FCH TEST: Starting Hydration For Disk: {} with ReplicaId: {}", diskId, replicaIds.stream().map(replicaId -> replicaId.getPartitionId().toPathString()));
 
         if(!replicaIds.isEmpty()){
           for(ReplicaId replicaId: replicaIds) {
@@ -193,6 +199,18 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
               fileCopyStatusListener.onFileCopyFailure(e);
               continue;
             }
+            try{
+              /**
+               * Use FileCopyTemporaryDirectoryName to create a temporary directory for file copy.
+               * This will be used to write the files which are not yet written and can be cleaned
+               * up without
+               */
+              createTemporaryDirectoryForFileCopyIfAbsent(replicaId, fileCopyBasedReplicationConfig);
+            } catch (IOException e){
+              logger.error("Error Creating Temporary Directory For Replica: " + replicaId.getPartitionId().toPathString());
+              fileCopyStatusListener.onFileCopyFailure(e);
+              continue;
+            }
 
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
                 fileCopyStatusListener, fileCopyHandler);
@@ -202,7 +220,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
             replicaToStartTimeMap.put(replicaId, System.currentTimeMillis()/1000);
           }
         } else{
-          logger.info("No Replicas To Hydrate For Disk: " + diskId);
+          logger.info("FCH TEST: No Replicas To Hydrate For Disk: " + diskId);
         }
       }
     }
@@ -221,6 +239,15 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       fileCopyInProgressFileName.createNewFile();
     }
   }
+
+  void createTemporaryDirectoryForFileCopyIfAbsent(ReplicaId replica, FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig) throws IOException {
+    logger.info("FCH TEST: Creating Temporary Directory For File Copy: " + fileCopyBasedReplicationConfig.fileCopyTemporaryDirectoryName);
+    File fileCopyTemporaryDirectory = new File(replica.getReplicaPath(), fileCopyBasedReplicationConfig.fileCopyTemporaryDirectoryName);
+    if (!fileCopyTemporaryDirectory.exists()) {
+      fileCopyTemporaryDirectory.mkdirs();
+    }
+  }
+
 
   @Override
   public int getThreadPoolSize() {
@@ -243,6 +270,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
     @Override
     public void onFileCopySuccess() {
+      logger.info("FCH TEST: Hydration Completed For Replica: " + replicaId.getPartitionId().toPathString());
       removeReplicaFromFileCopy(replicaId);
       replicaSyncUpManager.onFileCopyComplete(replicaId);
     }

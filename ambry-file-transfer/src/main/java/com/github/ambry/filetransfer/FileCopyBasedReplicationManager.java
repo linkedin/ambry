@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -31,7 +32,13 @@ import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +88,7 @@ public class FileCopyBasedReplicationManager {
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.FileCopyManagerListener,
           new PartitionStateChangeListenerImpl());
-      logger.info("File Copy Manager's state change listener registered!");
+      logger.info("FCH TEST: File Copy Manager's state change listener registered!");
     } else {
       throw new InstantiationException("File Copy Manager cannot be instantiated without a ClusterParticipant");
     }
@@ -90,6 +97,7 @@ public class FileCopyBasedReplicationManager {
     this.prioritizationManager = prioritizationManager;
     this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
     this.fileCopyBasedReplicationSchedulerThread = new Thread(fileCopyBasedReplicationScheduler);
+
     if(!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
@@ -103,23 +111,57 @@ public class FileCopyBasedReplicationManager {
     logger.info("Starting FileCopyBasedReplicationManager");
     fileCopyBasedReplicationSchedulerThread.start();
     isRunning = true;
-    logger.info("FileCopyBasedReplicationManager started");
+    logger.info("FCH TEST: FileCopyBasedReplicationManager started");
+    PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
+//    List<Long> partitionIds = Arrays.asList(20l, 127l);
+//
+//    logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
+//        PartitionId::getId).collect(Collectors.toList()));
+//
+//    List<PartitionId> partitionIdList =
+//        storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
+//
+//    logger.info("FCH TEST: Partitions to be hydrated up: {}", partitionIdList);
+//    //Integrate clean up.
+//    ExecutorService executor = Executors.newFixedThreadPool(30); // use appropriate number of threads
+//
+//    for (PartitionId partitionId : partitionIdList) {
+//      executor.execute(() -> {
+//        try {
+//          partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionId.getId()));
+//        } catch (Exception e) {
+//          logger.error("FCH TEST: Failed to build state for file copy for partition {}", partitionId, e);
+//        }
+//      });
+//    }
   }
 
   public void shutdown() throws InterruptedException {
-    logger.info("Shutting down FileCopyBasedReplicationManager");
+    logger.info("FCH TEST: Shutting down FileCopyBasedReplicationManager");
     fileCopyBasedReplicationScheduler.shutdown();
     fileCopyBasedReplicationSchedulerThread.join();
     isRunning = false;
-    logger.info("FileCopyBasedReplicationManager shutdown");
+    logger.info("FCH TEST: FileCopyBasedReplicationManager shutdown");
   }
 
   class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      List<Long> partitionIds = Arrays.asList(20l);
+
+      logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
+          PartitionId::getId).collect(Collectors.toList()));
+
+      List<PartitionId> partitionIdList =
+          storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
+      if(!partitionIdList.stream().map(x -> x.getId()).collect(Collectors.toList()).contains(partitionName)) {
+        logger.warn("FCH TEST: Partition {} is not part of the list of partitions to be hydrated up. Ignoring state change", partitionName);
+        return;
+      }
+
       if(!isRunning){
-        logger.info("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
+        logger.info("FCH TEST: FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
         throw new StateTransitionException("FileCopyBasedReplicationManager is not running. Ignoring state "
             + "change for partition: " + partitionName, StateTransitionException.
             TransitionErrorCode.FileCopyBasedReplicationManagerNotRunning);
@@ -138,20 +180,21 @@ public class FileCopyBasedReplicationManager {
        * If the file copy was already completed, then no need to do it again.
        */
       if(storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName)){
-        logger.info("File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
+        logger.info("FCH TEST: File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
         return;
       }
 
-      logger.info("Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}", replicaId.getPartitionId().toPathString());
+      logger.info("FCH TEST: Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}", replicaId.getPartitionId().toPathString());
+
       replicaSyncUpManager.initiateFileCopy(replicaId);
 
-      logger.info("Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
+      logger.info("FCH TEST: Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
       prioritizationManager.addReplica(replicaId);
 
       try {
-        logger.info("Waiting for File Copy to be completed for Replica: {}", replicaId.getPartitionId().toPathString());
+        logger.info("FCH TEST: Waiting for File Copy to be completed for Replica: {}", replicaId.getPartitionId().toPathString());
         replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
-        logger.info("File Copy Completed for Replica: {}", replicaId.getPartitionId().toPathString());
+        logger.info("FCH TEST: File Copy Completed for Replica: {}", replicaId.getPartitionId().toPathString());
       } catch (InterruptedException e) {
         logger.error("File copy for partition {} was interrupted", partitionName);
         throw new StateTransitionException("File copy for partition " + partitionName + " was interrupted",

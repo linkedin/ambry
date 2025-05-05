@@ -42,11 +42,13 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
 
 
   public FCFSPrioritizationManager() {
+    System.out.println("FCFS Inititalized");
     diskToReplicaMap = new ConcurrentHashMap<>();
     inProgressReplicas = new ConcurrentHashMap<>();
   }
   @Override
   public void start() {
+    logger.info("FCH TEST: FCH TEST: FCFS Pz Manager has Started");
     isRunning = true;
   }
 
@@ -62,7 +64,7 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
   }
 
   @Override
-  public List<ReplicaId> getPartitionListForDisk(@Nonnull DiskId diskId, @Nonnegative int numberOfReplicasPerDisk) {
+  public synchronized List<ReplicaId> getPartitionListForDisk(@Nonnull DiskId diskId, @Nonnegative int numberOfReplicasPerDisk) {
     if(!isRunning){
       logger.error("Failed to get partition list for disk {}", diskId);
       throw new StateTransitionException("Failed to get partition list for disk " + diskId, PrioritizationManagerRunningFailure);
@@ -76,7 +78,8 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
     }
 
     int numberOfReplicasToBeRemoved = Math.min(numberOfReplicasPerDisk, replicaListForDisk.size());
-    logger.info("Getting {} replicas for disk {}", numberOfReplicasToBeRemoved, diskId.getMountPath());
+    logger.info("FCH TEST: Getting {} replicas for disk {}", numberOfReplicasToBeRemoved, diskId.getMountPath());
+
 
     List<ReplicaId> replicasToReturn = new LinkedList<>(replicaListForDisk.subList(0, numberOfReplicasToBeRemoved));
 
@@ -97,10 +100,12 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
 
   @Override
   public synchronized boolean addReplica(ReplicaId replicaId) {
+    logger.info("FCH TEST: Trying to Add Replica to FCFS");
     validateIfPzManagerIsRunningOrThrowException(replicaId);
+    logger.info("FCH TEST: Prioritizer is Running");
     diskToReplicaMap.putIfAbsent(replicaId.getDiskId(), new LinkedList<>());
     diskToReplicaMap.get(replicaId.getDiskId()).add(replicaId);
-    logger.info("Added partition {} to prioritization Manager For Disk {}", replicaId.getReplicaPath(),
+    logger.info("FCH TEST: Added partition {} to prioritization Manager For Disk {}", replicaId.getReplicaPath(),
         replicaId.getDiskId().getMountPath());
     return true;
   }

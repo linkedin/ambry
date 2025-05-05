@@ -52,4 +52,6 @@ public interface PartitionFileStore {
    * @throws IOException if an I/O error occurs during the move operation
    */
   void moveAllRegularFiles(String srcDirPath, String destDirPath) throws IOException;
+
+  void cleanUpDirectory(String srcPath);
 }

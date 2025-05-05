@@ -110,6 +110,7 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   public void submitReplicaForHydration(ReplicaId replicaId, FileCopyStatusListener fileCopyStatusListener,
       FileCopyHandler fileCopyHandler) {
     try {
+      logger.info("FCH TEST: Submit");
       threadQueueLock.lock();
       DiskId diskId = replicaId.getDiskId();
       FileCopyThread fileCopyThread = new FileCopyThread(fileCopyHandler, fileCopyStatusListener);
@@ -134,18 +135,18 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   @Override
   public void stopAndRemoveReplicaFromThreadPool(ReplicaId replicaId) throws InterruptedException {
     threadQueueLock.lock();
-    logger.info("Stopping and removing replica {} from thread pool", replicaId);
+    logger.info("FCH TEST: Stopping and removing replica {} from thread pool", replicaId);
     FileCopyThread fileCopyThread = replicaToFileCopyThread.get(replicaId);
 
     if (fileCopyThread == null || !fileCopyThread.isAlive()) {
-      logger.info("No thread found for replica {}. Nothing to stop.", replicaId);
+      logger.info("FCH TEST: No thread found for replica {}. Nothing to stop.", replicaId);
       threadQueueLock.unlock();
       return;
     }
     long threadShutDownInitiationTime = System.currentTimeMillis();
-    logger.info("Stopping thread for replica {}", replicaId);
+    logger.info("FCH TEST: Stopping thread for replica {}", replicaId);
     fileCopyThread.shutDown();
-    logger.info("Thread for replica {} stopped in {} ms", replicaId,
+    logger.info("FCH TEST: Thread for replica {} stopped in {} ms", replicaId,
         System.currentTimeMillis() - threadShutDownInitiationTime);
     threadQueueLock.unlock();
   }
