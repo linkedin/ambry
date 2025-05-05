@@ -79,7 +79,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final DataNodeConfigSource dataNodeConfigSource;
   private final HelixAdmin helixAdmin;
   private final MetricRegistry metricRegistry;
-  private final CountDownLatch listenerLatch;
+  private final CountDownLatch listenersLatch;
   private volatile boolean disablePartitionsComplete = false;
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
@@ -103,7 +103,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     this.clusterManager = clusterManager;
     this.zkConnectStr = zkConnectStr;
     this.metricRegistry = metricRegistry;
-    this.listenerLatch = new CountDownLatch(listenerCount);
+    this.listenersLatch = new CountDownLatch(listenerCount);
     participantMetrics =
         new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState,
             clusterMapConfig.clustermapEnablePartitionStateTransitionMetrics);
@@ -172,11 +172,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
       PartitionStateChangeListener partitionStateChangeListener) {
-    partitionStateChangeListeners.computeIfAbsent(listenerType, k -> {
-      logger.info("Registering partition state change listener {}", listenerType);
-      listenerLatch.countDown();
-      return partitionStateChangeListener;
-    });
+    boolean isNewEntry = false;
+    logger.info("Registering partition state change listener {}", listenerType);
+    if (!partitionStateChangeListeners.containsKey(listenerType)) {
+      isNewEntry = true;
+    }
+    partitionStateChangeListeners.put(listenerType, partitionStateChangeListener);
+    if (isNewEntry) listenersLatch.countDown();
   }
 
   @Override
@@ -671,8 +673,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Expose for testing, to reset ListenerLatch
    */
   public void resetListenerLatch() {
-    while (listenerLatch.getCount() > 0) {
-      listenerLatch.countDown();
+    while (listenersLatch.getCount() > 0) {
+      listenersLatch.countDown();
     }
   }
 
@@ -908,7 +910,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       // Since in ADD flow of Nimbus we are calling participate before StorageManager, ReplicationManager is created
       // Blocking calling of this event until StorageManager and ReplicationManager is started.
       logger.info("Waiting on listener latch...");
-      listenerLatch.await();
+      listenersLatch.await();
       logger.info("Listener latch is released");
       participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
       // 1. take actions in storage manager (add new replica if necessary)
