@@ -1161,6 +1161,69 @@ public class HelixParticipantTest {
     helixParticipant2.close();
   }
 
+  @Test
+  public void testStateTransitionBlockedAndUnblocked() throws Exception {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
+
+    // participate
+    helixParticipant.participate(Collections.emptyList(), null, null);
+    HelixManager manager = helixParticipant.getHelixManager();
+    StateModelFactory<? extends StateModel> factory =
+        manager.getStateMachineEngine().getStateModelFactory(ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+    assertTrue(factory instanceof AmbryStateModelFactory);
+
+    ClusterMap cm = new StaticClusterManager(testPartitionLayout.partitionLayout, dcName, new MetricRegistry());
+    List<? extends ReplicaId> replicaIds =
+        cm.getReplicaIds(cm.getDataNodeId("localhost", clusterMapConfig.clusterMapPort));
+    String resource = "10000"; // There is only one resource
+    // send state transition messages, this is controller logic, just put it down here to make sure the pipeline
+    // of state transition works
+    sendStateTransitionMessages(manager, resource, replicaIds, "OFFLINE", "BOOTSTRAP");
+    // sleep some time
+    Thread.sleep(1000);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(0, getNumberOfReplicaInStateFromMetric("bootstrap", metricRegistry));
+    // register listeners
+    PartitionStateChangeListener testListener = new PartitionStateChangeListener() {
+      @Override
+      public void onPartitionBecomeBootstrapFromOffline(String partitionName) {}
+
+      @Override
+      public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {}
+
+      @Override
+      public void onPartitionBecomeLeaderFromStandby(String partitionName) {}
+
+      @Override
+      public void onPartitionBecomeStandbyFromLeader(String partitionName) {}
+
+      @Override
+      public void onPartitionBecomeInactiveFromStandby(String partitionName) {}
+
+      @Override
+      public void onPartitionBecomeOfflineFromInactive(String partitionName) {}
+
+      @Override
+      public void onPartitionBecomeDroppedFromOffline(String partitionName) {}
+    };
+    // registerListeners
+    helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener, testListener);
+    helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, testListener);
+    helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        testListener);
+    // sleep some time so the state transition can happen
+    // have to get offline to refresh the cache?
+    Thread.sleep(1000);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("bootstrap", metricRegistry));
+    helixParticipant.close();
+  }
+
   /**
    * Test two distributed locks
    * @param lock1

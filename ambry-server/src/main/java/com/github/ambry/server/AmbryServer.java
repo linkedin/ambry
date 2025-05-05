@@ -339,9 +339,9 @@ public class AmbryServer {
         logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
         DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
         // Flow for new node ADD
-        // In Non-Nimbus we use lipy to pre-populate Instance and DataNodeConfig
-        // In Nimbus we populate Instance config with auto-registration
-        // Data Node config is populated in pre-hook of ACM
+        // Instance config is populated with auto-registration
+        // State Transitions are blocked until DataNode config is populated
+        // Once DataNode config is populated, Listeners would be registered, that resumes Bootstrapping
         List<AmbryStatsReport> ambryStatsReports = getAmbryStatsReports(serverConfig);
 
         for (ClusterParticipant participant : clusterParticipants) {
