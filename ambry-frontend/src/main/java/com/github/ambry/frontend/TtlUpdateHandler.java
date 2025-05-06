@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -138,6 +139,7 @@ class TtlUpdateHandler {
             DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(blobIdStr, restRequest.getArgs());
             blobIdStr = datasetVersionRecord.getRenamedPath(datasetVersionPath.getAccountName(),
                 datasetVersionPath.getContainerName());
+            restRequest.setArg(SOURCE_BLOB_NAME_FROM_RENAMING, blobIdStr);
           }
         }
         if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {

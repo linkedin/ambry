@@ -194,7 +194,13 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         if (restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
           long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
           String blobIdClean = RestUtils.stripSlashAndExtensionFromId(input);
-          String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
+          String blobIdStr;
+          //in order to support renaming feature for dataset, we need to update the blob name for ttl update.
+          if (restRequest.getArgs().containsKey(SOURCE_BLOB_NAME_FROM_RENAMING)) {
+            blobIdStr = (String) restRequest.getArgs().get(SOURCE_BLOB_NAME_FROM_RENAMING);
+          } else {
+            blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
+          }
           NamedBlobPath namedBlobPath;
           if (blobIdStr != null) {
             if (!RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
