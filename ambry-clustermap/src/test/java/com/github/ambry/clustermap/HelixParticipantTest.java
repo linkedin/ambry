@@ -1162,7 +1162,7 @@ public class HelixParticipantTest {
   }
 
   @Test
-  public void testStateTransitionBlockedAndUnblocked() throws Exception {
+  public void testOfflineToBootstrapBlockedAndUnblocked() throws Exception {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
