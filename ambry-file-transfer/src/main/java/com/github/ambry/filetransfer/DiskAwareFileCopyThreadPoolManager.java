@@ -182,6 +182,18 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   @Override
   public void shutdown() throws InterruptedException {
     isRunning = false;
+    logger.info("Shutting down DiskAwareFileCopyThreadPoolManager");
+    threadQueueLock.lock();
+    runningThreads.forEach((diskId, fileCopyThreads) -> {
+      fileCopyThreads.forEach(fileCopyThread -> {
+        try {
+          fileCopyThread.shutDown();
+        } catch (Exception e) {
+          logger.error("Error while shutting down thread {}", fileCopyThread.threadName, e);
+        }
+      });
+    });
+    threadQueueLock.unlock();
     shutdownLatch.await();
   }
 }
