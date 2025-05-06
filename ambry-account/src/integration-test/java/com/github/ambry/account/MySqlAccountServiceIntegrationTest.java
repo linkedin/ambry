@@ -200,7 +200,7 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountService.getAccountById(testAccount.getId()));
 
     // 3. Update existing container. Verify container is updated in cache.
-    testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
+    testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).setWorkflowMigrationEnabled(true).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
