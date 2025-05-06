@@ -907,8 +907,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
     try {
-      // Since in ADD flow of Nimbus we are calling participate before StorageManager, ReplicationManager is created
-      // Blocking calling of this event until StorageManager and ReplicationManager is started.
+      // Since we are calling participate before StorageManager, ReplicationManager and StatsManager is created
+      // Blocking calling of this event until their respective listeners are registered
       logger.info("Waiting on listener latch...");
       listenersLatch.await();
       logger.info("Listener latch is released");
