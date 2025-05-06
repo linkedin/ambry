@@ -35,6 +35,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -49,10 +50,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import javax.sql.DataSource;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.hadoop.util.Time;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import java.sql.Timestamp;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -145,6 +148,20 @@ public class MySqlNamedBlobDbTest {
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
     namedBlobDb.cleanupStaleData(staleNamedBlobs);
   }
+
+  @Test
+  public void testPullBlobs() throws Exception {
+    List<StaleNamedBlob> arrayBlobs = new ArrayList<>();
+    StaleNamedBlob blob1 = new StaleNamedBlob((short) 100, (short) 10, "new_cleaner", "0", 0, null,  0, new Timestamp(Time.now()));
+    StaleNamedBlob blob2 = new StaleNamedBlob((short) 100, (short) 10, "new_cleaner", "0", 0, null,  0, new Timestamp(Time.now()));
+
+    arrayBlobs.add(blob1);
+    arrayBlobs.add(blob2);
+
+    MySqlNamedBlobDb obj = new MySqlNamedBlobDb(null,null,null,null,null);
+    obj.getStaleBlobs(arrayBlobs);
+  }
+
 
   @Test
   public void testUpdateBlobTtlAndStateToReady() throws Exception {
