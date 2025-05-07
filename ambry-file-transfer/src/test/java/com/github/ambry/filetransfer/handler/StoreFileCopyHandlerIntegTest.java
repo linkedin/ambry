@@ -136,8 +136,9 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     StoreLogInfo storeLogInfo = new StoreLogInfo(new StoreFileInfo(logSegmentFileName, logSegment.length()),
         indexInfos, new ArrayList<>());
     FileCopyGetMetaDataResponse fileCopyGetMetaDataResponse = new FileCopyGetMetaDataResponse(
-        FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1, 0,
-        "clientId", 1, Collections.singletonList(storeLogInfo), ServerErrorCode.NoError, null);
+        FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1, 0, "clientId",
+        1, Collections.singletonList(storeLogInfo), "snapshotId",
+        ServerErrorCode.NoError, null);
 
     StoreFileCopyHandler spyHandler = spy(super.handler);
     doReturn(fileCopyGetMetaDataResponse)
@@ -150,7 +151,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     doReturn(fileCopyGetChunkResponseForIndexFile).
     doReturn(fileCopyGetChunkResponseForIndexFile2)
         .when(spyHandler)
-        .getFileCopyGetChunkResponse(any(), any(), any(), anyBoolean());
+        .getFileCopyGetChunkResponse(any(), any(), any(), any(), anyBoolean());
 
     // Act - Run FCHandler.copy using Spy handler
     // TODO: Temporary directory should have been created before FileCopyHandler.copy() is called.
@@ -193,8 +194,8 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     StoreLogInfo storeLogInfo = new StoreLogInfo(new StoreFileInfo(logSegmentName.toString(), logSegment.length()),
         new ArrayList<>(), new ArrayList<>());
     FileCopyGetMetaDataResponse fileCopyGetMetaDataResponse = new FileCopyGetMetaDataResponse(
-        FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1, 0,
-        "clientId", 1, Collections.singletonList(storeLogInfo), ServerErrorCode.NoError, null);
+        FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1, 0, "clientId",
+        1, Collections.singletonList(storeLogInfo), "snapshotId", ServerErrorCode.NoError, null);
 
     StoreFileCopyHandler spyHandler = spy(super.handler);
     doReturn(fileCopyGetMetaDataResponse)
@@ -216,7 +217,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     doReturn(chunkResponses.get(1)).
     doReturn(chunkResponses.get(2))
         .when(spyHandler)
-        .getFileCopyGetChunkResponse(any(), any(), any(), anyBoolean());
+        .getFileCopyGetChunkResponse(any(), any(), any(), any(), anyBoolean());
 
     // Act - Run FCHandler.copy using Spy handler
     // TODO: Temporary directory should have been created before FileCopyHandler.copy() is called.
