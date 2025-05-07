@@ -516,81 +516,90 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   /**
-   * Test case for different list statement option
+   * Test case for list named blobs with prefix, without any pagination
    * @throws Exception
    */
   @Test
-  public void testListNamedBlobsWithOrder() throws Exception {
+  public void testListNamedBlobsWithPrefixWithoutPaging() throws Exception {
     for (int i = MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION;
         i <= MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION; i++) {
-      testListNamedBlobsWithOrder(i);
+      testListNamedBlobsWithPrefixWithoutPaging(i);
     }
   }
 
-  private void testListNamedBlobsWithOrder(int listSqlOption) throws Exception {
-    if (namedBlobDb != null) {
-      namedBlobDb.close();
-      namedBlobDb = null;
-    }
-    Properties properties = createProperties(listSqlOption);
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    config = new MySqlNamedBlobDbConfig(verifiableProperties);
-    MySqlNamedBlobDbFactory namedBlobDbFactory =
-        new MySqlNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), accountService, time);
-    namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
-
-    Account account = accountService.getAllAccounts().iterator().next();
-    Container container = account.getAllContainers().iterator().next();
-    String blobNamePrefix = "testListNamedBlobsWithOrder-" + TestUtils.getRandomKey(10) + "-";
-    // Now insert 100 blob names
+  private void testListNamedBlobsWithPrefixWithoutPaging(int listSqlOption) throws Exception {
     final int NUM_RECORD = 100;
-    List<NamedBlobRecord> records = new ArrayList<>();
-    for (int i = 0; i < NUM_RECORD; i++) {
-      String blobName = blobNamePrefix + String.format("%02d", i); // padding with 0 so we keep the order
-      NamedBlobRecord record =
-          new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
-              Utils.Infinite_Time, 0, 1024);
-      namedBlobDb.put(record, NamedBlobState.READY, true).get();
-      records.add(record);
-    }
-
-    BiFunction<List<NamedBlobRecord>, List<NamedBlobRecord>, Void> validateListResult = (obtained, expected) -> {
-      assertEquals("List result size does not match", expected.size(), obtained.size());
-      for (int i = 0; i < expected.size(); i++) {
-        assertEquals("List result does not match at index " + i, expected.get(i), obtained.get(i));
-      }
-      return null;
-    };
-
-    // case 1: All blob names are valid and with one version, list all of them
+    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, Utils.Infinite_Time);
     Page<NamedBlobRecord> page =
-        namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null, null).get();
+        namedBlobDb.list(param.account.getName(), param.container.getName(), param.blobNamePrefix, null, null).get();
     Assert.assertNull(page.getNextPageToken());
-    validateListResult.apply(page.getEntries(), records);
+    validateListResult(page.getEntries(), param.records);
+  }
 
-    // case 2: All blob names are valid and with one version, list with page token
+  /**
+   * Test case for list named blobs with prefix, with pagination
+   * @throws Exception
+   */
+  @Test
+  public void testListNamedBlobsWithPrefixWithPaging() throws Exception {
+    for (int i = MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION;
+        i <= MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION; i++) {
+      testListNamedBlobsWithPrefixWithPaging(i);
+    }
+  }
+
+  private void testListNamedBlobsWithPrefixWithPaging(int listSqlOption) throws Exception {
+    final int NUM_RECORD = 100;
+    final int PAGE_SIZE = 10;
+    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, Utils.Infinite_Time);
     List<NamedBlobRecord> obtainedRecords = new ArrayList<>();
+    Page<NamedBlobRecord> page = null;
     String token = null;
     int nextRecord = 0;
     do {
-      page = namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, token, 10).get();
+      page =
+          namedBlobDb.list(param.account.getName(), param.container.getName(), param.blobNamePrefix, token, PAGE_SIZE)
+              .get();
       obtainedRecords.addAll(page.getEntries());
       token = page.getNextPageToken();
 
       if (token != null) {
-        nextRecord += 10;
-        String expectedToken = blobNamePrefix + String.format("%02d", nextRecord);
+        nextRecord += PAGE_SIZE;
+        String expectedToken = param.blobNamePrefix + String.format("%02d", nextRecord);
         assertEquals(expectedToken, token);
       }
     } while (page.getNextPageToken() != null);
-    validateListResult.apply(obtainedRecords, records);
+    validateListResult(obtainedRecords, param.records);
+  }
 
-    // case 3: Add versions to some of the records, and delete some record
-    Map<Integer, NamedBlobRecord> removedRecords = new HashMap<>();
+  /**
+   * Test case for list named blobs with prefix, with multiple versions on blob names
+   * @throws Exception
+   */
+  @Test
+  public void testListNamedBlobsWithPrefixWithMultipleVersions() throws Exception {
+    for (int i = MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION;
+        i <= MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION; i++) {
+      time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+      for (long deleted_ts : new long[]{Utils.Infinite_Time, time.milliseconds() + TimeUnit.HOURS.toMillis(1)}) {
+        testListNamedBlobsWithPrefixWithMultipleVersions(i, deleted_ts);
+      }
+    }
+  }
+
+  private void testListNamedBlobsWithPrefixWithMultipleVersions(int listSqlOption, long deleted_ts) throws Exception {
+    final int NUM_RECORD = 100;
+    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, deleted_ts);
+    Account account = param.account;
+    Container container = param.container;
+    String blobNamePrefix = param.blobNamePrefix;
+    List<NamedBlobRecord> records = param.records;
 
     // Since we are adding new versions, we want to make sure new versions are larger than the existing versions.
     Thread.sleep(100);
     time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+
+    Map<Integer, NamedBlobRecord> removedRecords = new HashMap<>();
     // 1. Add a new version with deleted_ts = -1, state = ready to first record
     // replace existing
     NamedBlobRecord record1 = records.get(0);
@@ -697,12 +706,14 @@ public class MySqlNamedBlobDbIntegrationTest {
       }
     }
 
+    final int PAGE_SIZE = 10;
     // Now list the records and make sure the expected records are returned
-    obtainedRecords = new ArrayList<>();
-    token = null;
-    nextRecord = 0;
+    List<NamedBlobRecord> obtainedRecords = new ArrayList<>();
+    String token = null;
+    int nextRecord = 0;
+    Page<NamedBlobRecord> page = null;
     do {
-      page = namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, token, 10).get();
+      page = namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, token, PAGE_SIZE).get();
       obtainedRecords.addAll(page.getEntries());
       token = page.getNextPageToken();
 
@@ -712,14 +723,78 @@ public class MySqlNamedBlobDbIntegrationTest {
         assertEquals(expectedToken, token);
       }
     } while (page.getNextPageToken() != null);
-    validateListResult.apply(obtainedRecords, records);
+    validateListResult(obtainedRecords, records);
 
-    // case 4: use get to make sure the result of list is correct
     for (NamedBlobRecord record : records) {
       NamedBlobRecord recordFromStore =
           namedBlobDb.get(account.getName(), container.getName(), record.getBlobName()).get();
       assertEquals("List result does not match with get for blob_name " + record.getBlobName(), record,
           recordFromStore);
+    }
+  }
+
+  /**
+   * Data structure to pass some test parameters for list operation back to the test method.
+   */
+  static class ListOperationTestParam {
+    final Account account;
+    final Container container;
+    final String blobNamePrefix;
+    final List<NamedBlobRecord> records;
+
+    ListOperationTestParam(Account account, Container container, String blobNamePrefix, List<NamedBlobRecord> records) {
+      this.account = account;
+      this.container = container;
+      this.blobNamePrefix = blobNamePrefix;
+      this.records = records;
+    }
+  }
+
+  /**
+   * Setup test for list operation.
+   * @param listSqlOption The list sql option
+   * @param numberOfRecords The number of named blob record to create before test
+   * @param deleted_ts The deleted_ts timestamp for each records
+   * @return An instance of ListOperationTestParam that carries the test parameters
+   * @throws Exception
+   */
+  private ListOperationTestParam setupTestParamForListOperation(int listSqlOption, int numberOfRecords, long deleted_ts)
+      throws Exception {
+    if (namedBlobDb != null) {
+      namedBlobDb.close();
+      namedBlobDb = null;
+    }
+    Properties properties = createProperties(listSqlOption);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    config = new MySqlNamedBlobDbConfig(verifiableProperties);
+    MySqlNamedBlobDbFactory namedBlobDbFactory =
+        new MySqlNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), accountService, time);
+    namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobNamePrefix = "testListNamedBlobsWithOrder-" + TestUtils.getRandomKey(10) + "-";
+    List<NamedBlobRecord> records = new ArrayList<>();
+    for (int i = 0; i < numberOfRecords; i++) {
+      String blobName = blobNamePrefix + String.format("%02d", i); // padding with 0 so we keep the order
+      NamedBlobRecord record =
+          new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
+              deleted_ts, 0, 1024);
+      namedBlobDb.put(record, NamedBlobState.READY, true).get();
+      records.add(record);
+    }
+    return new ListOperationTestParam(account, container, blobNamePrefix, records);
+  }
+
+  /**
+   * Validate the result from list operation.
+   * @param obtained the obtained list
+   * @param expected the expected list
+   */
+  private void validateListResult(List<NamedBlobRecord> obtained, List<NamedBlobRecord> expected) {
+    assertEquals("List result size does not match", expected.size(), obtained.size());
+    for (int i = 0; i < expected.size(); i++) {
+      assertEquals("List result does not match at index " + i, expected.get(i), obtained.get(i));
     }
   }
 
