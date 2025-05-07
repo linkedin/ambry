@@ -307,10 +307,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       case 3:
         /**
          * List named-blobs query, given a prefix.
-         * The first query selects all versions of blobs with a given prefix that are not deleted, from a given account and container.
-         * The second query selects the most recent version of blobs with a given prefix, from a given account and container.
-         * Finally, we join and select a version for each blob, that is ready to serve.
-         * This can be the most recent version if it is not deleted, or nothing.
+         * This query uses a subquery to get the max version of a given blob name.
+         * 1. The subquery returns the max version whose blob_state is ready, even if it's deleted.
+         * 2. The outer query select goes through all the (blob_name, version) combination and only returns the one when
+         *    version is the max version from the subquery and not deleted.
+         * This list sql statement uses subquery instead of CTE and inner join so it should be more efficient.
          */
         // @formatter:off
         return String.format(""
@@ -318,7 +319,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             + "FROM named_blobs_v2 v1 "
             + "WHERE v1.account_id = ? "
             + "    AND v1.container_id = ? "
-            + "    AND v1.blob_state = %1$d "
+            + "    AND v1.%1$s"
             + "    AND blob_name LIKE ? "
             + "    AND blob_name >= ? "
             + "    AND (v1.deleted_ts IS NULL OR v1.deleted_ts > %2$s) "
@@ -328,9 +329,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             + "        WHERE v2.account_id = ? "
             + "            AND v2.container_id = ? "
             + "            AND v2.blob_name = v1.blob_name "
-            + "            AND v2.blob_state = %1$d "
+            + "            AND v2.%1$s"
             + "    ) "
-            + "LIMIT ?", NamedBlobState.READY.ordinal(), CURRENT_TIME);
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
       // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
@@ -678,6 +679,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     @Override
     public void close() {
+      if (dataSource instanceof Closeable) {
+        try {
+          ((Closeable) dataSource).close();
+        } catch (IOException e) {
+          logger.error("Failed to close datasource", e);
+        }
+      }
       Utils.shutDownExecutorService(executor, 1, TimeUnit.MINUTES);
     }
   }
