@@ -822,7 +822,7 @@ public class RequestResponseTest {
     List<LogInfo> logInfoList = new ArrayList<>(Arrays.asList(logInfo1, logInfo2));
 
     FileCopyGetMetaDataResponse response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-        logInfoList, ServerErrorCode.NoError, null);
+        logInfoList, "snapshotId", ServerErrorCode.NoError, null);
 
     DataInputStream requestStream1 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response1 = FileCopyGetMetaDataResponse.readFrom(requestStream1);
@@ -832,6 +832,7 @@ public class RequestResponseTest {
     Assert.assertEquals(ServerErrorCode.NoError, response1.getError());
     Assert.assertEquals(2, response1.getNumberOfLogfiles());
     Assert.assertEquals(2, response1.getLogInfos().size());
+    Assert.assertEquals("snapshotId", response1.getSnapshotId());
 
     Assert.assertEquals("0_log", response1.getLogInfos().get(0).getLogSegment().getFileName());
     Assert.assertEquals(1000, (long)response1.getLogInfos().get(0).getLogSegment().getFileSize());
@@ -857,7 +858,7 @@ public class RequestResponseTest {
     response.release();
 
     response = new FileCopyGetMetaDataResponse(requestVersionToUse, 111, "id1", 2,
-        logInfoList, ServerErrorCode.IOError, null);
+        logInfoList, "snapshotId", ServerErrorCode.IOError, null);
     DataInputStream requestStream2 = serAndPrepForRead(response, -1, false);
     FileCopyGetMetaDataResponse response2 = FileCopyGetMetaDataResponse.readFrom(requestStream2);
     Assert.assertEquals(ServerErrorCode.IOError, response2.getError());
@@ -904,6 +905,22 @@ public class RequestResponseTest {
       // Sending empty file name. Expected to throw exception.
       new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "",
           "host1", "snapshotId", 1000, 100, false);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+    try {
+      // Sending empty hostName. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "",
+          "", "snapshotId", 1000, 100, false);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e){
+      //expected
+    }
+    try {
+      // Sending empty snapshotId. Expected to throw exception.
+      new FileCopyGetChunkRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "",
+          "host1", "", 1000, 100, false);
       Assert.fail("Should have failed");
     } catch (IllegalArgumentException e){
       //expected
