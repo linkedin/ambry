@@ -42,6 +42,13 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
   private final FileChunkInfo fileChunkInfo;
 
   /**
+   * The snapshot id of the partition on serving node.
+   * This is returned as part of {@link FileCopyGetMetaDataResponse} and is used to ensure that a bootstrapping request
+   * doesn't clash with an ongoing compaction.
+   */
+  private final String snapshotId;
+
+  /**
    * The {@link ClusterMap} that contains the information about the cluster.
    */
   private final ClusterMap clusterMap;
@@ -57,6 +64,7 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
    * @param connectionPool The connection pool to use to get connections to the target replica.
    * @param fileCopyInfo The {@link FileCopyInfo} that contains the information required to send the request.
    * @param fileChunkInfo The {@link FileChunkInfo} that contains the file-chunk information required to send the request.
+   * @param snapshotId The snapshot id of the partition on serving node.
    * @param clusterMap The {@link ClusterMap} that contains the information about the cluster.
    * @param config The {@link FileCopyHandlerConfig} that contains the configuration required to send the request.
    */
@@ -64,6 +72,7 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
       @Nonnull ConnectionPool connectionPool,
       @Nonnull FileCopyInfo fileCopyInfo,
       @Nonnull FileChunkInfo fileChunkInfo,
+      @Nonnull String snapshotId,
       @Nonnull ClusterMap clusterMap,
       @Nonnull FileCopyBasedReplicationConfig config) {
     super(connectionPool, config);
@@ -71,11 +80,13 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
     Objects.requireNonNull(connectionPool, "connectionPool param cannot be null");
     Objects.requireNonNull(fileCopyInfo, "fileCopyInfo param cannot be null");
     Objects.requireNonNull(fileChunkInfo, "fileChunkInfo param cannot be null");
+    Objects.requireNonNull(snapshotId, "snapshotId param cannot be null");
     Objects.requireNonNull(clusterMap, "clusterMap param cannot be null");
     Objects.requireNonNull(config, "config param cannot be null");
 
     this.fileCopyInfo = fileCopyInfo;
     this.fileChunkInfo = fileChunkInfo;
+    this.snapshotId = snapshotId;
     this.clusterMap = clusterMap;
   }
 
@@ -92,7 +103,8 @@ public class GetChunkDataWorkflow extends BaseWorkFlow implements OperationRetry
     final FileCopyGetChunkRequest request = new FileCopyGetChunkRequest(
         FileCopyGetChunkRequest.FILE_CHUNK_REQUEST_VERSION_V_1, fileCopyInfo.getCorrelationId(),
         fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileChunkInfo.getFileName(),
-        fileChunkInfo.getStartOffset(), fileChunkInfo.getChunkLengthInBytes(), fileChunkInfo.isChunked());
+        fileCopyInfo.getSourceReplicaId().getDataNodeId().getHostname(), snapshotId, fileChunkInfo.getStartOffset(),
+        fileChunkInfo.getChunkLengthInBytes(), fileChunkInfo.isChunked());
 
     logger.info("Sending FileCopyGetChunkRequest: {}", request);
     long startTimeMs = System.currentTimeMillis();

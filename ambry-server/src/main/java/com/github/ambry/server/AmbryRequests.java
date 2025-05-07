@@ -1715,11 +1715,11 @@ public class AmbryRequests implements RequestAPI {
               fileCopyGetMetaDataRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
         }
         List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(false);
-
+        String snapshotId = ""; // TODO: Add support in blobStore to calculate snapshotId
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
-            logSegments.size(), logSegments, ServerErrorCode.NoError, null);
+            logSegments.size(), logSegments, snapshotId, ServerErrorCode.NoError, null);
       }
     } catch (Exception e) {
       if (null == fileCopyGetMetaDataRequest) {
@@ -1731,7 +1731,7 @@ public class AmbryRequests implements RequestAPI {
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), 0,
-            new ArrayList<>(), ServerErrorCode.UnknownError, null);
+            new ArrayList<>(), null, ServerErrorCode.UnknownError, null);
       }
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
