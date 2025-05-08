@@ -133,17 +133,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
-   * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
-   * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
-   * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-      Callback<AggregatedAccountStorageStats> callback) throws IOException {
+  public void participate() throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
-    registerTasks(ambryStatsReports, accountStatsStore, callback);
     try {
       // register server as a participant
       manager.connect();
@@ -431,12 +426,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
       return success;
     }
-  }
-
-  public void registerStateMachineModel() {
-    StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
-    stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
   }
 
   /**
@@ -804,14 +793,16 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * This method will register Helix Tasks
    * Register aggregation tasks for appropriate {@link AmbryStatsReport}s and {@link PropertyStoreCleanUpTask}.
-   * @param engine the {@link StateMachineEngine} to register the task state model.
    * @param statsReports the {@link List} of {@link AmbryStatsReport}s that may require the registration of
    * corresponding {@link MySqlReportAggregatorTask}s.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  private void registerTasks(List<AmbryStatsReport> statsReports,
+  public void registerTasksWithStateMachineModel(List<AmbryStatsReport> statsReports,
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
+    //Get the state machine engine
+    StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
+
     //Register MySqlReportAggregatorTask
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryStatsReport statsReport : statsReports) {
@@ -827,6 +818,16 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
           context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,
               metricRegistry));
+    }
+
+    //Register state transition model
+    stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
+        new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
+
+    //Register tasks
+    if (!taskFactoryMap.isEmpty()) {
+      stateMachineEngine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+          new TaskStateModelFactory(manager, taskFactoryMap));
     }
   }
 

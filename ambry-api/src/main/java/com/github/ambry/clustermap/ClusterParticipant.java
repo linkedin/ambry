@@ -32,13 +32,9 @@ public interface ClusterParticipant extends AutoCloseable {
 
   /**
    * Initiate the participation of cluster participant.
-   * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
-   * @param accountStatsStore The {@link AccountStatsStore} to retrieve and store container stats.
-   * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException
    */
-  void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-      Callback<AggregatedAccountStorageStats> callback) throws IOException;
+  void participate() throws IOException;
 
   /**
    * Set the sealed state of the given replica.
