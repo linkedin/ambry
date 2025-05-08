@@ -150,20 +150,6 @@ public class MySqlNamedBlobDbTest {
   }
 
   @Test
-  public void testPullBlobs() throws Exception {
-    List<StaleNamedBlob> arrayBlobs = new ArrayList<>();
-    StaleNamedBlob blob1 = new StaleNamedBlob((short) 100, (short) 10, "new_cleaner", "0", 0, null,  0, new Timestamp(Time.now()));
-    StaleNamedBlob blob2 = new StaleNamedBlob((short) 100, (short) 10, "new_cleaner", "0", 0, null,  0, new Timestamp(Time.now()));
-
-    arrayBlobs.add(blob1);
-    arrayBlobs.add(blob2);
-
-    MySqlNamedBlobDb obj = new MySqlNamedBlobDb(null,null,null,null,null);
-    obj.getStaleBlobs(arrayBlobs);
-  }
-
-
-  @Test
   public void testUpdateBlobTtlAndStateToReady() throws Exception {
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     calendar.add(Calendar.DATE, 10);

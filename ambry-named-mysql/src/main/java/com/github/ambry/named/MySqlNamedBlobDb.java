@@ -922,46 +922,97 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return staleBlobs;
   }
 
-  private List<StaleNamedBlob> runPullPotentialStaleBlobs(final Connection connection) throws Exception {
-    String query = "";
+
+  private List<StaleNamedBlob> runPullPotentialStaleBlobs(Connection connection) throws SQLException {
+    List<StaleNamedBlob> resultList = new ArrayList<>();
     List<Container> containers =
         (List<Container>) accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
     for (Container container : containers) {
-      try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
-        statement.setInt(1, container.getId());
-        statement.setInt(2, config.queryStaleDataMaxResults);
+      int offset = 0;
+      boolean hasMore = true;
 
-        // TODO: set correct val here
-        statement.setInt(3, 0);
+      while (hasMore) {
+        try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
+          statement.setInt(1, container.getId());
+          statement.setInt(2, config.queryStaleDataMaxResults);
+          statement.setInt(3, offset);
 
-        query = statement.toString();
-        logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
-        try (ResultSet resultSet = statement.executeQuery()) {
-          List<StaleNamedBlob> resultList = new ArrayList<>();
-          while (resultSet.next()) {
-            short accountId = resultSet.getShort(1);
-            short containerId = resultSet.getShort(2);
-            String blobName = resultSet.getString(3);
-            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
-            long version = resultSet.getLong(7);
-            Timestamp currentTime = resultSet.getTimestamp(5);
-            Timestamp modifiedTime = resultSet.getTimestamp(11);
-            int blobState = resultSet.getInt(9);
-            StaleNamedBlob result =
-                new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime, blobState,
-                    modifiedTime);
-            resultList.add(result);
+          String query = statement.toString();
+          logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
+
+          try (ResultSet resultSet = statement.executeQuery()) {
+            int rowCount = 0;
+            while (resultSet.next()) {
+              short accountId = resultSet.getShort(1);
+              short containerId = resultSet.getShort(2);
+              String blobName = resultSet.getString(3);
+              String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+              long version = resultSet.getLong(7);
+              Timestamp currentTime = resultSet.getTimestamp(5);
+              Timestamp modifiedTime = resultSet.getTimestamp(11);
+              int blobState = resultSet.getInt(9);
+
+              StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime, blobState, modifiedTime);
+              resultList.add(result);
+              rowCount++;
+            }
+            if (rowCount < config.queryStaleDataMaxResults) {
+              hasMore = false;
+            } else {
+              offset += config.queryStaleDataMaxResults;
+            }
           }
-          return resultList;
+        } catch (SQLException e) {
+          logger.error("Error executing query: {}", e.getMessage());
+          throw e;
         }
-      } catch (SQLException e) {
-        logger.error("Failed to execute query {}, {}", query, e.getMessage());
-        throw e;
       }
     }
-
-    return java.util.Collections.emptyList();
+    return resultList;
   }
+
+//
+//  private List<StaleNamedBlob> runPullPotentialStaleBlobs(final Connection connection) throws Exception {
+//    String query = "";
+//    List<Container> containers =
+//        (List<Container>) accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+//    int offset = 0;
+//    for (Container container : containers) {
+//      try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
+//        statement.setInt(1, container.getId());
+//        statement.setInt(2, config.queryStaleDataMaxResults);
+//
+//        // TODO: set correct val here
+//        statement.setInt(3, offset * config.queryStaleDataMaxResults);
+//
+//        query = statement.toString();
+//        logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
+//        try (ResultSet resultSet = statement.executeQuery()) {
+//          List<StaleNamedBlob> resultList = new ArrayList<>();
+//          while (resultSet.next()) {
+//            short accountId = resultSet.getShort(1);
+//            short containerId = resultSet.getShort(2);
+//            String blobName = resultSet.getString(3);
+//            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+//            long version = resultSet.getLong(7);
+//            Timestamp currentTime = resultSet.getTimestamp(5);
+//            Timestamp modifiedTime = resultSet.getTimestamp(11);
+//            int blobState = resultSet.getInt(9);
+//            StaleNamedBlob result =
+//                new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime, blobState,
+//                    modifiedTime);
+//            resultList.add(result);
+//          }
+//          return resultList;
+//        }
+//      } catch (SQLException e) {
+//        logger.error("Failed to execute query {}, {}", query, e.getMessage());
+//        throw e;
+//      }
+//    }
+//
+//    return java.util.Collections.emptyList();
+//  }
 
 //  private List<StaleNamedBlob> runPullStaleBlobs(final Connection connection) throws Exception {
 //    String query = "";
