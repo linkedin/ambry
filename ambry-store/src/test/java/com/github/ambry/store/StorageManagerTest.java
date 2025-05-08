@@ -2800,7 +2800,7 @@ public class StorageManagerTest {
       helixParticipant =
           new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
               parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-                  clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true, 2);
+                  clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
       helixAdmin = helixParticipant.getHelixAdmin();
       // Mock a state change listener to throw an exception
       PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
@@ -2808,7 +2808,7 @@ public class StorageManagerTest {
           new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
           listener).onPartitionBecomeBootstrapFromOffline(anyString());
       helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
-      helixParticipant.participate(Collections.emptyList(), null, null);
+      helixParticipant.participate();
 
       clusterMap = new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
       localNode = clusterMap.getDataNodeId("localhost", clusterMapConfig.clusterMapPort);
@@ -3156,7 +3156,7 @@ public class StorageManagerTest {
     private Boolean setStopStateReturnVal;
 
     MockClusterParticipant() {
-      this(null, null, 0);
+      this(null, null);
       markDisablePartitionComplete();
     }
 
@@ -3177,8 +3177,7 @@ public class StorageManagerTest {
     }
 
     @Override
-    public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-        Callback<AggregatedAccountStorageStats> callback) throws IOException {
+    public void participate() throws IOException {
       // no op
     }
 

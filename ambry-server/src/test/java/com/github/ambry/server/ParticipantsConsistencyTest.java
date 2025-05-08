@@ -208,9 +208,7 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
-    public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-        Callback<AggregatedAccountStorageStats> callback) {
-    }
+    public void participate() {}
 
     @Override
     public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {

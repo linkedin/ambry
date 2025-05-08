@@ -346,7 +346,7 @@ public class AmbryServer {
         List<AmbryStatsReport> ambryStatsReports = getAmbryStatsReports(serverConfig);
 
         for (ClusterParticipant participant : clusterParticipants) {
-          participant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
+          participant.participate();
         }
 
         // wait for dataNode to be populated
@@ -408,7 +408,7 @@ public class AmbryServer {
         logger.info("Registering State Machine model");
         for (ClusterParticipant participant : clusterParticipants) {
           if (participant instanceof HelixParticipant) {
-            ((HelixParticipant) participant).registerStateMachineModel();
+            ((HelixParticipant) participant).registerTasksWithStateMachineModel(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
           }
         }
 
