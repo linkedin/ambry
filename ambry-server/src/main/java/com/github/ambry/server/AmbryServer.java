@@ -31,6 +31,7 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
+import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -403,6 +404,13 @@ public class AmbryServer {
                 storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipant,
                 skipPredicate);
         replicationManager.start();
+
+        logger.info("Registering State Machine model");
+        for (ClusterParticipant participant : clusterParticipants) {
+          if (participant instanceof HelixParticipant) {
+            ((HelixParticipant) participant).registerStateMachineModel();
+          }
+        }
 
         ArrayList<Port> ports = new ArrayList<Port>();
         ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));

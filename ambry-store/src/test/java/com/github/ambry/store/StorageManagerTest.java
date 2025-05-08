@@ -517,7 +517,7 @@ public class StorageManagerTest {
     generateConfigs(true, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
-    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant(1);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
 
     // Create a new partition
     PartitionId newPartition1 =
@@ -911,7 +911,7 @@ public class StorageManagerTest {
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
-    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant(1);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
     StorageManager storageManager =
         createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
@@ -1475,8 +1475,8 @@ public class StorageManagerTest {
   public void setBlobStoreStoppedStateWithMultiDelegatesTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    MockClusterParticipant mockClusterParticipant1 = new MockClusterParticipant(1);
-    MockClusterParticipant mockClusterParticipant2 = new MockClusterParticipant(null, false, 1);
+    MockClusterParticipant mockClusterParticipant1 = new MockClusterParticipant();
+    MockClusterParticipant mockClusterParticipant2 = new MockClusterParticipant(null, false);
     List<ClusterParticipant> participants = Arrays.asList(mockClusterParticipant1, mockClusterParticipant2);
     StorageManager storageManager = createStorageManager(dataNode, metricRegistry, participants);
     storageManager.start();
@@ -3160,23 +3160,17 @@ public class StorageManagerTest {
       markDisablePartitionComplete();
     }
 
-    MockClusterParticipant(int listenerCount) {
-      this(null, null, listenerCount);
-      markDisablePartitionComplete();
-    }
-
     /**
      * Ctor for MockClusterParticipant with arguments to override return value of some methods.
      * @param setSealStateReturnVal if not null, use this value to override result of setReplicaSealedState(). If null,
      *                              go through standard workflow in the method.
      * @param setStopStateReturnVal if not null, use this value to override result of setReplicaStoppedState(). If null,
      *                              go through standard workflow in the method.
-     * @param listenerCount the number of listeners to be registered.
      */
-    MockClusterParticipant(Boolean setSealStateReturnVal, Boolean setStopStateReturnVal, int listenerCount) {
+    MockClusterParticipant(Boolean setSealStateReturnVal, Boolean setStopStateReturnVal) {
       super(mock(HelixClusterManager.class), clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry(),
           parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-              clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true, listenerCount);
+              clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
       this.setSealStateReturnVal = setSealStateReturnVal;
       this.setStopStateReturnVal = setStopStateReturnVal;
       markDisablePartitionComplete();

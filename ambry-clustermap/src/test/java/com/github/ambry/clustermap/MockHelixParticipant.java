@@ -86,7 +86,6 @@ public class MockHelixParticipant extends HelixParticipant {
       }
       return null;
     }).when(mockReplicationManagerListener).onPartitionBecomeOfflineFromInactive(any(String.class));
-    resetListenerLatch();
   }
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) {
