@@ -341,8 +341,8 @@ public class AmbryServer {
         DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
         // Flow for new node ADD
         // Instance config is populated with auto-registration
-        // State Transitions are blocked until DataNode config is populated
-        // Once DataNode config is populated, Listeners would be registered, that resumes Bootstrapping
+        // Once DataNode config is populated, Storage, Replication and Stats Manager are created
+        // State Machine Model and other tasks are not registered until then to the HelixParticipant
         List<AmbryStatsReport> ambryStatsReports = getAmbryStatsReports(serverConfig);
 
         for (ClusterParticipant participant : clusterParticipants) {
