@@ -39,11 +39,9 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
@@ -55,7 +53,6 @@ import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -516,60 +513,50 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   /**
-   * Test case for list named blobs with prefix, without any pagination
+   * Test case for list named blobs with prefix.
    * @throws Exception
    */
   @Test
-  public void testListNamedBlobsWithPrefixWithoutPaging() throws Exception {
+  public void testListNamedBlobsWithPrefix() throws Exception {
     for (int i = MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION;
         i <= MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION; i++) {
-      testListNamedBlobsWithPrefixWithoutPaging(i);
-    }
-  }
-
-  private void testListNamedBlobsWithPrefixWithoutPaging(int listSqlOption) throws Exception {
-    final int NUM_RECORD = 100;
-    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, Utils.Infinite_Time);
-    Page<NamedBlobRecord> page =
-        namedBlobDb.list(param.account.getName(), param.container.getName(), param.blobNamePrefix, null, null).get();
-    Assert.assertNull(page.getNextPageToken());
-    validateListResult(page.getEntries(), param.records);
-  }
-
-  /**
-   * Test case for list named blobs with prefix, with pagination
-   * @throws Exception
-   */
-  @Test
-  public void testListNamedBlobsWithPrefixWithPaging() throws Exception {
-    for (int i = MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION;
-        i <= MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION; i++) {
-      testListNamedBlobsWithPrefixWithPaging(i);
-    }
-  }
-
-  private void testListNamedBlobsWithPrefixWithPaging(int listSqlOption) throws Exception {
-    final int NUM_RECORD = 100;
-    final int PAGE_SIZE = 10;
-    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, Utils.Infinite_Time);
-    List<NamedBlobRecord> obtainedRecords = new ArrayList<>();
-    Page<NamedBlobRecord> page = null;
-    String token = null;
-    int nextRecord = 0;
-    do {
-      page =
-          namedBlobDb.list(param.account.getName(), param.container.getName(), param.blobNamePrefix, token, PAGE_SIZE)
-              .get();
-      obtainedRecords.addAll(page.getEntries());
-      token = page.getNextPageToken();
-
-      if (token != null) {
-        nextRecord += PAGE_SIZE;
-        String expectedToken = param.blobNamePrefix + String.format("%02d", nextRecord);
-        assertEquals(expectedToken, token);
+      time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+      for (long deleted_ts : new long[]{Utils.Infinite_Time, time.milliseconds() + TimeUnit.HOURS.toMillis(1)}) {
+        testListNamedBlobsWithPrefix(i, deleted_ts);
       }
-    } while (page.getNextPageToken() != null);
-    validateListResult(obtainedRecords, param.records);
+    }
+  }
+
+  private void testListNamedBlobsWithPrefix(int listSqlOption, long deleted_ts) throws Exception {
+    final int NUM_RECORD = 100;
+    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, deleted_ts);
+    // Test two different case with different page sizes.
+    // First page size equals to the number of records, so we expect all blob names returned in one list operation.
+    // Second page size is less than the number of records, so we expect pagination.
+    for (int pageSize : new int[]{NUM_RECORD, NUM_RECORD / 10}) {
+      List<NamedBlobRecord> obtainedRecords = new ArrayList<>();
+      Page<NamedBlobRecord> page = null;
+      String token = null;
+      int nextRecord = 0;
+      do {
+        page =
+            namedBlobDb.list(param.account.getName(), param.container.getName(), param.blobNamePrefix, token, pageSize)
+                .get();
+        obtainedRecords.addAll(page.getEntries());
+        token = page.getNextPageToken();
+        if (pageSize == NUM_RECORD) {
+          assertNull(token);
+          break;
+        } else {
+          if (token != null) {
+            nextRecord += pageSize;
+            String expectedToken = param.blobNamePrefix + String.format("%02d", nextRecord);
+            assertEquals(expectedToken, token);
+          }
+        }
+      } while (page.getNextPageToken() != null);
+      validateListResult(obtainedRecords, param.records);
+    }
   }
 
   /**
@@ -588,116 +575,141 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   private void testListNamedBlobsWithPrefixWithMultipleVersions(int listSqlOption, long deleted_ts) throws Exception {
-    final int NUM_RECORD = 100;
-    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, deleted_ts);
+    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, 10, deleted_ts);
     Account account = param.account;
     Container container = param.container;
-    String blobNamePrefix = param.blobNamePrefix;
-    List<NamedBlobRecord> records = param.records;
 
-    // Since we are adding new versions, we want to make sure new versions are larger than the existing versions.
-    Thread.sleep(100);
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-
-    Map<Integer, NamedBlobRecord> removedRecords = new HashMap<>();
-    // 1. Add a new version with deleted_ts = -1, state = ready to first record
-    // replace existing
-    NamedBlobRecord record1 = records.get(0);
-    NamedBlobRecord newRecord1 = new NamedBlobRecord(account.getName(), container.getName(), record1.getBlobName(),
-        getBlobId(account, container), Utils.Infinite_Time, 0, 1024);
-    namedBlobDb.put(newRecord1, NamedBlobState.READY, true).get();
-    records.set(0, newRecord1);
-
+    // There are 10 different blob names and they all have a valid base version. After base version, we will
+    // 1. Add a new version with deleted_ts = -1, state = ready to first record.
+    //    New version is expected in the list opertion
     // 2. Add a new version with deleted_ts = now() + 1 day, state = ready to second record
-    // replace existing
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-    NamedBlobRecord record2 = records.get(1);
-    NamedBlobRecord newRecord2 = new NamedBlobRecord(account.getName(), container.getName(), record2.getBlobName(),
-        getBlobId(account, container), time.milliseconds() + TimeUnit.DAYS.toMillis(1), 0, 1024);
-    namedBlobDb.put(newRecord2, NamedBlobState.READY, true).get();
-    records.set(1, newRecord2);
-
+    //    New version is expected in the list opertion
     // 3. Add a new version with deleted_ts = -1, state = wip to third record
-    // keep existing
-    NamedBlobRecord record3 = records.get(2);
-    NamedBlobRecord newRecord3 = new NamedBlobRecord(account.getName(), container.getName(), record3.getBlobName(),
-        getBlobId(account, container), Utils.Infinite_Time, 0, 1024);
-    namedBlobDb.put(newRecord3, NamedBlobState.IN_PROGRESS, true).get();
-
+    //    Base version is expected in the list opertion
     // 4. Add a new version with deleted_ts = now() + 1 day, state = wip to fourth record
-    // keep existing
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-    NamedBlobRecord record4 = records.get(3);
-    NamedBlobRecord newRecord4 = new NamedBlobRecord(account.getName(), container.getName(), record4.getBlobName(),
-        getBlobId(account, container), time.milliseconds() + TimeUnit.DAYS.toMillis(1), 0, 1024);
-    namedBlobDb.put(newRecord4, NamedBlobState.IN_PROGRESS, true).get();
-
+    //    Base version is expected in the list opertion
     // 5. Add a new version with deleted_ts = now() - 1 day, state = ready to fifth record
-    // remove existing
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-    NamedBlobRecord record5 = records.get(4);
-    NamedBlobRecord newRecord5 = new NamedBlobRecord(account.getName(), container.getName(), record5.getBlobName(),
-        getBlobId(account, container), time.milliseconds() - TimeUnit.DAYS.toMillis(1), 0, 1024);
-    namedBlobDb.put(newRecord5, NamedBlobState.READY, true).get();
-    removedRecords.put(4, record5);
-
+    //    Blob name is deleted, not expected from list opration
     // 6. Add a new version with deleted_ts = now() - 1 day, state = wip to sixth record
-    // keep existing
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-    NamedBlobRecord record6 = records.get(5);
-    NamedBlobRecord newRecord6 = new NamedBlobRecord(account.getName(), container.getName(), record6.getBlobName(),
-        getBlobId(account, container), time.milliseconds() - TimeUnit.DAYS.toMillis(1), 0, 1024);
-    namedBlobDb.put(newRecord6, NamedBlobState.IN_PROGRESS, true).get();
-
+    //    Base version is expected in the list opertion
     // 7. Add two new versions to seventh record, one with deleted_ts = -1, state = ready and another with deleted_ts = -1 and state = wip
-    // replace existing
-    NamedBlobRecord record7 = records.get(6);
-    NamedBlobRecord newRecord7_1 = new NamedBlobRecord(account.getName(), container.getName(), record7.getBlobName(),
-        getBlobId(account, container), Utils.Infinite_Time, 0, 1024);
-    namedBlobDb.put(newRecord7_1, NamedBlobState.READY, true).get();
-    NamedBlobRecord newRecord7_2 = new NamedBlobRecord(account.getName(), container.getName(), record7.getBlobName(),
-        getBlobId(account, container), Utils.Infinite_Time, 0, 1024);
-    namedBlobDb.put(newRecord7_2, NamedBlobState.IN_PROGRESS, true).get();
-    records.set(6, newRecord7_1);
-
+    //    First new version is expected in the list opertion
     // 8. Add two new versions to eighth record, both with deleted_ts = -1, state = wip
-    // keep existing
-    NamedBlobRecord record8 = records.get(7);
-    NamedBlobRecord newRecord8_1 = new NamedBlobRecord(account.getName(), container.getName(), record8.getBlobName(),
-        getBlobId(account, container), Utils.Infinite_Time, 0, 1024);
-    namedBlobDb.put(newRecord8_1, NamedBlobState.IN_PROGRESS, true).get();
-    NamedBlobRecord newRecord8_2 = new NamedBlobRecord(account.getName(), container.getName(), record8.getBlobName(),
-        getBlobId(account, container), Utils.Infinite_Time, 0, 1024);
-    namedBlobDb.put(newRecord8_2, NamedBlobState.IN_PROGRESS, true).get();
-
+    //    Base version is expected in the list opertion
     // 9. Delete ninth record
-    // remove existing
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-    NamedBlobRecord record9 = records.get(8);
-    namedBlobDb.delete(account.getName(), container.getName(), record9.getBlobName()).get();
-    removedRecords.put(8, record9);
-
+    //    Blob name is deleted, not expected from list opration
     // 10. Add a new version with deleted_ts = -1 and state = ready and then delete this blob mame
-    // remove existing
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-    NamedBlobRecord record10 = records.get(9);
-    NamedBlobRecord newRecord10 = new NamedBlobRecord(account.getName(), container.getName(), record10.getBlobName(),
-        getBlobId(account, container), Utils.Infinite_Time, 0, 1024);
-    namedBlobDb.put(newRecord10, NamedBlobState.READY, true).get();
-    namedBlobDb.delete(account.getName(), container.getName(), record10.getBlobName()).get();
-    removedRecords.put(9, record10);
-    Thread.sleep(100);
+    //     Blob name is deleted, not expected from list opration
 
+    List<NamedBlobRecord> expectedRecords = new ArrayList<>();
+    List<NamedBlobRecord> removedRecords = new ArrayList<>();
+    // we need to sleep for some time and set the current time to mock time instance before put and delete so the timestamp
+    // these operations saved to database is the same as the real time.
+
+    Thread.sleep(10);
+    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+
+    // Case 1
+    NamedBlobRecord record = param.records.get(0);
+    NamedBlobRecord newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            Utils.Infinite_Time, 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.READY, true).get();
+    expectedRecords.add(newRecord);
+
+    // Case 2
+    record = param.records.get(1);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            time.milliseconds() + TimeUnit.DAYS.toMillis(1), 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.READY, true).get();
+    expectedRecords.add(newRecord);
+
+    // Case 3
+    record = param.records.get(2);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            Utils.Infinite_Time, 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.IN_PROGRESS, true).get();
+    expectedRecords.add(record);
+
+    // Case 4
+    record = param.records.get(3);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            time.milliseconds() + TimeUnit.DAYS.toMillis(1), 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.IN_PROGRESS, true).get();
+    expectedRecords.add(record);
+
+    // Case 5
+    record = param.records.get(4);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            time.milliseconds() - TimeUnit.DAYS.toMillis(1), 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.READY, true).get();
+    removedRecords.add(record);
+
+    // Case 6
+    record = param.records.get(5);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            time.milliseconds() - TimeUnit.DAYS.toMillis(1), 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.IN_PROGRESS, true).get();
+    expectedRecords.add(record);
+
+    // Case 7
+    record = param.records.get(6);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            Utils.Infinite_Time, 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.READY, true).get();
+    Thread.sleep(10);
+    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+    NamedBlobRecord secondNewRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            Utils.Infinite_Time, 0, 1024);
+    namedBlobDb.put(secondNewRecord, NamedBlobState.IN_PROGRESS, true).get();
+    expectedRecords.add(newRecord);
+
+    // Case 8
+    record = param.records.get(7);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            Utils.Infinite_Time, 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.IN_PROGRESS, true).get();
+    Thread.sleep(10);
+    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            Utils.Infinite_Time, 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.IN_PROGRESS, true).get();
+    expectedRecords.add(record);
+
+    // Case 9
+    Thread.sleep(10);
+    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+    record = param.records.get(8);
+    namedBlobDb.delete(account.getName(), container.getName(), record.getBlobName()).get();
+    removedRecords.add(record);
+
+    // Case 10
+    record = param.records.get(9);
+    newRecord =
+        new NamedBlobRecord(account.getName(), container.getName(), record.getBlobName(), getBlobId(account, container),
+            Utils.Infinite_Time, 0, 1024);
+    namedBlobDb.put(newRecord, NamedBlobState.READY, true).get();
+    Thread.sleep(10);
+    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
+    namedBlobDb.delete(account.getName(), container.getName(), record.getBlobName()).get();
+    removedRecords.add(record);
+
+    Thread.sleep(100);
+    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
     // First remove those records from the expected list and make sure get returns Delete or NotFound
-    int removed = 0;
-    for (Map.Entry<Integer, NamedBlobRecord> entry : removedRecords.entrySet()) {
-      records.remove((int) entry.getKey() - removed);
-      removed++;
-      NamedBlobRecord record = entry.getValue();
+    for (NamedBlobRecord removedRecord : removedRecords) {
       try {
-        time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-        namedBlobDb.get(account.getName(), container.getName(), record.getBlobName()).get();
-        fail("Expected " + entry.getKey() + "th record to be deleted");
+        namedBlobDb.get(account.getName(), container.getName(), removedRecord.getBlobName()).get();
+        fail("Expected blob name " + removedRecord.getBlobName() + " to be deleted");
       } catch (ExecutionException e) {
         RestServiceException rse = Utils.getRootCause(e, RestServiceException.class);
         assertNotNull(rse);
@@ -706,29 +718,15 @@ public class MySqlNamedBlobDbIntegrationTest {
       }
     }
 
-    final int PAGE_SIZE = 10;
-    // Now list the records and make sure the expected records are returned
-    List<NamedBlobRecord> obtainedRecords = new ArrayList<>();
-    String token = null;
-    int nextRecord = 0;
-    Page<NamedBlobRecord> page = null;
-    do {
-      page = namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, token, PAGE_SIZE).get();
-      obtainedRecords.addAll(page.getEntries());
-      token = page.getNextPageToken();
+    Page<NamedBlobRecord> page =
+        page = namedBlobDb.list(account.getName(), container.getName(), param.blobNamePrefix, null, null).get();
+    assertNull(page.getNextPageToken());
+    validateListResult(page.getEntries(), expectedRecords);
 
-      if (token != null) {
-        nextRecord += 10;
-        String expectedToken = records.get(nextRecord).getBlobName();
-        assertEquals(expectedToken, token);
-      }
-    } while (page.getNextPageToken() != null);
-    validateListResult(obtainedRecords, records);
-
-    for (NamedBlobRecord record : records) {
+    for (NamedBlobRecord expectedRecord : expectedRecords) {
       NamedBlobRecord recordFromStore =
-          namedBlobDb.get(account.getName(), container.getName(), record.getBlobName()).get();
-      assertEquals("List result does not match with get for blob_name " + record.getBlobName(), record,
+          namedBlobDb.get(account.getName(), container.getName(), expectedRecord.getBlobName()).get();
+      assertEquals("List result does not match with get for blob_name " + expectedRecord.getBlobName(), expectedRecord,
           recordFromStore);
     }
   }
@@ -751,15 +749,11 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   /**
-   * Setup test for list operation.
-   * @param listSqlOption The list sql option
-   * @param numberOfRecords The number of named blob record to create before test
-   * @param deleted_ts The deleted_ts timestamp for each records
-   * @return An instance of ListOperationTestParam that carries the test parameters
+   * Set up namedBlobDb instance based on the listSqlOption.
+   * @param listSqlOption The list sql query option.
    * @throws Exception
    */
-  private ListOperationTestParam setupTestParamForListOperation(int listSqlOption, int numberOfRecords, long deleted_ts)
-      throws Exception {
+  private void setupNamedBlobDb(int listSqlOption) throws Exception {
     if (namedBlobDb != null) {
       namedBlobDb.close();
       namedBlobDb = null;
@@ -770,7 +764,19 @@ public class MySqlNamedBlobDbIntegrationTest {
     MySqlNamedBlobDbFactory namedBlobDbFactory =
         new MySqlNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), accountService, time);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
+  }
 
+  /**
+   * Setup test for list operation.
+   * @param listSqlOption The list sql option
+   * @param numberOfRecords The number of named blob record to create before test
+   * @param deleted_ts The deleted_ts timestamp for each records
+   * @return An instance of ListOperationTestParam that carries the test parameters
+   * @throws Exception
+   */
+  private ListOperationTestParam setupTestParamForListOperation(int listSqlOption, int numberOfRecords, long deleted_ts)
+      throws Exception {
+    setupNamedBlobDb(listSqlOption);
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobNamePrefix = "testListNamedBlobsWithOrder-" + TestUtils.getRandomKey(10) + "-";
