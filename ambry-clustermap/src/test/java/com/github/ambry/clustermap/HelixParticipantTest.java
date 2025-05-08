@@ -175,7 +175,6 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
             new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
-    helixParticipant.resetListenerLatch();
     ZKHelixAdmin helixAdmin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
     DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
 
@@ -508,7 +507,6 @@ public class HelixParticipantTest {
     HelixParticipant participant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory,
             new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
-    participant.resetListenerLatch();
     HelixParticipantMetrics metrics = participant.participantMetrics;
     metrics.incStateTransitionMetric("test-1", ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
     assertNotNull(metrics.partitionTransitionToCount.get("State-Transition-Partition-test-1-from-BOOTSTRAP-to-STANDBY"));
@@ -867,7 +865,6 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig), true);
-    helixParticipant.resetListenerLatch();
     // participate
     helixParticipant.participate(Collections.emptyList(), null, null);
     HelixManager manager = helixParticipant.getHelixManager();
@@ -990,7 +987,6 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig), true);
-    helixParticipant.resetListenerLatch();
     // Mock a state change listener to throw an exception
     PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
     doThrow(new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(

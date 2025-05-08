@@ -37,7 +37,6 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
@@ -79,7 +78,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final DataNodeConfigSource dataNodeConfigSource;
   private final HelixAdmin helixAdmin;
   private final MetricRegistry metricRegistry;
-  private final CountDownLatch listenersLatch;
   private volatile boolean disablePartitionsComplete = false;
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
@@ -95,15 +93,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param metricRegistry the {@link MetricRegistry} to instantiate {@link HelixParticipantMetrics}.
    * @param zkConnectStr the address identifying the zk service which this participant interacts with.
    * @param isSoleParticipant whether this is the sole participant on current node.
-   * @param listenerCount the number of listeners to be registered.
    */
   public HelixParticipant(HelixClusterManager clusterManager, ClusterMapConfig clusterMapConfig,
-      HelixFactory helixFactory, MetricRegistry metricRegistry, String zkConnectStr, boolean isSoleParticipant, int listenerCount) {
+      HelixFactory helixFactory, MetricRegistry metricRegistry, String zkConnectStr, boolean isSoleParticipant) {
     this.clusterMapConfig = clusterMapConfig;
     this.clusterManager = clusterManager;
     this.zkConnectStr = zkConnectStr;
     this.metricRegistry = metricRegistry;
-    this.listenersLatch = new CountDownLatch(listenerCount);
     participantMetrics =
         new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState,
             clusterMapConfig.clustermapEnablePartitionStateTransitionMetrics);
@@ -129,15 +125,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
   }
 
-  /**
-   * Constructor for HelixParticipant in most of the cases. Since we register 3 listeners
-   * one each for StorageManager, ReplicationManager and StatsManager
-   * */
-  public HelixParticipant(HelixClusterManager clusterManager, ClusterMapConfig clusterMapConfig,
-      HelixFactory helixFactory, MetricRegistry metricRegistry, String zkConnectStr, boolean isSoleParticipant) {
-    this(clusterManager, clusterMapConfig, helixFactory, metricRegistry, zkConnectStr, isSoleParticipant, 3);
-  }
-
   @Override
   public void setInitialLocalPartitions(Collection<String> localPartitions) {
     localPartitions.forEach(p -> localPartitionAndState.put(p, ReplicaState.OFFLINE));
@@ -156,10 +143,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       Callback<AggregatedAccountStorageStats> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
-    StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
-    stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
-    registerTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
+    registerTasks(ambryStatsReports, accountStatsStore, callback);
     try {
       // register server as a participant
       manager.connect();
@@ -172,13 +156,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
       PartitionStateChangeListener partitionStateChangeListener) {
-    boolean isNewEntry = false;
-    logger.info("Registering partition state change listener {}", listenerType);
-    if (!partitionStateChangeListeners.containsKey(listenerType)) {
-      isNewEntry = true;
-    }
     partitionStateChangeListeners.put(listenerType, partitionStateChangeListener);
-    if (isNewEntry) listenersLatch.countDown();
   }
 
   @Override
@@ -455,6 +433,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
   }
 
+  public void registerStateMachineModel() {
+    StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
+    stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
+        new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
+  }
+
   /**
    * Given a map of old disks and new disks, swaps the old disks with the new disks in the DataNodeConfig,
    * and persists the resulting changes to Helix.
@@ -670,15 +654,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Expose for testing, to reset ListenerLatch
-   */
-  public void resetListenerLatch() {
-    while (listenersLatch.getCount() > 0) {
-      listenersLatch.countDown();
-    }
-  }
-
-  /**
    * Mark disablePartitionsComplete = true, this is exposed for testing only.
    */
   protected void markDisablePartitionComplete() {
@@ -835,7 +810,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  private void registerTasks(StateMachineEngine engine, List<AmbryStatsReport> statsReports,
+  private void registerTasks(List<AmbryStatsReport> statsReports,
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
     //Register MySqlReportAggregatorTask
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
@@ -852,11 +827,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       taskFactoryMap.put(PropertyStoreCleanUpTask.COMMAND,
           context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,
               metricRegistry));
-    }
-
-    if (!taskFactoryMap.isEmpty()) {
-      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
-          new TaskStateModelFactory(manager, taskFactoryMap));
     }
   }
 
@@ -906,13 +876,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
     try {
-      // Since we are calling participate before StorageManager, ReplicationManager and StatsManager is created
-      // Blocking calling of this event until their respective listeners are registered
-      logger.info("Waiting on listener latch...");
-      listenersLatch.await();
-      logger.info("Listener latch is released");
-      participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
       // 1. take actions in storage manager (add new replica if necessary)
       onPartitionBecomePreBootstrapFromOffline(partitionName);
       onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
@@ -928,8 +893,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (statsManagerListener != null) {
         statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
-    } catch (InterruptedException e) {
-      throw new RuntimeException("Thread has been interrupted while waiting for bootstrap transition", e);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
