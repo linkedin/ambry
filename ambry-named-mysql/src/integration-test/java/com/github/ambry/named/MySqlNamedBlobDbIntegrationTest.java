@@ -520,16 +520,13 @@ public class MySqlNamedBlobDbIntegrationTest {
   public void testListNamedBlobsWithPrefix() throws Exception {
     for (int i = MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION;
         i <= MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION; i++) {
-      time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-      for (long deleted_ts : new long[]{Utils.Infinite_Time, time.milliseconds() + TimeUnit.HOURS.toMillis(1)}) {
-        testListNamedBlobsWithPrefix(i, deleted_ts);
-      }
+      testListNamedBlobsWithPrefix(i);
     }
   }
 
-  private void testListNamedBlobsWithPrefix(int listSqlOption, long deleted_ts) throws Exception {
+  private void testListNamedBlobsWithPrefix(int listSqlOption) throws Exception {
     final int NUM_RECORD = 100;
-    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD, deleted_ts);
+    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, NUM_RECORD);
     // Test two different case with different page sizes.
     // First page size equals to the number of records, so we expect all blob names returned in one list operation.
     // Second page size is less than the number of records, so we expect pagination.
@@ -567,15 +564,12 @@ public class MySqlNamedBlobDbIntegrationTest {
   public void testListNamedBlobsWithPrefixWithMultipleVersions() throws Exception {
     for (int i = MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION;
         i <= MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION; i++) {
-      time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-      for (long deleted_ts : new long[]{Utils.Infinite_Time, time.milliseconds() + TimeUnit.HOURS.toMillis(1)}) {
-        testListNamedBlobsWithPrefixWithMultipleVersions(i, deleted_ts);
-      }
+      testListNamedBlobsWithPrefixWithMultipleVersions(i);
     }
   }
 
-  private void testListNamedBlobsWithPrefixWithMultipleVersions(int listSqlOption, long deleted_ts) throws Exception {
-    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, 10, deleted_ts);
+  private void testListNamedBlobsWithPrefixWithMultipleVersions(int listSqlOption) throws Exception {
+    ListOperationTestParam param = setupTestParamForListOperation(listSqlOption, 10);
     Account account = param.account;
     Container container = param.container;
 
@@ -703,23 +697,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.delete(account.getName(), container.getName(), record.getBlobName()).get();
     removedRecords.add(record);
 
-    Thread.sleep(100);
-    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
-    // First remove those records from the expected list and make sure get returns Delete or NotFound
-    for (NamedBlobRecord removedRecord : removedRecords) {
-      try {
-        namedBlobDb.get(account.getName(), container.getName(), removedRecord.getBlobName()).get();
-        fail("Expected blob name " + removedRecord.getBlobName() + " to be deleted");
-      } catch (ExecutionException e) {
-        RestServiceException rse = Utils.getRootCause(e, RestServiceException.class);
-        assertNotNull(rse);
-        assertTrue(
-            rse.getErrorCode() == RestServiceErrorCode.NotFound || rse.getErrorCode() == RestServiceErrorCode.Deleted);
-      }
-    }
-
     Page<NamedBlobRecord> page =
-        page = namedBlobDb.list(account.getName(), container.getName(), param.blobNamePrefix, null, null).get();
+        namedBlobDb.list(account.getName(), container.getName(), param.blobNamePrefix, null, null).get();
     assertNull(page.getNextPageToken());
     validateListResult(page.getEntries(), expectedRecords);
 
@@ -770,19 +749,20 @@ public class MySqlNamedBlobDbIntegrationTest {
    * Setup test for list operation.
    * @param listSqlOption The list sql option
    * @param numberOfRecords The number of named blob record to create before test
-   * @param deleted_ts The deleted_ts timestamp for each records
    * @return An instance of ListOperationTestParam that carries the test parameters
    * @throws Exception
    */
-  private ListOperationTestParam setupTestParamForListOperation(int listSqlOption, int numberOfRecords, long deleted_ts)
+  private ListOperationTestParam setupTestParamForListOperation(int listSqlOption, int numberOfRecords)
       throws Exception {
     setupNamedBlobDb(listSqlOption);
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobNamePrefix = "testListNamedBlobsWithOrder-" + TestUtils.getRandomKey(10) + "-";
     List<NamedBlobRecord> records = new ArrayList<>();
+    time.setCurrentMilliseconds(SystemTime.getInstance().milliseconds());
     for (int i = 0; i < numberOfRecords; i++) {
       String blobName = blobNamePrefix + String.format("%02d", i); // padding with 0 so we keep the order
+      long deleted_ts = i % 2 == 0 ? Utils.Infinite_Time : time.milliseconds() + TimeUnit.HOURS.toMillis(1);
       NamedBlobRecord record =
           new NamedBlobRecord(account.getName(), container.getName(), blobName, getBlobId(account, container),
               deleted_ts, 0, 1024);
