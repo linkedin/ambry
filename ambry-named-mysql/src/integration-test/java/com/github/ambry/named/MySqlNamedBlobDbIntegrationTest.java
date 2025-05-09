@@ -581,25 +581,25 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // There are 10 different blob names and they all have a valid base version. After base version, we will
     // 1. Add a new version with deleted_ts = -1, state = ready to first record.
-    //    New version is expected in the list opertion
+    //    New version is expected in the list operation
     // 2. Add a new version with deleted_ts = now() + 1 day, state = ready to second record
-    //    New version is expected in the list opertion
+    //    New version is expected in the list operation
     // 3. Add a new version with deleted_ts = -1, state = wip to third record
-    //    Base version is expected in the list opertion
+    //    Base version is expected in the list operation
     // 4. Add a new version with deleted_ts = now() + 1 day, state = wip to fourth record
-    //    Base version is expected in the list opertion
+    //    Base version is expected in the list operation
     // 5. Add a new version with deleted_ts = now() - 1 day, state = ready to fifth record
-    //    Blob name is deleted, not expected from list opration
+    //    Blob name is deleted, not expected from list operation
     // 6. Add a new version with deleted_ts = now() - 1 day, state = wip to sixth record
-    //    Base version is expected in the list opertion
+    //    Base version is expected in the list operation
     // 7. Add two new versions to seventh record, one with deleted_ts = -1, state = ready and another with deleted_ts = -1 and state = wip
-    //    First new version is expected in the list opertion
+    //    First new version is expected in the list operation
     // 8. Add two new versions to eighth record, both with deleted_ts = -1, state = wip
-    //    Base version is expected in the list opertion
+    //    Base version is expected in the list operation
     // 9. Delete ninth record
-    //    Blob name is deleted, not expected from list opration
+    //    Blob name is deleted, not expected from list operation
     // 10. Add a new version with deleted_ts = -1 and state = ready and then delete this blob mame
-    //     Blob name is deleted, not expected from list opration
+    //     Blob name is deleted, not expected from list operation
 
     List<NamedBlobRecord> expectedRecords = new ArrayList<>();
     List<NamedBlobRecord> removedRecords = new ArrayList<>();
