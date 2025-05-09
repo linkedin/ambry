@@ -556,8 +556,7 @@ class FrontendRestRequestService implements RestRequestService {
         // Reject POST requests for non-S3 named blob requests, named blob uploads happen via PUT
         if (restRequest.getRestMethod() == RestMethod.POST && requestPath.matchesOperation(Operations.NAMED_BLOB)
             && !isS3Request(restRequest)) {
-          throw new RestServiceException(
-              "POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
+          throw new RestServiceException("POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
               RestServiceErrorCode.NotAllowed, true, false, null);
         }
 
