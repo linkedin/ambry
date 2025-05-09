@@ -188,12 +188,29 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption, localGetHeader).thenApply(NamedBlobRecord::getBlobId);
         }
-      } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
+      } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)
+          || RestUtils.isNamedBlobTtlUpdateRequest(restRequest)) {
         if (restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
           long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
           String blobIdClean = RestUtils.stripSlashAndExtensionFromId(input);
-          NamedBlobPath namedBlobPath =
-              NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          String blobIdStr;
+          //in order to support renaming feature for dataset, we need to update the blob name for ttl update.
+          if (restRequest.getArgs().containsKey(SOURCE_BLOB_NAME_FROM_RENAMING)) {
+            blobIdStr = (String) restRequest.getArgs().get(SOURCE_BLOB_NAME_FROM_RENAMING);
+          } else {
+            blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
+          }
+          NamedBlobPath namedBlobPath;
+          if (blobIdStr != null) {
+            if (!RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
+              throw new RestServiceException("Expecting named blob in blob id", RestServiceErrorCode.InvalidArgs);
+            } else {
+              namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
+            }
+          } else {
+            namedBlobPath =
+                NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          }
           NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
           conversionFuture = namedBlobDb.updateBlobTtlAndStateToReady(record).thenApply(result -> {

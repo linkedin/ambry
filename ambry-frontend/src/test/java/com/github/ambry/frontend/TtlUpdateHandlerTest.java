@@ -28,6 +28,7 @@ import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -43,6 +44,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -89,7 +91,10 @@ public class TtlUpdateHandlerTest {
     AccountAndContainerInjector accountAndContainerInjector =
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
-    router = new InMemoryRouter(new VerifiableProperties(new Properties()), CLUSTER_MAP, idConverterFactory);
+    Properties props = new Properties();
+    props.setProperty("router.hostname", "localhost");
+    props.setProperty("router.datacenter.name", "localDC");
+    router = new InMemoryRouter(new VerifiableProperties(props), CLUSTER_MAP, idConverterFactory);
     blobId = router.putBlob(null, BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null,
         QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
@@ -107,6 +112,8 @@ public class TtlUpdateHandlerTest {
     RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
     restRequest.setArg(RestUtils.Headers.BLOB_ID, blobId);
     restRequest.setArg(RestUtils.Headers.SERVICE_ID, SERVICE_ID);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse("/ttlUpdate", Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
     verifyTtlUpdate(restRequest, REF_ACCOUNT, REF_CONTAINER);
   }
 
@@ -274,6 +281,8 @@ public class TtlUpdateHandlerTest {
     RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
     restRequest.setArg(RestUtils.Headers.BLOB_ID, blobId);
     restRequest.setArg(RestUtils.Headers.SERVICE_ID, SERVICE_ID);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse("/", Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
     try {
       sendRequestGetResponse(restRequest, new MockRestResponseChannel());
       fail("Request should have failed");
