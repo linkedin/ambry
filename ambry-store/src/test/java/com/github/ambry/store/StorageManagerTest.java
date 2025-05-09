@@ -2809,7 +2809,7 @@ public class StorageManagerTest {
           listener).onPartitionBecomeBootstrapFromOffline(anyString());
       helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
       helixParticipant.participate();
-      helixParticipant.registerTasksWithStateMachineModel(Collections.emptyList(), null, null);
+      helixParticipant.startStateMachineModel(Collections.emptyList(), null, null);
 
       clusterMap = new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
       localNode = clusterMap.getDataNodeId("localhost", clusterMapConfig.clusterMapPort);

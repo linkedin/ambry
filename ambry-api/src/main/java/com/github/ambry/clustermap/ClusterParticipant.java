@@ -214,4 +214,13 @@ public interface ClusterParticipant extends AutoCloseable {
     // The default should be to do nothing about disk order, so return false.
     return false;
   }
+
+  /**
+   * Start the state machine model and registers the tasks
+   * @param ambryStatsReports The list of {@link AmbryStatsReport} to start the state machine model.
+   * @param accountStatsStore The {@link AccountStatsStore} to start the state machine model.
+   * @param callback The callback to be called when the state machine model is started.
+   */
+  default void startStateMachineModel(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+      Callback<AggregatedAccountStorageStats> callback) {}
 }
