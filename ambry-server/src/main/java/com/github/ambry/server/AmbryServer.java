@@ -27,8 +27,10 @@ import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
+import com.github.ambry.clustermap.DataNodeConfig;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.HelixParticipant;
@@ -134,6 +136,7 @@ public class AmbryServer {
   private final ClusterAgentsFactory clusterAgentsFactory;
   private final Function<MetricRegistry, JmxReporter> reporterFactory;
   private ClusterMap clusterMap;
+  private ClusterMapConfig clusterMapConfig;
   private List<ClusterParticipant> clusterParticipants;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
@@ -150,6 +153,7 @@ public class AmbryServer {
   private ServerSecurityService serverSecurityService;
   private final NettyInternalMetrics nettyInternalMetrics;
   private AccountStatsMySqlStore accountStatsMySqlStore = null;
+  private final String selfInstanceName;
 
   // variables to handle repair requests.
   private LocalRequestResponseChannel localChannel = null;
@@ -202,6 +206,9 @@ public class AmbryServer {
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
       nettyInternalMetrics = new NettyInternalMetrics(registry, new NettyConfig(properties));
       clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
+      this.selfInstanceName =
+          ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
+      this.clusterMapConfig = new ClusterMapConfig(properties);
     } catch (Exception e) {
       logger.error("Error during bootup", e);
       throw new InstantiationException("failure during bootup " + e);
@@ -211,8 +218,14 @@ public class AmbryServer {
   // Implementation of the ClusterMapChangeListener interface to handle cluster map changes.
   class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
     @Override
-    public void onDataNodeConfigChange()  {
-      dataNodeLatch.countDown();
+    public void onDataNodeConfigChange(List<DataNodeConfig> configs)  {
+      for (DataNodeConfig currNodeConfig : configs) {
+        String instanceName = currNodeConfig.getInstanceName();
+        if (instanceName.equals(selfInstanceName)) {
+          dataNodeLatch.countDown();
+          break;
+        }
+      }
     }
   }
 
@@ -238,7 +251,6 @@ public class AmbryServer {
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
       // verify the configs
       properties.verify();

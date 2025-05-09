@@ -46,6 +46,5 @@ public interface ClusterMapChangeListener {
   /**
    * Take actions when any change in DataNodeConfig on local node.
    */
-  default void onDataNodeConfigChange() {
-  }
+  default void onDataNodeConfigChange(List<DataNodeConfig> dataNodeConfigs) {}
 }
