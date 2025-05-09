@@ -19,6 +19,7 @@ import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.NamedBlobListEntry;
 import com.github.ambry.frontend.NamedBlobListHandler;
@@ -64,16 +65,21 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   public static final String ENCODING_TYPE_PARAM_NAME = "encoding-type";
   private final NamedBlobListHandler namedBlobListHandler;
   private final FrontendMetrics metrics;
+  private final FrontendConfig frontendConfig;
   public static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
   private static final String DELIMITER = "/";
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
-   * @param namedBlobListHandler  the {@link NamedBlobListHandler} to use.
+   *
+   * @param namedBlobListHandler the {@link NamedBlobListHandler} to use.
+   * @param frontendConfig the {@link FrontendConfig} to use.
    */
-  public S3ListHandler(NamedBlobListHandler namedBlobListHandler, FrontendMetrics metrics) {
+  public S3ListHandler(NamedBlobListHandler namedBlobListHandler, FrontendMetrics metrics,
+      FrontendConfig frontendConfig) {
     this.namedBlobListHandler = namedBlobListHandler;
     this.metrics = metrics;
+    this.frontendConfig = frontendConfig;
   }
 
   /**
@@ -139,11 +145,12 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
       commonPrefixes.add(new Prefix(dir));
     }
 
+    boolean enableDelimiter = delimiter != null && delimiter.equals(DELIMITER) && frontendConfig.enableDelimiter;
     if (LIST_TYPE_VERSION_2.equals(getHeader(restRequest.getArgs(), LIST_TYPE, false))) {
       ListBucketResultV2 resultV2 =
           new ListBucketResultV2(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList, encodingType,
               continuationToken, namedBlobRecordPage.getNextPageToken(), namedBlobRecordPage.getNextPageToken() != null,
-              delimiter != null && delimiter.equals(DELIMITER) ? commonPrefixes : null);
+              enableDelimiter ? commonPrefixes : null);
       LOGGER.debug("Sending response for S3 ListObjects {}", resultV2);
       // Serialize xml
       xmlMapper.writeValue(outputStream, resultV2);
@@ -151,7 +158,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
       ListBucketResult result =
           new ListBucketResult(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList, encodingType,
               marker, namedBlobRecordPage.getNextPageToken(), namedBlobRecordPage.getNextPageToken() != null,
-              delimiter != null && delimiter.equals(DELIMITER) ? commonPrefixes : null);
+              enableDelimiter ? commonPrefixes : null);
       LOGGER.debug("Sending response for S3 ListObjects {}", result);
       // Serialize xml
       xmlMapper.writeValue(outputStream, result);
