@@ -82,23 +82,30 @@ public class FileStore implements PartitionFileStore {
 
   // Lock for write operations in Filestore
   private final Object storeWriteLock = new Object();
+  // Pre-allocates files on disk on startup and allocates/free on demand
+  private final DiskSpaceAllocator diskSpaceAllocator;
+  // Size of each log segment
+  private long segmentSize;
 
   /**
    * Creates a new FileStore instance.
    * @param partitionToMountPath partition path for Filestore to access
+   *
    * @throws NullPointerException if fileCopyConfig is null
    */
-  public FileStore(String partitionToMountPath) {
+  public FileStore(String partitionToMountPath, DiskSpaceAllocator diskSpaceAllocator) {
     this.partitionToMountPath = partitionToMountPath;
+    this.diskSpaceAllocator = diskSpaceAllocator;
   }
 
   /**
    * Starts the FileStore service.
    * @throws StoreException if the service fails to start
    */
-  public void start() throws StoreException {
+  public void start(long segmentSize) throws StoreException {
     // Mark the service as running
     isRunning = true;
+    this.segmentSize = segmentSize;
   }
 
   /**
@@ -287,6 +294,74 @@ public class FileStore implements PartitionFileStore {
       throw new FileStoreException("Error while moving files from: " + srcDirPath + " to: " + destDirPath, FileStoreErrorCode.FileStoreMoveFilesError);
     }
     logger.info("All regular files are moved from: {} to: {}", srcDirPath, destDirPath);
+  }
+
+  /**
+   * Allocates a file in the specified path.
+   * @param path The path where the file should be allocated
+   * @param storeId The store ID for which the file is requested
+   * @throws IOException if an I/O error occurs during the allocation
+   */
+  @Override
+  public void allocateFile(String path, String storeId) throws IOException {
+    try {
+      // Verify service is running.
+      validateIfFileStoreIsRunning();
+
+      // Validate inputs.
+      Objects.requireNonNull(path, "path must not be null");
+      Objects.requireNonNull(storeId, "storeId must not be null");
+
+      // throw error if the file exists
+      File file = new File(path);
+      if (file.exists()) {
+        throw new IOException("File already exists in " + path);
+      }
+
+      // Allocate space for the file
+      synchronized (storeWriteLock) {
+        diskSpaceAllocator.allocate(file, segmentSize, storeId, false);
+      }
+    } catch (Exception e) {
+      logger.error("Unexpected error while allocating file in path {} for store {}", path, storeId, e);
+      throw new FileStoreException("Error while allocating file in path " + path + " for store: " + storeId,
+          FileStoreErrorCode.FileStoreFileAllocationFailed);
+    }
+
+    logger.info("Disk Space Allocator has allocated space for file in {}", path);
+  }
+
+  /**
+   * Cleans up the specified file.
+   * @param path The path of the file to clean
+   * @throws IOException if an I/O error occurs during the cleanup
+   */
+  @Override
+  public void cleanDir(String path, String storeId) throws IOException {
+    try {
+      // Verify service is running.
+      validateIfFileStoreIsRunning();
+
+      // Validate inputs.
+      Objects.requireNonNull(path, "target file must not be null");
+
+      // throw error if the file does not exist
+      File file = new File(path);
+      if (!file.exists()) {
+        throw new IOException("File doesn't exist in " + path);
+      }
+
+      // free space for the file
+      synchronized (storeWriteLock) {
+        diskSpaceAllocator.free(file, segmentSize, storeId, false);
+      }
+    } catch (Exception e) {
+      logger.error("Unexpected error while freeing file in path {} for store {}", path, storeId, e);
+      throw new FileStoreException("Error while freeing file in path " + path + " for store: " + storeId,
+          FileStoreErrorCode.FileStoreFileFailedCleanUp);
+    }
+
+    logger.info("Disk Space Allocator has free-ed space for file in {}", path);
   }
 
   /**

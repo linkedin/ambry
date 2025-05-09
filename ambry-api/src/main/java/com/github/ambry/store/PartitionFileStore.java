@@ -52,4 +52,21 @@ public interface PartitionFileStore {
    * @throws IOException if an I/O error occurs during the move operation
    */
   void moveAllRegularFiles(String srcDirPath, String destDirPath) throws IOException;
+
+  /**
+   * move a pre-allocated file in the target path from diskSpaceAllocator's pre-allocated files for the store
+   *
+   * @param targetPath the path of the directory where the files need to be created
+   * @param storeId    storeId of the store for which file is requested for
+   * @throws IOException if an I/O error occurs during the move operation
+   */
+  void allocateFile(String targetPath, String storeId) throws IOException;
+
+  /**
+   * move an allocated file back to diskSpaceAllocator's pre-allocated files store
+   * @param targetPath the path to the directory
+   * @param storeId    storeId of the store for which file is requested for
+   * @throws IOException if an I/O error occurs during the operation
+   */
+  void cleanDir(String targetPath, String storeId) throws IOException;
 }

@@ -180,7 +180,7 @@ public class DiskSpaceAllocator {
    * @param isSwapSegment {@code true} if the segment is used for swap purpose in compaction. {@code false} otherwise.
    * @throws IOException if the file could not be moved to the destination.
    */
-  void allocate(File destinationFile, long sizeInBytes, String storeId, boolean isSwapSegment) throws IOException {
+  public void allocate(File destinationFile, long sizeInBytes, String storeId, boolean isSwapSegment) throws IOException {
     long startTime = System.currentTimeMillis();
     try {
       if (enablePooling && poolState != PoolState.INITIALIZED) {
@@ -250,7 +250,7 @@ public class DiskSpaceAllocator {
    *                      {@code false} otherwise.
    * @throws IOException if the file to return does not exist or cannot be cleaned or recreated correctly.
    */
-  void free(File fileToReturn, long sizeInBytes, String storeId, boolean isSwapSegment) throws IOException {
+  public void free(File fileToReturn, long sizeInBytes, String storeId, boolean isSwapSegment) throws IOException {
     long startTime = System.currentTimeMillis();
     try {
       if (enablePooling && poolState != PoolState.INITIALIZED) {

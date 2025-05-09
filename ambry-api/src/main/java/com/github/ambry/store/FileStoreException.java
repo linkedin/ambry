@@ -73,8 +73,13 @@ public class FileStoreException extends RuntimeException {
      */
     FileStoreMoveFilesError,
     /**
-     * Indicates that the FileStore service encountered an error during delete
+     * Indicates that the FileStore service encountered an error during cleanup
      */
+    FileStoreFileFailedCleanUp,
+    /**
+     * Indicates that the File allocation by disk space allocator has failed
+     */
+    FileStoreFileAllocationFailed,
     UnknownError
   }
 }
