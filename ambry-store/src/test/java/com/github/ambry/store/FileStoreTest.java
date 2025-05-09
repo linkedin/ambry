@@ -59,6 +59,7 @@ public class FileStoreTest {
   private FileStore fileStore;
   private File tempDir;
   private FileCopyBasedReplicationConfig _fileCopyBasedReplicationConfig;
+  private static final long SEGMENT_CAPACITY = 512;
 
   /**
    * Sets up the test environment before each test.
@@ -69,8 +70,8 @@ public class FileStoreTest {
     tempDir = Files.createTempDirectory("FileStoreTest").toFile();
     Properties props = new Properties();
     _fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(props));
-    fileStore = new FileStore(tempDir.getAbsolutePath());
-    fileStore.start();
+    fileStore = new FileStore(tempDir.getAbsolutePath(), null);
+    fileStore.start(SEGMENT_CAPACITY);
   }
 
   /**
@@ -82,7 +83,7 @@ public class FileStoreTest {
     assertTrue("FileStore should be running after start", fileStore.isRunning());
     fileStore.stop();
     assertFalse("FileStore should not be running after stop", fileStore.isRunning());
-    fileStore.start();
+    fileStore.start(SEGMENT_CAPACITY);
     assertTrue("FileStore should be running after restart", fileStore.isRunning());
   }
 
