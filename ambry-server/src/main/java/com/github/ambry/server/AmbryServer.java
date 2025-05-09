@@ -153,7 +153,6 @@ public class AmbryServer {
   private ServerSecurityService serverSecurityService;
   private final NettyInternalMetrics nettyInternalMetrics;
   private AccountStatsMySqlStore accountStatsMySqlStore = null;
-  private final String selfInstanceName;
 
   // variables to handle repair requests.
   private LocalRequestResponseChannel localChannel = null;
@@ -206,8 +205,6 @@ public class AmbryServer {
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
       nettyInternalMetrics = new NettyInternalMetrics(registry, new NettyConfig(properties));
       clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
-      this.selfInstanceName =
-          ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
       this.clusterMapConfig = new ClusterMapConfig(properties);
     } catch (Exception e) {
       logger.error("Error during bootup", e);
@@ -218,7 +215,9 @@ public class AmbryServer {
   // Implementation of the ClusterMapChangeListener interface to handle cluster map changes.
   class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
     @Override
-    public void onDataNodeConfigChange(List<DataNodeConfig> configs)  {
+    public void onDataNodeConfigChange(List<DataNodeConfig> configs) {
+      String selfInstanceName =
+          ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
       for (DataNodeConfig currNodeConfig : configs) {
         String instanceName = currNodeConfig.getInstanceName();
         if (instanceName.equals(selfInstanceName)) {
