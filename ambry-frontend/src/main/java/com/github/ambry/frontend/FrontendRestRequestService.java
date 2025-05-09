@@ -58,8 +58,6 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Set;
-import java.util.HashSet;
-import java.util.Arrays;
 
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
@@ -250,7 +248,7 @@ class FrontendRestRequestService implements RestRequestService {
     s3BatchDeleteHandler = new S3BatchDeleteHandler(deleteBlobHandler, frontendMetrics);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, s3BatchDeleteHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
-    s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics, frontendConfig);
     s3GetHandler =
         new S3GetHandler(s3ListHandler, s3MultipartUploadHandler, getBlobHandler, securityService, frontendMetrics,
             accountAndContainerInjector);
