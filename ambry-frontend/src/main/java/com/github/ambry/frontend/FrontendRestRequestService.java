@@ -548,17 +548,18 @@ class FrontendRestRequestService implements RestRequestService {
     Callback<Void> errorCallback = (r, e) -> submitResponse(restRequest, restResponseChannel, null, e);
     try {
       logger.trace("Handling {} request - {}", restRequest.getRestMethod(), restRequest.getUri());
-      RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
-      // Reject POST requests for non-S3 named blob requests, named blob uploads happen via PUT
-      if (restRequest.getRestMethod() == RestMethod.POST && requestPath.matchesOperation(Operations.NAMED_BLOB)
-          && !isS3Request(restRequest)) {
-        throw new RestServiceException("POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
-            RestServiceErrorCode.NotAllowed, true, false, null);
-      }
-
       checkAvailable();
       securityService.preProcessRequest(restRequest, FrontendUtils.buildCallback(preProcessingMetrics, r -> {
+        RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
         restRequest.setArg(REQUEST_PATH, requestPath);
+
+        // Reject POST requests for non-S3 named blob requests, named blob uploads happen via PUT
+        if (restRequest.getRestMethod() == RestMethod.POST && requestPath.matchesOperation(Operations.NAMED_BLOB)
+            && !isS3Request(restRequest)) {
+          throw new RestServiceException(
+              "POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
+              RestServiceErrorCode.NotAllowed, true, false, null);
+        }
 
         //NamedBlobPath.parse will validate the blobName length
         //PUT operations have the strictest validation since they control what enters the system.
@@ -581,9 +582,8 @@ class FrontendRestRequestService implements RestRequestService {
     // ref: https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
     boolean isPrevWhitespace = false;
 
-    Set<Character> invalidAsciiBlobNameCharsSet = frontendConfig.invalidAsciiBlobNameChars.stream()
-        .map(s -> s.charAt(0))
-        .collect(Collectors.toSet());
+    Set<Character> invalidAsciiBlobNameCharsSet =
+        frontendConfig.invalidAsciiBlobNameChars.stream().map(s -> s.charAt(0)).collect(Collectors.toSet());
 
     for (int i = 0; i < blobName.length(); i++) {
       char c = blobName.charAt(i);
