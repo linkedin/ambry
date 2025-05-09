@@ -154,10 +154,9 @@ public class FrontendRestRequestServiceTest {
   static {
     try {
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
-      QUOTA_MANAGER =
-          new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
-              Mockito.mock(AccountService.class), null, new QuotaMetrics(new MetricRegistry()),
-              QuotaTestUtils.getDefaultRouterConfig());
+      QUOTA_MANAGER = new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+          Mockito.mock(AccountService.class), null, new QuotaMetrics(new MetricRegistry()),
+          QuotaTestUtils.getDefaultRouterConfig());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -414,8 +413,8 @@ public class FrontendRestRequestServiceTest {
             Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName,
-        GetOption.None, false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName, GetOption.None,
+        false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecordAfterTtlUpdate)));
 
@@ -423,6 +422,31 @@ public class FrontendRestRequestServiceTest {
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getStatus());
     assertEquals("Unexpected blob Id", blobIdWithClusterName, restResponseChannel.getHeader(LOCATION));
+  }
+
+  @Test
+  public void testNamedBlobPost() throws Exception {
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    String blobName = "blobName";
+    String namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    setAmbryHeadersForPut(headers, -1, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+        null, null);
+    RestRequest restRequest = createRestRequest(RestMethod.POST, namedBlobPathUri, headers, body);
+
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+    } catch (RestServiceException e) {
+      assertEquals(ResponseStatus.MethodNotAllowed, restResponseChannel.getStatus());
+    }
   }
 
   /**
@@ -487,8 +511,7 @@ public class FrontendRestRequestServiceTest {
     // What the test is looking for -> No exceptions thrown when the handle is run and the original exception arrives
     // safely.
     responseHandler.shutdown();
-    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions",
-        "handlePut"}) {
+    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions", "handlePut"}) {
       Method method =
           FrontendRestRequestService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
       responseHandler.reset();
@@ -662,10 +685,10 @@ public class FrontendRestRequestServiceTest {
             .setRetentionCount(0)
             .build();
     datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
-    map =
-        mapper.readValue(new String(datasetsUpdateJson), new TypeReference<Map<String, Object>>() {
-        });
-    assertFalse("Should not contain null(default) value after serialization", map.containsKey("retentionTimeInSeconds"));
+    map = mapper.readValue(new String(datasetsUpdateJson), new TypeReference<Map<String, Object>>() {
+    });
+    assertFalse("Should not contain null(default) value after serialization",
+        map.containsKey("retentionTimeInSeconds"));
     assertEquals("Serialized value mismatch", 0, map.get("retentionCount"));
 
     body = new LinkedList<>();
@@ -836,8 +859,8 @@ public class FrontendRestRequestServiceTest {
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
     when(namedBlobDb.delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName)).thenReturn(
         CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName,
-        GetOption.None, false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName, GetOption.None,
+        false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
     doOperation(restRequest, restResponseChannel);
@@ -857,8 +880,8 @@ public class FrontendRestRequestServiceTest {
         new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobNewName, blobIdFromRouter, 3600);
     when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobNewName,
         GetOption.None, false)).thenReturn(CompletableFuture.completedFuture(newNamedBlobRecord));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName,
-        GetOption.None, false)).thenThrow(new RuntimeException());
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName, GetOption.None,
+        false)).thenThrow(new RuntimeException());
     when(namedBlobDb.delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName)).thenReturn(
         CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
@@ -1627,7 +1650,8 @@ public class FrontendRestRequestServiceTest {
     reset(namedBlobDb);
     namedBlobRecord = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName + SLASH + version,
         blobIdFromRouter, Utils.Infinite_Time);
-    when(namedBlobDb.get(any(), any(), any(), any(), eq(false))).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(any(), any(), any(), any(), eq(false))).thenReturn(
+        CompletableFuture.completedFuture(namedBlobRecord));
 
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
@@ -1643,7 +1667,8 @@ public class FrontendRestRequestServiceTest {
     reset(namedBlobDb);
     when(namedBlobDb.delete(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
-    when(namedBlobDb.get(any(), any(), any(), any(), eq(false))).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(any(), any(), any(), any(), eq(false))).thenReturn(
+        CompletableFuture.completedFuture(namedBlobRecord));
 
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
@@ -1676,7 +1701,8 @@ public class FrontendRestRequestServiceTest {
     //Add a dataset version
     version = System.currentTimeMillis();
     blobName = DATASET_NAME_WITHOUT_USER_TAGS + SLASH + version;
-    namedBlobPathUri = NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName;
+    namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName;
     contentLength = 10;
     content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
     body = new LinkedList<>();
@@ -1702,15 +1728,14 @@ public class FrontendRestRequestServiceTest {
     blobIdFromRouter =
         router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
     reset(namedBlobDb);
-    namedBlobRecord = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName,
-        blobIdFromRouter, blobTtl);
+    namedBlobRecord =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName, blobIdFromRouter, blobTtl);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
-    when(namedBlobDb.delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
-        blobName)).thenReturn(
+    when(namedBlobDb.delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName)).thenReturn(
         CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
-        blobName, null, false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName, null,
+        false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
@@ -1746,15 +1771,15 @@ public class FrontendRestRequestServiceTest {
     byteBufferContent = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(contentLength));
     String blobIdFromRouter1 =
         router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
-    NamedBlobRecord namedBlobRecord1 = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName1,
-        blobIdFromRouter1, Utils.Infinite_Time);
+    NamedBlobRecord namedBlobRecord1 =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName1, blobIdFromRouter1,
+            Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord1)));
     when(namedBlobDb.delete(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(),
-        blobName1)).thenReturn(
-        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter1, false)));
-    when(namedBlobDb.get(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(),
-        blobName1, null, false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord1));
+        blobName1)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter1, false)));
+    when(namedBlobDb.get(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(), blobName1, null,
+        false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord1));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord1)));
 
@@ -3706,8 +3731,9 @@ public class FrontendRestRequestServiceTest {
     router = new InMemoryRouter(verifiableProperties, clusterMap, converterFactory);
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, converterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, router.getIdConverter().getNamedBlobDb(), accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
+            securityServiceFactory, urlSigningService, idSigningService, router.getIdConverter().getNamedBlobDb(),
+            accountService, accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore,
+            QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
@@ -3738,10 +3764,10 @@ public class FrontendRestRequestServiceTest {
       }
       Router testRouter = new FrontendTestRouter(idConverterFactory);
       frontendRestRequestService =
-          new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap,
-              idConverterFactory, securityFactory, urlSigningService, idSigningService, testRouter.getIdConverter()
-              .getNamedBlobDb(), accountService,
-              accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
+          new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
+              securityFactory, urlSigningService, idSigningService, testRouter.getIdConverter().getNamedBlobDb(),
+              accountService, accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore,
+              QUOTA_MANAGER);
       frontendRestRequestService.setupResponseHandler(responseHandler);
       frontendRestRequestService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
@@ -4132,9 +4158,8 @@ public class FrontendRestRequestServiceTest {
             refAccount.getId()).build();
     Container legacyContainerForPrivateBlob =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
-            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", refAccount.getId())
-            .setCacheable(false)
-            .build();
+            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob",
+            refAccount.getId()).setCacheable(false).build();
     Account accountWithTwoDefaultContainers =
         new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
             .addOrUpdateContainer(legacyContainerForPublicBlob)
@@ -4424,7 +4449,8 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
     }
 
     @Override
-    public Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties, Callback<String> callback) {
+    public Future<String> convert(RestRequest restRequest, String input, BlobProperties blobProperties,
+        Callback<String> callback) {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
@@ -4510,7 +4536,9 @@ class BadRestRequest extends BadRSC implements RestRequest {
   }
 
   @Override
-  public void removeArg(String key) { throw new IllegalStateException("Not implemented"); }
+  public void removeArg(String key) {
+    throw new IllegalStateException("Not implemented");
+  }
 
   @Override
   public SSLSession getSSLSession() {
@@ -4630,8 +4658,9 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata,
+      ReadableStreamChannel channel, PutBlobOptions options, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 
@@ -4649,8 +4678,8 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+  public Future<Void> updateBlobTtl(RestRequest restRequest, String blobId, String serviceId, long expiresAtMs,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);
   }
