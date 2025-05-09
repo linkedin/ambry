@@ -352,7 +352,7 @@ public class AmbryServer {
         // wait for dataNode to be populated
         if (nodeId == null) {
           logger.info("Waiting on dataNode config to be populated...");
-          dataNodeLatch.await();
+          dataNodeLatch.await(serverConfig.serverDatanodeConfigTimeout, TimeUnit.SECONDS);
           logger.info("DataNode config is populated");
           nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
         }
@@ -407,9 +407,7 @@ public class AmbryServer {
 
         logger.info("Registering State Machine model");
         for (ClusterParticipant participant : clusterParticipants) {
-          if (participant instanceof HelixParticipant) {
-            ((HelixParticipant) participant).registerTasksWithStateMachineModel(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
-          }
+            participant.startStateMachineModel(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
         }
 
         ArrayList<Port> ports = new ArrayList<Port>();
@@ -502,6 +500,8 @@ public class AmbryServer {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
+    } catch (InterruptedException e) {
+      logger.error("Startup timed out waiting for data node config to be populated", e);
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);

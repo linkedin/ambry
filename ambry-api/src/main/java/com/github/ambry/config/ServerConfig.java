@@ -145,6 +145,14 @@ public class ServerConfig {
   public final ServerExecutionMode serverExecutionMode;
 
   /**
+   * Timeout after the server will give up waiting for a datanode to be configured.
+   */
+  public static final String SERVER_DATANODE_CONFIG_WAIT_TIMEOUT = "server.datanode.config.timeout";
+  @Config(SERVER_DATANODE_CONFIG_WAIT_TIMEOUT)
+  @Default("300")
+  public long serverDatanodeConfigTimeout;
+
+  /**
    * Decide Replication Protocol For Hydration Of Newly Added Replicas
    * - Blob Based Replication
    * - File Based Replication
@@ -187,5 +195,6 @@ public class ServerConfig {
     serverRepairRequestsDbFactory = verifiableProperties.getString("server.repair.requests.db.factory", null);
     serverReplicationProtocolForHydration = verifiableProperties.getEnum(SERVER_REPLICATION_PROTOCOL_FOR_HYDRATION,
         ServerReplicationMode.class, ServerReplicationMode.BLOB_BASED);
+    serverDatanodeConfigTimeout = verifiableProperties.getLong(SERVER_DATANODE_CONFIG_WAIT_TIMEOUT, 300);
   }
 }

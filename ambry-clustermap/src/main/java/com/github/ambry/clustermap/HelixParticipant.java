@@ -798,7 +798,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  public void registerTasksWithStateMachineModel(List<AmbryStatsReport> statsReports,
+  @Override
+  public void startStateMachineModel(List<AmbryStatsReport> statsReports,
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
     //Get the state machine engine
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
