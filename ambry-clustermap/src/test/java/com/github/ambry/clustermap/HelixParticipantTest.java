@@ -1167,7 +1167,7 @@ public class HelixParticipantTest {
   }
 
   @Test
-  public void testOfflineToBootstrapWithDifferedStateModelRegistration() throws Exception {
+  public void testOfflineToBootstrapWithDelayedStateModelRegistration() throws Exception {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
