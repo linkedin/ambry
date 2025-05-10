@@ -80,6 +80,10 @@ public class FileCopyHandlerException extends RuntimeException {
      */
     FileCopyHandlerFailedDiskSpaceAllocation,
     /**
+     * Indicates that size of the file in logInfo is greater than segment size.
+     */
+    FileCopyHandlerInvalidLogFileSize,
+    /**
      * Indicates that FiceCopyHandler encountered an unknown error.
      */
     UnknownError

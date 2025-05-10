@@ -69,4 +69,9 @@ public interface PartitionFileStore {
    * @throws IOException if an I/O error occurs during the operation
    */
   void cleanFile(String targetPath, String storeId) throws IOException;
+
+  /**
+   * @return size of allocated segment in bytes
+   */
+  long getSegmentCapacity();
 }

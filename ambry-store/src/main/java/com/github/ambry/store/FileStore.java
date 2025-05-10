@@ -365,6 +365,16 @@ public class FileStore implements PartitionFileStore {
   }
 
   /**
+   * Returns the size of the allocated segment in bytes.
+   */
+  @Override
+  public long getSegmentCapacity() {
+    // Verify service is running.
+    validateIfFileStoreIsRunning();
+    return segmentSize;
+  }
+
+  /**
    * Performs cleanup operations when shutting down the FileStore.
    */
   public void shutdown() {

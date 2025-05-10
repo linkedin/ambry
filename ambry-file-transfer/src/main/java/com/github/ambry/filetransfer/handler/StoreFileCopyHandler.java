@@ -310,6 +310,10 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private void processLogSegment(LogInfo logInfo, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
       String snapshotId, PartitionFileStore fileStore) {
+    if (logInfo.getLogSegment().getFileSize() > fileStore.getSegmentCapacity()) {
+      throw new FileCopyHandlerException("Log segment file size is greater than the segment capacity",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerInvalidLogFileSize);
+    }
     FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
         logInfo.getLogSegment().getFileSize());
     int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSize() / config.getFileCopyHandlerChunkSize);
