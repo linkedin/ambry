@@ -68,6 +68,7 @@ public class AccountDao {
   // Container table query strings
   private final String insertContainersSql;
   private final String updateContainersSql;
+  private final String deleteContainersSql;
   private final String getContainersSinceSql;
   private final String getContainersByAccountSql;
   private final String getContainerByNameSql;
@@ -107,6 +108,8 @@ public class AccountDao {
         String.format("update %s set %s = ?, %s = ?, %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ",
             CONTAINER_TABLE, CONTAINER_INFO, VERSION, CONTAINER_NAME, CONTAINER_STATUS, LAST_MODIFIED_TIME, ACCOUNT_ID,
             CONTAINER_ID);
+    deleteContainersSql =
+        String.format("delete from %s where %s = ? and %s = ?", CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_ID);
     getContainerByNameSql =
         String.format("select %s, %s, %s, %s from %s where %s = ? and %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
             LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_NAME);
@@ -292,7 +295,7 @@ public class AccountDao {
   }
 
   /**
-   * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
+   * Adds/Updates accounts and Add/updates/deletes their containers to the database in batches atomically using transaction.
    * @param accountsInfo information of updated Accounts
    * @param batchSize number of statements to be executed in one batch
    * @throws SQLException
@@ -305,7 +308,8 @@ public class AccountDao {
       accountUpdateBatch = new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSql, true),
           dataAccessor.getPreparedStatement(updateAccountsSql, true),
           dataAccessor.getPreparedStatement(insertContainersSql, true),
-          dataAccessor.getPreparedStatement(updateContainersSql, true));
+          dataAccessor.getPreparedStatement(updateContainersSql, true),
+          dataAccessor.getPreparedStatement(deleteContainersSql, true));
 
       // Disable auto commits
       dataAccessor.setAutoCommit(false);
@@ -318,10 +322,12 @@ public class AccountDao {
         boolean isAccountUpdated = accountUpdateInfo.isUpdated();
         List<Container> addedContainers = accountUpdateInfo.getAddedContainers();
         List<Container> updatedContainers = accountUpdateInfo.getUpdatedContainers();
+        List<Container> deletedContainers = accountUpdateInfo.getDeletedContainers();
 
         // Number of changes in the account.
         int accountUpdateCount =
-            (isAccountAdded ? 1 : 0) + (isAccountUpdated ? 1 : 0) + addedContainers.size() + updatedContainers.size();
+            (isAccountAdded ? 1 : 0) + (isAccountUpdated ? 1 : 0) + addedContainers.size() + updatedContainers.size()
+                + deletedContainers.size();
 
         // Commit transaction with previous batch inserts/updates if it either of following is true.
         // a) Total batch count of previous #accounts/containers is equal to or greater than configured batch size.
@@ -347,6 +353,10 @@ public class AccountDao {
         // Add updated containers for batch updates
         for (Container container : updatedContainers) {
           accountUpdateBatch.updateContainer(account.getId(), container);
+        }
+        // Add deleted containers for batch deletes
+        for (Container container : deletedContainers) {
+          accountUpdateBatch.deleteContainer(account.getId(), container);
         }
 
         batchCount += accountUpdateCount;
@@ -435,6 +445,10 @@ public class AccountDao {
         statement.setString(4, container.getStatus().toString());
         statement.setInt(5, accountId);
         statement.setInt(6, container.getId());
+        break;
+      case Delete:
+        statement.setInt(1, accountId);
+        statement.setInt(2, container.getId());
     }
   }
 
@@ -447,17 +461,21 @@ public class AccountDao {
     private int updateAccountCount = 0;
     private int insertContainerCount = 0;
     private int updateContainerCount = 0;
+    private int deleteContainerCount = 0;
     private final PreparedStatement insertAccountStatement;
     private final PreparedStatement updateAccountStatement;
     private final PreparedStatement insertContainerStatement;
     private final PreparedStatement updateContainerStatement;
+    private final PreparedStatement deleteContainerStatement;
 
     public AccountUpdateBatch(PreparedStatement insertAccountStatement, PreparedStatement updateAccountStatement,
-        PreparedStatement insertContainerStatement, PreparedStatement updateContainerStatement) {
+        PreparedStatement insertContainerStatement, PreparedStatement updateContainerStatement,
+        PreparedStatement deleteContainerStatement) {
       this.insertAccountStatement = insertAccountStatement;
       this.updateAccountStatement = updateAccountStatement;
       this.insertContainerStatement = insertContainerStatement;
       this.updateContainerStatement = updateContainerStatement;
+      this.deleteContainerStatement = deleteContainerStatement;
     }
 
     /**
@@ -480,6 +498,10 @@ public class AccountDao {
       if (updateContainerStatement != null && updateContainerCount > 0) {
         updateContainerStatement.executeBatch();
         updateContainerCount = 0;
+      }
+      if(deleteContainerStatement != null && deleteContainerCount > 0) {
+        deleteContainerStatement.executeBatch();
+        deleteContainerCount = 0;
       }
     }
 
@@ -527,6 +549,18 @@ public class AccountDao {
       bindContainer(updateContainerStatement, accountId, container, StatementType.Update);
       updateContainerStatement.addBatch();
       ++updateContainerCount;
+    }
+
+    /**
+     * Adds {@link Container} to its delete {@link PreparedStatement}'s batch.
+     * @param accountId account id of the Container.
+     * @param container {@link Container} to be deleted.
+     * @throws SQLException
+     */
+    public void deleteContainer(int accountId, Container container) throws SQLException {
+      bindContainer(deleteContainerStatement, accountId, container, StatementType.Delete);
+      deleteContainerStatement.addBatch();
+      ++deleteContainerCount;
     }
   }
 }

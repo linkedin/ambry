@@ -793,7 +793,7 @@ public class CachedAccountService extends AbstractAccountService {
       }
 
       accountsUpdateInfo.add(
-          new AccountUpdateInfo(account, isAccountAdded, isAccountUpdated, addedContainers, updatedContainers));
+          new AccountUpdateInfo(account, isAccountAdded, isAccountUpdated, addedContainers, updatedContainers, new ArrayList<>()));
     }
 
     // Write changes to MySql db.
@@ -818,7 +818,7 @@ public class CachedAccountService extends AbstractAccountService {
     Pair<List<Container>, List<Container>> addedOrUpdatedContainers = getUpdatedContainers(account, containers);
     AccountUpdateInfo accountUpdateInfo =
         new AccountUpdateInfo(account, false, false, addedOrUpdatedContainers.getFirst(),
-            addedOrUpdatedContainers.getSecond());
+            addedOrUpdatedContainers.getSecond(), new ArrayList<>());
 
     // Write changes to MySql db.
     mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
