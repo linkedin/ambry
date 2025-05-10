@@ -1635,6 +1635,13 @@ public class HelixClusterManager implements ClusterMap {
             logger.info("Data node config change triggered from helix cluster {} in datacenter {}",
                 sourceHelixClusterName, dcName);
           }
+
+          List<DataNodeConfig> dataNodeConfigs = new ArrayList<>();
+          configs.forEach(dataNodeConfigs::add);
+          for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+            listener.onDataNodeConfigChange(dataNodeConfigs);
+          }
+
           if (logger.isDebugEnabled()) {
             logger.debug("Detailed data node config from helix cluster {} in datacenter {} is: {}",
                 sourceHelixClusterName, dcName, configs);

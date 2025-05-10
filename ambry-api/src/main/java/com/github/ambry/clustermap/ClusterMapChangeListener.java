@@ -25,7 +25,8 @@ public interface ClusterMapChangeListener {
    * @param addedReplicas {@link ReplicaId}(s) that have been added.
    * @param removedReplicas {@link ReplicaId}(s) that have been removed.
    */
-  void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas);
+  default void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+  }
 
   /**
    * Take actions when a data node is removed from the clustermap
@@ -41,4 +42,10 @@ public interface ClusterMapChangeListener {
    */
   default void onRoutingTableChange() {
   }
+
+  /**
+   * @param dataNodeConfigs List of dataNodeConfigs that have been changed
+   * Take actions when any change in DataNodeConfig happens.
+   */
+  default void onDataNodeConfigChange(List<DataNodeConfig> dataNodeConfigs) {}
 }

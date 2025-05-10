@@ -26,7 +26,7 @@ import java.util.TreeMap;
 /**
  * A data object for configs scoped to a single data node.
  */
-class DataNodeConfig {
+public class DataNodeConfig {
   private final String instanceName;
   private final String hostName;
   private final int port;
@@ -67,7 +67,7 @@ class DataNodeConfig {
   /**
    * @return a name that can be used as a unique key for this server.
    */
-  String getInstanceName() {
+  public String getInstanceName() {
     return instanceName;
   }
 
