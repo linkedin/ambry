@@ -13,6 +13,7 @@
  */
 package com.github.ambry.filetransfer.handler;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
@@ -20,9 +21,12 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.DiskSpaceAllocator;
+import com.github.ambry.store.DiskSpaceRequirements;
 import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.FileStore;
 import com.github.ambry.store.LogSegmentName;
+import com.github.ambry.store.StorageManagerMetrics;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileInfo;
 import com.github.ambry.store.StoreLogInfo;
@@ -61,13 +65,40 @@ import static org.mockito.Mockito.*;
  */
 @RunWith(MockitoJUnitRunner.class)
 public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
-  final Path tempDir = Files.createTempDirectory("StoreFileCopyHandlerIntegTest-" +
-      new Random().nextInt(1000)).toFile().toPath();
-
+  private final Path tempDir;
+  private final File reserveFileDir;
   private File sourcePartitionDir;
   private File targetPartitionDir;
+  private final FileStore fileStore;
+  private final DiskSpaceAllocator diskSpaceAllocator;
+  private final StorageManagerMetrics storeManagerMetrics;
+  private static final int SEGMENT_CAPACITY = 25 * 1024 * 1024; // 25 MB
+  private static final int SEGMENT_COUNT = 2;
+  private static final String STORE_ID = "0";
+  static final String STORE_DIR_PREFIX = "reserve_store_";
 
-  public StoreFileCopyHandlerIntegTest() throws IOException {}
+  public StoreFileCopyHandlerIntegTest() throws IOException {
+    tempDir = Files.createTempDirectory("StoreFileCopyHandlerIntegTest-" +
+        new Random().nextInt(1000)).toFile().toPath();
+    File tempDirFile = tempDir.toFile();
+    reserveFileDir = new File(tempDirFile, "reserve-files");
+    storeManagerMetrics = new StorageManagerMetrics(new MetricRegistry());
+    diskSpaceAllocator = new DiskSpaceAllocator(true, reserveFileDir, 0, storeManagerMetrics);
+    fileStore = new FileStore( "", diskSpaceAllocator);
+  }
+
+  /**
+   * Returns the number of segments remaining in the reserve pool for the given store ID and segment size.
+   * @param storeId the ID of the store.
+   * @param segmentSize the size of the segment.
+   * @return the number of segments remaining in the reserve pool.
+   */
+  int getReservePoolRemainingSegmentCount(String storeId, int segmentSize) {
+    File storeReserveDir = new File(reserveFileDir, STORE_DIR_PREFIX + storeId);
+    File fileSizeDir = new File(storeReserveDir, DiskSpaceAllocator.generateFileSizeDirName(segmentSize));
+    String[] filenameList = fileSizeDir.list();
+    return filenameList == null ? 0 : filenameList.length;
+  }
 
   /**
    * Sets up the test environment.
@@ -77,9 +108,8 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   @Before
   public void setUp() throws Exception {
     super.setUp();
-
-    FileStore fileStore = new FileStore( "");
-    fileStore.start();
+    diskSpaceAllocator.initializePool(Arrays.asList(new DiskSpaceRequirements(STORE_ID, SEGMENT_CAPACITY, SEGMENT_COUNT, 0)));
+    fileStore.start(SEGMENT_CAPACITY);
     when(handler.getStoreManager().getFileStore(any())).thenReturn(fileStore);
 
     File sourceDir = tempDir.resolve("source").toFile();
@@ -189,7 +219,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     String logSegmentFileName = logSegmentName + "_log";
 
     File logSegment = new File(targetPartitionDir, logSegmentFileName);
-    createSampleFile(logSegment, 25 * 1024 * 1024); // 25 MB
+    createSampleFile(logSegment, SEGMENT_CAPACITY); // 25 MB
 
     StoreLogInfo storeLogInfo = new StoreLogInfo(new StoreFileInfo(logSegmentName.toString(), logSegment.length()),
         new ArrayList<>(), new ArrayList<>());
@@ -224,6 +254,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     File fileCopyTempDirectory = new File(sourcePartitionDir, "fileCopyTempDirectory");
     assertFalse("Temporary directory already exists!", fileCopyTempDirectory.exists());
     assertTrue(fileCopyTempDirectory.mkdirs());
+    assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
     spyHandler.copy(fileCopyInfo);
     assertTrue(fileCopyTempDirectory.delete());
 
@@ -234,6 +265,11 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     assertNoSubDirectories(sourcePartitionDir);
     assertCopiedFileIsValid(logSegment, new File(sourcePartitionDir, logSegmentFileName));
     assertEquals(1, getNumberOfFilesMatchingSuffix(sourcePartitionDir, "_log"));
+    assertEquals(SEGMENT_COUNT-1, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
+
+    // cleanup the file to give it back to DiskSpaceAllocator
+    fileStore.cleanFile(logSegment.getPath(), STORE_ID);
+    assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
   }
 
   /**

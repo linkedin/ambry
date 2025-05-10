@@ -254,7 +254,7 @@ public class BlobStore implements Store {
         this.sealThresholdBytesLow, this.partialSealThresholdBytesHigh, this.partialSealThresholdBytesLow);
     // if there is a decommission file in store dir, that means previous decommission didn't complete successfully.
     recoverFromDecommission = isDecommissionInProgress();
-    fileStore = new FileStore(dataDir);
+    fileStore = new FileStore(dataDir, diskSpaceAllocator);
   }
 
   @Override
@@ -293,11 +293,12 @@ public class BlobStore implements Store {
         }
 
         storeDescriptor = new StoreDescriptor(dataDir, config);
-        fileStore.start();
+
         log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics, false);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
             accountService, remoteTokenTracker, diskMetrics, false);
+        fileStore.start(log.getSegmentSize());
 
         initialized = true;
       } catch (Exception e) {
