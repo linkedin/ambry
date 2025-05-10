@@ -178,7 +178,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           // allocate the file
           FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
               logInfo.getLogSegment().getFileSize());
-          String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
+          String filePath = partitionToMountTempFilePath + File.separator + logFileInfo.getFileName();
           fileStore.allocateFile(filePath, storeId.toString());
         } catch (IOException e) {
           logMessageAndThrow("ProcessLogSegment", "Failed Disk Space Allocation", e,

@@ -88,7 +88,7 @@ public class DiskSpaceAllocator {
    * @param requiredSwapSegmentsPerSize the number of swap segments needed for each segment size in the pool.
    * @param metrics a {@link StorageManagerMetrics} instance.
    */
-  DiskSpaceAllocator(boolean enablePooling, File reserveDir, long requiredSwapSegmentsPerSize,
+  public DiskSpaceAllocator(boolean enablePooling, File reserveDir, long requiredSwapSegmentsPerSize,
       StorageManagerMetrics metrics) {
     this.enablePooling = enablePooling;
     this.reserveDir = reserveDir;
@@ -143,7 +143,7 @@ public class DiskSpaceAllocator {
    *                         segment size needed by each store.
    * @throws StoreException if the pool could not be allocated to meet the provided requirements
    */
-  void initializePool(Collection<DiskSpaceRequirements> requirementsList) throws StoreException {
+  public void initializePool(Collection<DiskSpaceRequirements> requirementsList) throws StoreException {
     long startTime = System.currentTimeMillis();
     try {
       if (enablePooling) {
@@ -600,7 +600,7 @@ public class DiskSpaceAllocator {
    * @param sizeInBytes the size of the files in this directory
    * @return a directory name for this size. This is reserve_size_{n} where {n} is {@code sizeInBytes}
    */
-  static String generateFileSizeDirName(long sizeInBytes) {
+  public static String generateFileSizeDirName(long sizeInBytes) {
     return FILE_SIZE_DIR_PREFIX + sizeInBytes;
   }
 

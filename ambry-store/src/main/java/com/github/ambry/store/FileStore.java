@@ -337,7 +337,7 @@ public class FileStore implements PartitionFileStore {
    * @throws IOException if an I/O error occurs during the cleanup
    */
   @Override
-  public void cleanDir(String path, String storeId) throws IOException {
+  public void cleanFile(String path, String storeId) throws IOException {
     try {
       // Verify service is running.
       validateIfFileStoreIsRunning();

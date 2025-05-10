@@ -68,5 +68,5 @@ public interface PartitionFileStore {
    * @param storeId    storeId of the store for which file is requested for
    * @throws IOException if an I/O error occurs during the operation
    */
-  void cleanDir(String targetPath, String storeId) throws IOException;
+  void cleanFile(String targetPath, String storeId) throws IOException;
 }
