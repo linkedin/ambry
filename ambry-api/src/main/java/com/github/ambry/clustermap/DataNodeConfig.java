@@ -52,7 +52,7 @@ public class DataNodeConfig {
    * @param rackId an identifier for the rack or cabinet that the server is in for computing failure domains.
    * @param xid  the xid for this server.
    */
-  DataNodeConfig(String instanceName, String hostName, int port, String datacenterName, Integer sslPort,
+  public DataNodeConfig(String instanceName, String hostName, int port, String datacenterName, Integer sslPort,
       Integer http2Port, String rackId, long xid) {
     this.instanceName = instanceName;
     this.hostName = hostName;

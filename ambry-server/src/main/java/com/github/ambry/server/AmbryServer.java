@@ -364,8 +364,12 @@ public class AmbryServer {
         if (nodeId == null) {
           logger.info("Waiting on dataNode config to be populated...");
           dataNodeLatch.await(serverConfig.serverDatanodeConfigTimeout, TimeUnit.SECONDS);
-          logger.info("DataNode config is populated");
           nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+          if (nodeId == null) {
+            logger.error("Startup timed out waiting for data node config to be populated");
+            throw new RuntimeException("Startup timed out waiting for data node config to be populated");
+          }
+          logger.info("DataNode config is populated");
         }
 
         // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
@@ -511,8 +515,6 @@ public class AmbryServer {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
       logger.info("Server startup time in Ms {}", processingTime);
-    } catch (InterruptedException e) {
-      logger.error("Startup timed out waiting for data node config to be populated", e);
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
