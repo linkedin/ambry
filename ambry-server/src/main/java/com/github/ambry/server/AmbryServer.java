@@ -363,11 +363,12 @@ public class AmbryServer {
         // wait for dataNode to be populated
         if (nodeId == null) {
           logger.info("Waiting on dataNode config to be populated...");
-          dataNodeLatch.await(serverConfig.serverDatanodeConfigTimeout, TimeUnit.SECONDS);
+          if(!dataNodeLatch.await(serverConfig.serverDatanodeConfigTimeout, TimeUnit.SECONDS)) {
+            throw new IllegalArgumentException("Startup timed out waiting for data node config to be populated");
+          }
           nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
           if (nodeId == null) {
-            logger.error("Startup timed out waiting for data node config to be populated");
-            throw new RuntimeException("Startup timed out waiting for data node config to be populated");
+            throw new IllegalArgumentException(String.format("Node %s absent in cluster-map", networkConfig.hostName));
           }
           logger.info("DataNode config is populated");
         }
