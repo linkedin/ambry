@@ -69,7 +69,7 @@ public class AmbryServerTest {
     ambryServer.shutdown();
   }
 
-  @Test
+  @Test(timeout = 15000)
   public void testAmbryServerStartupWithoutDataNodeId() throws Exception {
     ClusterAgentsFactory spyClusterAgentsFactory = spy(new MockClusterAgentsFactory(false, false, 1, 1, 1));
     // Mock ClusterMap
@@ -109,7 +109,7 @@ public class AmbryServerTest {
     ambryServer.shutdown();
   }
 
-  @Test
+  @Test(timeout = 15000)
   public void testAmbryServerStartupWithoutDataNodeIdTimeoutCase() throws Exception {
     ClusterAgentsFactory spyClusterAgentsFactory = spy(new MockClusterAgentsFactory(false, false, 1, 1, 1));
     // Mock ClusterMap
