@@ -64,6 +64,8 @@ public class FrontendConfig {
 
   private static final String DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = "GetBlob,GetBlobInfo,GetSignedUrl";
 
+  public static final String ENABLE_DELIMITER = PREFIX + "enable.delimiter";
+
   /**
    * Cache validity in seconds for non-private blobs for GET.
    */
@@ -315,6 +317,13 @@ public class FrontendConfig {
   @Default("1000")
   public final int listMaxResults;
 
+  /**
+   * Set to true to enable delimiter support for S3 and Named blob API in frontend.
+   */
+  @Config(ENABLE_DELIMITER)
+  @Default("false")
+  public final boolean enableDelimiter;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -383,6 +392,7 @@ public class FrontendConfig {
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_AGGREGATED_ACCOUNTS, ""), ",");
     this.listMaxResults =
         verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
+    enableDelimiter = verifiableProperties.getBoolean(ENABLE_DELIMITER, false);
   }
 
   /**
