@@ -33,6 +33,7 @@ import java.util.function.Function;
 import org.junit.Test;
 
 import static com.github.ambry.utils.TestUtils.*;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
@@ -69,7 +70,7 @@ public class AmbryServerTest {
     ambryServer.shutdown();
   }
 
-  @Test(timeout = 15000)
+  @Test(timeout = 20000)
   public void testAmbryServerStartupWithoutDataNodeId() throws Exception {
     ClusterAgentsFactory spyClusterAgentsFactory = spy(new MockClusterAgentsFactory(false, false, 1, 1, 1));
     // Mock ClusterMap
@@ -88,6 +89,21 @@ public class AmbryServerTest {
     props.setProperty("clustermap.port", "1234");
 
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    AmbryServer ambryServer =
+        new AmbryServer(verifiableProperties, spyClusterAgentsFactory, null, new LoggingNotificationSystem(),
+            SystemTime.getInstance(), null);
+    // Start the server
+    Thread serverThread = new Thread(() -> {
+      try {
+        ambryServer.startup();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
+    serverThread.start();
+    // check if the thread is alive after waiting for few seconds
+    Thread.sleep(3000);
+    assertTrue("Thread should be alive", serverThread.isAlive());
     // Spawn a thread that calls the listener after a delay
     new Thread(() -> {
       try {
@@ -96,15 +112,14 @@ public class AmbryServerTest {
         doReturn(dataNodeId).when(spyClusterMap).getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
         spyClusterMap.invokeListenerForDataNodeChange(Collections.singletonList(
             new DataNodeConfig("localhost_1234", "localhost", 1234, "DC1", null, null, null, 0)));
+        // wait for some time for startup to finish
+        Thread.sleep(5000);
+        // check if the thread is alive after waiting for few seconds
+        assertFalse("Thread should not be alive", serverThread.isAlive());
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
     }).start();
-    // Start the server
-    AmbryServer ambryServer =
-        new AmbryServer(verifiableProperties, spyClusterAgentsFactory, null, new LoggingNotificationSystem(),
-            SystemTime.getInstance(), null);
-    ambryServer.startup();
     // Stop the server
     ambryServer.shutdown();
   }
@@ -134,6 +149,9 @@ public class AmbryServerTest {
     AmbryServer ambryServer =
         new AmbryServer(verifiableProperties, spyClusterAgentsFactory, null, new LoggingNotificationSystem(),
             SystemTime.getInstance(), null);
-    assertException(InstantiationException.class, ambryServer::startup, null);
+    assertException(InstantiationException.class, ambryServer::startup, e -> {
+      assertEquals("Unexpected exception thrown", e.getMessage(),
+          "failure during startup java.lang.IllegalArgumentException: Startup timed out waiting for data node config to be populated");
+    });
   }
 }
