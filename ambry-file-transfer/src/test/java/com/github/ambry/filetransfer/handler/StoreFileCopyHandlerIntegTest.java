@@ -75,7 +75,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   private static final int SEGMENT_CAPACITY = 25 * 1024 * 1024; // 25 MB
   private static final int SEGMENT_COUNT = 2;
   private static final String STORE_ID = "0";
-  static final String STORE_DIR_PREFIX = "reserve_store_";
+  private static final String STORE_DIR_PREFIX = "reserve_store_";
 
   public StoreFileCopyHandlerIntegTest() throws IOException {
     tempDir = Files.createTempDirectory("StoreFileCopyHandlerIntegTest-" +
