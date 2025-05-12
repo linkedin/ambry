@@ -30,10 +30,8 @@ import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
-import com.github.ambry.clustermap.DataNodeConfig;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
-import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
@@ -204,27 +202,14 @@ public class AmbryServer {
           Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, registry);
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
       nettyInternalMetrics = new NettyInternalMetrics(registry, new NettyConfig(properties));
-      clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
       this.clusterMapConfig = new ClusterMapConfig(properties);
+      ClusterMapChangeListener clusterMapListener = new AmbryServerClusterMapChangeListenerImpl(
+          ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort),
+          dataNodeLatch);
+      clusterMap.registerClusterMapListener(clusterMapListener);
     } catch (Exception e) {
       logger.error("Error during bootup", e);
       throw new InstantiationException("failure during bootup " + e);
-    }
-  }
-
-  // Implementation of the ClusterMapChangeListener interface to handle cluster map changes.
-  class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
-    @Override
-    public void onDataNodeConfigChange(List<DataNodeConfig> configs) {
-      String selfInstanceName =
-          ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
-      for (DataNodeConfig currNodeConfig : configs) {
-        String instanceName = currNodeConfig.getInstanceName();
-        if (instanceName.equals(selfInstanceName)) {
-          dataNodeLatch.countDown();
-          break;
-        }
-      }
     }
   }
 
