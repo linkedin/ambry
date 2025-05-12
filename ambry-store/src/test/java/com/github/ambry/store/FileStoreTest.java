@@ -16,6 +16,8 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.utils.TestUtils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -29,6 +31,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -344,7 +347,11 @@ public class FileStoreTest {
     String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
     File file = new File(filePath);
     if (file.createNewFile()) {
-      assertException(FileStoreException.class, () -> fileStore.allocateFile(filePath, STORE_ID), null);
+      assertException(FileStoreException.class, () -> fileStore.allocateFile(filePath, STORE_ID), e -> {
+        assertEquals("Unexpected exception thrown",
+            new FileStoreException("Error while allocating file in path " + filePath + " for store: " + STORE_ID,
+                FileStoreException.FileStoreErrorCode.FileStoreFileAllocationFailed), e);
+      });
     } else {
       throw new RuntimeException("Failed to create test file");
     }
@@ -382,7 +389,11 @@ public class FileStoreTest {
   @Test
   public void testCleanFileWhichDoesntExist() throws Exception {
     String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
-    assertException(FileStoreException.class, () -> fileStore.cleanFile(filePath, STORE_ID), null);
+    assertException(FileStoreException.class, () -> fileStore.cleanFile(filePath, STORE_ID), e -> {
+      assertEquals("Unexpected exception thrown",
+          new FileStoreException("Error while freeing file in path " + filePath + " for store: " + STORE_ID,
+              FileStoreException.FileStoreErrorCode.FileStoreFileFailedCleanUp), e);
+    });
   }
 
   /**
