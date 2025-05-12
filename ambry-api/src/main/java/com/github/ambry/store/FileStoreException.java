@@ -80,6 +80,10 @@ public class FileStoreException extends RuntimeException {
      * Indicates that the File allocation by disk space allocator has failed
      */
     FileStoreFileAllocationFailed,
+    /**
+     /**
+     * Indicates that the FileStore service encountered an error during delete
+     */
     UnknownError
   }
 }
