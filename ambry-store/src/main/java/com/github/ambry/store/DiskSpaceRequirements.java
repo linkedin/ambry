@@ -18,7 +18,7 @@ package com.github.ambry.store;
  * Describes the additional segments required by a store-related entity. This is provided to the
  * {@link DiskSpaceAllocator} to initialize a disk space pool.
  */
-class DiskSpaceRequirements {
+public class DiskSpaceRequirements {
   private final long segmentSizeInBytes;
   private final long segmentsNeeded;
   private final long swapSegmentsInUse;
@@ -30,7 +30,7 @@ class DiskSpaceRequirements {
    * @param segmentsNeeded the number of additional segments needed in the disk space pool.
    * @param swapSegmentsInUse the number of swap segments currently in use by this entity.
    */
-  DiskSpaceRequirements(String storeId, long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
+  public DiskSpaceRequirements(String storeId, long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
     if (segmentSizeInBytes <= 0 || segmentsNeeded < 0 || swapSegmentsInUse < 0) {
       throw new IllegalArgumentException(
           "Arguments cannot be negative. segmentSizeInBytes: " + segmentSizeInBytes + ", segmentsNeeded: "
