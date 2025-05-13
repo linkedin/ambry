@@ -134,8 +134,9 @@ public class MockRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("stichBlob is not supported by this mock");
   }
 
