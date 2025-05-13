@@ -533,7 +533,7 @@ public class BlobStore implements Store {
     return this.replicaId;
   }
 
-  String getDataDir() {
+  public String getDataDir() {
     return dataDir;
   }
 
