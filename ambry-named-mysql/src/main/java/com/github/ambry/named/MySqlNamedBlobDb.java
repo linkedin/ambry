@@ -880,8 +880,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   public static List<StaleNamedBlob> getStaleBlobs(List<StaleNamedBlob> blobList) {
-    StaleNamedBlob keepBlob = blobList.get(0);
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
+    if (blobList.isEmpty()) {
+      return staleBlobs;
+    }
+    StaleNamedBlob keepBlob = blobList.get(0);
     long cutoffTime = System.currentTimeMillis() - fiveDaysMillis;
     Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
 
@@ -925,8 +928,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   private List<StaleNamedBlob> runPullPotentialStaleBlobs(Connection connection) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
-    List<Container> containers =
-        (List<Container>) accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+    Set<Container> containerSet = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+    List<Container> containers = new ArrayList<>(containerSet);
     for (Container container : containers) {
       int offset = 0;
       boolean hasMore = true;
