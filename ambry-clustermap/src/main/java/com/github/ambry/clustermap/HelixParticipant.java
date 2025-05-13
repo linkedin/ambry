@@ -37,6 +37,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
@@ -78,6 +79,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final DataNodeConfigSource dataNodeConfigSource;
   private final HelixAdmin helixAdmin;
   private final MetricRegistry metricRegistry;
+  private CountDownLatch blockStateTransitionLatch = null;
   private volatile boolean disablePartitionsComplete = false;
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
@@ -134,11 +136,20 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
    * @throws IOException if there is an error connecting to the Helix cluster.
+   * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
+   * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
+   * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
   @Override
-  public void participate() throws IOException {
+  public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports,
+      AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
+    StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
+    stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
+        new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
+    registerTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
+    this.blockStateTransitionLatch = new CountDownLatch(1);
     try {
       // register server as a participant
       manager.connect();
@@ -600,6 +611,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return success;
   }
 
+  @Override
+  public void unblockStateTransition() {
+      this.blockStateTransitionLatch.countDown();
+  }
+
   /**
    * A zookeeper based implementation for distributed lock.
    */
@@ -793,17 +809,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * This method will register Helix Tasks
    * Register aggregation tasks for appropriate {@link AmbryStatsReport}s and {@link PropertyStoreCleanUpTask}.
+   * @param engine the {@link StateMachineEngine} to register the task state model.
    * @param statsReports the {@link List} of {@link AmbryStatsReport}s that may require the registration of
    * corresponding {@link MySqlReportAggregatorTask}s.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  @Override
-  public void startStateMachineModel(List<AmbryStatsReport> statsReports,
+  private void registerTasks(StateMachineEngine engine, List<AmbryStatsReport> statsReports,
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
-    //Get the state machine engine
-    StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
-
     //Register MySqlReportAggregatorTask
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryStatsReport statsReport : statsReports) {
@@ -822,12 +835,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
 
     //Register state transition model
-    stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
+    engine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
 
     //Register tasks
     if (!taskFactoryMap.isEmpty()) {
-      stateMachineEngine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
           new TaskStateModelFactory(manager, taskFactoryMap));
     }
   }
@@ -878,8 +891,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
     try {
+      if (this.blockStateTransitionLatch != null && this.blockStateTransitionLatch.getCount() > 0) {
+        logger.info("Bootstrapping is waiting for blockStateTransitionLatch...");
+        this.blockStateTransitionLatch.await();
+      }
+      participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
       // 1. take actions in storage manager (add new replica if necessary)
       onPartitionBecomePreBootstrapFromOffline(partitionName);
       onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
@@ -895,6 +912,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (statsManagerListener != null) {
         statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
+    } catch (InterruptedException e) {
+      logger.error("Waiting for state transition to be unblocked was interrupted", e);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;

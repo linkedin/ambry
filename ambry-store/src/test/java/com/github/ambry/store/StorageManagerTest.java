@@ -2808,8 +2808,8 @@ public class StorageManagerTest {
           new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
           listener).onPartitionBecomeBootstrapFromOffline(anyString());
       helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
-      helixParticipant.participate();
-      helixParticipant.startStateMachineModel(Collections.emptyList(), null, null);
+      helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
+      helixParticipant.unblockStateTransition();
 
       clusterMap = new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
       localNode = clusterMap.getDataNodeId("localhost", clusterMapConfig.clusterMapPort);
@@ -3178,7 +3178,8 @@ public class StorageManagerTest {
     }
 
     @Override
-    public void participate() throws IOException {
+    public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+        Callback<AggregatedAccountStorageStats> callback) throws IOException {
       // no op
     }
 

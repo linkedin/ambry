@@ -208,7 +208,13 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
-    public void participate() {}
+    public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+        Callback<AggregatedAccountStorageStats> callback) {
+    }
+
+    @Override
+    public void unblockStateTransition() {
+    }
 
     @Override
     public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {

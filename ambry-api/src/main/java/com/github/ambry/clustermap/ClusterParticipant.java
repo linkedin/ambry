@@ -32,9 +32,18 @@ public interface ClusterParticipant extends AutoCloseable {
 
   /**
    * Initiate the participation of cluster participant.
+   * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
+   * @param accountStatsStore The {@link AccountStatsStore} to retrieve and store container stats.
+   * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException
    */
-  void participate() throws IOException;
+  void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+      Callback<AggregatedAccountStorageStats> callback) throws IOException;
+
+  /**
+   * Unblocks State Transition that was blocked in participate.
+   */
+  void unblockStateTransition();
 
   /**
    * Set the sealed state of the given replica.
@@ -214,13 +223,4 @@ public interface ClusterParticipant extends AutoCloseable {
     // The default should be to do nothing about disk order, so return false.
     return false;
   }
-
-  /**
-   * Start the state machine model and registers the tasks
-   * @param ambryStatsReports The list of {@link AmbryStatsReport} to start the state machine model.
-   * @param accountStatsStore The {@link AccountStatsStore} to start the state machine model.
-   * @param callback The callback to be called when the state machine model is started.
-   */
-  default void startStateMachineModel(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-      Callback<AggregatedAccountStorageStats> callback) {}
 }

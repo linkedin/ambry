@@ -342,7 +342,7 @@ public class AmbryServer {
         List<AmbryStatsReport> ambryStatsReports = getAmbryStatsReports(serverConfig);
 
         for (ClusterParticipant participant : clusterParticipants) {
-          participant.participate();
+          participant.participateAndBlockStateTransition(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
         }
 
         // wait for dataNode to be populated
@@ -406,9 +406,10 @@ public class AmbryServer {
                 skipPredicate);
         replicationManager.start();
 
-        logger.info("Registering State Machine model");
+        // unblock state transition
+        logger.info("Unblocking state transition");
         for (ClusterParticipant participant : clusterParticipants) {
-            participant.startStateMachineModel(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
+          participant.unblockStateTransition();
         }
 
         ArrayList<Port> ports = new ArrayList<Port>();

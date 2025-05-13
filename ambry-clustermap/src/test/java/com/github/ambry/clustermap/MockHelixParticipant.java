@@ -95,7 +95,8 @@ public class MockHelixParticipant extends HelixParticipant {
   }
 
   @Override
-  public void participate() throws IOException {
+  public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+      Callback<AggregatedAccountStorageStats> callback) throws IOException {
     // no op
   }
 

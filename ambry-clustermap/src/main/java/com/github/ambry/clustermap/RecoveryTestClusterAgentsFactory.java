@@ -87,7 +87,12 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
       // create a no op cluster participant that does nothing. Just sits idly by!!! ¯\_(ツ)_/¯
       ClusterParticipant clusterParticipant = new ClusterParticipant() {
         @Override
-        public void participate() {
+        public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryHealthReports, AccountStatsStore accountStatsStore,
+            Callback<AggregatedAccountStorageStats> callback) {
+        }
+
+        @Override
+        public void unblockStateTransition() {
         }
 
         @Override
