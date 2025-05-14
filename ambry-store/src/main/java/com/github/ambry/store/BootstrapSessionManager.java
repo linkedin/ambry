@@ -84,7 +84,7 @@ public class BootstrapSessionManager {
       throw new IllegalStateException("Failed to disable compaction for partition: " + partitionId);
     }
     BootstrapSession session = new BootstrapSession(partitionId, snapShotId, bootstrappingNodeId,
-        diskManagerConfig, enableCompactionOnTimerExpiryHandler);
+        diskManagerConfig, enableCompactionOnTimerExpiryHandler, enableCompactionOnTimerExpiryHandler);
     bootstrapSessionsMap
       .computeIfAbsent(bootstrappingNodeId, k -> new HashMap<>())
       .put(partitionId.getId(), session);

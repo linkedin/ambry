@@ -66,16 +66,19 @@ public class BootstrapSession {
    * @param partitionId          The ID of the partition being bootstrapped.
    * @param snapShotId           The ID of the snapshot being bootstrapped.
    * @param bootstrappingNodeId  The ID of the node that is bootstrapping the partition.
-   * @param diskManagerConfig
-   * @param onTimerExpiryHandler The handler to be called when the timer expires.
+   * @param diskManagerConfig     The configuration for the disk manager.
+   * @param onDefaultTimerExpiryHandler The handler to be called when the default timer expires.
+   * @param onTotalTimerExpiryHandler The handler to be called when the total timer expires.
    */
   public BootstrapSession(@Nonnull PartitionId partitionId, @Nonnull String snapShotId, @Nonnull String bootstrappingNodeId,
-      @Nonnull DiskManagerConfig diskManagerConfig, @Nonnull BiConsumer<String, PartitionId> onTimerExpiryHandler) {
+      @Nonnull DiskManagerConfig diskManagerConfig, @Nonnull BiConsumer<String, PartitionId> onDefaultTimerExpiryHandler,
+      @Nonnull BiConsumer<String, PartitionId> onTotalTimerExpiryHandler) {
     Objects.requireNonNull(partitionId, "partitionId cannot be null");
     Objects.requireNonNull(snapShotId, "snapShotId cannot be null");
     Objects.requireNonNull(bootstrappingNodeId, "bootstrappingNodeId cannot be null");
     Objects.requireNonNull(diskManagerConfig, "diskManagerConfig cannot be null");
-    Objects.requireNonNull(onTimerExpiryHandler, "onTimerExpiryHandler cannot be null");
+    Objects.requireNonNull(onDefaultTimerExpiryHandler, "onDefaultTimerExpiryHandler cannot be null");
+    Objects.requireNonNull(onTotalTimerExpiryHandler, "onTotalTimerExpiryHandler cannot be null");
 
     this.snapShotId = snapShotId;
     this.bootstrappingNodeId = bootstrappingNodeId;
@@ -83,7 +86,7 @@ public class BootstrapSession {
 
     this.deferralTimer = new ExtendableTimer(diskManagerConfig.diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds, () -> {
       logger.info("Deferral timer expired for snapshot: " + snapShotId);
-      onTimerExpiryHandler.accept(bootstrappingNodeId, partitionId);
+      onDefaultTimerExpiryHandler.accept(bootstrappingNodeId, partitionId);
 
       logger.info("Deferral timer expired for snapshot: " + snapShotId + ", stopping the timer");
       stop();
@@ -91,7 +94,7 @@ public class BootstrapSession {
 
     this.totalTimerSinceCompactionDisabled = new ExtendableTimer(diskManagerConfig.diskManagerDeferredCompactionTotalTimerTimeoutMilliseconds, () -> {
       logger.info("TotalTimerSinceCompactionDisabled timer expired for snapshot: " + snapShotId);
-      onTimerExpiryHandler.accept(bootstrappingNodeId, partitionId);
+      onTotalTimerExpiryHandler.accept(bootstrappingNodeId, partitionId);
 
       logger.info("TotalTimerSinceCompactionDisabled timer expired for snapshot: " + snapShotId + ", stopping the timer");
       stop();

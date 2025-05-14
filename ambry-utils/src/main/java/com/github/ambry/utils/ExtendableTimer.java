@@ -33,7 +33,7 @@ public class ExtendableTimer {
   /**
    * The time in milliseconds to schedule the task.
    */
-  private long scheduledTimeInMs;
+  private final long scheduledDelayInMs;
 
   /**
    * The requested task to be executed when the timer expires.
@@ -55,16 +55,16 @@ public class ExtendableTimer {
 
   /**
    * Constructor for ExtendableTimer.
-   * @param scheduledTimeInMs The time in milliseconds to schedule the task.
+   * @param scheduledDelayInMs The time in milliseconds to schedule the task.
    * @param task The task to be executed when the timer expires.
    */
-  public ExtendableTimer(long scheduledTimeInMs, Runnable task) {
+  public ExtendableTimer(long scheduledDelayInMs, Runnable task) {
     Objects.requireNonNull(task, "task cannot be null");
 
-    if (scheduledTimeInMs <= 0) {
-      throw new IllegalArgumentException("scheduledTimeInMs must be greater than 0");
+    if (scheduledDelayInMs <= 0) {
+      throw new IllegalArgumentException("scheduledDelayInMs must be greater than 0");
     }
-    this.scheduledTimeInMs = scheduledTimeInMs;
+    this.scheduledDelayInMs = scheduledDelayInMs;
     this.task = task;
   }
 
@@ -75,26 +75,23 @@ public class ExtendableTimer {
   public void start() {
     if (isRunning) return;
 
-    logger.info("Starting timer with delay of {} ms", scheduledTimeInMs);
-    scheduleTask(scheduledTimeInMs);
+    logger.info("Starting timer with delay of {} ms", scheduledDelayInMs);
+    scheduleTask(scheduledDelayInMs);
     isRunning = true;
   }
 
   /**
    * Extends the timer by the specified time in milliseconds.
-   * @param timeInMs The time in milliseconds to extend the timer.
+   * @param delayInMs The time in milliseconds to extend the timer.
    */
-  public void extend(long timeInMs) {
+  public void extend(long delayInMs) {
+    if (delayInMs <= 0) {
+      throw new IllegalArgumentException("delayInMs must be greater than 0");
+    }
     cancel();
 
-    // Add the time to the original scheduled time
-    scheduledTimeInMs += timeInMs;
-
-    // Calculate the delay in milliseconds from the current time
-    long delayInMs = scheduledTimeInMs - System.currentTimeMillis();
-
     // Reschedule the task with the new delay
-    logger.info("Extending timer by {} ms, new delay is {} ms", timeInMs, delayInMs);
+    logger.info("Extending timer by {} ms", delayInMs);
     scheduleTask(delayInMs);
   }
 

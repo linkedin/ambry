@@ -1,150 +1,99 @@
-/**
- * Copyright 2025 LinkedIn Corp. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- */
 package com.github.ambry.store;
 
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.config.DiskManagerConfig;
-import com.github.ambry.config.VerifiableProperties;
-import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
-
 
 /**
- * Unit tests for {@link BootstrapSessionManager}.
+ * Unit tests for {@link BootstrapSession}.
  */
 @RunWith(MockitoJUnitRunner.class)
-public class BootstrapSessionTest {
-  /**
-   * Mocked {@link DiskManager#controlCompactionForBlobStore} to control compaction for the blob store.
-   */
-  @Mock
-  private BiFunction<PartitionId, Boolean, Boolean> mockCompactionControl;
+public class BootstrapSessionTest extends BootstrapSessionManagerTest {
 
   /**
-   * Mocked {@link PartitionId} to be used in the tests.
-   */
-  @Mock
-  private PartitionId mockPartitionId;
-
-  /**
-   * Mocked {@link DiskManagerConfig} to be used in the tests.
-   */
-  private DiskManagerConfig diskManagerConfig;
-
-  private BootstrapSessionManager bootstrapSessionManager;
-
-  /**
-   * Default timer value for deferred compaction in test context.
-   */
-  private final int diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds = 300; // 0.3 seconds
-
-  /**
-   * Default timer value for total-timer-since-compaction-was-disabled in test context.
-   */
-  private final int diskManagerDeferredCompactionTotalTimerTimeoutMilliseconds = 1000; // 1 second
-
-  /**
-   * Setup method to initialize the {@link BootstrapSessionManager} and mock objects.
-   */
-  @Before
-  public void setup() {
-    when(mockCompactionControl.apply(any(), anyBoolean())).thenReturn(true);
-    when(mockPartitionId.getId()).thenReturn(100L);
-
-    Properties properties = new Properties();
-    properties.put("disk.manager.deferred.compaction.default.timer.timeout.milliseconds",
-        String.valueOf(diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds));
-    properties.put("disk.manager.deferred.compaction.total.timer.timeout.milliseconds",
-        String.valueOf(diskManagerDeferredCompactionTotalTimerTimeoutMilliseconds));
-    diskManagerConfig = new DiskManagerConfig(new VerifiableProperties(properties));
-
-    bootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, mockCompactionControl);
-    bootstrapSessionManager.enable();
-  }
-
-  /**
-   * Adds a bootstrap session. Test that the session is added correctly and that the compaction control is called.
+   * Test that {@link BootstrapSession#stop} cancels the timers before they trigger.
    */
   @Test
-  public void testAddAndStartBootstrapSession() {
-    bootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snapshot1", "node1");
-
-    BootstrapSession session = bootstrapSessionManager.getBootstrapSession(mockPartitionId, "node1");
-    assertNotNull(session);
-
-    assertEquals("snapshot1", session.getSnapShotId());
-    verify(mockCompactionControl).apply(mockPartitionId, false);
-  }
-
-  /**
-   * Adds & removes a bootstrap session and checks that the session is removed correctly.
-   */
-  @Test
-  public void testRemoveBootstrapSession() {
-    bootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snapshot2", "node2");
-    bootstrapSessionManager.removeBootstrapSession(mockPartitionId, "node2");
-
-    assertNull(bootstrapSessionManager.getBootstrapSession(mockPartitionId, "node2"));
-  }
-
-  /**
-   * Clears all sessions and checks that the sessions are removed correctly.
-   */
-  @Test
-  public void testClearAllSessions() {
-    bootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snap1", "nodeX");
-    bootstrapSessionManager.clearAllSessions();
-
-    assertNull(bootstrapSessionManager.getBootstrapSession(mockPartitionId, "nodeX"));
-  }
-
-  /**
-   *
-   */
-  @Test
-  public void testEnableCompactionOnTimerExpiryHandler() throws InterruptedException {
+  public void testStopCancelsTimersBeforeTrigger() throws InterruptedException {
     // Arrange
-    AtomicBoolean compactionEnabled = new AtomicBoolean(false);
-    BootstrapSessionManager testBootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, (partitionId1, enable) -> {
-      if (enable) {
-        compactionEnabled.set(true);
-      }
-      return true;
-    });
-    testBootstrapSessionManager.enable();
+    AtomicBoolean handlerCalled = new AtomicBoolean(false);
+    BootstrapSession session = new BootstrapSession(mockPartitionId, "snapshot1", "node1",
+        diskManagerConfig, (nodeId, partitionId) -> handlerCalled.set(true), (nodeId, partitionId) -> handlerCalled.set(true));
 
     // Act
-    testBootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snapshot4", "nodeZ");
+    session.start();
+    session.stop();
+    Thread.sleep(150); // The default timer in test context is configured to be 300ms. Let time pass, timers shouldn't fire.
 
-    // Wait for time with buffer (50% extra time considering the default timer in test context is configured to be 300ms.
-    // Less than 50% buffer could end up making this test flaky due to GC or other jvm delays)
-    long waitTimeMs = (long) (diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds * 1.5);
-    Thread.sleep(waitTimeMs);
+    // Assert
+    assertFalse("Timer handler should not have been called after stop()", handlerCalled.get());
+  }
 
-    assertTrue("Compaction should be re-enabled after deferral timer expiry", compactionEnabled.get());
-    assertNull("Bootstrap session should be cleaned up after timer expiry",
-        testBootstrapSessionManager.getBootstrapSession(mockPartitionId, "nodeZ"));
+  /**
+   * Test that the default timer can be extended and that it delays the handler.
+   */
+  @Test
+  public void testExtendDeferralTimerDelaysHandler() throws InterruptedException {
+    // Arrange
+    AtomicBoolean handlerCalled = new AtomicBoolean(false);
+    BootstrapSession session = new BootstrapSession(mockPartitionId, "snapshot1", "node1",
+        diskManagerConfig, (nodeId, partitionId) -> handlerCalled.set(true), (nodeId, partitionId) -> handlerCalled.set(true));
+    session.start();
+
+    // Sleep less than the original delay (300 ms)
+    Thread.sleep(250);
+
+    // Act
+    // Extend the deferral timer
+    session.extendDeferralTimer(500);
+
+    // Wait long enough to exceed original delay, but not the extended delay
+    // If Extend functionality is not working, this will trigger the handler as we have waited 350ms (250 + 100)
+    // after starting the session and this is more than the default timer of 300ms.
+    Thread.sleep(100);
+
+    // Assert
+    // Should not have triggered yet
+    assertFalse(handlerCalled.get());
+
+    // Wait more to exceed the extended delay
+    // We have waited 600ms (100 + 250) after extending the session and this is more than the extended timer of 500ms.
+    Thread.sleep(500);
+
+    assertTrue(handlerCalled.get());
+  }
+
+  /**
+   * Test that the total timer expires even if the deferral timer is extended.
+   */
+  @Test
+  public void testTotalTimerExpiresEvenIfDeferralTimerIsExtended() throws InterruptedException {
+    // Arrange
+    AtomicBoolean deferralHandlerCalled = new AtomicBoolean(false);
+    AtomicBoolean totalHandlerCalled = new AtomicBoolean(false);
+
+    BootstrapSession session = new BootstrapSession(mockPartitionId, "snapshot1", "node1",
+        diskManagerConfig, (nodeId, partitionId) -> deferralHandlerCalled.set(true), (nodeId, partitionId) -> totalHandlerCalled.set(true));
+    session.start();
+
+    // Act
+    // Repeatedly extend the deferral timer before it expires
+    for (int i = 0; i < 3; i++) {
+      Thread.sleep(250);  // less than deferralTimeout
+      session.extendDeferralTimer(300);  // push it further each time
+    }
+
+    // Wait a bit longer to allow total timer to expire
+    Thread.sleep(300);  // 4 * 250 + 300 = ~1300ms > 1000ms
+
+    // Assert
+    // The deferral timer should not have fired as it was restarted multiple times
+    assertFalse(deferralHandlerCalled.get());
+
+    // The total timer should have fired once, despite extensions
+    assertTrue(totalHandlerCalled.get());
   }
 }
