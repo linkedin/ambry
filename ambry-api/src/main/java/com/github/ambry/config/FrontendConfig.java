@@ -44,6 +44,7 @@ public class FrontendConfig {
   public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
   public static final String CONTAINER_METRICS_EXCLUDED_ACCOUNTS = PREFIX + "container.metrics.excluded.accounts";
   public static final String CONTAINER_METRICS_AGGREGATED_ACCOUNTS = PREFIX + "container.metrics.aggregated.accounts";
+  public static final String INVALID_ASCII_BLOB_NAME_CHARS = PREFIX + "invalid.ascii.blob.name.chars";
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
   public static final String CONTAINER_METRICS_ENABLED_REQUEST_TYPES = PREFIX + "container.metrics.enabled.request.types";
   public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES =
@@ -62,6 +63,8 @@ public class FrontendConfig {
       "DeleteBlob,GetBlob,GetBlobInfo,GetSignedUrl,PostBlob,UpdateBlobTtl,UndeleteBlob,PutBlob";
 
   private static final String DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = "GetBlob,GetBlobInfo,GetSignedUrl";
+
+  public static final String ENABLE_DELIMITER = PREFIX + "enable.delimiter";
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -143,6 +146,10 @@ public class FrontendConfig {
   @Config("frontend.path.prefixes.to.remove")
   @Default("")
   public final List<String> pathPrefixesToRemove;
+
+  @Config("frontend.enable.blob.name.rule.check")
+  @Default("false")
+  public final boolean enableBlobNameRuleCheck;
 
   /**
    * The secure path to validate if required for certain container.
@@ -293,6 +300,10 @@ public class FrontendConfig {
   @Default("")
   public final List<String> containerMetricsAggregatedAccounts;
 
+  @Config(INVALID_ASCII_BLOB_NAME_CHARS)
+  @Default("")
+  public final List<String> invalidAsciiBlobNameChars;
+
   /**
    * This should be controlled by {@link NettyConfig}.nettyEnableOneHundredContinue
    */
@@ -305,6 +316,13 @@ public class FrontendConfig {
   @Config(LIST_MAX_RESULTS)
   @Default("1000")
   public final int listMaxResults;
+
+  /**
+   * Set to true to enable delimiter support for S3 and Named blob API in frontend.
+   */
+  @Config(ENABLE_DELIMITER)
+  @Default("false")
+  public final boolean enableDelimiter;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
@@ -332,10 +350,13 @@ public class FrontendConfig {
     }
     pathPrefixesToRemove = Collections.unmodifiableList(
         pathPrefixesFromConfig.stream().map(this::stripLeadingAndTrailingSlash).collect(Collectors.toList()));
+    invalidAsciiBlobNameChars =
+        Utils.splitString(verifiableProperties.getString(INVALID_ASCII_BLOB_NAME_CHARS, ""), ",");
     chunkedGetResponseThresholdInBytes =
         verifiableProperties.getLong("frontend.chunked.get.response.threshold.in.bytes", 8192);
     allowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
+    enableBlobNameRuleCheck = verifiableProperties.getBoolean("frontend.enable.blob.name.rule.check", false);
     attachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
     containerMetricsEnabledRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_REQUEST_TYPES,
         DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES);
@@ -371,6 +392,7 @@ public class FrontendConfig {
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_AGGREGATED_ACCOUNTS, ""), ",");
     this.listMaxResults =
         verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
+    enableDelimiter = verifiableProperties.getBoolean(ENABLE_DELIMITER, false);
   }
 
   /**

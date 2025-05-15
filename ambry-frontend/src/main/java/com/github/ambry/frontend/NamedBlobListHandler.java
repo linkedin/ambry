@@ -143,13 +143,15 @@ public class NamedBlobListHandler {
       return buildCallback(frontendMetrics.listSecurityPostProcessRequestMetrics, securityCheckResult -> {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
-        // If DELIMITER is not equal to "/", then the directory grouping  is not supported.
+        // If DELIMITER is not equal to "/" or if it is not enabled in configs, then the directory grouping  is not
+        // supported.
         String delimiter = getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
+        boolean enableDelimiter = delimiter != null && delimiter.equals(DELIMITER) && frontendConfig.enableDelimiter;
         CallbackUtils.callCallbackAfter(
             listRecursively(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
                 namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(),
-                maxKeys == null ? frontendConfig.listMaxResults : Integer.parseInt(maxKeys),
-                delimiter != null && delimiter.equals(DELIMITER)), listBlobsCallback());
+                maxKeys == null ? frontendConfig.listMaxResults : Integer.parseInt(maxKeys), enableDelimiter),
+            listBlobsCallback());
       }, uri, LOGGER, finalCallback);
     }
 

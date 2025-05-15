@@ -492,7 +492,7 @@ public class AmbryServer {
           DisruptionService disruptionService = disruptionServiceFactory.getDisruptionService();
           ScheduledExecutorService scheduledExecutorService = Utils.newScheduler(1, "ambry-prioritization", false);
           replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager, clusterMap, nodeId, scheduledExecutorService, storageManager, replicationConfig,
-          helixClusterManager.getManagerQueryHelper(), disruptionService);
+          helixClusterManager.getManagerQueryHelper(), disruptionService, registry);
         }
 
       } else {

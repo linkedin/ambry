@@ -13,8 +13,11 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.utils.TestUtils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -23,10 +26,12 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -42,6 +47,7 @@ import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 import java.nio.file.Files;
 
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 /**
@@ -58,7 +64,13 @@ public class FileStoreTest {
 
   private FileStore fileStore;
   private File tempDir;
+  private File reserveFileDir;
   private FileCopyBasedReplicationConfig _fileCopyBasedReplicationConfig;
+  private DiskSpaceAllocator diskSpaceAllocator;
+  private static final int SEGMENT_CAPACITY = 512;
+  private static final int SEGMENT_COUNT = 2;
+  private static final String STORE_ID = "0";
+  private static final String STORE_DIR_PREFIX = "reserve_store_";
 
   /**
    * Sets up the test environment before each test.
@@ -69,8 +81,13 @@ public class FileStoreTest {
     tempDir = Files.createTempDirectory("FileStoreTest").toFile();
     Properties props = new Properties();
     _fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(props));
-    fileStore = new FileStore(tempDir.getAbsolutePath());
-    fileStore.start();
+    reserveFileDir = new File(tempDir, "reserve-files");
+    StorageManagerMetrics storeManagerMetrics = new StorageManagerMetrics(new MetricRegistry());
+    diskSpaceAllocator = new DiskSpaceAllocator(true, reserveFileDir, 0, storeManagerMetrics);
+    diskSpaceAllocator.initializePool(
+        Arrays.asList(new DiskSpaceRequirements(STORE_ID, SEGMENT_CAPACITY, SEGMENT_COUNT, 0)));
+    fileStore = new FileStore(tempDir.getAbsolutePath(), diskSpaceAllocator);
+    fileStore.start(SEGMENT_CAPACITY);
   }
 
   /**
@@ -82,7 +99,7 @@ public class FileStoreTest {
     assertTrue("FileStore should be running after start", fileStore.isRunning());
     fileStore.stop();
     assertFalse("FileStore should not be running after stop", fileStore.isRunning());
-    fileStore.start();
+    fileStore.start(SEGMENT_CAPACITY);
     assertTrue("FileStore should be running after restart", fileStore.isRunning());
   }
 
@@ -299,5 +316,96 @@ public class FileStoreTest {
       fileStore.stop();
     }
     // TemporaryFolder rule handles cleanup automatically
+  }
+
+  /**
+   * Tests the successful allocation of a file using the allocateFile method.
+   * Verifies that:
+   * - The file is created successfully.
+   * - The reserve pool count is updated correctly.
+   */
+  @Test
+  public void testAllocateFileSuccess() throws Exception {
+    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
+    File file = new File(filePath);
+    // Validate if pool has enough files
+    assertFalse(file.exists());
+    assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
+    // Call allocateFile
+    fileStore.allocateFile(filePath, STORE_ID);
+    // Validate if file is created
+    assertTrue(file.exists());
+    assertEquals(SEGMENT_COUNT-1, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
+  }
+
+  /**
+   * Tests the behavior of the allocateFile method when the file already exists.
+   * Expects a FileStoreException to be thrown.
+   */
+  @Test
+  public void testAllocateFileAlreadyExists() throws Exception {
+    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
+    File file = new File(filePath);
+    if (file.createNewFile()) {
+      assertException(FileStoreException.class, () -> fileStore.allocateFile(filePath, STORE_ID), e -> {
+        assertEquals("Unexpected exception thrown",
+            new FileStoreException("Error while allocating file in path " + filePath + " for store: " + STORE_ID,
+                FileStoreException.FileStoreErrorCode.FileStoreFileAllocationFailed), e);
+      });
+    } else {
+      throw new RuntimeException("Failed to create test file");
+    }
+  }
+
+  /**
+   * Tests the successful cleanup of a file using the cleanFile method.
+   * Verifies that:
+   * - The file is deleted successfully.
+   * - The reserve pool count is updated correctly.
+   */
+  @Test
+  public void testCleanFileSuccess() throws Exception {
+    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
+    File file = new File(filePath);
+    // Validate if pool has enough files
+    assertFalse(file.exists());
+    assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
+    // Call allocateFile
+    fileStore.allocateFile(filePath, STORE_ID);
+    // Validate if file is created
+    assertTrue(file.exists());
+    assertEquals(SEGMENT_COUNT-1, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
+    // Clean File
+    fileStore.cleanFile(filePath, STORE_ID);
+    // Validate if file is deleted
+    assertFalse(file.exists());
+    assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
+  }
+
+  /**
+   * Tests the behavior of the cleanFile method when the file does not exist.
+   * Expects a FileStoreException to be thrown.
+   */
+  @Test
+  public void testCleanFileWhichDoesntExist() throws Exception {
+    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
+    assertException(FileStoreException.class, () -> fileStore.cleanFile(filePath, STORE_ID), e -> {
+      assertEquals("Unexpected exception thrown",
+          new FileStoreException("Error while freeing file in path " + filePath + " for store: " + STORE_ID,
+              FileStoreException.FileStoreErrorCode.FileStoreFileFailedCleanUp), e);
+    });
+  }
+
+  /**
+   * Returns the number of segments remaining in the reserve pool for the given store ID and segment size.
+   * @param storeId the ID of the store.
+   * @param segmentSize the size of the segment.
+   * @return the number of segments remaining in the reserve pool.
+   */
+  int getReservePoolRemainingSegmentCount(String storeId, int segmentSize) {
+    File storeReserveDir = new File(reserveFileDir, STORE_DIR_PREFIX + storeId);
+    File fileSizeDir = new File(storeReserveDir, DiskSpaceAllocator.generateFileSizeDirName(segmentSize));
+    String[] filenameList = fileSizeDir.list();
+    return filenameList == null ? 0 : filenameList.length;
   }
 }
