@@ -55,6 +55,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
         }
       }
       staleResultList.removeAll(failedResults);
+      // do batch delete here?
       namedBlobDb.cleanupStaleData(staleResultList);
       logger.info("Named Blobs Cleanup Runner is completed for {} stale cases (there are {} failed cases)",
           staleResultList.size(), failedResults.size());
