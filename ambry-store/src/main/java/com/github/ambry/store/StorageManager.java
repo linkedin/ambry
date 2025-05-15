@@ -949,7 +949,7 @@ public class StorageManager implements StoreManager {
         // For case 3, we should throw exception to make replica stay in ERROR state (thus, frontends won't pick this replica)
         // For case 4, we check it's current used capacity and put it in BOOTSTRAP state if necessary. This is to ensure
         //             it catches up with peers before serving PUT traffic (or being selected as LEADER)
-        store = getStore(replica.getPartitionId(), false);
+        store = getStore(replica.getPartitionId(), true);
 
         // store should be in started if this is not a first time added replica
         // as we will start all stores on the host during a restart
@@ -973,19 +973,19 @@ public class StorageManager implements StoreManager {
 
         // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
         // it to stay in BOOTSTRAP state when catching up with peers.
-        long storeUsedCapacity = store.getSizeInBytes();
-        if (storeUsedCapacity <= HEADER_SIZE) {
-          logger.info(
-              "Store {} has used capacity {} less than or equal to {} bytes, consider it recently created and make it go through bootstrap process.",
-              partitionName, storeUsedCapacity, HEADER_SIZE);
-          try {
-            createBootstrapFileIfAbsent(replica);
-          } catch (IOException e) {
-            logger.error("Failed to create bootstrap file for store {}", partitionName);
-            throw new StateTransitionException("Failed to create bootstrap file for " + partitionName,
-                ReplicaOperationFailure);
-          }
-        }
+//        long storeUsedCapacity = store.getSizeInBytes();
+//        if (storeUsedCapacity <= HEADER_SIZE) {
+//          logger.info(
+//              "Store {} has used capacity {} less than or equal to {} bytes, consider it recently created and make it go through bootstrap process.",
+//              partitionName, storeUsedCapacity, HEADER_SIZE);
+//          try {
+//            createBootstrapFileIfAbsent(replica);
+//          } catch (IOException e) {
+//            logger.error("Failed to create bootstrap file for store {}", partitionName);
+//            throw new StateTransitionException("Failed to create bootstrap file for " + partitionName,
+//                ReplicaOperationFailure);
+//          }
+//        }
       }
     }
 

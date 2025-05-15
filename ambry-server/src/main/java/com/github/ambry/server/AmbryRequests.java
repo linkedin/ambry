@@ -1716,7 +1716,7 @@ public class AmbryRequests implements RequestAPI {
           throw new StoreException("BlobStore is not available for partition " +
               fileCopyGetMetaDataRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
         }
-        List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(true);
+        List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(false);
 
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,

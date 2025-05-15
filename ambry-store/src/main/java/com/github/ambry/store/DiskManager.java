@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -200,11 +201,13 @@ public class DiskManager {
         }
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
-            if(Arrays.asList(20l).contains(partitionAndStore.getKey().getId())) {
+            if(Arrays.asList(419l).contains(partitionAndStore.getKey().getId())) {
               partitionAndStore.getValue().initialize();
-              logger.info("FCH TEST: Contents Of Directory Before Clean up Is: {}" + new File(partitionAndStore.getValue().getDataDir()).listFiles());
+              logger.info("FCH TEST: Contents Of Directory {} Before Clean up Is: {}",partitionAndStore.getValue().getDataDir()  ,Arrays.stream(new File(partitionAndStore.getValue().getDataDir()).listFiles()).map(File::getName).collect(
+                  Collectors.toList()));
               partitionAndStore.getValue().getFileStore().cleanUpDirectory(partitionAndStore.getValue().getDataDir());
-              logger.info("FCH TEST: Contents Of Directory After Clean up Is: {}" + new File(partitionAndStore.getValue().getDataDir()).listFiles());
+
+              logger.info("FCH TEST: Contents Of Directory {} After Clean up Is: {}", partitionAndStore.getValue().getDataDir(),  new File(partitionAndStore.getValue().getDataDir()).listFiles());
             }
             else
               partitionAndStore.getValue().start();

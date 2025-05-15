@@ -148,17 +148,19 @@ public class FileCopyBasedReplicationManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-      List<Long> partitionIds = Arrays.asList(20l);
+      List<Long> partitionIds = Arrays.asList(419l);
 
-      logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
+      logger.info("FCH TEST: All Partitions to be hydrated are: {}", storeManager.getLocalPartitions().stream().map(
           PartitionId::getId).collect(Collectors.toList()));
-
       List<PartitionId> partitionIdList =
           storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
-      if(!partitionIdList.stream().map(x -> x.getId()).collect(Collectors.toList()).contains(partitionName)) {
+      logger.info("FCH TEST: Partitions to be checked for hydration are: {}", partitionIdList);
+      if(!partitionName.equals("419")) {
         logger.warn("FCH TEST: Partition {} is not part of the list of partitions to be hydrated up. Ignoring state change", partitionName);
         return;
       }
+
+      logger.info("Started hydration for partitions {}", partitionName);
 
       if(!isRunning){
         logger.info("FCH TEST: FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
@@ -193,16 +195,17 @@ public class FileCopyBasedReplicationManager {
 
       try {
         logger.info("FCH TEST: Waiting for File Copy to be completed for Replica: {}", replicaId.getPartitionId().toPathString());
-        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+        //replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
         logger.info("FCH TEST: File Copy Completed for Replica: {}", replicaId.getPartitionId().toPathString());
-      } catch (InterruptedException e) {
+      } catch (Exception e) {
         logger.error("File copy for partition {} was interrupted", partitionName);
         throw new StateTransitionException("File copy for partition " + partitionName + " was interrupted",
             StateTransitionException.TransitionErrorCode.FileCopyProtocolFailure);
-      } catch (StateTransitionException e){
-        logger.error("File copy for partition {} failed", partitionName);
-        throw e;
       }
+//      } catch (StateTransitionException e){
+//        logger.error("File copy for partition {} failed", partitionName);
+//        throw e;
+//      }
     }
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {

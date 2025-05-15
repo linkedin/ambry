@@ -32,13 +32,12 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,6 +83,8 @@ public class FileStore implements PartitionFileStore {
 
   // Lock for write operations in Filestore
   private final Object storeWriteLock = new Object();
+
+  private SegmentFileTracker segmentTracker;
 
   /**
    * Creates a new FileStore instance.
@@ -140,7 +141,7 @@ public class FileStore implements PartitionFileStore {
       throws StoreException, IOException {
     // Verify service is running before proceeding
     validateIfFileStoreIsRunning();
-
+    long startTime = System.currentTimeMillis();
     File file = validateAndGetFile(fileName);
     if (!isChunked) {
       return new StoreFileChunk(new DataInputStream(Files.newInputStream(file.toPath())), file.length());
@@ -152,7 +153,6 @@ public class FileStore implements PartitionFileStore {
       }
       // Seek to the specified offset
       randomAccessFile.seek(offset);
-
       // Allocate buffer for reading data
       ByteBuffer buf = ByteBuffer.allocate((int) size);
 
@@ -165,6 +165,7 @@ public class FileStore implements PartitionFileStore {
       }
       // Prepare buffer for reading
       buf.flip();
+      logger.info("Time taken For Chunk Read is {} milliseconds", System.currentTimeMillis() - startTime);
       // return file chunk buffer read
       return StoreFileChunk.from(buf);
     } catch (FileNotFoundException e) {
@@ -179,6 +180,22 @@ public class FileStore implements PartitionFileStore {
     }
   }
 
+  public SegmentFileTracker createFileAndReturnSegmentTracker(String fileName){
+    RandomAccessFile randomAccessFile = null;
+    try {
+      File file = new File(partitionToMountPath + File.separator + fileName);
+      if (!file.exists()) {
+        file.createNewFile();
+      }
+      randomAccessFile = new RandomAccessFile(file, "rw");
+      segmentTracker = new SegmentFileTracker(randomAccessFile);
+      return segmentTracker;
+    } catch (IOException e) {
+      logger.error("Error while creating file: {}", fileName, e);
+    }
+
+  }
+
   /**
    * Writes data from an input stream to a file.
    * @param outputFilePath  The path where the file should be written
@@ -190,7 +207,7 @@ public class FileStore implements PartitionFileStore {
   public void writeStoreFileChunkToDisk(String outputFilePath, StoreFileChunk storeFileChunk) throws IOException {
     // Verify service is running
     validateIfFileStoreIsRunning();
-
+    long startTime = System.currentTimeMillis();
     // Validate input
     Objects.requireNonNull(storeFileChunk, "storeFileChunk must not be null");
     Objects.requireNonNull(storeFileChunk.getStream(), "dataInputStream in storeFileChunk must not be null");
@@ -199,12 +216,9 @@ public class FileStore implements PartitionFileStore {
     // Can add buffered streaming to avoid memory overusage if multiple threads calling FileStore.
     // Read the entire file content into memory
     int fileSize = storeFileChunk.getStream().available();
-    storeFileChunk.getStream().reset();
-    logger.info("FCH TEST: File size of the array is started");
     logger.info("FCH TEST: File size of the array is {}", fileSize);
     byte[] content = Utils.readBytesFromStream(storeFileChunk.getStream(), fileSize);
-    fileSize = storeFileChunk.getStream().available();
-    logger.info("FCH TEST: File size of the array is {}", fileSize);
+    logger.info("FCH TEST: Time taken for Chunk Coversion is {} milliseconds", System.currentTimeMillis() - startTime);
 
     try {
       synchronized (storeWriteLock) {
@@ -219,6 +233,7 @@ public class FileStore implements PartitionFileStore {
         // Write content to file with create and append options, which will create a new file if file doesn't exist
         // and append to the existing file if file exists
         Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
+        logger.info("FCH TEST: Time taken for File Write is {} milliseconds", System.currentTimeMillis() - startTime);
       }
     } catch (Exception e) {
       logger.error("Error while writing chunk to file: {}", outputFilePath, e);
@@ -251,7 +266,7 @@ public class FileStore implements PartitionFileStore {
         if (!srcDirPath.startsWith(partitionToMountPath +  File.separator)) {
           throw new IOException("Source directory is not under mount path: " + partitionToMountPath);
         }
-        if (!destDirPath.startsWith(partitionToMountPath + File.separator)) {
+        if (!destDirPath.startsWith(partitionToMountPath)) {
           throw new IOException("Destination directory is not under mount path: " + partitionToMountPath);
         }
 
@@ -302,6 +317,7 @@ public class FileStore implements PartitionFileStore {
     // Verify service is running.
     validateIfFileStoreIsRunning();
 
+    logger.info("FCH TEST: Cleaning up directory: {}", srcPath);
     // Validate input.
     Objects.requireNonNull(srcPath, "srcPath must not be null");
 
@@ -311,15 +327,24 @@ public class FileStore implements PartitionFileStore {
         if (!Files.exists(source)) {
           throw new IOException("Source directory does not exist: " + srcPath);
         }
-        Files.walk(source)
-            .sorted((o1, o2) -> o2.compareTo(o1)) // Sort in reverse order to delete files before directories
-            .forEach(path -> {
-              try {
-                Files.delete(path);
-              } catch (IOException e) {
-                logger.error("Error deleting file or directory: {}", path, e);
-              }
-            });
+        try (Stream<Path> entries = Files.list(source)) {
+          entries.forEach(path -> {
+            try {
+              // Recursively walk and delete each child path
+              Files.walk(path)
+                  .sorted(Comparator.reverseOrder()) // Delete children before parents
+                  .forEach(p -> {
+                    try {
+                      Files.delete(p);
+                    } catch (IOException e) {
+                      System.err.println("Failed to delete: " + p + " - " + e.getMessage());
+                    }
+                  });
+            } catch (IOException e) {
+              System.err.println("Failed to walk path: " + path + " - " + e.getMessage());
+            }
+          });
+        }
       }
     } catch (Exception e) {
       logger.error("Unexpected error while cleaning up directory: {}", srcPath, e);

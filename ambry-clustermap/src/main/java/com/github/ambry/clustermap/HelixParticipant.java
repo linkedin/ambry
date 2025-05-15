@@ -881,13 +881,21 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
     try {
       // 1. take actions in storage manager (add new replica if necessary)
-      onPartitionBecomePreBootstrapFromOffline(partitionName);
+      try{
+        onPartitionBecomePreBootstrapFromOffline(partitionName);
+      }catch (Exception e){
+        logger.error("Error in onPartitionBecomePreBootstrapFromOffline", e);
+        localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+        throw e;
+      }
 
       PartitionStateChangeListener fileCopyStateChangeListener =
           partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
 
       if (fileCopyStateChangeListener != null) {
         fileCopyStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+
       }
 
       onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
@@ -905,7 +913,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
-      throw e;
+      try {
+        throw e;
+      } catch (InterruptedException ex) {
+        throw new RuntimeException(ex);
+      }
     }
     logger.info("Before setting partition {} to bootstrap", partitionName);
     localPartitionAndState.put(partitionName, ReplicaState.BOOTSTRAP);
@@ -913,7 +925,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
-  public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+  public void onPartitionBecomeStandbyFromBootstrap(String partitionName){
     participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
     try {
       // 1. take actions in replication manager (wait for replica to finish bootstrapping)

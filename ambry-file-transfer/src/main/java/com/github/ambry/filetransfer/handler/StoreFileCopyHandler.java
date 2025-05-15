@@ -281,6 +281,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
     FileCopyGetChunkResponse chunkResponse = null;
     try {
+      fileStore.
       chunkResponse =
           getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME, fileCopyInfo, fileChunkInfo,false);
       String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
