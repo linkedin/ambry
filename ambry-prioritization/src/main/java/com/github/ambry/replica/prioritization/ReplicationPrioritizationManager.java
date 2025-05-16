@@ -28,6 +28,7 @@ import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replica.prioritization.disruption.Operation;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -392,7 +393,15 @@ public class ReplicationPrioritizationManager implements Runnable {
    * Process any partitions that have completed replication.
    */
   private void processCompletedPartitions() {
-    currentlyReplicatingPriorityPartitions.stream().filter(this::hasCompletedReplication).forEach(completedPartitions::add);
+    for (PartitionId partitionId : currentlyReplicatingPriorityPartitions) {
+      try {
+        if (hasCompletedReplication(partitionId)) {
+          completedPartitions.add(partitionId);
+        }
+      } catch (Exception e) {
+        logger.error("Error checking replication status for partition {} {}", partitionId, e.getMessage());
+      }
+    }
 
     // Remove completed partitions from current set
     currentlyReplicatingPriorityPartitions.removeAll(completedPartitions);
@@ -591,7 +600,21 @@ public class ReplicationPrioritizationManager implements Runnable {
   public boolean hasCompletedReplication(PartitionId partitionId) {
 
     // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
-    ReplicaState state = storageManager.getStore(partitionId).getCurrentState();
+
+    Store store = storageManager.getStore(partitionId);
+    if (store == null) {
+      logger.error("Store not found for partition {}", partitionId);
+      return true;
+    }
+
+    ReplicaState state = store.getCurrentState();
+
+    if (state == null) {
+      logger.error("Replica state not found for partition {}", partitionId);
+      return true;
+    }
+
+    logger.debug("Found state {} for partition {}", state, partitionId);
     return state == ReplicaState.STANDBY || state == ReplicaState.LEADER || state == ReplicaState.ERROR;
   }
 
