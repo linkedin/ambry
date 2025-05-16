@@ -81,11 +81,4 @@ public interface PrioritizationManager {
    */
   boolean removeInProgressReplica(DiskId diskId, ReplicaId replicaId);
 
-  /**
-   * Returns the number of disks that are currently in the prioritization manager.
-   * @return the number of disks.
-   */
-  int getNumberOfDisks();
-
-  void reset();
 }

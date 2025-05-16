@@ -34,4 +34,9 @@ public class DefaultDisruptionService implements DisruptionService {
 
     return partitionOperationsMap;
   }
+
+  @Override
+  public List<PartitionId> sortByDisruptions(List<PartitionId> partitionIds) {
+    return partitionIds;
+  }
 }
