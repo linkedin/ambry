@@ -42,6 +42,9 @@ public enum ServerErrorCode {
   BlobLifeVersionConflict,
   BlobNotDeleted,
   BlobAlreadyUndeleted,
-  BlobDeletedPermanently
+  BlobDeletedPermanently,
+  SnapshotUnavailable,
+  SnapshotNotFound,
+  SnapshotMismatch
 }
 //@formatter:on

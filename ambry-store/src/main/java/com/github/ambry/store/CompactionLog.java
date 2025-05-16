@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Represents a record of the compaction process and helps in recovery in case of crashes.
  */
-class CompactionLog implements Closeable {
+public class CompactionLog implements Closeable {
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
@@ -79,7 +79,7 @@ class CompactionLog implements Closeable {
    * @param storeId the ID of the store under compaction.
    * @return whether compaction is in progress for the store.
    */
-  static boolean isCompactionInProgress(String dir, String storeId) {
+  public static boolean isCompactionInProgress(String dir, String storeId) {
     return new File(dir, storeId + COMPACTION_LOG_SUFFIX).exists();
   }
 

@@ -280,4 +280,9 @@ public interface Store {
    * @return
    */
   List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment);
+
+  /**
+   * Returns True if compaction is in progress
+   */
+  boolean isCompactionInProgress();
 }

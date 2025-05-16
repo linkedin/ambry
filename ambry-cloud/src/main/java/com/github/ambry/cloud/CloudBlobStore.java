@@ -742,6 +742,11 @@ public class CloudBlobStore implements Store {
   }
 
   @Override
+  public boolean isCompactionInProgress() {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void purge(List<MessageInfo> infosToPurge) throws StoreException {
     throw new UnsupportedOperationException("Method not supported");
   }

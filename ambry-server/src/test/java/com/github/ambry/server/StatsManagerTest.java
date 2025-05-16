@@ -726,6 +726,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isCompactionInProgress() {
+      throw new UnsupportedOperationException("Method not supported");
+    }
+
+    @Override
     public boolean isInitialized() {
       throw new IllegalStateException("Not implemented");
     }
