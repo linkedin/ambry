@@ -74,6 +74,7 @@ public class DiskManager {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
+  private final BootstrapSessionManager bootstrapSessionManager;
   private final Set<String> stoppedReplicas;
   private final DiskMetrics diskMetrics;
   private final List<ReplicaStatusDelegate> replicaStatusDelegates;
@@ -169,6 +170,7 @@ public class DiskManager {
       }
     }
     compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
+    bootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, this::controlCompactionForBlobStore);
   }
 
   /**
@@ -231,6 +233,7 @@ public class DiskManager {
       }
       diskSpaceAllocator.initializePool(requirementsList);
       compactionManager.enable();
+      bootstrapSessionManager.enable();
       running = true;
       if (diskHealthCheck.isEnabled()) {
         logger.info("Starting Disk Healthchecker");
@@ -316,6 +319,7 @@ public class DiskManager {
     try {
       running = false;
       compactionManager.disable();
+      bootstrapSessionManager.disable();
       diskIOScheduler.disable();
       final AtomicInteger numFailures = new AtomicInteger(0);
       List<Thread> shutdownThreads = new ArrayList<>();
@@ -428,7 +432,7 @@ public class DiskManager {
    * @param enabled whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
-  boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+  public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     rwLock.readLock().lock();
     boolean succeed = false;
     try {
@@ -899,6 +903,10 @@ public class DiskManager {
    */
   public List<File> getFilesForPattern(Pattern pattern) throws IOException {
     return Utils.getFilesForPattern(this.disk.getMountPath(), pattern);
+  }
+
+  public BootstrapSessionManager getBootstrapSessionManager() {
+    return bootstrapSessionManager;
   }
 
   /**

@@ -429,6 +429,14 @@ public class StorageManager implements StoreManager {
     return partitionToDiskManager.get(id);
   }
 
+  public BootstrapSessionManager getBootstrapSessionManager(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    if (diskManager == null) {
+      throw new IllegalArgumentException("Failed to find disk manager for partition " + id);
+    }
+    return diskManager.getBootstrapSessionManager();
+  }
+
   /**
    * Only exposed to test
    * @return {@link StoreMetrics}.
