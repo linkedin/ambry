@@ -394,6 +394,7 @@ public class ReplicationPrioritizationManager implements Runnable {
   private void processCompletedPartitions() {
     currentlyReplicatingPriorityPartitions.stream().filter(this::hasCompletedReplication).forEach(completedPartitions::add);
 
+    replicationPrioritizationMetrics.recordPartitionReplicationComplete(completedPartitions.size());
     // Remove completed partitions from current set
     currentlyReplicatingPriorityPartitions.removeAll(completedPartitions);
     replicationPrioritizationMetrics.updateCurrentlyReplicatingPriorityPartitions(currentlyReplicatingPriorityPartitions);
