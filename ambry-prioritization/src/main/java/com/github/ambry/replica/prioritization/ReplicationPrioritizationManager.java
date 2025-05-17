@@ -598,24 +598,22 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @return true if replication is complete (bootstrap finished)
    */
   public boolean hasCompletedReplication(PartitionId partitionId) {
-
-    // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
-
     Store store = storageManager.getStore(partitionId);
-    if (store == null) {
-      logger.error("Store not found for partition {}", partitionId);
+
+    if (store != null && store.isStarted()) {
+      ReplicaState state = store.getCurrentState();
+      if (state == null) {
+        logger.error("Replica state not found for partition {}", partitionId);
+        return true;
+      }
+
+      logger.debug("Found state {} for partition {}", state, partitionId);
+      // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
+      return state == ReplicaState.STANDBY || state == ReplicaState.LEADER || state == ReplicaState.ERROR;
+    } else {
+      logger.error("Store not started or not found for partition {}. Will try this partition in next run", partitionId);
       return true;
     }
-
-    ReplicaState state = store.getCurrentState();
-
-    if (state == null) {
-      logger.error("Replica state not found for partition {}", partitionId);
-      return true;
-    }
-
-    logger.debug("Found state {} for partition {}", state, partitionId);
-    return state == ReplicaState.STANDBY || state == ReplicaState.LEADER || state == ReplicaState.ERROR;
   }
 
 
