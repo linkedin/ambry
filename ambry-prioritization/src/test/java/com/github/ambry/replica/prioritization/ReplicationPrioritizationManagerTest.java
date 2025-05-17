@@ -130,6 +130,14 @@ public class ReplicationPrioritizationManagerTest {
     when(storageManager.getStore(partition3)).thenReturn(store3);
     when(storageManager.getStore(partition4)).thenReturn(store4);
     when(storageManager.getStore(partition5)).thenReturn(store5);
+
+    // Setup Stores
+    when(store1.isStarted()).thenReturn(true);
+    when(store2.isStarted()).thenReturn(true);
+    when(store3.isStarted()).thenReturn(true);
+    when(store4.isStarted()).thenReturn(true);
+    when(store5.isStarted()).thenReturn(true);
+
     partitionToStoreMap = new HashMap<>();
     partitionToStoreMap.put(partition1, store1);
     partitionToStoreMap.put(partition2, store2);
