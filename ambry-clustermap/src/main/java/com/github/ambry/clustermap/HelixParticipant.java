@@ -145,6 +145,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
+    //Register state transition model
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
@@ -611,6 +612,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return success;
   }
 
+  /**
+   * With auto-registration instanceConfig is populated on participant registration, also triggering state transition
+   * We have a latch that blocks state transition until this method is called, which is called after listeners of
+   * StorageManager, StatsManager, and ReplicationManager is registered
+   */
   @Override
   public void unblockStateTransition() {
       this.blockStateTransitionLatch.countDown();
@@ -833,10 +839,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           context -> new PropertyStoreCleanUpTask(context.getManager(), dataNodeConfigSource, clusterMapConfig,
               metricRegistry));
     }
-
-    //Register state transition model
-    engine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
 
     //Register tasks
     if (!taskFactoryMap.isEmpty()) {
