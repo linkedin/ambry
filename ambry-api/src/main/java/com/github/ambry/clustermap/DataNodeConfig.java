@@ -26,7 +26,7 @@ import java.util.TreeMap;
 /**
  * A data object for configs scoped to a single data node.
  */
-class DataNodeConfig {
+public class DataNodeConfig {
   private final String instanceName;
   private final String hostName;
   private final int port;
@@ -52,7 +52,7 @@ class DataNodeConfig {
    * @param rackId an identifier for the rack or cabinet that the server is in for computing failure domains.
    * @param xid  the xid for this server.
    */
-  DataNodeConfig(String instanceName, String hostName, int port, String datacenterName, Integer sslPort,
+  public DataNodeConfig(String instanceName, String hostName, int port, String datacenterName, Integer sslPort,
       Integer http2Port, String rackId, long xid) {
     this.instanceName = instanceName;
     this.hostName = hostName;
@@ -67,7 +67,7 @@ class DataNodeConfig {
   /**
    * @return a name that can be used as a unique key for this server.
    */
-  String getInstanceName() {
+  public String getInstanceName() {
     return instanceName;
   }
 

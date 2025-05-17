@@ -703,6 +703,14 @@ public class MockClusterMap implements ClusterMap {
   }
 
   /**
+   * Invoke clustermap change listener for Data node configs
+   * @param dataNodeConfigs List of dataNodeConfigs
+   */
+  public void invokeListenerForDataNodeChange(List<DataNodeConfig> dataNodeConfigs) {
+    clusterMapChangeListener.onDataNodeConfigChange(dataNodeConfigs);
+  }
+
+  /**
    * Sets the local datacenter name and changes the views of the partition classes. Not thread safe.
    * @param localDatacenterName the name of the local datacenter
    */
