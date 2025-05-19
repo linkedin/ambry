@@ -32,17 +32,21 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class FileCopyPrioritizationManager extends Thread implements PrioritizationManager {
-  DisruptionService disruptionService;
-  String datacenterName;
-  ClusterManagerQueryHelper clusterManagerQueryHelper;
-  CountDownLatch shutDownLatch = new CountDownLatch(1);
-  ReentrantLock lock = new ReentrantLock(true);
-  Map<DiskId, LinkedHashSet<ReplicaId>> disIdToReplicaQueue = new HashMap<>();
-  Set<ReplicaId> inProgressReplicas = new HashSet<>();
+  private final DisruptionService disruptionService;
+  private final String datacenterName;
+  private final ClusterManagerQueryHelper clusterManagerQueryHelper;
+  private final CountDownLatch shutDownLatch = new CountDownLatch(1);
+  private final ReentrantLock lock = new ReentrantLock(true);
+  private final Map<DiskId, LinkedHashSet<ReplicaId>> disIdToReplicaQueue = new HashMap<>();
+  private final Set<ReplicaId> inProgressReplicas = new HashSet<>();
   boolean running = true;
+
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
 
   public FileCopyPrioritizationManager(DisruptionService disruptionService, String datacenterName,
       ClusterManagerQueryHelper clusterManagerQueryHelper) {
@@ -55,38 +59,60 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   public void run() {
     while (running) {
       lock.lock();
-      disIdToReplicaQueue.keySet().forEach(diskId -> {
-        LinkedHashSet<ReplicaId> replicaIds = disIdToReplicaQueue.get(diskId);
-        Map<PartitionId, ReplicaId> partitionIdReplicaIdMap = new HashMap<>();
-        replicaIds.forEach(replicaId -> {
-          partitionIdReplicaIdMap.put(replicaId.getPartitionId(), replicaId);
+      try {
+        disIdToReplicaQueue.keySet().forEach(diskId -> {
+          LinkedHashSet<ReplicaId> replicaIds = disIdToReplicaQueue.get(diskId);
+          Map<PartitionId, ReplicaId> partitionIdReplicaIdMap = new HashMap<>();
+          replicaIds.forEach(replicaId -> {
+            partitionIdReplicaIdMap.put(replicaId.getPartitionId(), replicaId);
+          });
+          List<PartitionId> partitionIds =
+              replicaIds.stream().map(ReplicaId::getPartitionId).collect(Collectors.toList());
+
+          Set<PartitionId> belowMinActivePartitionIds = new HashSet<>(filterBelowMinActiveReplicas(partitionIds));
+          Set<PartitionId> equalsMinActivePartitionIds = new HashSet<>(filterEqualsMinActiveReplicas(partitionIds));
+          List<PartitionId> partitionIdsByDisruption = disruptionService.sortByDisruptions(partitionIds);
+
+          LinkedHashSet<PartitionId> belowMinActivePartitionIdsByDisruption = new LinkedHashSet<>();
+          LinkedHashSet<PartitionId> equalsMinActivePartitionIdsByDisruption = new LinkedHashSet<>();
+
+          partitionIdsByDisruption.forEach(partitionId -> {
+            if (belowMinActivePartitionIds.contains(partitionId)) {
+              belowMinActivePartitionIdsByDisruption.add(partitionId);
+            }
+            if (equalsMinActivePartitionIds.contains(partitionId)) {
+              equalsMinActivePartitionIdsByDisruption.add(partitionId);
+            }
+          });
+
+          LinkedHashSet<PartitionId> partitionIdSet = new LinkedHashSet<>();
+          partitionIdSet.addAll(belowMinActivePartitionIdsByDisruption);
+          partitionIdSet.addAll(equalsMinActivePartitionIdsByDisruption);
+          partitionIdSet.addAll(partitionIds);
+
+          LinkedHashSet<ReplicaId> sortedReplicas = new LinkedHashSet<>();
+          partitionIdSet.forEach(partitionId -> {
+            sortedReplicas.add(partitionIdReplicaIdMap.get(partitionId));
+          });
+          disIdToReplicaQueue.put(diskId, sortedReplicas);
         });
-        List<PartitionId> partitionIds =
-            replicaIds.stream().map(ReplicaId::getPartitionId).collect(Collectors.toList());
-        List<PartitionId> belowMinActivePartitionIds = filterBelowMinActiveReplicas(partitionIds);
-        List<PartitionId> partitionIdsByDisruption = disruptionService.sortByDisruptions(partitionIds);
-        LinkedHashSet<PartitionId> partitionIdSet = new LinkedHashSet<>();
-        partitionIdSet.addAll(belowMinActivePartitionIds);
-        partitionIdSet.addAll(partitionIdsByDisruption);
-        LinkedHashSet<ReplicaId> sortedReplicas = new LinkedHashSet<>();
-        partitionIdSet.forEach(partitionId -> {
-          sortedReplicas.add(partitionIdReplicaIdMap.get(partitionId));
-        });
-        disIdToReplicaQueue.put(diskId, sortedReplicas);
-      });
-      lock.unlock();
+      } finally {
+        lock.unlock();
+      }
     }
     shutDownLatch.countDown();
   }
 
   @Override
   public void shutdown() {
+    logger.info("Shutting down the Prioritization Manager.");
     running = false;
     try {
       shutDownLatch.await();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
+    } catch (Exception e) {
+      logger.error("There was an error while waiting for shut down.", e);
     }
+    logger.info("Shut down of the Prioritization Manager completed.");
   }
 
   @Override
@@ -136,7 +162,8 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   @Override
   public boolean removeReplica(DiskId diskId, ReplicaId replicaId) {
     lock.lock();
-    boolean wasElementPresent = inProgressReplicas.remove(replicaId);
+    LinkedHashSet<ReplicaId> replicaQueue = disIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
+    boolean wasElementPresent = replicaQueue.remove(replicaId);
     lock.unlock();
     return wasElementPresent;
   }
@@ -145,6 +172,8 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   public boolean removeInProgressReplica(DiskId diskId, ReplicaId replicaId) {
     lock.lock();
     boolean wasElementPresent = inProgressReplicas.remove(replicaId);
+    LinkedHashSet<ReplicaId> replicaQueue = disIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
+    replicaQueue.remove(replicaId);
     lock.unlock();
     return wasElementPresent;
   }
@@ -155,11 +184,17 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
         .collect(Collectors.toList());
   }
 
-  private int getMinActiveReplicas(PartitionId partitionId) {
+  private List<PartitionId> filterEqualsMinActiveReplicas(List<PartitionId> partitionIds) {
+    return partitionIds.stream()
+        .filter(partitionId -> calculateLocalReplicaCount(partitionId) == getMinActiveReplicas(partitionId))
+        .collect(Collectors.toList());
+  }
+
+  int getMinActiveReplicas(PartitionId partitionId) {
     return clusterManagerQueryHelper.getMinActiveReplicas(partitionId);
   }
 
-  private int calculateLocalReplicaCount(PartitionId partition) {
+  int calculateLocalReplicaCount(PartitionId partition) {
     Set<ReplicaState> states = new HashSet<>(Arrays.asList(ReplicaState.LEADER, ReplicaState.STANDBY));
     Map<ReplicaState, List<AmbryReplica>> localDCReplicas =
         (Map<ReplicaState, List<AmbryReplica>>) partition.getReplicaIdsByStates(states, datacenterName);
