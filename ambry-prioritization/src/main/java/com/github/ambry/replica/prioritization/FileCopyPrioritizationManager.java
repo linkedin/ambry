@@ -36,6 +36,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Manages the prioritization of file copy operations for replicas across disks.
+ * This class ensures that replicas are processed in a prioritized order based on
+ * disruption service and replica states, while maintaining thread safety.
+ */
 public class FileCopyPrioritizationManager extends Thread implements PrioritizationManager {
   private final DisruptionService disruptionService;
   private final String datacenterName;
@@ -55,6 +60,14 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     this.clusterManagerQueryHelper = clusterManagerQueryHelper;
   }
 
+  /**
+   * This always keeps running
+   * For each disk's pending queue, it calculates belowMinActiveReplicas
+   * then sorts these by disruption priority and adds to the result, and then it calculates equalMinActiveReplicas
+   * then sorts these by disruption priority, and adds these to result next, and it then
+   * sorts remaining replicas by disruption priority and adds these result
+   * Then the current pending queue is replaced by the result
+   */
   @Override
   public void run() {
     while (running) {
@@ -103,6 +116,11 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     shutDownLatch.countDown();
   }
 
+  /**
+   * Shuts down the prioritization manager gracefully.
+   * Sets {@link #running} to false
+   * and waits until run method exits
+   */
   @Override
   public void shutdown() {
     logger.info("Shutting down the Prioritization Manager.");
@@ -120,6 +138,13 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     return running;
   }
 
+  /**
+   * Returns the partitions for disk by order of priority
+   * and removes these from the queue , everytime different partitions get removed
+   * @param diskId the {@link DiskId} for which the list of partitions should be replicated.
+   * @param numberOfReplicasPerDisk the number of replicas that should be replicated from the given disk.
+   * @return {@link List<ReplicaId>} replica ids for disk
+   */
   @Override
   public List<ReplicaId> getPartitionListForDisk(DiskId diskId, int numberOfReplicasPerDisk) {
     lock.lock();
@@ -140,6 +165,11 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     return returnList;
   }
 
+  /**
+   * Returns the in-progress replicas for the disk
+   * @param diskId the {@link DiskId} for which the list of partitions are in progress.
+   * @return {@link List<ReplicaId>} replica ids for disk
+   */
   @Override
   public List<ReplicaId> getInProgressReplicaIdsForDisk(DiskId diskId) {
     lock.lock();
@@ -149,6 +179,11 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     return inProgressReplicasForDisk;
   }
 
+  /**
+   * Adds replicas to a queue which will be prioritized
+   * @param replicaId the {@link ReplicaId} to add.
+   * @return true if replica is added , false if replica is already present
+   */
   @Override
   public boolean addReplica(ReplicaId replicaId) {
     lock.lock();
@@ -159,6 +194,12 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     return isAlreadyPresent;
   }
 
+  /**
+   * Removes the replicas from the queue
+   * @param diskId the {@link DiskId} that the replicas are on.
+   * @param replicaId the {@link ReplicaId} to remove.
+   * @return true if replica was removed, false otherwise
+   */
   @Override
   public boolean removeReplica(DiskId diskId, ReplicaId replicaId) {
     lock.lock();
@@ -168,6 +209,12 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     return wasElementPresent;
   }
 
+  /**
+   * Removes the replicas from in progress and pending queue
+   * @param diskId the {@link DiskId} that the replicas are on.
+   * @param replicaId the {@link ReplicaId} to remove.
+   * @return true if replica was removed, false otherwise
+   */
   @Override
   public boolean removeInProgressReplica(DiskId diskId, ReplicaId replicaId) {
     lock.lock();
