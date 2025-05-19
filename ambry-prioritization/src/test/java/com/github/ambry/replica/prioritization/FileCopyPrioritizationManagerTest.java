@@ -25,7 +25,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -58,7 +57,7 @@ public class FileCopyPrioritizationManagerTest {
     currentDataNodeId = clusterMap.getDataNodeIds().get(0);
     clusterMap.createNewPartition(clusterMap.getDataNodes(), 0);
     prioritizationManager = new FileCopyPrioritizationManager(disruptionService, "DC1", clusterManagerQueryHelper);
-    when(clusterManagerQueryHelper.getMinActiveReplicas(any())).thenReturn(2);
+    when(clusterManagerQueryHelper.getMinActiveReplicas(any())).thenReturn(0);
     prioritizationManager.start();
   }
 
@@ -131,7 +130,7 @@ public class FileCopyPrioritizationManagerTest {
   }
 
   @Test
-  public void testReplicaOrderingBasedOnDisruptionService() {
+  public void testReplicaOrderingBasedOnDisruptionService() throws InterruptedException {
     DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
 
     clusterMap.createNewPartition(Collections.singletonList((MockDataNodeId) dataNodeId), 0);
@@ -165,23 +164,36 @@ public class FileCopyPrioritizationManagerTest {
     PartitionId partition1 = replica1.getPartitionId();
     PartitionId partition2 = replica2.getPartitionId();
     PartitionId partition3 = replica3.getPartitionId();
-    when(disruptionService.sortByDisruptions(anyList())).thenAnswer(invocation -> {
-      List<PartitionId> partitions = invocation.getArgument(0);
-      return partitions.stream().sorted((p1, p2) -> {
-        if (p1.equals(partition2)) {
-          return -1;
-        }
-        if (p1.equals(partition1)) {
-          return 0;
-        }
-        return 1;
-      }).collect(Collectors.toList());
-    });
-
-    // Add replicas to the prioritization manager
     prioritizationManager.addReplica(replica1);
     prioritizationManager.addReplica(replica2);
     prioritizationManager.addReplica(replica3);
+
+    when(disruptionService.sortByDisruptions(anyList())).thenAnswer(invocation -> {
+      List<PartitionId> partitions = invocation.getArgument(0);
+
+      List<PartitionId> result = new ArrayList<>();
+      if (partitions.contains(partition2)) {
+        partitions.remove(partition2);
+        result.add(partition2);
+      }
+
+      if (partitions.contains(partition1)) {
+        partitions.remove(partition1);
+        result.add(partition1);
+      }
+
+      if (partitions.contains(partition3)) {
+        partitions.remove(partition3);
+        result.add(partition3);
+      }
+
+      result.addAll(partitions);
+
+      return result;
+    });
+
+    // Add replicas to the prioritization manager
+    prioritizationManager.runPrioritizationCycle();
 
     // Retrieve replicas for the disk
     List<ReplicaId> sortedReplicas = prioritizationManager.getPartitionListForDisk(disk, 3);

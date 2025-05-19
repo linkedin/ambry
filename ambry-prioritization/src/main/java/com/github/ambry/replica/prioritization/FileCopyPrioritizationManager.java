@@ -75,49 +75,93 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   @Override
   public void run() {
     while (running) {
-      lock.lock();
-      try {
-        disIdToReplicaQueue.keySet().forEach(diskId -> {
-          LinkedHashSet<ReplicaId> replicaIds = disIdToReplicaQueue.get(diskId);
-          Map<PartitionId, ReplicaId> partitionIdReplicaIdMap = new HashMap<>();
-          replicaIds.forEach(replicaId -> {
-            partitionIdReplicaIdMap.put(replicaId.getPartitionId(), replicaId);
-          });
-          List<PartitionId> partitionIds =
-              replicaIds.stream().map(ReplicaId::getPartitionId).collect(Collectors.toList());
-
-          Set<PartitionId> belowMinActivePartitionIds = new HashSet<>(filterBelowMinActiveReplicas(partitionIds));
-          Set<PartitionId> equalsMinActivePartitionIds = new HashSet<>(filterEqualsMinActiveReplicas(partitionIds));
-          List<PartitionId> partitionIdsByDisruption = disruptionService.sortByDisruptions(partitionIds);
-
-          LinkedHashSet<PartitionId> belowMinActivePartitionIdsByDisruption = new LinkedHashSet<>();
-          LinkedHashSet<PartitionId> equalsMinActivePartitionIdsByDisruption = new LinkedHashSet<>();
-
-          partitionIdsByDisruption.forEach(partitionId -> {
-            if (belowMinActivePartitionIds.contains(partitionId)) {
-              belowMinActivePartitionIdsByDisruption.add(partitionId);
-            }
-            if (equalsMinActivePartitionIds.contains(partitionId)) {
-              equalsMinActivePartitionIdsByDisruption.add(partitionId);
-            }
-          });
-
-          LinkedHashSet<PartitionId> partitionIdSet = new LinkedHashSet<>();
-          partitionIdSet.addAll(belowMinActivePartitionIdsByDisruption);
-          partitionIdSet.addAll(equalsMinActivePartitionIdsByDisruption);
-          partitionIdSet.addAll(partitionIds);
-
-          LinkedHashSet<ReplicaId> sortedReplicas = new LinkedHashSet<>();
-          partitionIdSet.forEach(partitionId -> {
-            sortedReplicas.add(partitionIdReplicaIdMap.get(partitionId));
-          });
-          disIdToReplicaQueue.put(diskId, sortedReplicas);
-        });
-      } finally {
-        lock.unlock();
-      }
+      runPrioritizationCycle();
     }
     shutDownLatch.countDown();
+  }
+
+  public void runPrioritizationCycle() {
+    try {
+      //TODO - Take lock on disk level for improved add/remove performance and add notify based timer to shutdown
+      lock.lock();
+      disIdToReplicaQueue.keySet().forEach(diskId -> {
+        LinkedHashSet<ReplicaId> replicaIds = disIdToReplicaQueue.get(diskId);
+        if (replicaIds.isEmpty()) {
+          return;
+        }
+        logger.trace("current queue at starting cycle disk {} is {}", diskId, replicaIds);
+        Map<PartitionId, ReplicaId> partitionIdReplicaIdMap = new HashMap<>();
+        replicaIds.forEach(replicaId -> {
+          partitionIdReplicaIdMap.put(replicaId.getPartitionId(), replicaId);
+        });
+        List<PartitionId> partitionIds =
+            replicaIds.stream().map(ReplicaId::getPartitionId).collect(Collectors.toList());
+        logger.trace("at starting partition ids are for disk {} are {}", diskId, partitionIds);
+
+        Set<PartitionId> belowMinActivePartitionIds =
+            new HashSet<>(filterBelowMinActiveReplicas(new ArrayList<>(partitionIds)));
+        Set<PartitionId> equalsMinActivePartitionIds =
+            new HashSet<>(filterEqualsMinActiveReplicas(new ArrayList<>(partitionIds)));
+        List<PartitionId> partitionIdsByDisruption = disruptionService.sortByDisruptions(new ArrayList<>(partitionIds));
+
+        logger.trace("below min active partition ids disk {} partition {}", diskId, belowMinActivePartitionIds);
+        logger.trace("below equals active partition ids disk {} partition {}", diskId, equalsMinActivePartitionIds);
+        logger.trace("partition ids by disruption for disk {} partition {}", diskId, partitionIdsByDisruption);
+
+        LinkedHashSet<PartitionId> belowMinActivePartitionIdsByDisruption = new LinkedHashSet<>();
+        LinkedHashSet<PartitionId> equalsMinActivePartitionIdsByDisruption = new LinkedHashSet<>();
+
+        partitionIdsByDisruption.forEach(partitionId -> {
+          if (belowMinActivePartitionIds.contains(partitionId)) {
+            belowMinActivePartitionIdsByDisruption.add(partitionId);
+          }
+          if (equalsMinActivePartitionIds.contains(partitionId)) {
+            equalsMinActivePartitionIdsByDisruption.add(partitionId);
+          }
+        });
+
+        LinkedHashSet<PartitionId> partitionIdSet = new LinkedHashSet<>();
+        partitionIdSet.addAll(belowMinActivePartitionIdsByDisruption);
+        partitionIdSet.addAll(equalsMinActivePartitionIdsByDisruption);
+        partitionIdSet.addAll(partitionIdsByDisruption);
+        partitionIdSet.addAll(partitionIds);
+
+        logger.trace("all partition ids at end are for disk {} partition {}", diskId, partitionIds);
+        logger.trace("below min partition sorted are for disk {} partition {}", diskId,
+            belowMinActivePartitionIdsByDisruption);
+        logger.trace("equals min partition sorted are for disk {} partiton {}", diskId, equalsMinActivePartitionIds);
+        logger.trace("all partition ids sorted are for disk {} partition {}", diskId, partitionIdSet);
+
+        LinkedHashSet<ReplicaId> sortedReplicas = new LinkedHashSet<>();
+        partitionIdSet.forEach(partitionId -> {
+          sortedReplicas.add(partitionIdReplicaIdMap.get(partitionId));
+        });
+        logger.trace("current queue for disk {} is {}", diskId, sortedReplicas);
+
+        LinkedHashSet<ReplicaId> prevReplicas = disIdToReplicaQueue.get(diskId);
+        logIfQueueChanged(diskId, prevReplicas, sortedReplicas);
+        disIdToReplicaQueue.put(diskId, sortedReplicas);
+      });
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private void logIfQueueChanged(DiskId diskId, LinkedHashSet<ReplicaId> previousQueue,
+      LinkedHashSet<ReplicaId> newQueue) {
+    if (previousQueue.size() != newQueue.size()) {
+      logger.info("For disk {} queue has changed from {} to {}", diskId, previousQueue, newQueue);
+      return;
+    }
+
+    List<ReplicaId> previousQueueList = new ArrayList<>(previousQueue);
+    List<ReplicaId> newQueueList = new ArrayList<>(newQueue);
+
+    for (int i = 0; i < previousQueueList.size(); i++) {
+      if (previousQueueList.get(i).equals(newQueueList.get(i))) {
+        logger.info("For disk {} queue has changed from {} to {}", diskId, previousQueue, newQueue);
+      }
+    }
   }
 
   /**
@@ -166,6 +210,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     disIdToReplicaQueue.put(diskId, remainingSet);
     inProgressReplicas.addAll(returnList);
     lock.unlock();
+    logger.info("Returning replicas for disk {} are {}", diskId, returnList);
     return returnList;
   }
 
@@ -191,9 +236,11 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   @Override
   public boolean addReplica(ReplicaId replicaId) {
     lock.lock();
+    logger.info("Adding replica {}", replicaId);
     DiskId diskId = replicaId.getDiskId();
     disIdToReplicaQueue.putIfAbsent(diskId, new LinkedHashSet<>());
     boolean isAlreadyPresent = disIdToReplicaQueue.get(diskId).add(replicaId);
+    logger.trace("after adding queue for disk {} is {}", diskId, disIdToReplicaQueue.get(diskId));
     lock.unlock();
     return isAlreadyPresent;
   }
@@ -207,6 +254,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   @Override
   public boolean removeReplica(DiskId diskId, ReplicaId replicaId) {
     lock.lock();
+    logger.info("removing replica {} from disk {}", replicaId, diskId);
     LinkedHashSet<ReplicaId> replicaQueue = disIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
     boolean wasElementPresent = replicaQueue.remove(replicaId);
     lock.unlock();
@@ -222,6 +270,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   @Override
   public boolean removeInProgressReplica(DiskId diskId, ReplicaId replicaId) {
     lock.lock();
+    logger.info("Removing in progress replica {} disk {}", replicaId, diskId);
     boolean wasElementPresent = inProgressReplicas.remove(replicaId);
     LinkedHashSet<ReplicaId> replicaQueue = disIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
     replicaQueue.remove(replicaId);
