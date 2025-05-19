@@ -48,7 +48,7 @@ public class BootstrapSessionManager {
    * It takes a PartitionId and a boolean indicating whether to enable or disable compaction.
    * Returns true if the operation is successful, false otherwise.
    */
-  private BiFunction<PartitionId, Boolean, Boolean> controlCompactionForBlobStore;
+  private final BiFunction<PartitionId, Boolean, Boolean> controlCompactionForBlobStore;
 
   private static final Logger logger = LoggerFactory.getLogger(BootstrapSessionManager.class);
 
@@ -78,11 +78,7 @@ public class BootstrapSessionManager {
     Objects.requireNonNull(bootstrappingNodeId, "bootstrappingNodeId cannot be null");
     validateBootstrapSessionManagerIsRunningOrThrow();
 
-    boolean isSucceeded = controlCompactionForBlobStore.apply(partitionId, false);
-    if (!isSucceeded) {
-      logger.error("Failed to disable compaction for partition: " + partitionId);
-      throw new IllegalStateException("Failed to disable compaction for partition: " + partitionId);
-    }
+    controlCompactionForBlobStore(partitionId, false);
     BootstrapSession session = new BootstrapSession(partitionId, snapShotId, bootstrappingNodeId,
         diskManagerConfig, enableCompactionOnTimerExpiryHandler, enableCompactionOnTimerExpiryHandler);
     bootstrapSessionsMap
@@ -106,6 +102,8 @@ public class BootstrapSessionManager {
       session.stop();
       bootstrapSessionsMap.get(bootstrappingNodeId).remove(partitionId.getId());
     }
+    // Enable compaction for the blob store
+    controlCompactionForBlobStore(partitionId, true);
   }
 
   /**
@@ -159,6 +157,8 @@ public class BootstrapSessionManager {
   public void clearAllSessions() {
     for (HashMap<Long, BootstrapSession> sessions : bootstrapSessionsMap.values()) {
       for (BootstrapSession session : sessions.values()) {
+        // Enable compaction for the blob store
+        controlCompactionForBlobStore(session.getPartitionId(), true);
         session.stop();
       }
     }
@@ -170,12 +170,7 @@ public class BootstrapSessionManager {
    * It takes the bootstrapping node ID and the partition ID as parameters.
    */
   private final BiConsumer<String, PartitionId> enableCompactionOnTimerExpiryHandler = (bootstrappingNodeId, partitionId) -> {
-    logger.info("Enabling compaction for partition: " + partitionId);
-    boolean isSucceeded = controlCompactionForBlobStore.apply(partitionId, true);
-    if (!isSucceeded) {
-      logger.error("Failed to enable compaction for partition: " + partitionId);
-      throw new IllegalStateException("Failed to enable compaction for partition: " + partitionId);
-    }
+    controlCompactionForBlobStore(partitionId, true);
 
     // Remove the session from the map
     // if bootstrappingNodeId has no sessions, remove the bootstrappingNodeId key from the map
@@ -186,6 +181,21 @@ public class BootstrapSessionManager {
       return v.isEmpty() ? null : v;
     });
   };
+
+  /**
+   * Controls the compaction for the blob store. Checks if the operation is successful and throws an exception if not.
+   * @param partitionId The partition ID for which to control compaction.
+   * @param enable true to enable compaction, false to disable it.
+   */
+  private void controlCompactionForBlobStore(PartitionId partitionId, boolean enable) {
+    if (!controlCompactionForBlobStore.apply(partitionId, enable)) {
+      String message = "Failed to " + (enable ? "enable" : "disable") + " compaction for partition: " + partitionId;
+      logger.error(message);
+      throw new IllegalStateException(message);
+    } else {
+      logger.info("Compaction " + (enable ? "enabled" : "disabled") + " for partition: " + partitionId);
+    }
+  }
 
   /**
    * Checks if the BootstrapSessionManager is running.

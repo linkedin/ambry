@@ -44,9 +44,12 @@ public class DiskManagerConfig {
   @Default("5")
   public final int diskManagerDiskHealthCheckOperationTimeoutSeconds;
 
+  // Timers used in Deferred Compaction
+  // DefaultTimer is extendable and in every getChunk Api call, this is extended.
   @Config("disk.manager.deferred.compaction.default.timer.timeout.milliseconds")
   public final long diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds;
 
+  // TotalTimer is not extendable and this helps avoid infinite Compaction starvation.
   @Config("disk.manager.deferred.compaction.total.timer.timeout.milliseconds")
   public final long diskManagerDeferredCompactionTotalTimerTimeoutMilliseconds;
 

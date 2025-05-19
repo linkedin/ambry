@@ -57,6 +57,11 @@ public class BootstrapSessionManagerTest {
   private BootstrapSessionManager bootstrapSessionManager;
 
   /**
+   * Mocked {@link BootstrapSessionManager} with a custom compaction handler to be used in the tests.
+   */
+  private BootstrapSessionManager bootstrapSessionManagerWithCompactionHandler;
+
+  /**
    * Default timer value for deferred compaction in test context.
    */
   private final int diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds = 300; // 0.3 seconds
@@ -65,6 +70,9 @@ public class BootstrapSessionManagerTest {
    * Default timer value for total-timer-since-compaction-was-disabled in test context.
    */
   private final int diskManagerDeferredCompactionTotalTimerTimeoutMilliseconds = 1000; // 1 second
+
+  private final AtomicBoolean compactionEnabled = new AtomicBoolean(false);
+
 
   /**
    * Setup method to initialize the {@link BootstrapSessionManager} and mock objects.
@@ -83,6 +91,14 @@ public class BootstrapSessionManagerTest {
 
     bootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, mockCompactionControl);
     bootstrapSessionManager.enable();
+
+    bootstrapSessionManagerWithCompactionHandler = new BootstrapSessionManager(diskManagerConfig, (partitionId1, enable) -> {
+      if (enable) {
+        compactionEnabled.set(true);
+      }
+      return true;
+    });
+    bootstrapSessionManagerWithCompactionHandler.enable();
   }
 
   /**
@@ -90,15 +106,21 @@ public class BootstrapSessionManagerTest {
    */
   @Test
   public void testAddAndStartBootstrapSession() {
+    // Arrange
+    reset();
     bootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snapshot1", "node1");
 
+    // Act
     BootstrapSession session = bootstrapSessionManager.getBootstrapSession(mockPartitionId, "node1");
-    assertNotNull(session);
 
+    // Assert
+    assertNotNull(session);
     assertEquals("snapshot1", session.getSnapShotId());
     assertEquals("node1", session.getBootstrappingNodeId());
     assertEquals(mockPartitionId, session.getPartitionId());
-    verify(mockCompactionControl).apply(mockPartitionId, false);
+
+    // Verify that compaction control was called one with the correct parameters
+    verify(mockCompactionControl, times(1)).apply(mockPartitionId, false);
   }
 
   /**
@@ -106,10 +128,17 @@ public class BootstrapSessionManagerTest {
    */
   @Test
   public void testRemoveBootstrapSession() {
-    bootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snapshot2", "node2");
-    bootstrapSessionManager.removeBootstrapSession(mockPartitionId, "node2");
+    // Arrange
+    reset();
 
-    assertNull(bootstrapSessionManager.getBootstrapSession(mockPartitionId, "node2"));
+    bootstrapSessionManagerWithCompactionHandler.addAndStartBootstrapSession(mockPartitionId, "snapshot2", "node2");
+
+    // Act
+    bootstrapSessionManagerWithCompactionHandler.removeBootstrapSession(mockPartitionId, "node2");
+
+    // Assert
+    assertNull(bootstrapSessionManagerWithCompactionHandler.getBootstrapSession(mockPartitionId, "node2"));
+    assertTrue("Compaction should be re-enabled after session removal", compactionEnabled.get());
   }
 
   /**
@@ -117,10 +146,35 @@ public class BootstrapSessionManagerTest {
    */
   @Test
   public void testClearAllSessions() {
-    bootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snap1", "nodeX");
-    bootstrapSessionManager.clearAllSessions();
+    // Arrange
+    reset();
 
-    assertNull(bootstrapSessionManager.getBootstrapSession(mockPartitionId, "nodeX"));
+    AtomicBoolean compactionEnabledForNode1 = new AtomicBoolean(false);
+    AtomicBoolean compactionEnabledForNode2 = new AtomicBoolean(false);
+
+    BootstrapSessionManager testBootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, (partitionId1, enable) -> {
+      if (enable) {
+        if (compactionEnabledForNode1.get()) {
+          compactionEnabledForNode2.set(true);
+        } else {
+          compactionEnabledForNode1.set(true);
+        }
+      }
+      return true;
+    });
+    testBootstrapSessionManager.enable();
+
+    testBootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snap1", "nodeX");
+    testBootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snap2", "nodeY");
+
+    // Act
+    testBootstrapSessionManager.clearAllSessions();
+
+    // Assert
+    assertNull(testBootstrapSessionManager.getBootstrapSession(mockPartitionId, "nodeX"));
+    assertNull(testBootstrapSessionManager.getBootstrapSession(mockPartitionId, "nodeY"));
+    assertTrue("Compaction should be re-enabled after session removal", compactionEnabledForNode1.get());
+    assertTrue("Compaction should be re-enabled after session removal", compactionEnabledForNode2.get());
   }
 
   /**
@@ -130,17 +184,10 @@ public class BootstrapSessionManagerTest {
   @Test
   public void testEnableCompactionOnTimerExpiryHandler() throws InterruptedException {
     // Arrange
-    AtomicBoolean compactionEnabled = new AtomicBoolean(false);
-    BootstrapSessionManager testBootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, (partitionId1, enable) -> {
-      if (enable) {
-        compactionEnabled.set(true);
-      }
-      return true;
-    });
-    testBootstrapSessionManager.enable();
+    reset();
 
     // Act
-    testBootstrapSessionManager.addAndStartBootstrapSession(mockPartitionId, "snapshot4", "nodeZ");
+    bootstrapSessionManagerWithCompactionHandler.addAndStartBootstrapSession(mockPartitionId, "snapshot4", "nodeZ");
 
     // Wait for time with buffer (50% extra time considering the default timer in test context is configured to be 300ms.
     // Less than 50% buffer could end up making this test flaky due to GC or other jvm delays)
@@ -149,6 +196,10 @@ public class BootstrapSessionManagerTest {
 
     assertTrue("Compaction should be re-enabled after deferral timer expiry", compactionEnabled.get());
     assertNull("Bootstrap session should be cleaned up after timer expiry",
-        testBootstrapSessionManager.getBootstrapSession(mockPartitionId, "nodeZ"));
+        bootstrapSessionManagerWithCompactionHandler.getBootstrapSession(mockPartitionId, "nodeZ"));
+  }
+
+  private void reset() {
+    compactionEnabled.set(false);
   }
 }
