@@ -63,6 +63,9 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup postBlobMetricsGroup;
   public final RestRequestMetricsGroup postAccountsMetricsGroup;
   public final RestRequestMetricsGroup postDatasetsMetricsGroup;
+  public final RestRequestMetricsGroup postMultipartAbortMetricsGroup;
+  public final RestRequestMetricsGroup postMultipartCompleteMetricsGroup;
+  public final RestRequestMetricsGroup postMultipartCreateMetricsGroup;
 
   // PUT
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
@@ -135,7 +138,6 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics getDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getDatasetsSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics copyDatasetsSecurityPostProcessRequestMetrics;
-
 
   public final AsyncOperationTracker.Metrics listDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics listDatasetsSecurityPostProcessRequestMetrics;
@@ -374,6 +376,16 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, metricRegistry, frontendConfig);
     postDatasetsMetricsGroup =
         new RestRequestMetricsGroup(PostDatasetsHandler.class, "PostDatasets", false, metricRegistry, frontendConfig);
+    postMultipartAbortMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostMultipartAbort", false, metricRegistry,
+            frontendConfig);
+    postMultipartCompleteMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostMultipartComplete", false, metricRegistry,
+            frontendConfig);
+    postMultipartCreateMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostMultipartCreate", false, metricRegistry,
+            frontendConfig);
+
     // PUT
     updateBlobTtlMetricsGroup =
         new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, metricRegistry, frontendConfig);
@@ -381,7 +393,6 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, metricRegistry, frontendConfig);
     putBlobMetricsGroup =
         new RestRequestMetricsGroup(NamedBlobPutHandler.class, "PutBlob", false, metricRegistry, frontendConfig);
-
 
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
@@ -511,7 +522,8 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "RetentionRequest", metricRegistry);
 
     s3DeleteHandleMetrics = new AsyncOperationTracker.Metrics(S3DeleteHandler.class, "S3Handle", metricRegistry);
-    s3BatchDeleteHandleMetrics = new AsyncOperationTracker.Metrics(S3BatchDeleteHandler.class, "S3Handle", metricRegistry);
+    s3BatchDeleteHandleMetrics =
+        new AsyncOperationTracker.Metrics(S3BatchDeleteHandler.class, "S3Handle", metricRegistry);
     s3ListHandleMetrics = new AsyncOperationTracker.Metrics(S3ListHandler.class, "S3Handle", metricRegistry);
     s3PutHandleMetrics = new AsyncOperationTracker.Metrics(S3PutHandler.class, "S3Handle", metricRegistry);
     s3GetHandleMetrics = new AsyncOperationTracker.Metrics(S3GetHandler.class, "S3Handle", metricRegistry);
