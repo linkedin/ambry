@@ -40,6 +40,10 @@ import org.slf4j.LoggerFactory;
  * Manages the prioritization of file copy operations for replicas across disks.
  * This class ensures that replicas are processed in a prioritized order based on
  * disruption service and replica states, while maintaining thread safety.
+ *
+ * For each disk it maintains a queue {@link #disIdToReplicaQueue} which gets sorted continuously
+ * based on active replicas and data from disruption service. The data can be polled using
+ * {@link #getPartitionListForDisk} and partition can be added using {@link #addReplica}.
  */
 public class FileCopyPrioritizationManager extends Thread implements PrioritizationManager {
   private final DisruptionService disruptionService;
