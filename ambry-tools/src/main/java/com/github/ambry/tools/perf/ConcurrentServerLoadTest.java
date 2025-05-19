@@ -574,6 +574,22 @@ public class ConcurrentServerLoadTest {
           || getNumberWritableReplicas() > 0);
     }
 
+    private void handleResponseError(ServerErrorCode errorCode, ReplicaId replicaId) {
+      if (errorCode == ServerErrorCode.NoError) {
+        return;
+      }
+      if (errorCode == ServerErrorCode.PartitionReadOnly || errorCode == ServerErrorCode.ReplicaUnavailable) {
+        // handle read-only partition
+        onReplicaIdBecomeUnavailable(replicaId);
+      } else if (errorCode == ServerErrorCode.RetryAfterBackoff) {
+        try {
+          Thread.sleep(1000);
+        } catch (Exception e) {
+          logger.error("Interrupted while sleeping", e);
+        }
+      }
+    }
+
     @Override
     public void run() {
       long startTime = SystemTime.getInstance().milliseconds();
@@ -644,12 +660,7 @@ public class ConcurrentServerLoadTest {
           PutResponse response = PutResponse.readFrom(stream);
           if (response.getError() != ServerErrorCode.NoError) {
             logger.error("PutRequest failed, errorCode: {}, blobId: {}", response.getError(), blobId);
-            if (response.getError() == ServerErrorCode.PartitionReadOnly
-                || response.getError() == ServerErrorCode.ReplicaUnavailable) {
-              // handle read-only partition
-              onReplicaIdBecomeUnavailable(replicaId);
-            } else {
-            }
+            handleResponseError(response.getError(), replicaId);
           } else {
             logger.trace("Successfully put blob id {}", blobId);
             blobIdStore.maybeAddBlobId(blobId);
@@ -673,6 +684,7 @@ public class ConcurrentServerLoadTest {
         BlobId blobId = blobIdStore.getRandomBlobId();
         PartitionRequestInfo partitionRequestInfo =
             new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
+
         GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), threadName, MessageFormatFlags.All,
             Collections.singletonList(partitionRequestInfo), GetOption.Include_All);
 
@@ -683,6 +695,13 @@ public class ConcurrentServerLoadTest {
           GetResponse response = GetResponse.readFrom(stream, clusterMap);
           if (response.getError() != ServerErrorCode.NoError) {
             logger.error("GetResponse failed, errorCode: {}, blobId: {}", response.getError(), blobId);
+            ReplicaId replicaId = blobId.getPartition()
+                .getReplicaIds()
+                .stream()
+                .filter(rid -> rid.getDataNodeId().equals(dataNodeId))
+                .findFirst()
+                .get();
+            handleResponseError(response.getError(), replicaId);
           }
         } catch (IOException e) {
           logger.error("Failed to send put request", e);
@@ -712,6 +731,13 @@ public class ConcurrentServerLoadTest {
           DeleteResponse response = DeleteResponse.readFrom(stream);
           if (response.getError() != ServerErrorCode.NoError && response.getError() != ServerErrorCode.BlobDeleted) {
             logger.error("DeleteResponse failed, errorCode: {}, blobId: {}", response.getError(), blobId);
+            ReplicaId replicaId = blobId.getPartition()
+                .getReplicaIds()
+                .stream()
+                .filter(rid -> rid.getDataNodeId().equals(dataNodeId))
+                .findFirst()
+                .get();
+            handleResponseError(response.getError(), replicaId);
           }
         } catch (IOException e) {
           logger.error("Failed to send put request", e);
@@ -742,6 +768,13 @@ public class ConcurrentServerLoadTest {
           if (response.getError() != ServerErrorCode.NoError
               && response.getError() != ServerErrorCode.BlobAlreadyUpdated) {
             logger.error("TtlUpdateResponse failed, errorCode: {}, blobId: {}", response.getError(), blobId);
+            ReplicaId replicaId = blobId.getPartition()
+                .getReplicaIds()
+                .stream()
+                .filter(rid -> rid.getDataNodeId().equals(dataNodeId))
+                .findFirst()
+                .get();
+            handleResponseError(response.getError(), replicaId);
           }
         } catch (IOException e) {
           logger.error("Failed to send put request", e);
