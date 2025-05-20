@@ -243,6 +243,9 @@ public class GetBlobHandler {
             ReadableStreamChannel response = result.getBlobDataChannel();
             if (subResource == null) {
               response = closeChannelIfNotModified(result);
+              if (response != null) {
+                restRequest.getMetricsTracker().setBytesTransferred(result.getBlobInfo().getBlobProperties().getBlobSize());
+              }
             } else {
               switch (subResource) {
                 case BlobInfo:
