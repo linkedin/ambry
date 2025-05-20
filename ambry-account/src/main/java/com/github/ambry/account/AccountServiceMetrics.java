@@ -52,9 +52,15 @@ public class AccountServiceMetrics {
   public static final String ACCOUNT_DELETES_TO_AMBRY_SERVER_ERROR_COUNT = "AccountDeletesToAmbryServerErrorCount";
   public static final String ACCOUNT_FETCH_FROM_AMBRY_SERVER_ERROR_COUNT = "AccountFetchFromAmbryServerErrorCount";
   public static final String GET_ACCOUNT_INCONSISTENCY_COUNT = "GetAccountInconsistencyCount";
+  public static final String GET_CONTAINER_INCONSISTENCY_COUNT = "GetContainerInconsistencyCount";
+  public static final String UPDATE_CONTAINER_INCONSISTENCY_COUNT = "UpdateContainerInconsistencyCount";
   public static final String ON_DEMAND_CONTAINER_FETCH_COUNT = "OnDemandContainerFetchCount";
   public static final String ACCOUNT_DATA_INCONSISTENCY_COUNT = "AccountDataInconsistencyCount";
   public static final String TIME_IN_SECONDS_SINCE_LAST_SYNC = "TimeInSecondsSinceLastSync";
+  public static final String SECONDARY_UPDATE_ACCOUNT_ERROR_COUNT = "SecondaryUpdateAccountErrorCount";
+  public static final String SECONDARY_GET_ACCOUNT_ERROR_COUNT = "SecondaryGetAccountErrorCount";
+  public static final String SECONDARY_UPDATE_CONTAINER_ERROR_COUNT = "SecondaryUpdateContainerErrorCount";
+  public static final String SECONDARY_GET_CONTAINER_ERROR_COUNT = "SecondaryGetContainerErrorCount";
 
   public static final String CONTAINER_COUNT = "ContainerCount";
 
@@ -83,10 +89,16 @@ public class AccountServiceMetrics {
   public final Counter accountFetchFromAmbryServerErrorCount;
   public final Counter accountUpdatesToStoreErrorCount;
   public final Counter getAccountInconsistencyCount;
+  public final Counter getContainerInconsistencyCount;
+  public final Counter updateContainersInconsistencyCount;
   public final Counter onDemandContainerFetchCount;
   public final Counter updateContainersErrorCount;
   public final Counter fetchAndUpdateCacheErrorCount;
   public final Counter updateAccountsErrorCount;
+  public final Counter secondaryUpdateAccountErrorCount;
+  public final Counter secondaryGetAccountErrorCount;
+  public final Counter secondaryUpdateContainerErrorCount;
+  public final Counter secondaryGetContainerErrorCount;
 
   // Gauge
   Gauge<Integer> accountDataInconsistencyCount;
@@ -147,6 +159,12 @@ public class AccountServiceMetrics {
         MetricRegistry.name(HelixAccountService.class, ACCOUNT_FETCH_FROM_AMBRY_SERVER_ERROR_COUNT));
     getAccountInconsistencyCount =
         metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, GET_ACCOUNT_INCONSISTENCY_COUNT));
+    getContainerInconsistencyCount = metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, GET_CONTAINER_INCONSISTENCY_COUNT));
+    updateContainersInconsistencyCount = metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, UPDATE_CONTAINER_INCONSISTENCY_COUNT));
+    secondaryUpdateAccountErrorCount = metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, SECONDARY_UPDATE_ACCOUNT_ERROR_COUNT));
+    secondaryGetAccountErrorCount = metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, SECONDARY_GET_ACCOUNT_ERROR_COUNT));
+    secondaryUpdateContainerErrorCount = metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, SECONDARY_UPDATE_CONTAINER_ERROR_COUNT));
+    secondaryGetContainerErrorCount = metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, SECONDARY_GET_CONTAINER_ERROR_COUNT));
   }
 
   /**

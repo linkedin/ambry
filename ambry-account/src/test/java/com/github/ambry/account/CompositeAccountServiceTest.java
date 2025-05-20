@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -137,7 +138,7 @@ public class CompositeAccountServiceTest {
         compositeAccountService.getContainerByName(testAccount.getName(), testContainer.getName()));
     verify(primaryAccountService).getContainerByName(testAccount.getName(), testContainer.getName());
     verify(secondaryAccountService).getContainerByName(testAccount.getName(), testContainer.getName());
-    assertEquals("Expected one inconsistency", 1, metrics.getAccountInconsistencyCount.getCount());
+    assertEquals("Expected one inconsistency", 1, metrics.getContainerInconsistencyCount.getCount());
   }
 
   /**
@@ -172,11 +173,12 @@ public class CompositeAccountServiceTest {
    * Test composite updateAccounts() with both sources returning the same result.
    */
   @Test
-  public void testUpdateAccountsBothSuccess() throws AccountServiceException {
+  public void testUpdateAccountsBothSuccess() throws Exception {
     Account updatedTestAccount = new AccountBuilder(testAccount).status(Account.AccountStatus.INACTIVE).build();
     Collection<Account> accountsToUpdate = Collections.singletonList(updatedTestAccount);
     compositeAccountService.updateAccounts(accountsToUpdate);
     verify(primaryAccountService).updateAccounts(accountsToUpdate);
+    Thread.sleep(200);
     verify(secondaryAccountService).updateAccounts(accountsToUpdate);
   }
 
@@ -184,7 +186,7 @@ public class CompositeAccountServiceTest {
    * Test composite updateAccounts() with either of the sources throwing exception.
    */
   @Test
-  public void testUpdateAccountsException() throws Exception {
+  public void testPrimaryUpdateAccountsException() throws Exception {
     Account updatedTestAccount = new AccountBuilder(testAccount).status(Account.AccountStatus.INACTIVE).build();
     Collection<Account> accountsToUpdate = Collections.singletonList(updatedTestAccount);
     // exception in primary should be thrown
@@ -194,15 +196,19 @@ public class CompositeAccountServiceTest {
         () -> compositeAccountService.updateAccounts(accountsToUpdate), null);
     verify(primaryAccountService).updateAccounts(accountsToUpdate);
     verify(secondaryAccountService, never()).updateAccounts(any());
+  }
 
-    // exception in secondary should be swallowed
-    reset(primaryAccountService, secondaryAccountService);
+  @Test
+  public void testSecondaryUpdateAccountsException() throws Exception {
+    Account updatedTestAccount = new AccountBuilder(testAccount).status(Account.AccountStatus.INACTIVE).build();
+    Collection<Account> accountsToUpdate = Collections.singletonList(updatedTestAccount);
     doThrow(new AccountServiceException("", AccountServiceErrorCode.InternalError)).when(secondaryAccountService)
-        .updateAccounts(any());
-    TestUtils.assertException(AccountServiceException.class,
-        () -> compositeAccountService.updateAccounts(accountsToUpdate), null);
+            .updateAccounts(any());
+    compositeAccountService.updateAccounts(accountsToUpdate);
     verify(primaryAccountService).updateAccounts(accountsToUpdate);
     verify(secondaryAccountService).updateAccounts(accountsToUpdate);
+    Thread.sleep(200);
+    assertEquals("Expected one inconsistency", 1, metrics.secondaryUpdateAccountErrorCount.getCount());
   }
 
   /**
@@ -219,6 +225,7 @@ public class CompositeAccountServiceTest {
     assertEquals("Unexpected response", updatedContainers,
         compositeAccountService.updateContainers(testAccount.getName(), updatedContainers));
     verify(primaryAccountService).updateContainers(testAccount.getName(), updatedContainers);
+    Thread.sleep(200);
     verify(secondaryAccountService).updateContainers(testAccount.getName(), updatedContainers);
   }
 
@@ -226,7 +233,7 @@ public class CompositeAccountServiceTest {
    * Test composite updateContainers() with either of the sources returning throwing exception.
    */
   @Test
-  public void testUpdateContainersException() throws Exception {
+  public void testPrimaryUpdateContainersException() throws Exception {
     Collection<Container> updatedContainers = Collections.singletonList(
         new ContainerBuilder(testContainer).setStatus(Container.ContainerStatus.INACTIVE).build());
 
@@ -238,15 +245,18 @@ public class CompositeAccountServiceTest {
         () -> compositeAccountService.updateContainers(testAccount.getName(), updatedContainers), null);
     verify(primaryAccountService).updateContainers(testAccount.getName(), updatedContainers);
     verify(secondaryAccountService, never()).updateContainers(any(), any());
+  }
 
-    // exception in secondary should be swallowed
-    reset(primaryAccountService, secondaryAccountService);
+  @Test
+  public void testSecondaryUpdateContainersException() throws Exception {
+    Collection<Container> updatedContainers = Collections.singletonList(
+            new ContainerBuilder(testContainer).setStatus(Container.ContainerStatus.INACTIVE).build());
     when(primaryAccountService.updateContainers(any(), any())).thenReturn(updatedContainers);
     when(secondaryAccountService.updateContainers(any(), any())).thenThrow(
-        new AccountServiceException("", AccountServiceErrorCode.InternalError));
-    TestUtils.assertException(AccountServiceException.class,
-        () -> compositeAccountService.updateContainers(testAccount.getName(), updatedContainers), null);
+            new AccountServiceException("", AccountServiceErrorCode.InternalError));
+    compositeAccountService.updateContainers(testAccount.getName(), updatedContainers);
     verify(primaryAccountService).updateContainers(testAccount.getName(), updatedContainers);
+    Thread.sleep(200);
     verify(secondaryAccountService).updateContainers(testAccount.getName(), updatedContainers);
   }
 
