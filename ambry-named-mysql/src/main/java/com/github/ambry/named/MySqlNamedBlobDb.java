@@ -45,12 +45,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -89,6 +87,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String BLOB_STATE = "blob_state";
   private static final String VERSION = "version";
   private static final String DELETED_TS = "deleted_ts";
+  private static final String MODIFIED_TS = "modified_ts";
   private static final String BLOB_SIZE = "blob_size";
   // query building blocks
   private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
@@ -190,13 +189,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
 
   private static final String NEW_GET_STALE_QUERY = String.format(
-      "SELECT account_id, container_id, blob_name, version, modified_ts " +
-          "FROM named_blobs_v2 " +
-          "WHERE container_id = ? " +
-          "ORDER BY blob_name " +
-          "LIMIT ? OFFSET ?;"
+      "SELECT %s, %s, %s, %s, %s, %s, %s " +
+          "FROM %s " +
+          "WHERE container_id = ? AND account_id = ? " +
+          "ORDER BY %s DESC " +
+          "LIMIT ? OFFSET ?;",
+      ACCOUNT_ID,
+      CONTAINER_ID,
+      BLOB_NAME,
+      BLOB_ID,
+      VERSION,
+      BLOB_STATE,
+      MODIFIED_TS,
+      NAMED_BLOBS_V2,
+      VERSION
   );
 
+  //  Timestamp deletedTime = resultSet.getTimestamp(6);
 
   /**
    * Pull the stale blobs that need to be cleaned up
@@ -937,8 +946,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       while (hasMore) {
         try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
           statement.setInt(1, container.getId());
-          statement.setInt(2, config.queryStaleDataMaxResults);
-          statement.setInt(3, offset);
+          statement.setInt(2, container.getParentAccountId());
+          statement.setInt(3, config.queryStaleDataMaxResults);
+          statement.setInt(4, offset);
 
           String query = statement.toString();
           logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
@@ -950,12 +960,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               short containerId = resultSet.getShort(2);
               String blobName = resultSet.getString(3);
               String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
-              long version = resultSet.getLong(7);
-              Timestamp currentTime = resultSet.getTimestamp(5);
-              Timestamp modifiedTime = resultSet.getTimestamp(11);
-              int blobState = resultSet.getInt(9);
+              long version = resultSet.getLong(5);
+              int blobState = resultSet.getInt(6);
+              //Timestamp deletedTime = resultSet.getTimestamp(6);
+              Timestamp modifiedTime = resultSet.getTimestamp(7);
 
-              StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime, blobState, modifiedTime);
+              StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, null, blobState, modifiedTime);
               resultList.add(result);
               rowCount++;
             }
