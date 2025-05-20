@@ -44,6 +44,15 @@ public class DiskManagerConfig {
   @Default("5")
   public final int diskManagerDiskHealthCheckOperationTimeoutSeconds;
 
+  // Timers used in Deferred Compaction
+  // DefaultTimer is extendable and in every getChunk Api call, this is extended.
+  @Config("disk.manager.deferred.compaction.default.timer.timeout.milliseconds")
+  public final long diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds;
+
+  // TotalTimer is not extendable and this helps avoid infinite Compaction starvation.
+  @Config("disk.manager.deferred.compaction.total.timer.timeout.milliseconds")
+  public final long diskManagerDeferredCompactionTotalTimerTimeoutMilliseconds;
+
   public DiskManagerConfig(VerifiableProperties verifiableProperties) {
     diskManagerReserveFileDirName =
         verifiableProperties.getString("disk.manager.reserve.file.dir.name", "reserve-pool");
@@ -55,5 +64,9 @@ public class DiskManagerConfig {
         verifiableProperties.getInt("disk.manager.disk.healthcheck.interval.seconds", 60);
     diskManagerDiskHealthCheckOperationTimeoutSeconds =
         verifiableProperties.getInt("disk.manager.disk.healthcheck.operation.timeout.seconds", 5);
+    diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds =
+        verifiableProperties.getLong("disk.manager.deferred.compaction.default.timer.timeout.milliseconds", 1800000); // 30 mins
+    diskManagerDeferredCompactionTotalTimerTimeoutMilliseconds =
+        verifiableProperties.getLong("disk.manager.deferred.compaction.total.timer.timeout.milliseconds", 5400000); // 90 mins
   }
 }
