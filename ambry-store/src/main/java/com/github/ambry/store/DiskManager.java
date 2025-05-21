@@ -24,7 +24,9 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousFileChannel;
@@ -172,6 +174,34 @@ public class DiskManager {
     compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
   }
 
+
+  public List<String> readFromFile(String fileName) {
+    List<String> allValues = new ArrayList<>();
+    logger.info("FCH TEST: Reading from file: " + fileName);
+    File file = new File(fileName);
+    if(file.exists()){
+      logger.info("FCH TEST: File Exists: " + fileName);
+    }
+    try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+      String line;
+      logger.info("FCH TEST: Reading from file2: " + fileName);
+      while ((line = br.readLine()) != null) {
+        logger.info("FCH TEST: Values read from file are: " + line);
+        String[] values = line.split(",");
+
+        for (String value : values) {
+          String trimmedValue = value.trim();
+          allValues.add(trimmedValue);
+        }
+      }
+
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+
+    return allValues;
+  }
+
   /**
    * Starts all the stores on this disk.
    * @throws InterruptedException
@@ -201,7 +231,13 @@ public class DiskManager {
         }
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
-            if(Arrays.asList(419l).contains(partitionAndStore.getKey().getId())) {
+              List<String> partitionNames = readFromFile("/mnt/u001/partitions.txt");
+              logger.info("FCH TEST: Partition Names To be Filtered In Disk Manager Are: {}", partitionNames);
+              List<Long> longPartitionNames = partitionNames.stream().map(x-> Long.valueOf(x)).collect(
+                  Collectors.toList());
+            logger.info("FCH TEST: Partition Names To be Filtered As long In Disk Manager Are: {}", longPartitionNames);
+
+            if(longPartitionNames.contains(partitionAndStore.getKey().getId())) {
               partitionAndStore.getValue().initialize();
               logger.info("FCH TEST: Contents Of Directory {} Before Clean up Is: {}",partitionAndStore.getValue().getDataDir()  ,Arrays.stream(new File(partitionAndStore.getValue().getDataDir()).listFiles()).map(File::getName).collect(
                   Collectors.toList()));

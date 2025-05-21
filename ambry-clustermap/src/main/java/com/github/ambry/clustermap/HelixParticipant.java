@@ -878,8 +878,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    try {
+      Thread.sleep(10000);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
     participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
     try {
+      logger.info("FCH TEST: Transition For Partition PreBootstrap From Offline {}", partitionName);
       // 1. take actions in storage manager (add new replica if necessary)
       try{
         onPartitionBecomePreBootstrapFromOffline(partitionName);
@@ -888,15 +894,16 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         localPartitionAndState.put(partitionName, ReplicaState.ERROR);
         throw e;
       }
-
+      logger.info("FCH TEST: Transition For Partition FileCopy from PreBootstrap {}", partitionName);
       PartitionStateChangeListener fileCopyStateChangeListener =
           partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
 
       if (fileCopyStateChangeListener != null) {
+        logger.info("FCH TEST: Listener invoked for partition {}", partitionName);
         fileCopyStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
         replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
-
       }
+      logger.info("FCH TEST: Transition For Partition Bootstrap from PreBootstrap {}", partitionName);
 
       onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
       // 2. take actions in replication manager (add new replica if necessary)

@@ -37,6 +37,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,7 +91,11 @@ public class FileStore implements PartitionFileStore {
   // Size of each log segment
   private long segmentSize;
 
-  private SegmentFileTracker segmentTracker;
+  ExecutorService executor = Executors.newSingleThreadExecutor();
+
+  Future<?> currentFuture = null;
+
+//  private SegmentFileTracker segmentTracker;
 
   /**
    * Creates a new FileStore instance.
@@ -187,20 +194,19 @@ public class FileStore implements PartitionFileStore {
     }
   }
 
-  public SegmentFileTracker createFileAndReturnSegmentTracker(String fileName){
-    RandomAccessFile randomAccessFile = null;
-    try {
-      File file = new File(partitionToMountPath + File.separator + fileName);
-      if (!file.exists()) {
-        file.createNewFile();
-      }
-      randomAccessFile = new RandomAccessFile(file, "rw");
-      segmentTracker = new SegmentFileTracker(randomAccessFile);
-    } catch (IOException e) {
-      logger.error("Error while creating file: {}", fileName, e);
-    }
-    return segmentTracker;
-  }
+//  public SegmentFileTracker createFileAndReturnSegmentTracker(String fileName){
+//    RandomAccessFile randomAccessFile = null;
+//    try {
+//      File file = new File(partitionToMountPath + File.separator + fileName);
+//      if (!file.exists()) {
+//        file.createNewFile();
+//      }
+//      randomAccessFile = new RandomAccessFile(file, "rw");
+//    } catch (IOException e) {
+//      logger.error("Error while creating file: {}", fileName, e);
+//    }
+//    return segmentTracker;
+//  }
 
   /**
    * Writes data from an input stream to a file.
@@ -236,9 +242,23 @@ public class FileStore implements PartitionFileStore {
           // Throwing IOException if the parent directory does not exist
           throw new IOException("Parent directory does not exist: " + parentDir);
         }
+        if(currentFuture != null){
+          long startTimeBlocker = System.currentTimeMillis();
+          currentFuture.get();
+          logger.info("Thread Is Blocked For {}", System.currentTimeMillis()- startTimeBlocker);
+        }
         // Write content to file with create and append options, which will create a new file if file doesn't exist
         // and append to the existing file if file exists
-        Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
+        Future<?> future = executor.submit(() -> {
+          try (FileOutputStream fos = new FileOutputStream(outputPath.toFile(), true)) {
+            fos.write(content);
+            fos.flush();
+          } catch (IOException e) {
+            logger.error("Error while writing chunk to file: {}", outputFilePath, e);
+          }
+        });
+        currentFuture = future;
+        //Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
         logger.info("FCH TEST: Time taken for File Write is {} milliseconds", System.currentTimeMillis() - startTime);
       }
     } catch (Exception e) {

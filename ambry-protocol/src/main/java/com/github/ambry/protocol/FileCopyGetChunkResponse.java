@@ -253,6 +253,7 @@ public class FileCopyGetChunkResponse extends Response {
    */
   @Override
   public void prepareBuffer(){
+    long startTime = System.currentTimeMillis();
     super.prepareBuffer();
     bufferToSend.writeBytes(partitionId.getBytes());
     Utils.serializeString(bufferToSend, fileName, Charset.defaultCharset());
@@ -261,6 +262,7 @@ public class FileCopyGetChunkResponse extends Response {
     bufferToSend.writeBoolean(isLastChunk);
     try {
       bufferToSend.writeBytes(chunkStream, chunkStream.available());
+      logger.info("FileCopyGetChunkResponse Buffer Preparation: {} ms", System.currentTimeMillis() - startTime);
     } catch (IOException e) {
       logger.info("Error while writing chunkStream", e);
       throw new RuntimeException(e);

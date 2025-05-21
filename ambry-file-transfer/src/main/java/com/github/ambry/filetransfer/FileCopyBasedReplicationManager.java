@@ -31,6 +31,8 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -112,7 +114,7 @@ public class FileCopyBasedReplicationManager {
     fileCopyBasedReplicationSchedulerThread.start();
     isRunning = true;
     logger.info("FCH TEST: FileCopyBasedReplicationManager started");
-    PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
+//    PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
 //    List<Long> partitionIds = Arrays.asList(20l, 127l);
 //
 //    logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
@@ -144,20 +146,40 @@ public class FileCopyBasedReplicationManager {
     logger.info("FCH TEST: FileCopyBasedReplicationManager shutdown");
   }
 
+  public static List<String> readFromFile(String fileName) {
+    String line;
+    String[] values = new String[0];
+    try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+      while ((line = br.readLine()) != null) {
+        // Split by comma
+        values = line.split(",");
+        for (String value : values) {
+          System.out.print(value.trim() + " ");
+        }
+        System.out.println(); // Newline after each row
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return Arrays.asList(values);
+  }
+
   class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-      List<Long> partitionIds = Arrays.asList(419l);
-
+      //List<Long> partitionIds = Arrays.asList();//Arrays.asList(419l);
+      List<Long> fileCopyPartitionNames = readFromFile("/mnt/u001/partitions.txt").stream().map(Long::valueOf).collect(
+          Collectors.toList());
+      logger.info("FCH TEST: Filtered partitions {}",
+          fileCopyPartitionNames);
+      logger.info("FCH TEST: FileCopyBasedReplicationManager: onPartitionBecomeBootstrapFromOffline for partition {}",
+          partitionName);
       logger.info("FCH TEST: All Partitions to be hydrated are: {}", storeManager.getLocalPartitions().stream().map(
           PartitionId::getId).collect(Collectors.toList()));
-      List<PartitionId> partitionIdList =
-          storeManager.getLocalPartitions().stream().filter(p -> partitionIds.contains(p.getId())).collect(Collectors.toList());
-      logger.info("FCH TEST: Partitions to be checked for hydration are: {}", partitionIdList);
-      if(!partitionName.equals("419")) {
+      if(!fileCopyPartitionNames.contains(Long.valueOf(partitionName))) {
         logger.warn("FCH TEST: Partition {} is not part of the list of partitions to be hydrated up. Ignoring state change", partitionName);
-        return;
+         return;
       }
 
       logger.info("Started hydration for partitions {}", partitionName);

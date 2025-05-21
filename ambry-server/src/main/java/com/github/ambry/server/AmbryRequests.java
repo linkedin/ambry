@@ -1818,6 +1818,8 @@ public class AmbryRequests implements RequestAPI {
         new ServerNetworkResponseMetrics(metrics.fileCopyGetChunkResponseQueueTimeInMs,
             metrics.fileCopyGetChunkSendTimeInMs, metrics.fileCopyGetChunkTotalTimeInMs,
             null, null, totalTimeSpent));
+    publicAccessLogger.info("{} {} totalProcessingTime {}", fileCopyGetChunkRequest, response, SystemTime.getInstance().milliseconds()- startTime);
+
   }
 
   /**
