@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 import com.github.ambry.clustermap.*;
 import com.github.ambry.replica.prioritization.disruption.DefaultDisruptionService;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -172,23 +173,11 @@ public class FileCopyPrioritizationManagerTest {
       List<PartitionId> partitions = invocation.getArgument(0);
 
       List<PartitionId> result = new ArrayList<>();
-      if (partitions.contains(partition2)) {
-        partitions.remove(partition2);
-        result.add(partition2);
+      for (PartitionId partitionId : Arrays.asList(partition2, partition1, partition3)) {
+        partitions.remove(partitionId);
+        result.add(partitionId);
       }
-
-      if (partitions.contains(partition1)) {
-        partitions.remove(partition1);
-        result.add(partition1);
-      }
-
-      if (partitions.contains(partition3)) {
-        partitions.remove(partition3);
-        result.add(partition3);
-      }
-
       result.addAll(partitions);
-
       return result;
     });
 
