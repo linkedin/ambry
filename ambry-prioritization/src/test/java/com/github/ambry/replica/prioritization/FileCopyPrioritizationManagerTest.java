@@ -134,6 +134,9 @@ public class FileCopyPrioritizationManagerTest {
     inProgressReplicas = prioritizationManager.getInProgressReplicaIdsForDisk(disk);
     assertTrue("There should be no in progress replicas", inProgressReplicas.isEmpty());
 
+    returnedReplicas = prioritizationManager.getPartitionListForDisk(disk, 1);
+    assertTrue("There should be no replica in queue", returnedReplicas.isEmpty());
+
     boolean removeNonExistent = prioritizationManager.removeInProgressReplica(disk, replica);
     assertFalse("Non-existent in-progress replica should not be removed", removeNonExistent);
   }
