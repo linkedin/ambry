@@ -28,10 +28,12 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,8 +59,12 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public FileCopyPrioritizationManager(DisruptionService disruptionService, String datacenterName,
-      ClusterManagerQueryHelper clusterManagerQueryHelper) {
+  public FileCopyPrioritizationManager(@Nonnull DisruptionService disruptionService, @Nonnull String datacenterName,
+      @Nonnull ClusterManagerQueryHelper clusterManagerQueryHelper) {
+    Objects.requireNonNull(disruptionService, "Disruption service cannot be null");
+    Objects.requireNonNull(datacenterName, "Datacenter name cannot be null");
+    Objects.requireNonNull(clusterManagerQueryHelper, "clusterManager query helper cannot be null");
+
     this.disruptionService = disruptionService;
     this.datacenterName = datacenterName;
     this.clusterManagerQueryHelper = clusterManagerQueryHelper;
