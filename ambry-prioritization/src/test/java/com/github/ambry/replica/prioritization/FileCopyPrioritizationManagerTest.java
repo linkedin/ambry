@@ -164,6 +164,7 @@ public class FileCopyPrioritizationManagerTest {
     for (DiskId diskId : diskIds) {
       if (diskToReplica.get(diskId).size() >= 3) {
         allReplicaIds = new ArrayList<>(diskToReplica.get(diskId));
+        break;
       }
     }
 
