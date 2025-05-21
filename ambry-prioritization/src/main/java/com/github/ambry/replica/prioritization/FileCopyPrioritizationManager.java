@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * This class ensures that replicas are processed in a prioritized order based on
  * disruption service and replica states, while maintaining thread safety.
  *
- * For each disk it maintains a queue {@link #disIdToReplicaQueue} which gets sorted continuously
+ * For each disk it maintains a queue {@link #diskIdToReplicaQueue} which gets sorted continuously
  * based on active replicas and data from disruption service. The data can be polled using
  * {@link #getPartitionListForDisk} and partition can be added using {@link #addReplica}.
  */
@@ -51,7 +51,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   private final ClusterManagerQueryHelper clusterManagerQueryHelper;
   private final CountDownLatch shutDownLatch = new CountDownLatch(1);
   private final ReentrantLock lock = new ReentrantLock(true);
-  private final Map<DiskId, LinkedHashSet<ReplicaId>> disIdToReplicaQueue = new HashMap<>();
+  private final Map<DiskId, LinkedHashSet<ReplicaId>> diskIdToReplicaQueue = new HashMap<>();
   private final Set<ReplicaId> inProgressReplicas = new HashSet<>();
   boolean running = true;
 
@@ -84,8 +84,8 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     try {
       //TODO - Take lock on disk level for improved add/remove performance and add notify based timer to shutdown
       lock.lock();
-      disIdToReplicaQueue.keySet().forEach(diskId -> {
-        LinkedHashSet<ReplicaId> replicaIds = disIdToReplicaQueue.get(diskId);
+      diskIdToReplicaQueue.keySet().forEach(diskId -> {
+        LinkedHashSet<ReplicaId> replicaIds = diskIdToReplicaQueue.get(diskId);
         if (replicaIds.isEmpty()) {
           return;
         }
@@ -138,9 +138,9 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
         });
         logger.trace("current queue for disk {} is {}", diskId, sortedReplicas);
 
-        LinkedHashSet<ReplicaId> prevReplicas = disIdToReplicaQueue.get(diskId);
+        LinkedHashSet<ReplicaId> prevReplicas = diskIdToReplicaQueue.get(diskId);
         logIfQueueChanged(diskId, prevReplicas, sortedReplicas);
-        disIdToReplicaQueue.put(diskId, sortedReplicas);
+        diskIdToReplicaQueue.put(diskId, sortedReplicas);
       });
     } finally {
       lock.unlock();
@@ -196,7 +196,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   @Override
   public List<ReplicaId> getPartitionListForDisk(DiskId diskId, int numberOfReplicasPerDisk) {
     lock.lock();
-    LinkedHashSet<ReplicaId> replicaIdSet = disIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
+    LinkedHashSet<ReplicaId> replicaIdSet = diskIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
     List<ReplicaId> replicaIds = new ArrayList<>(replicaIdSet);
 
     List<ReplicaId> returnList = replicaIds.subList(0, Integer.min(numberOfReplicasPerDisk, replicaIds.size()));
@@ -207,7 +207,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     }
     LinkedHashSet<ReplicaId> remainingSet = new LinkedHashSet<>(remainingList);
 
-    disIdToReplicaQueue.put(diskId, remainingSet);
+    diskIdToReplicaQueue.put(diskId, remainingSet);
     inProgressReplicas.addAll(returnList);
     lock.unlock();
     logger.info("Returning replicas for disk {} are {}", diskId, returnList);
@@ -238,9 +238,9 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     lock.lock();
     logger.info("Adding replica {}", replicaId);
     DiskId diskId = replicaId.getDiskId();
-    disIdToReplicaQueue.putIfAbsent(diskId, new LinkedHashSet<>());
-    boolean isAlreadyPresent = disIdToReplicaQueue.get(diskId).add(replicaId);
-    logger.trace("after adding queue for disk {} is {}", diskId, disIdToReplicaQueue.get(diskId));
+    diskIdToReplicaQueue.putIfAbsent(diskId, new LinkedHashSet<>());
+    boolean isAlreadyPresent = diskIdToReplicaQueue.get(diskId).add(replicaId);
+    logger.trace("after adding queue for disk {} is {}", diskId, diskIdToReplicaQueue.get(diskId));
     lock.unlock();
     return isAlreadyPresent;
   }
@@ -255,7 +255,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
   public boolean removeReplica(DiskId diskId, ReplicaId replicaId) {
     lock.lock();
     logger.info("removing replica {} from disk {}", replicaId, diskId);
-    LinkedHashSet<ReplicaId> replicaQueue = disIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
+    LinkedHashSet<ReplicaId> replicaQueue = diskIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
     boolean wasElementPresent = replicaQueue.remove(replicaId);
     lock.unlock();
     return wasElementPresent;
@@ -272,7 +272,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
     lock.lock();
     logger.info("Removing in progress replica {} disk {}", replicaId, diskId);
     boolean wasElementPresent = inProgressReplicas.remove(replicaId);
-    LinkedHashSet<ReplicaId> replicaQueue = disIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
+    LinkedHashSet<ReplicaId> replicaQueue = diskIdToReplicaQueue.getOrDefault(diskId, new LinkedHashSet<>());
     replicaQueue.remove(replicaId);
     lock.unlock();
     return wasElementPresent;
