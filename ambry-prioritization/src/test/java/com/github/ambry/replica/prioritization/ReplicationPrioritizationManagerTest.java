@@ -130,6 +130,14 @@ public class ReplicationPrioritizationManagerTest {
     when(storageManager.getStore(partition3)).thenReturn(store3);
     when(storageManager.getStore(partition4)).thenReturn(store4);
     when(storageManager.getStore(partition5)).thenReturn(store5);
+
+    // Setup Stores
+    when(store1.isStarted()).thenReturn(true);
+    when(store2.isStarted()).thenReturn(true);
+    when(store3.isStarted()).thenReturn(true);
+    when(store4.isStarted()).thenReturn(true);
+    when(store5.isStarted()).thenReturn(true);
+
     partitionToStoreMap = new HashMap<>();
     partitionToStoreMap.put(partition1, store1);
     partitionToStoreMap.put(partition2, store2);
@@ -1702,6 +1710,92 @@ public class ReplicationPrioritizationManagerTest {
 
     assertNotNull("Should have enabled some partitions in second run", enabledPartitions);
     assertEquals("Should have enabled 2 partitions in second run", 2, enabledPartitions.size());
+  }
+
+
+  @Test
+  public void testResetOfPrioritizedPartitionMetrics() {
+    // Setup partitions
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(partition1, partition2, partition3));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are in BOOTSTRAP state initially
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Partition1 is below the minimum replica count (high priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    mockReplicaStates(partition1, 2);
+
+    // Partition2 is at the minimum replica count (medium priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    mockReplicaStates(partition2, 3);
+
+    // Partition3 is above the minimum replica count (low priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    mockReplicaStates(partition3, 4);
+
+    // First run - categorize partitions
+    manager.startPrioritizationCycle();
+
+    // Verify prioritization categories are populated
+    assertNotNull("Prioritization categories should not be null", manager.getReplicationPrioritizationMetrics().getBelowMinReplicaWithDisruptionCount());
+    assertTrue("High-priority partitions should be categorized", manager.getCurrentlyReplicatingPriorityPartitions().contains(partition1));
+
+    // Reset mocks for the next run
+    reset(replicationEngine);
+
+    // All partitions complete bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+
+    // Second run - all partitions should be reset
+    manager.startPrioritizationCycle();
+
+    // Verify prioritization categories are reset
+    assertTrue("Prioritization categories should be reset", manager.getCurrentlyReplicatingPriorityPartitions().isEmpty());
+    assertEquals("All prioritization metrics should be reset to zero", 0, manager.getReplicationPrioritizationMetrics().getBelowMinReplicaWithDisruptionCount().getValue().intValue());
+    assertEquals("All prioritization metrics should be reset to zero", 0, manager.getReplicationPrioritizationMetrics().getMinReplicaWithDisruptionCount().getValue().intValue());
+    assertEquals("All prioritization metrics should be reset to zero", 0, manager.getReplicationPrioritizationMetrics().getNormalPriorityCount().getValue().intValue());
+  }
+
+
+  @Test
+  public void testHasCompletedReplicationErrorCases() {
+    PartitionId mockPartition = mock(PartitionId.class);
+    Store mockStore = mock(Store.class);
+
+    // Case 1: Store is null
+    when(storageManager.getStore(mockPartition)).thenReturn(null);
+    assertTrue("Replication should be considered complete if store is null", manager.hasCompletedReplication(mockPartition));
+
+    // Case 2: Store is not started
+    when(storageManager.getStore(mockPartition)).thenReturn(mockStore);
+    when(mockStore.isStarted()).thenReturn(false);
+    assertTrue("Replication should be considered complete if store is not started", manager.hasCompletedReplication(mockPartition));
+
+    // Case 3: Store is started but state is null
+    when(mockStore.isStarted()).thenReturn(true);
+    when(mockStore.getCurrentState()).thenReturn(null);
+    assertTrue("Replication should be considered complete if replica state is null", manager.hasCompletedReplication(mockPartition));
+
+    // Case 4: Store is started and state is STANDBY
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    assertTrue("Replication should be complete if state is STANDBY", manager.hasCompletedReplication(mockPartition));
+
+    // Case 5: Store is started and state is LEADER
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.LEADER);
+    assertTrue("Replication should be complete if state is LEADER", manager.hasCompletedReplication(mockPartition));
+
+    // Case 6: Store is started and state is ERROR
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.ERROR);
+    assertTrue("Replication should be complete if state is ERROR", manager.hasCompletedReplication(mockPartition));
+
+    // Case 7: Store is started and state is BOOTSTRAP
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    assertFalse("Replication should not be complete if state is BOOTSTRAP", manager.hasCompletedReplication(mockPartition));
   }
 
 

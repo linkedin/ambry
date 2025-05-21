@@ -76,6 +76,14 @@ public class FileCopyHandlerException extends RuntimeException {
      */
     FileCopyHandlerGetChunkDataApiError,
     /**
+     * Indicates that FileCopyHandler encountered an error while allocating file from Disk Space Allocator.
+     */
+    FileCopyHandlerFailedDiskSpaceAllocation,
+    /**
+     * Indicates that size of the file in logInfo is greater than segment size.
+     */
+    FileCopyHandlerInvalidLogFileSize,
+    /**
      * Indicates that FiceCopyHandler encountered an unknown error.
      */
     UnknownError

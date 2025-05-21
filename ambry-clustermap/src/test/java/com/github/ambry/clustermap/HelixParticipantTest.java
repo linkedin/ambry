@@ -414,7 +414,7 @@ public class HelixParticipantTest {
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory,
             new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     try {
-      helixParticipant.participate(Collections.emptyList(), null, null);
+      helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
       fail("Participation should have failed");
     } catch (IOException e) {
       // OK
@@ -485,7 +485,8 @@ public class HelixParticipantTest {
     assertTrue(helixManagerFactory.getHelixManager(InstanceType.SPECTATOR).isConnected());
     assertFalse(helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT).isConnected());
 
-    participant.participate(Collections.emptyList(), null, null);
+    participant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
+    participant.unblockStateTransition();
     MockHelixManagerFactory.MockHelixManager helixManager =
         helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT);
     assertTrue(helixManager.isConnected());
@@ -866,7 +867,8 @@ public class HelixParticipantTest {
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig), true);
     // participate
-    helixParticipant.participate(Collections.emptyList(), null, null);
+    helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
+    helixParticipant.unblockStateTransition();
     HelixManager manager = helixParticipant.getHelixManager();
     StateModelFactory<? extends StateModel> factory =
         manager.getStateMachineEngine().getStateModelFactory(ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
@@ -915,7 +917,7 @@ public class HelixParticipantTest {
 
 
   @Test
-  public void testEnableStatePostParticipate() throws IOException {
+  public void testEnableStatePostparticipate() throws IOException {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
@@ -927,7 +929,7 @@ public class HelixParticipantTest {
     assertEquals(manager.getInstanceType(), InstanceType.PARTICIPANT);
     assertNotNull("HelixManager cannot be null", manager);
 
-    helixParticipant.participate(Collections.emptyList(), null, null);
+    helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
 
     // Without cloud config, instances should still be in ENABLE state
     assertEquals(InstanceConstants.InstanceOperation.ENABLE,
@@ -948,7 +950,7 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig), true);
-    helixParticipant.participate( Collections.emptyList(), null, null);
+    helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
     assertNotNull("PropertyStoreCleanUpTask should be registered",
         helixParticipant.getHelixManager().getStateMachineEngine()
             .getStateModelFactory(TaskConstants.STATE_MODEL_NAME));
@@ -968,7 +970,7 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig), true);
-    helixParticipant.participate(Collections.emptyList(), null, null);
+    helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
     assertNull("PropertyStoreCleanUpTask should not be registered",
         helixParticipant.getHelixManager().getStateMachineEngine()
             .getStateModelFactory(TaskConstants.STATE_MODEL_NAME));
@@ -987,7 +989,6 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig), true);
-
     // Mock a state change listener to throw an exception
     PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
     doThrow(new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
@@ -995,7 +996,8 @@ public class HelixParticipantTest {
     helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
 
     // participate
-    helixParticipant.participate(Collections.emptyList(), null, null);
+    helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
+    helixParticipant.unblockStateTransition();
     HelixManager manager = helixParticipant.getHelixManager();
     ClusterMap cm = new StaticClusterManager(testPartitionLayout.partitionLayout, dcName, new MetricRegistry());
     List<? extends ReplicaId> replicaIds =
@@ -1099,8 +1101,8 @@ public class HelixParticipantTest {
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig2, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig2), true);
     // Calling participate so manager can connect to zookeeper
-    helixParticipant.participate(Collections.emptyList(), null, null);
-    helixParticipant2.participate(Collections.emptyList(), null, null);
+    helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
+    helixParticipant2.participateAndBlockStateTransition(Collections.emptyList(), null, null);
 
     try {
       helixParticipant.exitMaintenanceMode();
@@ -1156,6 +1158,42 @@ public class HelixParticipantTest {
 
     helixParticipant.close();
     helixParticipant2.close();
+  }
+
+  @Test
+  public void testOfflineToBootstrapWithDelayedStateTransition() throws Exception {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
+
+    // participate
+    helixParticipant.participateAndBlockStateTransition(Collections.emptyList(), null, null);
+    HelixManager manager = helixParticipant.getHelixManager();
+
+    ClusterMap cm = new StaticClusterManager(testPartitionLayout.partitionLayout, dcName, new MetricRegistry());
+    List<? extends ReplicaId> replicaIds =
+        cm.getReplicaIds(cm.getDataNodeId("localhost", clusterMapConfig.clusterMapPort));
+    String resource = "10000"; // There is only one resource
+    // send state transition messages, this is controller logic, just put it down here to make sure the pipeline
+    // of state transition works
+    sendStateTransitionMessages(manager, resource, replicaIds, "OFFLINE", "BOOTSTRAP");
+    // sleep some time
+    Thread.sleep(1000);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(0, getNumberOfReplicaInStateFromMetric("bootstrap", metricRegistry));
+    // unblock the state transition
+    helixParticipant.unblockStateTransition();
+    // sleep some time so the state transition can happen
+    Thread.sleep(1000);
+    StateModelFactory<? extends StateModel> factory =
+        manager.getStateMachineEngine().getStateModelFactory(ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+    assertTrue(factory instanceof AmbryStateModelFactory);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("bootstrap", metricRegistry));
+    helixParticipant.close();
   }
 
   /**

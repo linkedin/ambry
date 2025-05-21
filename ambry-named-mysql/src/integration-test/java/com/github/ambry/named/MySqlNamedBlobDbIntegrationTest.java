@@ -14,34 +14,21 @@
  */
 package com.github.ambry.named;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
-import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
@@ -50,7 +37,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-import javax.sql.DataSource;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -62,16 +48,7 @@ import static org.junit.Assert.*;
  * Integration tests for {@link MySqlNamedBlobDb}.
  */
 @RunWith(Parameterized.class)
-public class MySqlNamedBlobDbIntegrationTest {
-  private static final String LOCAL_DC = "dc1";
-  // Please note that we are using mock time for time travel. Need to reset time (call setCurrentMilliseconds) when the
-  // tests depends on time sequences
-  private static final MockTime time = new MockTime(System.currentTimeMillis());
-  private final MySqlNamedBlobDb namedBlobDb;
-  private final InMemAccountService accountService;
-  private final PartitionId partitionId;
-  private final MySqlNamedBlobDbConfig config;
-  private final boolean enableHardDelete;
+public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergrationBase {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -79,26 +56,7 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   public MySqlNamedBlobDbIntegrationTest(boolean enableHardDelete) throws Exception {
-    this.enableHardDelete = enableHardDelete;
-    Properties properties = Utils.loadPropsFromResource("mysql.properties");
-    properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, LOCAL_DC);
-    if (enableHardDelete) {
-      properties.setProperty(MySqlNamedBlobDbConfig.ENABLE_HARD_DELETE, Boolean.toString(true));
-    }
-    properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, LOCAL_DC);
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    config = new MySqlNamedBlobDbConfig(verifiableProperties);
-    accountService = new InMemAccountService(false, false);
-    for (int i = 0; i < 5; i++) {
-      accountService.createAndAddRandomAccount();
-    }
-    MockClusterMap clusterMap = new MockClusterMap();
-    partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
-    MySqlNamedBlobDbFactory namedBlobDbFactory =
-        new MySqlNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), accountService, time);
-    namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
-
-    cleanup();
+    super(enableHardDelete, MySqlNamedBlobDbConfig.DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
   }
 
   /**
@@ -293,7 +251,7 @@ public class MySqlNamedBlobDbIntegrationTest {
   public void testDeleteWithMultipleVersions() throws Exception {
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
-    String blobName = "testDeleteWithMultipleVersions";
+    String blobName = "testDeleteWithMultipleVersions-" + TestUtils.getRandomKey(10);
 
     String blobId1 = getBlobId(account, container);
     String blobId2 = getBlobId(account, container);
@@ -311,11 +269,13 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.put(record2, NamedBlobState.IN_PROGRESS, true).get();
     time.sleep(100);
     // insert version 3 with state = ready, deletedts = now() + 1 hour
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     NamedBlobRecord record3 = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId3,
         time.milliseconds() + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(record3, NamedBlobState.READY, true).get();
     time.sleep(100);
-    // insert version 3 with state = in_progress, deletedts = now() + 1 hour
+    // insert version 4 with state = in_progress, deletedts = now() + 1 hour
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     NamedBlobRecord record4 = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId4,
         time.milliseconds() + TimeUnit.HOURS.toMillis(1));
     namedBlobDb.put(record4, NamedBlobState.IN_PROGRESS, true).get();
@@ -368,131 +328,6 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
   }
 
-  /**
-   * Test behavior with list named blob
-   */
-  @Test
-  public void testListNamedBlobsWithStaleRecords() throws Exception {
-    Iterator<Account> accountIter = accountService.getAllAccounts().iterator();
-    Account a1 = accountIter.next();
-    Iterator<Container> a1containerIter = a1.getAllContainers().iterator();
-    Container a1c1 = a1containerIter.next();
-    Container a1c2 = a1containerIter.next();
-    Account a2 = accountIter.next();
-    Iterator<Container> a2containerIter = a2.getAllContainers().iterator();
-    Container a2c1 = a2containerIter.next();
-    String blobName = "testListNamedBlobsWithStaleRecords";
-    NamedBlobRecord v1, v1_other, v2, v2_other;
-    Page<NamedBlobRecord> page;
-
-    // put blob Ready and list should return the blob
-    v1 = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName, getBlobId(a1, a1c1),
-        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
-    v1_other = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName + "-other", getBlobId(a1, a1c1),
-        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
-    // add some extra blobs in other accounts and containers for testing
-    NamedBlobRecord a1c2Blob = new NamedBlobRecord(a1.getName(), a1c2.getName(), blobName, getBlobId(a1, a1c2),
-        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
-    NamedBlobRecord a2c1Blob = new NamedBlobRecord(a2.getName(), a2c1.getName(), blobName, getBlobId(a2, a2c1),
-        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
-    namedBlobDb.put(a1c2Blob, NamedBlobState.READY, true).get();
-    namedBlobDb.put(a2c1Blob, NamedBlobState.READY, true).get();
-    namedBlobDb.put(v1, NamedBlobState.READY, true).get();
-    NamedBlobRecord v1_get = namedBlobDb.get(a1.getName(), a1c1.getName(), blobName).get();
-    assertEquals(v1, v1_get);
-    namedBlobDb.put(v1_other, NamedBlobState.READY, true).get();
-    NamedBlobRecord v1_other_get = namedBlobDb.get(a1.getName(), a1c1.getName(), blobName + "-other").get();
-    assertEquals(v1_other, v1_other_get);
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
-    assertEquals(2, page.getEntries().size());
-    assertEquals(v1_get, page.getEntries().get(0));
-    assertEquals(v1_other_get, page.getEntries().get(1));
-    time.sleep(100);
-
-    // put blob in-progress and list should return the Ready blob
-    v2 = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName, getBlobId(a1, a1c1),
-        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
-    namedBlobDb.put(v2, NamedBlobState.IN_PROGRESS, true).get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
-    assertEquals(2, page.getEntries().size());
-    assertEquals(v1_get, page.getEntries().get(0));
-    assertEquals(v1_other_get, page.getEntries().get(1));
-    time.sleep(100);
-
-    // update blob and list should return the new blob
-    v2 = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName, getBlobId(a1, a1c1),
-        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
-    v2_other = new NamedBlobRecord(a1.getName(), a1c1.getName(), blobName + "-other", getBlobId(a1, a1c1),
-        Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
-    namedBlobDb.put(v2, NamedBlobState.READY, true).get();
-    namedBlobDb.put(v2_other, NamedBlobState.READY, true).get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
-    assertEquals(2, page.getEntries().size());
-    assertEquals(v2, page.getEntries().get(0));
-    assertEquals(v2_other, page.getEntries().get(1));
-    time.sleep(100);
-
-    // delete blob and list should return empty
-    namedBlobDb.delete(a1.getName(), a1c1.getName(), blobName).get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
-    assertEquals("got " + page.getEntries(), 1, page.getEntries().size());
-    assertEquals(v2_other, page.getEntries().get(0));
-    time.sleep(100);
-    namedBlobDb.delete(a1.getName(), a1c1.getName(), blobName + "-other").get();
-    page = namedBlobDb.list(a1.getName(), a1c1.getName(), blobName, null, null).get();
-    assertEquals(0, page.getEntries().size());
-  }
-
-  /**
-   * Test behavior with list named blob
-   */
-  @Test
-  public void testListNamedBlobs() throws Exception {
-    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-
-    time.setCurrentMilliseconds(calendar.getTimeInMillis());
-    Account account = accountService.getAllAccounts().iterator().next();
-    Container container = account.getAllContainers().iterator().next();
-
-    final String blobNamePrefix = "blobNameForList";
-
-    // Create expired records
-    final long expiredTimeMs = calendar.getTimeInMillis() - TimeUnit.HOURS.toMillis(1);
-    final Set<String> expiredNames = new HashSet<>(Arrays.asList("name1", "name2", "name3", "name4", "name5"));
-    expiredNames.forEach(i -> {
-      final NamedBlobRecord record =
-          new NamedBlobRecord(account.getName(), container.getName(), blobNamePrefix + i, getBlobId(account, container),
-              expiredTimeMs);
-      try {
-        namedBlobDb.put(record, NamedBlobState.READY, true).get();
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    });
-
-    // Create valid records
-    final long validimeMs = calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1);
-    final Set<String> validNames = new HashSet<>(Arrays.asList("name6", "name7", "name8", "name9", "name10"));
-    final Set<NamedBlobRecord> validRecords = new HashSet<>();
-    validNames.forEach(i -> {
-      final NamedBlobRecord record =
-          new NamedBlobRecord(account.getName(), container.getName(), blobNamePrefix + i, getBlobId(account, container),
-              validimeMs);
-      validRecords.add(record);
-      try {
-        namedBlobDb.put(record, NamedBlobState.READY, true).get();
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    });
-
-    // List named blob should only put out valid ones without empty entries.
-    Page<NamedBlobRecord> page =
-        namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null, null).get();
-    assertEquals("List named blob entries should match the valid records", validRecords,
-        new HashSet<>(page.getEntries()));
-    assertNull("Next page token should be null", page.getNextPageToken());
-  }
 
   /**
    * Test behavior with blob cleanup main pipeline
@@ -823,16 +658,6 @@ public class MySqlNamedBlobDbIntegrationTest {
     assertTrue("Good blob case 6 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
-  /**
-   * Get a sample blob ID.
-   * @param account the account of the blob.
-   * @param container the container of the blob.
-   * @return the base64 blob ID.
-   */
-  private String getBlobId(Account account, Container container) {
-    return new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 0, account.getId(), container.getId(),
-        partitionId, false, BlobId.BlobDataType.SIMPLE).getID();
-  }
 
   /**
    * @param callable an async call, where the {@link Future} is expected to be completed with an exception.
@@ -845,19 +670,6 @@ public class MySqlNamedBlobDbIntegrationTest {
     });
   }
 
-  /**
-   * Empties the accounts and containers tables.
-   * @throws SQLException throw any SQL related exception
-   */
-  private void cleanup() throws SQLException {
-    for (DataSource dataSource : namedBlobDb.getDataSources().values()) {
-      try (Connection connection = dataSource.getConnection()) {
-        try (Statement statement = connection.createStatement()) {
-          statement.executeUpdate("DELETE FROM named_blobs_v2");
-        }
-      }
-    }
-  }
 
   private void checkRecordsEqual(NamedBlobRecord record1, NamedBlobRecord record2) {
     assertEquals("AccountName mismatch", record1.getAccountName(), record2.getAccountName());

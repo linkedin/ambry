@@ -172,6 +172,18 @@ public class StoreFileCopyHandler implements FileCopyHandler {
         final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + config.fileCopyTemporaryDirectoryName;
         logInfo.getIndexSegments().forEach(indexFile ->
           processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore));
+        // Process log segment
+        Long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
+        // allocate the file
+        FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
+            logInfo.getLogSegment().getFileSize());
+        String filePath = partitionToMountTempFilePath + File.separator + logFileInfo.getFileName();
+        try {
+          fileStore.allocateFile(filePath, storeId.toString());
+        } catch (IOException e) {
+          logMessageAndThrow("ProcessLogSegment", "Failed Disk Space Allocation", e,
+              FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerFailedDiskSpaceAllocation);
+        }
         processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
 
         // Move all files to actual path.
@@ -298,6 +310,10 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private void processLogSegment(LogInfo logInfo, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
       String snapshotId, PartitionFileStore fileStore) {
+    if (logInfo.getLogSegment().getFileSize() > fileStore.getSegmentCapacity()) {
+      throw new FileCopyHandlerException("Log segment file size is greater than the segment capacity",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerInvalidLogFileSize);
+    }
     FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
         logInfo.getLogSegment().getFileSize());
     int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSize() / config.getFileCopyHandlerChunkSize);

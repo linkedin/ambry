@@ -39,6 +39,21 @@ public class FileStoreException extends RuntimeException {
   }
 
   /**
+   * Overridden equals method to compare two FileStoreException objects.
+   */
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    FileStoreException that = (FileStoreException) obj;
+    return this.getMessage().equals(that.getMessage()) && this.error == that.error;
+  }
+
+  /**
    * Creates a new FileStoreException with a message, error code, and cause.
    *
    * @param s The error message describing what went wrong
@@ -73,6 +88,15 @@ public class FileStoreException extends RuntimeException {
      */
     FileStoreMoveFilesError,
     /**
+     * Indicates that the FileStore service encountered an error during cleanup
+     */
+    FileStoreFileFailedCleanUp,
+    /**
+     * Indicates that the File allocation by disk space allocator has failed
+     */
+    FileStoreFileAllocationFailed,
+    /**
+     /**
      * Indicates that the FileStore service encountered an error during delete
      */
     UnknownError
