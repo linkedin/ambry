@@ -31,5 +31,7 @@ public interface DisruptionService {
    */
   Map<PartitionId, List<Operation>> batchDisruptionsByPartition(List<PartitionId> partitionIds);
 
-  List<PartitionId> sortByDisruptions(List<PartitionId> partitionIds);
+  default List<PartitionId> sortByDisruptions(List<PartitionId> partitionIds) {
+    return partitionIds;
+  }
 }
