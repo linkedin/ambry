@@ -447,7 +447,7 @@ public class DiskManager {
    * @param id the {@link PartitionId} of the {@link BlobStore} to check control for.
    * @return {@code true} if the compaction is under control. {@code false} if not.
    */
-  public boolean isCompactionForBlobStoreUnderControl(PartitionId id) {
+  public boolean isCompactionEnabledForBlobStoreUnderControl(PartitionId id) {
     return controlCompactionForBlobStoreMap.getOrDefault(id, false);
   }
 

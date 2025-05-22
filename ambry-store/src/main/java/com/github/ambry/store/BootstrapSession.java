@@ -146,7 +146,7 @@ public class BootstrapSession {
    * Gets the ID of the snapshot being bootstrapped.
    * @return The ID of the snapshot being bootstrapped.
    */
-  String getSnapShotId() {
+  public String getSnapShotId() {
     return snapShotId;
   }
 

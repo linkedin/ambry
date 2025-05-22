@@ -739,6 +739,11 @@ public class StatsManagerTest {
     public boolean isStarted() {
       throw new IllegalStateException("Not implemented");
     }
+
+    @Override
+    public String getSnapshotId(List<LogInfo> logSegments) {
+      throw new UnsupportedOperationException("Method not supported");
+    }
   }
 
   /**
