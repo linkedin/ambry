@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * based on active replicas and data from disruption service. The data can be polled using
  * {@link #getPartitionListForDisk} and partition can be added using {@link #addReplica}.
  */
-public class FileCopyPrioritizationManager extends Thread implements PrioritizationManager {
+public class FileCopyDisruptionBasedPrioritizationManager extends Thread implements PrioritizationManager {
   private final DisruptionService disruptionService;
   private final String datacenterName;
   private final ClusterManagerQueryHelper clusterManagerQueryHelper;
@@ -59,7 +59,7 @@ public class FileCopyPrioritizationManager extends Thread implements Prioritizat
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public FileCopyPrioritizationManager(@Nonnull DisruptionService disruptionService, @Nonnull String datacenterName,
+  public FileCopyDisruptionBasedPrioritizationManager(@Nonnull DisruptionService disruptionService, @Nonnull String datacenterName,
       @Nonnull ClusterManagerQueryHelper clusterManagerQueryHelper) {
     Objects.requireNonNull(disruptionService, "Disruption service cannot be null");
     Objects.requireNonNull(datacenterName, "Datacenter name cannot be null");

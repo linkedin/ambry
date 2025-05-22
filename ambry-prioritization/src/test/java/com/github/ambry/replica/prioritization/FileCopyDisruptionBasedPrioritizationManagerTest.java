@@ -37,10 +37,10 @@ import org.mockito.junit.MockitoJUnitRunner;
 
 
 @RunWith(MockitoJUnitRunner.class)
-public class FileCopyPrioritizationManagerTest {
+public class FileCopyDisruptionBasedPrioritizationManagerTest {
 
   @Mock
-  private FileCopyPrioritizationManager prioritizationManager;
+  private FileCopyDisruptionBasedPrioritizationManager prioritizationManager;
 
   @Mock
   private ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerQueryHelper;
@@ -57,7 +57,7 @@ public class FileCopyPrioritizationManagerTest {
     clusterMap = new MockClusterMap(false, true, 3, 4, 1, true, false, "DC1");
     currentDataNodeId = clusterMap.getDataNodeIds().get(0);
     clusterMap.createNewPartition(clusterMap.getDataNodes(), 0);
-    prioritizationManager = new FileCopyPrioritizationManager(disruptionService, "DC1", clusterManagerQueryHelper);
+    prioritizationManager = new FileCopyDisruptionBasedPrioritizationManager(disruptionService, "DC1", clusterManagerQueryHelper);
     when(clusterManagerQueryHelper.getMinActiveReplicas(any())).thenReturn(0);
     prioritizationManager.start();
   }
