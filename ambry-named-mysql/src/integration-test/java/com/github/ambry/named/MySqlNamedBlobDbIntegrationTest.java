@@ -18,12 +18,17 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
+import com.github.ambry.repair.MysqlRepairRequestsDb;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -37,10 +42,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
+import javax.sql.DataSource;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.mysql.MySqlUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -414,9 +421,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobStaleCase1() throws Exception {
-    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
-    long staleCutoffTime = calendar.getTimeInMillis();
 
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
@@ -425,8 +429,13 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
-    time.setCurrentMilliseconds(staleCutoffTime);
     namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
+
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+        "WHERE blob_name = 'stale/case1/more path segments--'";
+
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
     assertEquals("Stale blob case 1 count does not match!", 1, staleNamedBlobs.size());
@@ -436,15 +445,14 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         record.getBlobId());
   }
 
+
+  ///// PASSES
   /**
    * Test behavior with blob cleanup for stale blob case
    * Case 2. created more than staleDataRetentionDays ago, Ready, not Largest and bigger version is ready
    */
   @Test
   public void testCleanupBlobStaleCase2() throws Exception {
-    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
-    long staleCutoffTime = calendar.getTimeInMillis();
 
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
@@ -453,10 +461,15 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
-    time.setCurrentMilliseconds(staleCutoffTime);
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
-    time.setCurrentMilliseconds(staleCutoffTime + 1);
+//    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+//        "WHERE blob_name = 'stale/case2/more path segments--'";
+//
+//    Statement statement = getStatement();
+//    statement.executeUpdate(sql);
+
+
     String blobIdNew = getBlobId(account, container);
     NamedBlobRecord recordNew =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
@@ -470,16 +483,13 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         record.getBlobId());
   }
 
+  ///// PASSES
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 1, created less than staleDataRetentionDays ago, InProgress, is Largest (Don't care about ttl and delete)
    */
   @Test
   public void testCleanupBlobGoodCase1() throws Exception {
-    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
-    long afterStaleCutoffTime = calendar.getTimeInMillis() + 5000;
-
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -487,7 +497,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
-    time.setCurrentMilliseconds(afterStaleCutoffTime + 5000);
     namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
     assertTrue("Good blob case 1 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
@@ -523,15 +532,14 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 2 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
+
+  ///// PASSES
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 3, created more than staleDataRetentionDays ago, Ready, is Largest
    */
   @Test
   public void testCleanupBlobGoodCase3() throws Exception {
-    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
-    long staleCutoffTime = calendar.getTimeInMillis();
 
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
@@ -540,13 +548,20 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
-    time.setCurrentMilliseconds(staleCutoffTime);
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
+
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+        "WHERE blob_name = 'stale/case3/more path segments--'";
+
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
     assertTrue("Good blob case 3 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
+
+  ///// PASSES
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 4, created more than staleDataRetentionDays ago, Ready, not Largest, but bigger version is InProgress.
@@ -577,6 +592,8 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 4 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
+
+  ///// PASSES
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 5, two rows created for the same blobId more than staleDataRetentionDays ago,
@@ -607,6 +624,8 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertEquals("Good blob case 5 pull stale blob result should be empty!", 0, staleNamedBlobs.size());
   }
 
+
+  ///// PASSES
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 6, one row created for a blobId more than staleDataRetentionDays ago via TTL Update process,
@@ -670,11 +689,16 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     });
   }
 
-
   private void checkRecordsEqual(NamedBlobRecord record1, NamedBlobRecord record2) {
     assertEquals("AccountName mismatch", record1.getAccountName(), record2.getAccountName());
     assertEquals("ContainerName mismatch", record1.getContainerName(), record2.getContainerName());
     assertEquals("BlobName mismatch", record1.getBlobName(), record2.getBlobName());
     assertEquals("BlobId mismatch", record1.getBlobId(), record2.getBlobId());
+  }
+
+  private Statement getStatement() throws Exception {
+    DataSource dataSource = namedBlobDb.getDataSources().values().iterator().next();
+    Connection conn = dataSource.getConnection();
+    return conn.createStatement();
   }
 }

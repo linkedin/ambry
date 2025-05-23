@@ -45,12 +45,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -77,6 +75,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
   private static final String MULTI_VERSION_PLACE_HOLDER = "MULTI_VERSION_PLACE_HOLDER";
   private static final int VERSION_BASE = 100000;
+
+  private static final long fiveDaysMillis = 5L * 24 * 60 * 60 * 1000;
   // table name
   private static final String NAMED_BLOBS_V2 = "named_blobs_v2";
   // column names
@@ -87,6 +87,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String BLOB_STATE = "blob_state";
   private static final String VERSION = "version";
   private static final String DELETED_TS = "deleted_ts";
+  private static final String MODIFIED_TS = "modified_ts";
   private static final String BLOB_SIZE = "blob_size";
   // query building blocks
   private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
@@ -173,6 +174,26 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private static final String TTL_UPDATE_QUERY =
       String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
+
+
+  private static final String NEW_GET_STALE_QUERY = String.format(
+      "SELECT %s, %s, %s, %s, %s, %s, %s " +
+          "FROM %s " +
+          "WHERE container_id = ? AND account_id = ? " +
+          "ORDER BY %s DESC " +
+          "LIMIT ? OFFSET ?;",
+      ACCOUNT_ID,
+      CONTAINER_ID,
+      BLOB_NAME,
+      BLOB_ID,
+      VERSION,
+      BLOB_STATE,
+      MODIFIED_TS,
+      NAMED_BLOBS_V2,
+      VERSION
+  );
+
+  //  Timestamp deletedTime = resultSet.getTimestamp(6);
 
   /**
    * Pull the stale blobs that need to be cleaned up
@@ -506,7 +527,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      List<StaleNamedBlob> staleNamedBlobResults = runPullStaleBlobs(connection);
+      List<StaleNamedBlob> potentialStaleNamedBlobResults = runPullPotentialStaleBlobs(connection);
+      List<StaleNamedBlob> staleNamedBlobResults = getStaleBlobs(potentialStaleNamedBlobResults);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
@@ -928,35 +950,175 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return new DeleteResult(blobVersions);
   }
 
-  private List<StaleNamedBlob> runPullStaleBlobs(final Connection connection) throws Exception {
-    String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(GET_STALE_QUERY)) {
-      Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-      calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
-      long previousTimeInMillis = calendar.getTimeInMillis();
-      statement.setLong(1, previousTimeInMillis * VERSION_BASE);
-      statement.setInt(2, config.queryStaleDataMaxResults);
-      query = statement.toString();
-      logger.debug("Pulling stale blobs from MySql. Query {}", query);
-      try (ResultSet resultSet = statement.executeQuery()) {
-        List<StaleNamedBlob> resultList = new ArrayList<>();
-        while (resultSet.next()) {
-          short accountId = resultSet.getShort(1);
-          short containerId = resultSet.getShort(2);
-          String blobName = resultSet.getString(3);
-          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
-          long version = resultSet.getLong(5);
-          Timestamp currentTime = resultSet.getTimestamp(6);
-          StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
-          resultList.add(result);
-        }
-        return resultList;
-      }
-    } catch (SQLException e) {
-      logger.error("Failed to execute query {}, {}", query, e.getMessage());
-      throw e;
+  public static List<StaleNamedBlob> getStaleBlobs(List<StaleNamedBlob> blobList) {
+    List<StaleNamedBlob> staleBlobs = new ArrayList<>();
+    if (blobList.isEmpty()) {
+      return staleBlobs;
     }
+    StaleNamedBlob keepBlob = blobList.get(0);
+    long cutoffTime = System.currentTimeMillis() - fiveDaysMillis;
+    Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
+
+    for (int i = 1; i < blobList.size(); i++) {
+      StaleNamedBlob currentBlob = blobList.get(i);
+
+      if (!keepBlob.getBlobName().equals(currentBlob.getBlobName())) {
+        keepBlob = currentBlob;
+        continue;
+      }
+
+      int keepBlobState = keepBlob.getBlobState();
+      int currentBlobState = currentBlob.getBlobState();
+      Timestamp keepBlobModifiedTS = keepBlob.getModifiedTS();
+
+      if (keepBlobState == 0 && currentBlobState == 1) {
+        if (keepBlobModifiedTS.before(cutoffTimestamp)) {
+          staleBlobs.add(keepBlob);
+          keepBlob = currentBlob;
+        }
+      } else if (keepBlobState == 1 && currentBlobState == 1) {
+        staleBlobs.add(currentBlob);
+      } else if (keepBlobState == 0 && currentBlobState == 0) {
+        if (keepBlobModifiedTS.after(cutoffTimestamp)) {
+          staleBlobs.add(currentBlob);
+        } else {
+          staleBlobs.add(keepBlob);
+          keepBlob = currentBlob;
+        }
+      } else if (keepBlobState == 1 && currentBlobState == 0) {
+        staleBlobs.add(currentBlob);
+      }
+    }
+
+    if (keepBlob.getBlobState() == 0 && keepBlob.getModifiedTS().before(cutoffTimestamp)) {
+      staleBlobs.add(keepBlob);
+    }
+    return staleBlobs;
   }
+
+
+  private List<StaleNamedBlob> runPullPotentialStaleBlobs(Connection connection) throws SQLException {
+    List<StaleNamedBlob> resultList = new ArrayList<>();
+    Set<Container> containerSet = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+    List<Container> containers = new ArrayList<>(containerSet);
+    for (Container container : containers) {
+      int offset = 0;
+      boolean hasMore = true;
+
+      while (hasMore) {
+        try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
+          statement.setInt(1, container.getId());
+          statement.setInt(2, container.getParentAccountId());
+          statement.setInt(3, config.queryStaleDataMaxResults);
+          statement.setInt(4, offset);
+
+          String query = statement.toString();
+          logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
+
+          try (ResultSet resultSet = statement.executeQuery()) {
+            int rowCount = 0;
+            while (resultSet.next()) {
+              short accountId = resultSet.getShort(1);
+              short containerId = resultSet.getShort(2);
+              String blobName = resultSet.getString(3);
+              String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+              long version = resultSet.getLong(5);
+              int blobState = resultSet.getInt(6);
+              //Timestamp deletedTime = resultSet.getTimestamp(6);
+              Timestamp modifiedTime = resultSet.getTimestamp(7);
+
+              StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, null, blobState, modifiedTime);
+              resultList.add(result);
+              rowCount++;
+            }
+            if (rowCount < config.queryStaleDataMaxResults) {
+              hasMore = false;
+            } else {
+              offset += config.queryStaleDataMaxResults;
+            }
+          }
+        } catch (SQLException e) {
+          logger.error("Error executing query: {}", e.getMessage());
+          throw e;
+        }
+      }
+    }
+    return resultList;
+  }
+
+//
+//  private List<StaleNamedBlob> runPullPotentialStaleBlobs(final Connection connection) throws Exception {
+//    String query = "";
+//    List<Container> containers =
+//        (List<Container>) accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+//    int offset = 0;
+//    for (Container container : containers) {
+//      try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
+//        statement.setInt(1, container.getId());
+//        statement.setInt(2, config.queryStaleDataMaxResults);
+//
+//        // TODO: set correct val here
+//        statement.setInt(3, offset * config.queryStaleDataMaxResults);
+//
+//        query = statement.toString();
+//        logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
+//        try (ResultSet resultSet = statement.executeQuery()) {
+//          List<StaleNamedBlob> resultList = new ArrayList<>();
+//          while (resultSet.next()) {
+//            short accountId = resultSet.getShort(1);
+//            short containerId = resultSet.getShort(2);
+//            String blobName = resultSet.getString(3);
+//            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+//            long version = resultSet.getLong(7);
+//            Timestamp currentTime = resultSet.getTimestamp(5);
+//            Timestamp modifiedTime = resultSet.getTimestamp(11);
+//            int blobState = resultSet.getInt(9);
+//            StaleNamedBlob result =
+//                new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime, blobState,
+//                    modifiedTime);
+//            resultList.add(result);
+//          }
+//          return resultList;
+//        }
+//      } catch (SQLException e) {
+//        logger.error("Failed to execute query {}, {}", query, e.getMessage());
+//        throw e;
+//      }
+//    }
+//
+//    return java.util.Collections.emptyList();
+//  }
+
+//  private List<StaleNamedBlob> runPullStaleBlobs(final Connection connection) throws Exception {
+//    String query = "";
+//    try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
+////      Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+////      calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+//      //long previousTimeInMillis = calendar.getTimeInMillis();
+//      //statement.setLong(1, previousTimeInMillis * VERSION_BASE);
+//      statement.setInt(2, config.queryStaleDataMaxResults);
+//      query = statement.toString();
+//      logger.debug("Pulling stale blobs from MySql. Query {}", query);
+//      try (ResultSet resultSet = statement.executeQuery()) {
+//        List<StaleNamedBlob> resultList = new ArrayList<>();
+//        while (resultSet.next()) {
+//          short accountId = resultSet.getShort(1);
+//          short containerId = resultSet.getShort(2);
+//          String blobName = resultSet.getString(3);
+//          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+//          long version = resultSet.getLong(7);
+//          Timestamp currentTime = resultSet.getTimestamp(11);
+//          int blobState = resultSet.getInt(9);
+//          StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime, blobState, o);
+//          resultList.add(result);
+//        }
+//        return resultList;
+//      }
+//    } catch (SQLException e) {
+//      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+//      throw e;
+//    }
+//  }
 
   private void applySoftDeleteWithVersion(short accountId, short containerId, String blobName, long version,
       Timestamp deleteTs, Connection connection) throws Exception {
