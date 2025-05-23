@@ -165,12 +165,26 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     FileCopyGetMetaDataResponse metadataResponse = null;
     try {
       metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
+      String snapshotId = metadataResponse.getSnapshotId();
+
       metadataResponse.getLogInfos().forEach(logInfo -> {
         // Process the respective files and copy it to the temporary path.
         final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + config.fileCopyTemporaryDirectoryName;
         logInfo.getIndexSegments().forEach(indexFile ->
-          processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, fileStore));
-        processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, fileStore);
+          processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore));
+        // Process log segment
+        Long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
+        // allocate the file
+        FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
+            logInfo.getLogSegment().getFileSize());
+        String filePath = partitionToMountTempFilePath + File.separator + logFileInfo.getFileName();
+        try {
+          fileStore.allocateFile(filePath, storeId.toString());
+        } catch (IOException e) {
+          logMessageAndThrow("ProcessLogSegment", "Failed Disk Space Allocation", e,
+              FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerFailedDiskSpaceAllocation);
+        }
+        processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
 
         // Move all files to actual path.
         try {
@@ -232,14 +246,14 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @return the chunk response of type {@link FileCopyGetChunkResponse}
    */
   FileCopyGetChunkResponse getFileCopyGetChunkResponse(String operationName, FileCopyInfo fileCopyInfo,
-      FileChunkInfo fileChunkInfo, boolean isChunked) {
+      FileChunkInfo fileChunkInfo, String snapshotId, boolean isChunked) {
     validateIfStoreFileCopyHandlerIsRunning();
 
     FileCopyGetChunkResponse chunkResponse = null;
     String errorSuffix = " while processing the " + (isChunked ? "chunk" : "file");
     try {
       chunkResponse = operationRetryHandler.executeWithRetry(
-          () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, fileChunkInfo, clusterMap, config)
+          () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, fileChunkInfo, snapshotId, clusterMap, config)
               .execute(), operationName);
     } catch (IOException e) {
       logMessageAndThrow(operationName, "IO error" + errorSuffix, e,
@@ -272,12 +286,12 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param fileStore the file store
    */
   private void processIndexFile(FileInfo indexFile, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
-      PartitionFileStore fileStore) {
+      String snapshotId, PartitionFileStore fileStore) {
     final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
     FileCopyGetChunkResponse chunkResponse = null;
     try {
-      chunkResponse =
-          getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME, fileCopyInfo, fileChunkInfo,false);
+      chunkResponse = getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_FILE_OPERATION_NAME, fileCopyInfo,
+          fileChunkInfo, snapshotId, false);
       String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
     } finally {
@@ -295,7 +309,11 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param fileStore the file store
    */
   private void processLogSegment(LogInfo logInfo, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
-      PartitionFileStore fileStore) {
+      String snapshotId, PartitionFileStore fileStore) {
+    if (logInfo.getLogSegment().getFileSize() > fileStore.getSegmentCapacity()) {
+      throw new FileCopyHandlerException("Log segment file size is greater than the segment capacity",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerInvalidLogFileSize);
+    }
     FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
         logInfo.getLogSegment().getFileSize());
     int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSize() / config.getFileCopyHandlerChunkSize);
@@ -312,7 +330,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
        FileCopyGetChunkResponse chunkResponse = null;
        try {
-         chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, true);
+         chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, snapshotId,true);
          String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
          writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
       } finally {

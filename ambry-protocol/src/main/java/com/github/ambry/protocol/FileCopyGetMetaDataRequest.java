@@ -113,9 +113,8 @@ public class FileCopyGetMetaDataRequest extends RequestOrResponse {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("FileCopyGetMetaDataRequest[")
-      .append("PartitionId=")
-      .append(partitionId.getId()).append(", HostName=")
-      .append(hostName)
+      .append("PartitionId=").append(partitionId.getId())
+      .append(", HostName=").append(hostName)
       .append("]");
     return sb.toString();
   }

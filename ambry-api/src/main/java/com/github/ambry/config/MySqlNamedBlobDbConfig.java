@@ -40,8 +40,8 @@ public class MySqlNamedBlobDbConfig {
    */
   @Config(LIST_NAMED_BLOBS_SQL_OPTION)
   public static final int DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION = 2;
-  public static final int MIN_LIST_NAMED_BLOBS_SQL_OPTION = 1;
-  public static final int MAX_LIST_NAMED_BLOBS_SQL_OPTION = 2;
+  public static final int MIN_LIST_NAMED_BLOBS_SQL_OPTION = 2;
+  public static final int MAX_LIST_NAMED_BLOBS_SQL_OPTION = 3;
   public final int listNamedBlobsSQLOption;
 
   /**

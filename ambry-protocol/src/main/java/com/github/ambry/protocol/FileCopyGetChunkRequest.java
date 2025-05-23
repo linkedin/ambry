@@ -15,7 +15,6 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -38,9 +37,21 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
   private final String fileName;
 
   /**
+   * The hostname of the server.
+   */
+  private final String hostName;
+
+  /**
    * The start offset of the chunk.
    */
   private final long startOffset;
+
+  /**
+   * The snapshot id of the partition on serving node.
+   * This is returned as part of {@link FileCopyGetMetaDataResponse} and is used to ensure that a bootstrapping request
+   * doesn't clash with an ongoing compaction.
+   */
+  private final String snapshotId;
 
   /**
    * The size of the chunk in bytes.
@@ -74,30 +85,39 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
 
   /**
    * Constructor for FileCopyGetChunkRequest
-   * @param versionId The version of the request.
+   *
+   * @param versionId     The version of the request.
    * @param correlationId The correlation id of the request.
-   * @param clientId The client id of the request.
-   * @param partitionId The partition id of the requested file.
-   * @param fileName The name of the requested file.
-   * @param startOffset The start offset of the chunk.
-   * @param sizeInBytes The size of the chunk in bytes.
+   * @param clientId      The client id of the request.
+   * @param partitionId   The partition id of the requested file.
+   * @param fileName      The name of the requested file.
+   * @param hostName      The hostname of requesting server.
+   * @param snapshotId    The requested snapshotId.
+   * @param startOffset   The start offset of the chunk.
+   * @param sizeInBytes   The size of the chunk in bytes.
    */
   public FileCopyGetChunkRequest(short versionId, int correlationId,
-      String clientId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes, boolean isChunked) {
+      String clientId, PartitionId partitionId, String fileName, String hostName, String snapshotId, long startOffset,
+      long sizeInBytes, boolean isChunked) {
     super(RequestOrResponseType.FileCopyGetChunkRequest, versionId, correlationId, clientId);
-    validateRequest(versionId, partitionId, fileName, startOffset, sizeInBytes);
+    validateRequest(versionId, partitionId, fileName, hostName, snapshotId, startOffset, sizeInBytes);
 
     this.partitionId = partitionId;
     this.fileName = fileName;
+    this.hostName = hostName;
     this.startOffset = startOffset;
+    this.snapshotId = snapshotId;
     this.chunkLengthInBytes = sizeInBytes;
     this.isChunked = isChunked;
   }
 
-  private void validateRequest(short versionId, PartitionId partitionId, String fileName, long startOffset, long sizeInBytes) {
+  private void validateRequest(short versionId, PartitionId partitionId, String fileName, String hostName,
+      String snapshotId, long startOffset, long sizeInBytes) {
     validateVersion(versionId);
     Objects.requireNonNull(partitionId, "PartitionId cannot be null");
     Objects.requireNonNull(fileName, "FileName cannot be null");
+    Objects.requireNonNull(hostName, "HostName cannot be null");
+    Objects.requireNonNull(snapshotId, "SnapshotId cannot be null");
     Objects.requireNonNull(startOffset, "StartOffset cannot be null");
     Objects.requireNonNull(sizeInBytes, "SizeInBytes cannot be null");
 
@@ -128,12 +148,14 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     String clientId = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     String fileName = Utils.readIntString(stream);
+    String hostName = Utils.readIntString(stream);
+    String snapShotId = Utils.readIntString(stream);
     long startOffset = stream.readLong();
     long sizeInBytes = stream.readLong();
     boolean isChunked = stream.readBoolean();
 
     return new FileCopyGetChunkRequest(versionId, correlationId, clientId, partitionId,
-        fileName, startOffset, sizeInBytes, isChunked);
+        fileName, hostName, snapShotId, startOffset, sizeInBytes, isChunked);
   }
 
   /**
@@ -144,6 +166,8 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     super.prepareBuffer();
     bufferToSend.writeBytes(partitionId.getBytes());
     Utils.serializeString(bufferToSend, fileName, Charset.defaultCharset());
+    Utils.serializeString(bufferToSend, hostName, Charset.defaultCharset());
+    Utils.serializeString(bufferToSend, snapshotId, Charset.defaultCharset());
     bufferToSend.writeLong(startOffset);
     bufferToSend.writeLong(chunkLengthInBytes);
     bufferToSend.writeBoolean(isChunked);
@@ -154,6 +178,8 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     sb.append("FileCopyProtocolGetChunkRequest[")
         .append("PartitionId=").append(partitionId)
         .append(", FileName=").append(fileName)
+        .append(", HostName=").append(hostName)
+        .append(", SnapshotId=").append(snapshotId)
         .append(", StartOffset=").append(startOffset)
         .append(", SizeInBytes=").append(chunkLengthInBytes)
         .append(", IsChunked=").append(isChunked)
@@ -167,7 +193,7 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
    */
   public long sizeInBytes() {
     return super.sizeInBytes() + partitionId.getBytes().length + FILE_NAME_SIZE_IN_BYTES + fileName.length() +
-        Long.BYTES + Long.BYTES + IS_CHUNKED_SIZE_IN_BYTES;
+        hostName.length() + snapshotId.length() + Long.BYTES + Long.BYTES + IS_CHUNKED_SIZE_IN_BYTES;
   }
 
   /**
@@ -184,6 +210,20 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
    */
   public String getFileName() {
     return fileName;
+  }
+
+  /**
+   * Get the hostname of the server.
+   */
+  public String getHostName() {
+    return hostName;
+  }
+
+  /**
+   * Get the requested snapshotId.
+   */
+  public String getSnapshotId() {
+    return snapshotId;
   }
 
   /**

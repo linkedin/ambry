@@ -208,8 +208,12 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
-    public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+    public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
         Callback<AggregatedAccountStorageStats> callback) {
+    }
+
+    @Override
+    public void unblockStateTransition() {
     }
 
     @Override

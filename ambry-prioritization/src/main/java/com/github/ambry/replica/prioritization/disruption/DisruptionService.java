@@ -30,4 +30,8 @@ public interface DisruptionService {
    * @return A map of PartitionId to a list of merged DisruptionOperations
    */
   Map<PartitionId, List<Operation>> batchDisruptionsByPartition(List<PartitionId> partitionIds);
+
+  default List<PartitionId> sortByDisruptions(List<PartitionId> partitionIds) {
+    return partitionIds;
+  }
 }

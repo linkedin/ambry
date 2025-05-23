@@ -1635,12 +1635,18 @@ public class HelixClusterManager implements ClusterMap {
             logger.info("Data node config change triggered from helix cluster {} in datacenter {}",
                 sourceHelixClusterName, dcName);
           }
+
           if (logger.isDebugEnabled()) {
             logger.debug("Detailed data node config from helix cluster {} in datacenter {} is: {}",
                 sourceHelixClusterName, dcName, configs);
           }
           try {
             addOrUpdateInstanceInfos(configs, dcName);
+            List<DataNodeConfig> dataNodeConfigs = new ArrayList<>();
+            configs.forEach(dataNodeConfigs::add);
+            for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+              listener.onDataNodeConfigChange(dataNodeConfigs);
+            }
           } catch (Exception e) {
             if (!dataNodeConfigInitialized) {
               logger.error("Exception occurred when initializing data nodes from helix cluster {} in datacenter {}: ",

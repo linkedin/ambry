@@ -28,6 +28,7 @@ import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replica.prioritization.disruption.Operation;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -392,7 +393,15 @@ public class ReplicationPrioritizationManager implements Runnable {
    * Process any partitions that have completed replication.
    */
   private void processCompletedPartitions() {
-    currentlyReplicatingPriorityPartitions.stream().filter(this::hasCompletedReplication).forEach(completedPartitions::add);
+    for (PartitionId partitionId : currentlyReplicatingPriorityPartitions) {
+      try {
+        if (hasCompletedReplication(partitionId)) {
+          completedPartitions.add(partitionId);
+        }
+      } catch (Exception e) {
+        logger.error("Error checking replication status for partition {} {}", partitionId, e.getMessage());
+      }
+    }
 
     // Remove completed partitions from current set
     currentlyReplicatingPriorityPartitions.removeAll(completedPartitions);
@@ -589,10 +598,22 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @return true if replication is complete (bootstrap finished)
    */
   public boolean hasCompletedReplication(PartitionId partitionId) {
+    Store store = storageManager.getStore(partitionId);
 
-    // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
-    ReplicaState state = storageManager.getStore(partitionId).getCurrentState();
-    return state == ReplicaState.STANDBY || state == ReplicaState.LEADER || state == ReplicaState.ERROR;
+    if (store != null && store.isStarted()) {
+      ReplicaState state = store.getCurrentState();
+      if (state == null) {
+        logger.error("Replica state not found for partition {}", partitionId);
+        return true;
+      }
+
+      logger.debug("Found state {} for partition {}", state, partitionId);
+      // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
+      return state == ReplicaState.STANDBY || state == ReplicaState.LEADER || state == ReplicaState.ERROR;
+    } else {
+      logger.error("Store not started or not found for partition {}. Will try this partition in next run", partitionId);
+      return true;
+    }
   }
 
 

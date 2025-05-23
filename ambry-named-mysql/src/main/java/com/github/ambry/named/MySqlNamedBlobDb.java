@@ -106,19 +106,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String.format("SELECT %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION, DELETED_TS,
           NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
-  /**
-   * Below is the query for named blob list api
-   * Which select records up to a specific limit where the blob name starts with a string prefix.
-   * It contains two main parts:
-   * 1. Pull out the max version for rows meeting below conditions:
-   *     a). The account and container matches with user query
-   *     b). The 'blob_state' is READY (1), not IN_PROGRESS (0)
-   * 2. Use the result of step 1 to inner join with raw table on (account_id, container_id, blob_name, version),
-   *    with filter on the blob_name, and order by blob_name.
-   */
-  // @formatter:off
-  private final String LIST_NAMED_BLOBS_SQL;
-  // @formatter:on
+  private final String LIST_WITH_PREFIX_SQL;
 
   /**
    * Similar like LIST_QUERY_V2, but this query is used when user don't provide the prefix and want to list all records.
@@ -262,7 +250,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String localDatacenter, MetricRegistry metricRegistry, Time time) {
     this.accountService = accountService;
     this.config = config;
-    this.LIST_NAMED_BLOBS_SQL = getListNamedBlobsSQL(config);
+    this.LIST_WITH_PREFIX_SQL = getListWithPrefixSQLStatement(config);
     this.localDatacenter = localDatacenter;
     this.retryExecutor = new RetryExecutor(null);
     this.transactionExecutors = MySqlUtils.getDbEndpointsPerDC(config.dbInfo)
@@ -284,23 +272,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     this(accountService, config, dataSourceFactory, localDatacenter, metricRegistry, SystemTime.getInstance());
   }
 
-  public String getListNamedBlobsSQL(MySqlNamedBlobDbConfig config) {
+  private String getListWithPrefixSQLStatement(MySqlNamedBlobDbConfig config) {
     switch (config.listNamedBlobsSQLOption) {
-      case 1:
-        // old query that joins the entire table with a few selected rows
-        // @formatter:off
-        return String.format(""
-            + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
-            + "FROM named_blobs_v2 t1 "
-            + "INNER JOIN "
-            + "(SELECT account_id, container_id, blob_name, max(version) as version "
-            + "FROM named_blobs_v2 "
-            + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
-            + "        GROUP BY account_id, container_id, blob_name) t2 "
-            + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-            + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
-         // @formatter:on
       case 2:
         /**
          * List named-blobs query, given a prefix.
@@ -340,6 +313,35 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             + " ORDER BY BlobsAllVersion.blob_name "
             + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
         // @formatter:on
+      case 3:
+        /**
+         * List named-blobs query, given a prefix.
+         * This query uses a subquery to get the max version of a given blob name.
+         * 1. The subquery returns the max version whose blob_state is ready, even if it's deleted.
+         * 2. The outer query select goes through all the (blob_name, version) combination and only returns the one when
+         *    version is the max version from the subquery and not deleted.
+         * This list sql statement uses subquery instead of CTE and inner join so it should be more efficient.
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
+            + "FROM named_blobs_v2 candidate "
+            + "WHERE candidate.account_id = ? "
+            + "    AND candidate.container_id = ? "
+            + "    AND candidate.%1$s"
+            + "    AND candidate.blob_name LIKE ? "
+            + "    AND candidate.blob_name >= ? "
+            + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + "    AND candidate.version = ( "
+            + "        SELECT MAX(latest.version) "
+            + "        FROM named_blobs_v2 latest "
+            + "        WHERE latest.account_id = ? "
+            + "            AND latest.container_id = ? "
+            + "            AND latest.blob_name = candidate.blob_name "
+            + "            AND latest.%1$s"
+            + "    ) "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
+      // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
     }
@@ -687,6 +689,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     @Override
     public void close() {
+      if (dataSource instanceof Closeable) {
+        try {
+          ((Closeable) dataSource).close();
+        } catch (IOException e) {
+          logger.error("Failed to close datasource", e);
+        }
+      }
       Utils.shutDownExecutorService(executor, 1, TimeUnit.MINUTES);
     }
   }
@@ -737,27 +746,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
     String query = "";
-    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY : LIST_NAMED_BLOBS_SQL;
+    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY : LIST_WITH_PREFIX_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       if (blobNamePrefix == null) {
-        // list-all no prefix
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, pageToken);
-        statement.setString(4, pageToken);
-        statement.setInt(5, maxKeysValue + 1);
+        constructListAllQuery(statement, accountId, containerId, pageToken, maxKeysValue);
       } else {
-        // list with prefix
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobNamePrefix + "%");
-        statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
-        statement.setInt(5, accountId);
-        statement.setInt(6, containerId);
-        statement.setString(7, blobNamePrefix + "%");
-        statement.setString(8, pageToken != null ? pageToken : blobNamePrefix);
-        statement.setInt(9, maxKeysValue + 1);
+        if (config.listNamedBlobsSQLOption == MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION) {
+          constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+        } else {
+          constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+        }
       }
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
@@ -787,6 +786,69 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
+  }
+
+  /**
+   * Construct a list all query statement
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param pageToken The page token
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListAllQuery(PreparedStatement statement, short accountId, short containerId, String pageToken,
+      int maxKeysValue) throws SQLException {
+    // list-all no prefix
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, pageToken);
+    statement.setString(4, pageToken);
+    statement.setInt(5, maxKeysValue + 1);
+  }
+
+  /**
+   * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 2
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param blobNamePrefix The blobname prefix
+   * @param pageToken The page token
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListQueryWithPrefixV2(PreparedStatement statement, short accountId, short containerId,
+      String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, blobNamePrefix + "%");
+    statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setString(7, blobNamePrefix + "%");
+    statement.setString(8, pageToken != null ? pageToken : blobNamePrefix);
+    statement.setInt(9, maxKeysValue + 1);
+  }
+
+  /**
+   * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 3
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param blobNamePrefix The blobname prefix
+   * @param pageToken The page token
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListQueryWithPrefixV3(PreparedStatement statement, short accountId, short containerId,
+      String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, blobNamePrefix + "%");
+    statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setInt(7, maxKeysValue + 1);
   }
 
   private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId,
@@ -1112,7 +1174,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       // use the current time
       int paramInd = 1;
       if (!config.enableHardDelete) {
-        // Update statement requies a delete timestamp as first parameter
+        // Update statement requires a delete timestamp as first parameter
         statement.setTimestamp(paramInd++, deletedTs);
       }
       statement.setInt(paramInd++, accountId);

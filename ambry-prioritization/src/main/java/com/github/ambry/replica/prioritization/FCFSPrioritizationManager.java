@@ -141,12 +141,6 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
 
   }
 
-  @Override
-  public int getNumberOfDisks() {
-    return diskToReplicaMap.size();
-  }
-
-  @Override
   public void reset() {
     diskToReplicaMap.clear();
     inProgressReplicas.clear();

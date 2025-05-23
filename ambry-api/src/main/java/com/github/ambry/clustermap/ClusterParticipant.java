@@ -37,8 +37,13 @@ public interface ClusterParticipant extends AutoCloseable {
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException
    */
-  void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+  void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
       Callback<AggregatedAccountStorageStats> callback) throws IOException;
+
+  /**
+   * Unblocks State Transition that was blocked in participate.
+   */
+  void unblockStateTransition();
 
   /**
    * Set the sealed state of the given replica.

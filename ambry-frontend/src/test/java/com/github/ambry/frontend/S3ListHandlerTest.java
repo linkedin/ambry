@@ -543,12 +543,65 @@ public class S3ListHandlerTest {
     assertNull("Expected no NextContinuationToken on page 2", resultPage2.getNextContinuationToken());
   }
 
+  @Test
+  public void testNoCommonPrefixesWhenDelimiterDisabled() throws Exception {
+    // 1. Setup configuration with delimiter disabled
+    Properties props = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(props);
+    props.setProperty("frontend.enable.delimiter", "false"); // important
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    frontendConfig = new FrontendConfig(verifiableProperties);
+    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
+    NamedBlobListHandler namedBlobListHandler =
+        new NamedBlobListHandler(new FrontendTestSecurityServiceFactory().getSecurityService(),
+            new InMemNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE).getNamedBlobDb(),
+            injector, metrics, frontendConfig);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler, metrics, frontendConfig);
+
+    // 2. Upload a blob with a directory-style name (e.g., "dir1/file.txt")
+    String key = "dir1/file.txt";
+    String requestPath = NAMED_BLOB_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + key;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
+    byte[] content = TestUtils.getRandomBytes(512);
+    RestRequest putRequest = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, requestPath, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
+    putRequest.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(putRequest, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    FutureResult<Void> putResult = new FutureResult<>();
+    namedBlobPutHandler.handle(putRequest, new MockRestResponseChannel(), putResult::done);
+    putResult.get();
+
+    // 3. Issue list request with delimiter set
+    String listUri = S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + "/?list-type=2&delimiter=/";
+    RestRequest listRequest =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, listUri, new JSONObject(), null);
+    listRequest.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(listRequest, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    listRequest.setArg(LIST_REQUEST, "true");
+    listRequest.setArg(PREFIX_PARAM_NAME, EMPTY_PREFIX);
+
+    // 4. Handle request
+    RestResponseChannel responseChannel = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3ListHandler.handle(listRequest, responseChannel, futureResult::done);
+    ReadableStreamChannel channel = futureResult.get();
+    ByteBuffer buffer = ((ByteBufferReadableStreamChannel) channel).getContent();
+
+    // 5. Parse and assert that <CommonPrefixes> is not included
+    ListBucketResultV2 result = xmlMapper.readValue(buffer.array(), ListBucketResultV2.class);
+    assertNull("CommonPrefixes should be null when delimiter is disabled", result.getCommonPrefixes());
+  }
+
   /**
    * Initates a {@link NamedBlobPutHandler} and a {@link S3ListHandler}
    */
   private void setup() throws Exception {
     Properties properties = new Properties();
     CommonTestUtils.populateRequiredRouterProps(properties);
+    properties.setProperty("frontend.enable.delimiter", "true");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
@@ -567,6 +620,6 @@ public class S3ListHandlerTest {
     NamedBlobListHandler namedBlobListHandler =
         new NamedBlobListHandler(securityServiceFactory.getSecurityService(), namedBlobDb, injector, metrics,
             frontendConfig);
-    s3ListHandler = new S3ListHandler(namedBlobListHandler, metrics);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler, metrics, frontendConfig);
   }
 }
