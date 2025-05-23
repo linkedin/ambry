@@ -154,6 +154,7 @@ class PostBlobHandler {
         // Start the callback chain by parsing blob info headers and performing request security processing.
         BlobInfo blobInfo = getBlobInfoFromRequest();
         checkUploadRequirements(blobInfo.getBlobProperties());
+        restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);

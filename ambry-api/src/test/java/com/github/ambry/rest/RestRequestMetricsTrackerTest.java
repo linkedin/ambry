@@ -96,7 +96,7 @@ public class RestRequestMetricsTrackerTest {
     requestMetrics.recordMetrics();
     String metricPrefix =
         RestRequestMetricsTracker.class.getCanonicalName() + "." + RestRequestMetricsTracker.DEFAULT_REQUEST_TYPE;
-    testMetrics.compareMetrics(metricPrefix, metricRegistry);
+    testMetrics.compareMetrics(metricPrefix, metricRegistry, induceFailure);
   }
 
   /**
@@ -113,7 +113,7 @@ public class RestRequestMetricsTrackerTest {
     requestMetrics.injectMetrics(restRequestMetrics);
     requestMetrics.recordMetrics();
     String metricPrefix = getClass().getCanonicalName() + "." + testRequestType;
-    testMetrics.compareMetrics(metricPrefix, metricRegistry);
+    testMetrics.compareMetrics(metricPrefix, metricRegistry, induceFailure);
   }
 }
 
@@ -133,6 +133,8 @@ class TestMetrics {
 
   private final long operationErrorCount;
 
+  private final long bytesTransferred = 12345678;
+
   /**
    * Creates a new instance by generating new random metrics and updating it in the given {@code requestMetrics}.
    * @param requestMetrics the instance of {@link RestRequestMetricsTracker} where metrics have to be updated.
@@ -148,7 +150,7 @@ class TestMetrics {
    * @param metricPrefix the prefix of the metrics to look for.
    * @param metricRegistry the {@link MetricRegistry} where metrics were recorded.
    */
-  protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry) {
+  protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry, boolean failed) {
     Map<String, Histogram> histograms = metricRegistry.getHistograms();
     assertEquals("NIO request processing time unequal", nioLayerRequestProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.NIO_REQUEST_PROCESSING_TIME_SUFFIX)
@@ -189,6 +191,14 @@ class TestMetrics {
         metricRegistry.getMeters().get(metricPrefix + RestRequestMetrics.OPERATION_RATE_SUFFIX).getCount());
     assertEquals("Error metric value is not as expected", operationErrorCount,
         metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.OPERATION_ERROR_SUFFIX).getCount());
+
+    if (failed) {
+      assertTrue("Expected throughput to not have been calculated when request failed",
+          histograms.get(metricPrefix + RestRequestMetrics.THROUGHPUT_SUFFIX).getSnapshot().getValues().length == 0);
+    } else {
+      assertTrue("Expected throughput to have been calculated when request succeeded",
+          histograms.get(metricPrefix + RestRequestMetrics.THROUGHPUT_SUFFIX).getSnapshot().getValues()[0] > 0);
+    }
   }
 
   /**
@@ -212,6 +222,8 @@ class TestMetrics {
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingTime(scResponseProcessingTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingWaitTime(scRequestProcessingWaitTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingWaitTime(scResponseProcessingWaitTime);
+
+    restRequestMetricsTracker.setBytesTransferred(bytesTransferred);
 
     if (induceFailure) {
       restRequestMetricsTracker.markFailure();

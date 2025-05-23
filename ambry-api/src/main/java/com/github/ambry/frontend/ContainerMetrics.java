@@ -44,10 +44,10 @@ public class ContainerMetrics extends EntityOperationMetrics {
     this.accountMetrics = accountMetrics;
   }
 
-  public void recordMetrics(long roundTripTimeInMs, ResponseStatus responseStatus) {
-    super.recordMetrics(roundTripTimeInMs, responseStatus);
+  public void recordMetrics(long roundTripTimeInMs, ResponseStatus responseStatus, long bytesTransferred) {
+    super.recordMetrics(roundTripTimeInMs, responseStatus, bytesTransferred);
     if (accountMetrics != null) {
-      accountMetrics.recordMetrics(roundTripTimeInMs, responseStatus);
+      accountMetrics.recordMetrics(roundTripTimeInMs, responseStatus, bytesTransferred);
     }
   }
 }
