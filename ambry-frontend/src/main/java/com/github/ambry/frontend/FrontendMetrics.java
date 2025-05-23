@@ -64,6 +64,9 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup postBlobMetricsGroup;
   public final RestRequestMetricsGroup postAccountsMetricsGroup;
   public final RestRequestMetricsGroup postDatasetsMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartAbortMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartCompleteMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartCreateMetricsGroup;
 
   // PUT
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
@@ -377,6 +380,16 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, metricRegistry, frontendConfig);
     postDatasetsMetricsGroup =
         new RestRequestMetricsGroup(PostDatasetsHandler.class, "PostDatasets", false, metricRegistry, frontendConfig);
+    s3MultipartAbortMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartAbort", false, metricRegistry,
+            frontendConfig);
+    s3MultipartCompleteMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartComplete", false, metricRegistry,
+            frontendConfig);
+    s3MultipartCreateMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartCreate", false, metricRegistry,
+            frontendConfig);
+
     // PUT
     updateBlobTtlMetricsGroup =
         new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, metricRegistry, frontendConfig);
