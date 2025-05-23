@@ -26,7 +26,6 @@ import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -103,10 +102,10 @@ public class S3MultipartCreateUploadHandler<R> {
     private void start() {
       try {
         accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
-            frontendMetrics.postMultipartCreateMetricsGroup);
+            frontendMetrics.s3MultipartCreateMetricsGroup);
         restRequest.getMetricsTracker()
             .injectMetrics(
-                frontendMetrics.postMultipartCreateMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
+                frontendMetrics.s3MultipartCreateMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);

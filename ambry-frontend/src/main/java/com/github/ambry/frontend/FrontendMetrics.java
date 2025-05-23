@@ -63,9 +63,9 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup postBlobMetricsGroup;
   public final RestRequestMetricsGroup postAccountsMetricsGroup;
   public final RestRequestMetricsGroup postDatasetsMetricsGroup;
-  public final RestRequestMetricsGroup postMultipartAbortMetricsGroup;
-  public final RestRequestMetricsGroup postMultipartCompleteMetricsGroup;
-  public final RestRequestMetricsGroup postMultipartCreateMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartAbortMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartCompleteMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartCreateMetricsGroup;
 
   // PUT
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
@@ -376,14 +376,14 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, metricRegistry, frontendConfig);
     postDatasetsMetricsGroup =
         new RestRequestMetricsGroup(PostDatasetsHandler.class, "PostDatasets", false, metricRegistry, frontendConfig);
-    postMultipartAbortMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostMultipartAbort", false, metricRegistry,
+    s3MultipartAbortMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartAbort", false, metricRegistry,
             frontendConfig);
-    postMultipartCompleteMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostMultipartComplete", false, metricRegistry,
+    s3MultipartCompleteMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartComplete", false, metricRegistry,
             frontendConfig);
-    postMultipartCreateMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostMultipartCreate", false, metricRegistry,
+    s3MultipartCreateMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartCreate", false, metricRegistry,
             frontendConfig);
 
     // PUT

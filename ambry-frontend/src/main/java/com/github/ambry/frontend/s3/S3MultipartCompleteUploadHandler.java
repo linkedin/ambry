@@ -156,10 +156,10 @@ public class S3MultipartCompleteUploadHandler<R> {
     private void start() {
       try {
         accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
-            frontendMetrics.postMultipartCompleteMetricsGroup);
+            frontendMetrics.s3MultipartCompleteMetricsGroup);
         restRequest.getMetricsTracker()
             .injectMetrics(
-                frontendMetrics.postMultipartCompleteMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(),
+                frontendMetrics.s3MultipartCompleteMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(),
                     false));
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {

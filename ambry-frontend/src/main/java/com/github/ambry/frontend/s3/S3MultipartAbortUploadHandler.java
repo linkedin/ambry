@@ -88,10 +88,10 @@ public class S3MultipartAbortUploadHandler<R> {
     private void start() {
       try {
         accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
-            frontendMetrics.postMultipartAbortMetricsGroup);
+            frontendMetrics.s3MultipartAbortMetricsGroup);
         restRequest.getMetricsTracker()
             .injectMetrics(
-                frontendMetrics.postMultipartAbortMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
+                frontendMetrics.s3MultipartAbortMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);
