@@ -283,9 +283,11 @@ public class RestRequestMetricsTracker {
           metrics.unsatisfiedRequestCount.inc();
         }
 
-        // Only add throughput metrics when the request is successful. Recording a failure could mean we incorrectly
-        // report throughput as something higher than normal since the round trip time is likely to be shorter.
-        if (!failed) {
+        // Only add throughput metrics when the request is successful and bytes were actually transfered over the wire.
+        // Recording throughput during failure could mean we incorrectly report throughput as something higher than normal since
+        // the round trip time is likely to be shorter.
+        // We also want to make sure we aren't polluting our metrics with a bunch of 0 throughput values.
+        if (!failed && bytesTransferred > 0) {
           metrics.throughput.update(RestUtils.calculateThroughput(bytesTransferred, nioMetricsTracker.roundTripTimeInMs));
         }
       }
