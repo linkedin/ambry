@@ -1728,7 +1728,7 @@ public class AmbryRequests implements RequestAPI {
           logger.info("FileCopyGetMetaDataRequest: Compaction is in progress for partition {}. Rejecting request", partitionId.getId());
           response = new FileCopyGetMetaDataResponse(ServerErrorCode.SnapshotUnavailable);
         } else {
-          if(storeManager.isCompactionControlBeenSetForBlobStore(partitionId) && storeManager.isCompactionEnabledForBlobStoreUnderControl(partitionId)) {
+          if(storeManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(partitionId) && storeManager.isCompactionEnabledForBlobStore(partitionId)) {
             logger.info("FileCopyGetMetaDataRequest: Compaction control has been set for partition {}. Rejecting request", partitionId.getId());
             response = new FileCopyGetMetaDataResponse(ServerErrorCode.SnapshotUnavailable);
           }
@@ -1817,7 +1817,7 @@ public class AmbryRequests implements RequestAPI {
           logger.info("FileCopyGetChunkRequest: Compaction is in progress for partition {}. Rejecting request", partitionId.getId());
           response = new FileCopyGetChunkResponse(ServerErrorCode.SnapshotUnavailable);
         } else  {
-          if(storeManager.isCompactionControlBeenSetForBlobStore(partitionId) && storeManager.isCompactionEnabledForBlobStoreUnderControl(partitionId)) {
+          if(storeManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(partitionId)) {
             logger.info("FileCopyGetChunkRequest: Compaction control has been set for partition {}. Rejecting request", partitionId.getId());
             response = new FileCopyGetChunkResponse(ServerErrorCode.SnapshotUnavailable);
           }

@@ -75,7 +75,7 @@ public class DiskManager {
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
   private final BootstrapSessionManager bootstrapSessionManager;
-  private final HashMap<PartitionId, Boolean> controlCompactionForBlobStoreMap = new HashMap<>();
+  private final ConcurrentHashMap<PartitionId, Boolean> controlCompactionForBlobStoreMap = new ConcurrentHashMap<>();
   private final Set<String> stoppedReplicas;
   private final DiskMetrics diskMetrics;
   private final List<ReplicaStatusDelegate> replicaStatusDelegates;
@@ -443,21 +443,16 @@ public class DiskManager {
   }
 
   /**
-   * Return true if the compaction control has been set. Return the compaction control for the given partition id.
+   * Return true if the compaction control has been set and its set to True.
    * @param id the {@link PartitionId} of the {@link BlobStore} to check control for.
    * @return {@code true} if the compaction is under control. {@code false} if not.
    */
-  public boolean isCompactionEnabledForBlobStoreUnderControl(PartitionId id) {
-    return controlCompactionForBlobStoreMap.getOrDefault(id, false);
-  }
-
-  /**
-   * Return true if the compaction control has been set.
-   * @param id the {@link PartitionId} of the {@link BlobStore} to check control for.
-   * @return {@code true} if the compaction is under control. {@code false} if not.
-   */
-  public boolean isCompactionControlBeenSetForBlobStore(PartitionId id) {
-    return controlCompactionForBlobStoreMap.containsKey(id);
+  public boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId id) {
+    // We want to distinguish between the following two cases:
+    // "key not set" → no compaction control has been set yet
+    // "key set to false" → compaction explicitly disabled
+    Boolean enabled = controlCompactionForBlobStoreMap.get(id);
+    return enabled != null && enabled;
   }
 
   /**

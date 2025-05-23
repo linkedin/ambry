@@ -149,12 +149,7 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public boolean isCompactionControlBeenSetForBlobStore(PartitionId partitionId) {
-    throw new UnsupportedOperationException("Method not supported");
-  }
-
-  @Override
-  public boolean isCompactionEnabledForBlobStoreUnderControl(PartitionId partitionId) {
+  public boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId partitionId) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

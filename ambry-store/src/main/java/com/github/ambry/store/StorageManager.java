@@ -446,25 +446,12 @@ public class StorageManager implements StoreManager {
    * @return {@code true} if compaction control has been set for blob store, {@code false} otherwise.
    */
   @Override
-  public boolean isCompactionControlBeenSetForBlobStore(PartitionId id) {
+  public boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId id) {
     DiskManager diskManager = getDiskManager(id);
     if (diskManager == null) {
       throw new IllegalArgumentException("Failed to find disk manager for partition " + id);
     }
-    return diskManager.isCompactionControlBeenSetForBlobStore(id);
-  }
-
-  /**
-   * @param id the {@link PartitionId} for which isCompactionEnabledForBlobStoreUnderControl is requested.
-   * @return {@code true} if compaction is enabled for blob store under control, {@code false} otherwise.
-   */
-  @Override
-  public boolean isCompactionEnabledForBlobStoreUnderControl(PartitionId id) {
-    DiskManager diskManager = getDiskManager(id);
-    if (diskManager == null) {
-      throw new IllegalArgumentException("Failed to find disk manager for partition " + id);
-    }
-    return diskManager.isCompactionEnabledForBlobStoreUnderControl(id);
+    return diskManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(id);
   }
 
   /**
