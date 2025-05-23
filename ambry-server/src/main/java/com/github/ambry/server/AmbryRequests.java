@@ -1728,7 +1728,7 @@ public class AmbryRequests implements RequestAPI {
           logger.info("FileCopyGetMetaDataRequest: Compaction is in progress for partition {}. Rejecting request", partitionId.getId());
           response = new FileCopyGetMetaDataResponse(ServerErrorCode.SnapshotUnavailable);
         } else {
-          if(storeManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(partitionId) && storeManager.isCompactionEnabledForBlobStore(partitionId)) {
+          if(storeManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(partitionId)) {
             logger.info("FileCopyGetMetaDataRequest: Compaction control has been set for partition {}. Rejecting request", partitionId.getId());
             response = new FileCopyGetMetaDataResponse(ServerErrorCode.SnapshotUnavailable);
           }
