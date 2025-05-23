@@ -726,6 +726,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isCompactionInProgress() {
+      throw new UnsupportedOperationException("Method not supported");
+    }
+
+    @Override
     public boolean isInitialized() {
       throw new IllegalStateException("Not implemented");
     }
@@ -733,6 +738,11 @@ public class StatsManagerTest {
     @Override
     public boolean isStarted() {
       throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public String getSnapshotId(List<LogInfo> logSegments) {
+      throw new UnsupportedOperationException("Method not supported");
     }
   }
 

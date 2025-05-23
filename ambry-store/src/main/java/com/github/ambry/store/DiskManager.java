@@ -75,6 +75,7 @@ public class DiskManager {
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
   private final BootstrapSessionManager bootstrapSessionManager;
+  private final ConcurrentHashMap<PartitionId, Boolean> controlCompactionForBlobStoreMap = new ConcurrentHashMap<>();
   private final Set<String> stoppedReplicas;
   private final DiskMetrics diskMetrics;
   private final List<ReplicaStatusDelegate> replicaStatusDelegates;
@@ -170,7 +171,7 @@ public class DiskManager {
       }
     }
     compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
-    bootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, this::controlCompactionForBlobStore);
+    bootstrapSessionManager = new BootstrapSessionManager(diskManagerConfig, this::controlCompactionForBlobStoreStub);
   }
 
   /**
@@ -320,6 +321,7 @@ public class DiskManager {
       running = false;
       compactionManager.disable();
       bootstrapSessionManager.disable();
+      controlCompactionForBlobStoreMap.clear();
       diskIOScheduler.disable();
       final AtomicInteger numFailures = new AtomicInteger(0);
       List<Thread> shutdownThreads = new ArrayList<>();
@@ -428,11 +430,40 @@ public class DiskManager {
 
   /**
    * Enable or disable compaction on the {@link PartitionId} {@code id}.
+   * Also updates controlCompactionForBlobStoreMap which is further used by deferred compaction to prevent overriding
+   * this control.
+   * This is used by few places like State transitions, Admin store start/stop endpoints, Repairs flow etc.
+   * @param id the {@link PartitionId} of the {@link BlobStore} on which compaction control is enabled or disabled.
+   * @param enabled whether to enable ({@code true}) or disable.
+   * @return {@code true} if enabling or disabling was successful. {@code false} if not.
+   */
+  public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+    controlCompactionForBlobStoreMap.put(id, enabled);
+    return controlCompactionForBlobStoreStub(id, enabled);
+  }
+
+  /**
+   * Return true if the compaction control has been set and its set to True.
+   * @param id the {@link PartitionId} of the {@link BlobStore} to check control for.
+   * @return {@code true} if the compaction is under control. {@code false} if not.
+   */
+  public boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId id) {
+    // We want to distinguish between the following two cases:
+    // "key not set" → no compaction control has been set yet
+    // "key set to false" → compaction explicitly disabled
+    Boolean enabled = controlCompactionForBlobStoreMap.get(id);
+    return enabled != null && enabled;
+  }
+
+  /**
+   * Enable or disable compaction on the {@link PartitionId} {@code id}.
+   * To be only used by Deferred Compaction. Api plane ensures using controlCompactionForBlobStoreMap that it doesn't
+   * override this control.
    * @param id the {@link PartitionId} of the {@link BlobStore} on which compaction is disabled or enabled.
    * @param enabled whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
-  public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+  private boolean controlCompactionForBlobStoreStub(PartitionId id, boolean enabled) {
     rwLock.readLock().lock();
     boolean succeed = false;
     try {

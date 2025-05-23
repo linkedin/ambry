@@ -525,4 +525,14 @@ public class InMemoryStore implements Store {
   public List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment) {
     throw new UnsupportedOperationException("Method not supported");
   }
+
+  @Override
+  public boolean isCompactionInProgress() {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public String getSnapshotId(List<LogInfo> logSegments) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
 }

@@ -37,6 +37,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -1766,6 +1769,29 @@ public class BlobStore implements Store {
       return compactor.getCompactionDetailsInProgress();
     }
     return null;
+  }
+
+  public boolean isCompactionInProgress() {
+    return CompactionLog.isCompactionInProgress(dataDir, storeId);
+  }
+
+  @Override
+  public String getSnapshotId(List<LogInfo> logSegments) {
+    StringBuilder sb = new StringBuilder();
+
+    for (LogInfo logInfo : logSegments) {
+      sb.append(logInfo.getLogSegment().getFileName());
+      for (FileInfo indexSegment : logInfo.getIndexSegments()) {
+        sb.append(indexSegment.getFileName());
+      }
+    }
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] hash = digest.digest(sb.toString().getBytes(StandardCharsets.UTF_8));
+      return Utils.encodeAsHexString(hash);
+    } catch (NoSuchAlgorithmException e) {
+      throw new RuntimeException("SHA-256 algorithm not found", e);
+    }
   }
 
   /**

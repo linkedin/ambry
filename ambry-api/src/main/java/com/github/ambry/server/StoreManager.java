@@ -159,4 +159,11 @@ public interface StoreManager {
    * @return {@code true} if replica is set up successfully. {@code false} if not.
    */
   boolean setUpReplica(String partitionName);
+
+  /**
+   * Return true if the compaction control has been set.
+   * @param partitionId the {@link PartitionId} to check Compaction control for.
+   * @return {@code true} if the compaction is under control. {@code false} if not.
+   */
+  boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId partitionId);
 }
