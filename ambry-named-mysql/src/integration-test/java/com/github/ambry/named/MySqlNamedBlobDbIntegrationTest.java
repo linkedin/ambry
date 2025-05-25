@@ -48,6 +48,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.mysql.MySqlUtils.*;
+import static java.lang.Thread.*;
 import static org.junit.Assert.*;
 
 
@@ -66,6 +67,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     super(enableHardDelete, MySqlNamedBlobDbConfig.DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
   }
 
+  // DONE
   /**
    * Tests sequences of puts, gets, lists, and deletes across multiple containers.
    * @throws Exception
@@ -218,6 +220,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     }
   }
 
+  /// DONE
   /**
    * Test behavior with expired blobs
    */
@@ -236,7 +239,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
     time.setCurrentMilliseconds(System.currentTimeMillis());
 
-    Thread.sleep(100);
+    sleep(100);
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
         RestServiceErrorCode.Deleted);
     NamedBlobRecord recordFromStore =
@@ -335,7 +338,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     }
   }
 
-
+  // fails
   /**
    * Test behavior with blob cleanup main pipeline
    */
@@ -381,7 +384,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
       records.add(record2);
     }
 
-    Thread.sleep(100);
+    sleep(100);
 
     // Confirm the pullStaleBlobs indeed pulled out the stale blob cases
     Set<String> staleInputSet = staleRecords.stream()
@@ -415,6 +418,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     time.setCurrentMilliseconds(System.currentTimeMillis());
   }
 
+  // DONE
   /**
    * Test behavior with blob cleanup for stale blob case
    * Case 1. created more than staleDataRetentionDays ago, InProgress, is Largest (Don't care about the ttl and delete)
@@ -463,12 +467,13 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
-//    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
-//        "WHERE blob_name = 'stale/case2/more path segments--'";
-//
-//    Statement statement = getStatement();
-//    statement.executeUpdate(sql);
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+        "WHERE blob_name = 'stale/case2/more path segments--'";
 
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
+
+    sleep(10);
 
     String blobIdNew = getBlobId(account, container);
     NamedBlobRecord recordNew =
@@ -483,7 +488,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         record.getBlobId());
   }
 
-  ///// PASSES
+  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 1, created less than staleDataRetentionDays ago, InProgress, is Largest (Don't care about ttl and delete)
@@ -502,16 +507,13 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 1 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
+  // DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 2, created less than staleDataRetentionDays ago, Ready, not largest, and bigger version is ready
    */
   @Test
   public void testCleanupBlobGoodCase2() throws Exception {
-    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
-    long afterStaleCutoffTime = calendar.getTimeInMillis() + 5000;
-
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -519,21 +521,19 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
-    time.setCurrentMilliseconds(afterStaleCutoffTime);
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
-    time.setCurrentMilliseconds(afterStaleCutoffTime + 1);
     String blobIdNew = getBlobId(account, container);
     NamedBlobRecord recordNew =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
     namedBlobDb.put(recordNew, NamedBlobState.READY, true).get();
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
-    assertTrue("Good blob case 2 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
+    assertEquals(staleNamedBlobs.size(), 1);
   }
 
 
-  ///// PASSES
+  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 3, created more than staleDataRetentionDays ago, Ready, is Largest
@@ -561,7 +561,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   }
 
 
-  ///// PASSES
+  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 4, created more than staleDataRetentionDays ago, Ready, not Largest, but bigger version is InProgress.
@@ -582,6 +582,12 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     time.setCurrentMilliseconds(staleCutoffTime);
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+        "WHERE blob_name = 'good/case4/more path segments--'";
+
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
+
     time.setCurrentMilliseconds(staleCutoffTime + 5000);
     String blobIdNew = getBlobId(account, container);
     NamedBlobRecord recordNew =
@@ -593,7 +599,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   }
 
 
-  ///// PASSES
+  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 5, two rows created for the same blobId more than staleDataRetentionDays ago,
@@ -625,7 +631,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   }
 
 
-  ///// PASSES
+  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 6, one row created for a blobId more than staleDataRetentionDays ago via TTL Update process,
@@ -677,6 +683,167 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 6 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
+  @Test
+  public void testNewCleaner2() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "new_cleaner";
+    NamedBlobRecord record1 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+    namedBlobDb.put(record1, NamedBlobState.IN_PROGRESS, true).get();
+
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+        "WHERE blob_name = 'new_cleaner'";
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
+
+    NamedBlobRecord record2 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+    namedBlobDb.put(record2, NamedBlobState.IN_PROGRESS, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Should remove the older one, total 1 stale blob", 1, staleNamedBlobs.size());
+    assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(0).getBlobId(), record1.getBlobId());
+  }
+
+  @Test
+  public void testNewCleaner3() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "new_cleaner";
+    NamedBlobRecord record1 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id1", Utils.Infinite_Time);
+    namedBlobDb.put(record1, NamedBlobState.IN_PROGRESS, true).get();
+
+    NamedBlobRecord record2 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id2", Utils.Infinite_Time);
+    namedBlobDb.put(record2, NamedBlobState.IN_PROGRESS, true).get();
+
+
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 22 DAY " +
+        "WHERE blob_id = X'6E5A1BFA2775';";
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
+
+    String sql2 = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 21 DAY " +
+        "WHERE blob_id = X'6E5A1BFA2776'";
+    Statement statement2 = getStatement();
+    statement2.executeUpdate(sql2);
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
+    assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
+    assertEquals("Blob-id from record2 should be removed", staleNamedBlobs.get(0).getBlobId(), record2.getBlobId());
+  }
+
+  @Test
+  public void testNewCleaner4() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "new_cleaner";
+    NamedBlobRecord record1 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id1", Utils.Infinite_Time);
+    namedBlobDb.put(record1, NamedBlobState.IN_PROGRESS, true).get();
+
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+        "WHERE blob_name = 'new_cleaner'";
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
+
+    NamedBlobRecord record2 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id2", Utils.Infinite_Time);
+    namedBlobDb.put(record2, NamedBlobState.IN_PROGRESS, true).get();
+
+    NamedBlobRecord record3 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id3", Utils.Infinite_Time);
+    namedBlobDb.put(record3, NamedBlobState.IN_PROGRESS, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
+    assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
+    assertEquals("Blob-id from record2 should be removed", staleNamedBlobs.get(0).getBlobId(), record2.getBlobId());
+  }
+
+  @Test
+  public void testNewCleaner5() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "new_cleaner";
+    NamedBlobRecord record1 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id1", Utils.Infinite_Time);
+    namedBlobDb.put(record1, NamedBlobState.IN_PROGRESS, true).get();
+
+    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
+        "WHERE blob_name = 'new_cleaner'";
+    Statement statement = getStatement();
+    statement.executeUpdate(sql);
+
+    NamedBlobRecord record2 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id2", Utils.Infinite_Time);
+    namedBlobDb.put(record2, NamedBlobState.IN_PROGRESS, true).get();
+
+    NamedBlobRecord record3 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id3", Utils.Infinite_Time);
+    namedBlobDb.put(record3, NamedBlobState.READY, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
+    assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
+    assertEquals("Blob-id from record2 should be removed", staleNamedBlobs.get(0).getBlobId(), record2.getBlobId());
+  }
+
+  @Test
+  public void testNewCleaner6() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "new_cleaner";
+    NamedBlobRecord record1 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+    namedBlobDb.put(record1, NamedBlobState.IN_PROGRESS, true).get();
+
+    NamedBlobRecord record2 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+    namedBlobDb.put(record2, NamedBlobState.READY, true).get();
+
+    NamedBlobRecord record3 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+    namedBlobDb.put(record3, NamedBlobState.IN_PROGRESS, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Should remove both, total 1 stale blob", 1, staleNamedBlobs.size());
+    assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(0).getBlobId(), record1.getBlobId());
+  }
+
+  @Test
+  public void testNewCleaner7() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "new_cleaner";
+    NamedBlobRecord record1 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id1", Utils.Infinite_Time);
+    namedBlobDb.put(record1, NamedBlobState.READY, true).get();
+
+
+    NamedBlobRecord record2 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id2", Utils.Infinite_Time);
+    namedBlobDb.put(record2, NamedBlobState.IN_PROGRESS, true).get();
+
+    NamedBlobRecord record3 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, "blob-id3", Utils.Infinite_Time);
+    namedBlobDb.put(record3, NamedBlobState.READY, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
+    assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
+    assertEquals("Blob-id from record2 should be removed", staleNamedBlobs.get(0).getBlobId(), record2.getBlobId());
+
+  }
 
   /**
    * @param callable an async call, where the {@link Future} is expected to be completed with an exception.

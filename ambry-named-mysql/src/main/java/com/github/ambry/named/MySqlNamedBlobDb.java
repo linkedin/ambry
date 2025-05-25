@@ -45,6 +45,8 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -190,7 +192,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       BLOB_STATE,
       MODIFIED_TS,
       NAMED_BLOBS_V2,
-      VERSION
+      MODIFIED_TS
   );
 
   //  Timestamp deletedTime = resultSet.getTimestamp(6);
@@ -949,6 +951,54 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
     return new DeleteResult(blobVersions);
   }
+
+//  public static List<StaleNamedBlob> getStaleBlobs(List<StaleNamedBlob> blobList) {
+//    Map<String, List<StaleNamedBlob>> blobsByName = new HashMap<>();
+//    List<StaleNamedBlob> staleBlobs = new ArrayList<>();
+//    long cutoffTime = System.currentTimeMillis() - fiveDaysMillis;
+//    Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
+//
+//    // Group blobs by blobName
+//    for (StaleNamedBlob blob : blobList) {
+//      blobsByName.computeIfAbsent(blob.getBlobName(), k -> new ArrayList<>()).add(blob);
+//    }
+//
+//    for (List<StaleNamedBlob> group : blobsByName.values()) {
+//      // Sort DESC by version or modified timestamp
+//      group.sort(Comparator.comparing(StaleNamedBlob::getModifiedTS).reversed());
+//
+//      boolean foundValidReady = false;
+//      StaleNamedBlob candidate = null;
+//
+//      for (StaleNamedBlob blob : group) {
+//        int state = blob.getBlobState();
+//        Timestamp modified = blob.getModifiedTS();
+//
+//        if (state == NamedBlobState.READY.ordinal()) {
+//          if (!foundValidReady) {
+//            foundValidReady = true;
+//            candidate = blob;
+//          } else {
+//            // Older READY blobs beyond the latest valid one → stale
+//            staleBlobs.add(blob);
+//          }
+//        } else if (state == NamedBlobState.IN_PROGRESS.ordinal()) {
+//          if (foundValidReady || modified.before(cutoffTimestamp)) {
+//            staleBlobs.add(blob);
+//          } else if (candidate == null) {
+//            candidate = blob; // Might keep most recent IN_PROGRESS if no READY found
+//          } else {
+//            staleBlobs.add(blob); // Older IN_PROGRESS is stale
+//          }
+//        } else {
+//          // Unknown or future states
+//          staleBlobs.add(blob);
+//        }
+//      }
+//    }
+//
+//    return staleBlobs;
+//  }
 
   public static List<StaleNamedBlob> getStaleBlobs(List<StaleNamedBlob> blobList) {
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
