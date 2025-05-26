@@ -58,6 +58,11 @@ public class BootstrapSession {
    */
   private final ExtendableTimer totalTimerSinceCompactionDisabled;
 
+  /**
+   * Configuration for the disk manager.
+   */
+  private final DiskManagerConfig diskManagerConfig;
+
   private static final Logger logger = LoggerFactory.getLogger(BootstrapSession.class);
 
   /**
@@ -83,6 +88,7 @@ public class BootstrapSession {
     this.snapShotId = snapShotId;
     this.bootstrappingNodeId = bootstrappingNodeId;
     this.partitionId = partitionId;
+    this.diskManagerConfig = diskManagerConfig;
 
     this.deferralTimer = new ExtendableTimer(diskManagerConfig.diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds, () -> {
       logger.info("Deferral timer expired for snapshot: " + snapShotId);
@@ -120,19 +126,27 @@ public class BootstrapSession {
   }
 
   /**
-   * Extends the deferral timer by a certain number of minutes.
-   * Only the deferral timer can be extended.
+   * Extends the deferral timer by a certain number of milliseconds.
+   * Only the default deferral timer can be extended.
    * @param timeInMs The time in milliseconds to extend the deferral timer.
    */
-  void extendDeferralTimer(long timeInMs) {
+  public void extendDeferralTimer(long timeInMs) {
     deferralTimer.extend(timeInMs);
+  }
+
+  /**
+   * Extends the deferral timer to the default timeout.
+   * This is used when the deferral timer is extended to the default timeout.
+   */
+  public void extendDeferralTimer() {
+    deferralTimer.extend(diskManagerConfig.diskManagerDeferredCompactionDefaultTimerTimeoutMilliseconds);
   }
 
   /**
    * Gets the ID of the snapshot being bootstrapped.
    * @return The ID of the snapshot being bootstrapped.
    */
-  String getSnapShotId() {
+  public String getSnapShotId() {
     return snapShotId;
   }
 

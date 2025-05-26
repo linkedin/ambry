@@ -50,6 +50,7 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -2003,6 +2004,60 @@ public class BlobStoreTest {
     // Assert
     assertEquals("Expecting 5 index files for log segment =" + segmentName, 5, storeLogInfos.get(0).getIndexSegments().size());
     assertEquals("Expecting index files to be in sorted order", expectedIndexFileNames, actualIndexFileNames);
+  }
+
+  @Test
+  public void testBlobStoreGetSnapshotIdShouldChangeOnStoreDataChange() throws Exception {
+    if (!this.isLogSegmented) {
+      // This test is only applicable when the log is segmented
+      return;
+    }
+    // Arrange
+    final BlobStore blobStore = createAndStartBlobStore();
+
+    long totalLogSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
+    LogSegment loadedSegment = getLogSegment(LogSegmentName.fromPositionAndGeneration(totalLogSegments, 0),
+        SEGMENT_CAPACITY, true);
+    List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
+
+    final Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        createStoreConfig(SEGMENT_CAPACITY, true),
+        null, true, segmentsToLoad, Collections.EMPTY_LIST.iterator(), null);
+    blobStore.setLog(log);
+
+    String lastIndexFileName = null;
+    for (int i = 1; i < totalLogSegments; i++) {
+      LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
+      LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+      blobStore.getLog().addSegment(segment, true);
+
+      Path indexFilePath = Paths.get(blobStore.getDataDir() + "/" + segment.getName() + "_index");
+      Files.copy(Paths.get(tempDir + "/0_0_18_index"), indexFilePath);
+
+      if (i == totalLogSegments - 1) {
+        lastIndexFileName = segment.getName() + "_index";
+      }
+    }
+
+    // Act: Get the snapshotId
+    final List<LogInfo> storeLogInfos = blobStore.getLogSegmentMetadataFiles(true);
+    final String snapshotId = blobStore.getSnapshotId(storeLogInfos);
+
+    // Assert
+    assertNotNull("Expecting a non-null snapshotId", snapshotId);
+    assertFalse("Expecting a non-empty snapshotId", snapshotId.isEmpty());
+
+    // Act: Renaming one IndexFile to mimic Compaction
+    Path oldIndexFilePath = Paths.get(blobStore.getDataDir() + "/" + lastIndexFileName);
+    Path newIndexFilePath = Paths.get(blobStore.getDataDir() + "/" + "1_1_18_index");
+    Files.move(oldIndexFilePath, newIndexFilePath, StandardCopyOption.REPLACE_EXISTING);
+
+    // Act: Get the new snapshotId
+    final List<LogInfo> newStoreLogInfos = blobStore.getLogSegmentMetadataFiles(true);
+    final String newSnapshotId = blobStore.getSnapshotId(newStoreLogInfos);
+
+    // Assert
+    assertNotEquals("Expecting the new snapshotId to be different from the old one", snapshotId, newSnapshotId);
   }
 
   /**
