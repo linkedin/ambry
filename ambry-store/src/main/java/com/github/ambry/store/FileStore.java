@@ -512,10 +512,8 @@ public class FileStore implements PartitionFileStore {
           FileStoreLogAndIndexFileNamingConventionError);
     }
 
-    // Replace the second part (index 1) with "0"
     parts[1] = "0";
 
-    // Join the parts back together
     return String.join("_", parts);
   }
 
