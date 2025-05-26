@@ -47,6 +47,7 @@ public class ClusterMapConfig {
   public static final String IS_AUTO_REGISTRATION_ENABLED = "clustermap.auto.registration.enabled";
   public static final String PARTITION_FILTERING_ENABLED = "clustermap.enable.partition.filtering";
 
+  public static final String ENABLE_FILE_COPY_PROTOCOL = "clustermap.enable.file.copy.protocol";
   /**
    * The factory class used to get the resource state policies.
    */
@@ -406,6 +407,10 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapPartitionFilteringEnabled;
 
+  @Config(ENABLE_FILE_COPY_PROTOCOL)
+  @Default("false")
+  public final boolean enableFileCopyProtocol;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -496,5 +501,6 @@ public class ClusterMapConfig {
     clusterMapAutoRegistrationEnabled = verifiableProperties.getBoolean(IS_AUTO_REGISTRATION_ENABLED, false);
     routerPutSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
     clusterMapPartitionFilteringEnabled = verifiableProperties.getBoolean(PARTITION_FILTERING_ENABLED, false);
+    enableFileCopyProtocol = verifiableProperties.getBoolean(ENABLE_FILE_COPY_PROTOCOL, false);
   }
 }

@@ -20,6 +20,8 @@ package com.github.ambry.filetransfer;
  * based on the Priority of the Partition.
  */
 public interface FileCopyBasedReplicationScheduler extends Runnable{
+
+  public boolean isRunning();
   /**
    * Shutdown the scheduler.
    */

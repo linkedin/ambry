@@ -24,6 +24,7 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.store.FileStoreException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -901,6 +902,22 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
       // 1. take actions in storage manager (add new replica if necessary)
       onPartitionBecomePreBootstrapFromOffline(partitionName);
+
+      PartitionStateChangeListener fileCopyStateChangeListener =
+          partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
+
+      if (fileCopyStateChangeListener != null) {
+        try{
+          logger.info("Invoking FileCopy Listener for partition {}", partitionName);
+          fileCopyStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+          replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+        } catch (Exception e){
+            logger.error("FileCopy Listener failed for partition {}. Starting Normal Replication For the "
+                + "Partition after clean up", partitionName);
+            // If FileCopyListener fails, we can start normal replication
+        }
+      }
+
       onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =

@@ -379,6 +379,14 @@ public class BlobStore implements Store {
       final Timer.Context context = metrics.storeStartTime.time();
       try {
         initialize();
+        //Clean up temporary Staging Directory created by FileStore
+        if(config.storeDeleteFileCopyTemporaryDirectoryOnRestart && fileStore.isRunning()){
+          try {
+            fileStore.cleanUpStagingDirectory(dataDir, config.storeFileCopyTemporaryDirectoryName, storeId);
+          } catch (IOException e) {
+            logger.error("Failed to clean up staging directory for store {}. Error: {}", storeId, e.getMessage());
+          }
+        }
         load();
       } finally {
         context.stop();

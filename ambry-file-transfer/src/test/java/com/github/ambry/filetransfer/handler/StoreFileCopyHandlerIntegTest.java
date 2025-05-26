@@ -16,8 +16,6 @@ package com.github.ambry.filetransfer.handler;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.config.FileCopyBasedReplicationConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.ServerErrorCode;
@@ -27,7 +25,6 @@ import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.FileStore;
 import com.github.ambry.store.LogSegmentName;
 import com.github.ambry.store.StorageManagerMetrics;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileInfo;
 import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -48,7 +45,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
@@ -268,7 +264,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     assertEquals(SEGMENT_COUNT-1, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
 
     // cleanup the file to give it back to DiskSpaceAllocator
-    fileStore.cleanFile(logSegment.getPath(), STORE_ID);
+    fileStore.cleanLogFile(logSegment.getPath(), STORE_ID);
     assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
   }
 
