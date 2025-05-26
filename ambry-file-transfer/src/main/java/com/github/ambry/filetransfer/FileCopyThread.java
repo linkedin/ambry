@@ -56,9 +56,7 @@ public class FileCopyThread extends Thread {
 
     this.fileCopyStatusListener = fileCopyStatusListener;
     this.fileCopyHandler = fileCopyHandler;
-    System.out.println("ddcdcdcdcdcd");
     this.threadName = "FileCopyThread-" + fileCopyStatusListener.getReplicaId().getPartitionId().toPathString();
-    System.out.println("ddcdcdcdcdcd");
     this.isRunning = true;
     this.shutDownLatch = new CountDownLatch(1);
   }
