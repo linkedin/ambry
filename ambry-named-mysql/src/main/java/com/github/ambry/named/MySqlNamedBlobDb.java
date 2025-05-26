@@ -179,7 +179,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
 
   private static final String NEW_GET_STALE_QUERY = String.format(
-      "SELECT %s, %s, %s, %s, %s, %s, %s " +
+      "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
           "FROM %s " +
           "WHERE container_id = ? AND account_id = ? " +
           "ORDER BY %s DESC " +
@@ -191,6 +191,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       VERSION,
       BLOB_STATE,
       MODIFIED_TS,
+      DELETED_TS,
       NAMED_BLOBS_V2,
       MODIFIED_TS
   );
@@ -1011,6 +1012,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     for (int i = 1; i < blobList.size(); i++) {
       StaleNamedBlob currentBlob = blobList.get(i);
+      if (currentBlob.getDeleteTs() != null) {
+        continue;
+        }
 
       if (!keepBlob.getBlobName().equals(currentBlob.getBlobName())) {
         keepBlob = currentBlob;
@@ -1076,8 +1080,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               int blobState = resultSet.getInt(6);
               //Timestamp deletedTime = resultSet.getTimestamp(6);
               Timestamp modifiedTime = resultSet.getTimestamp(7);
+              Timestamp deletedTime = resultSet.getTimestamp(8);
 
-              StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, null, blobState, modifiedTime);
+              StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
               resultList.add(result);
               rowCount++;
             }
@@ -1175,7 +1180,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     String query = "";
     try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_WITH_VERSION_QUERY)) {
       // use the current time
-      statement.setTimestamp(1, deleteTs);
+      statement.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
       statement.setInt(2, accountId);
       statement.setInt(3, containerId);
       statement.setString(4, blobName);
