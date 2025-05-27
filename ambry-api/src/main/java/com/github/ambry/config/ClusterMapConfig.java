@@ -407,6 +407,12 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapPartitionFilteringEnabled;
 
+  /**
+   * Flag to enable the file copy-based replication protocol.
+   * This setting is referenced in both AmbryServer.
+   * This will enable FileCopyBasedReplicationManager which will register
+   * itself with the Helix Participant and allow automatically trigger File Copy Protocol in Helix Participant.
+   */
   @Config(ENABLE_FILE_COPY_PROTOCOL)
   @Default("false")
   public final boolean enableFileCopyProtocol;

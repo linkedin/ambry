@@ -724,11 +724,18 @@ public class StoreConfig {
   @Default("bootstrap_in_progress")
   public final String storeBootstrapInProgressFile;
 
+  /**
+   * Name of the staging directory where temporary files are created during file copy operations.
+   */
   public static final String STORE_FILE_COPY_TEMPORARY_DIRECTORY_NAME = "store.file.copy.temporary.directory.name";
   @Config(STORE_FILE_COPY_TEMPORARY_DIRECTORY_NAME)
   @Default("fileCopyTempDirectory")
   public final String storeFileCopyTemporaryDirectoryName;
 
+  /**
+   * Whether to delete the temporary directory created during file copy operations on restart.
+   * The config can be removed once the correctness of clean up feature is verified.
+   */
   public static final String STORE_DELETE_FILE_COPY_TEMPORARY_DIRECTORY_ON_RESTART =
       "store.delete.file.copy.temporary.directory.on.restart";
   @Config(STORE_DELETE_FILE_COPY_TEMPORARY_DIRECTORY_ON_RESTART)

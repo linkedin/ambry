@@ -104,7 +104,6 @@ public class FileStoreException extends RuntimeException {
      * Indicates that the FileStore service encountered an error during delete
      */
     UnknownError,
-
     /**
      * Indicates that the FileStore service encountered an error related to log and index file naming conventions.
      */
