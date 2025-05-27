@@ -176,7 +176,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
       metadataResponse.getLogInfos().forEach(logInfo -> {
         // Process the respective files and copy it to the temporary path.
-        final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + storeConfig.storeFileCopyInProgressFileName;
+        final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
         logInfo.getIndexSegments().forEach(indexFile -> {
           try {
             processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);

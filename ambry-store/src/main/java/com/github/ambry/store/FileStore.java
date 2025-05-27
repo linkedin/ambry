@@ -226,12 +226,11 @@ public class FileStore implements PartitionFileStore {
 
     Path outputPath = Paths.get(outputFilePath);
     Path parentDir = outputPath.getParent();
-    Path targetOutputPath = null;
     String targetPathString = "";
     try {
       synchronized (storeWriteLock) {
         String targetOutputString = updatePathWithResetCompactionIndex(outputFilePath);
-        targetOutputPath = Paths.get(targetOutputString);
+        Path targetOutputPath = Paths.get(targetOutputString);
         // Validate if parent directory exists
         if (parentDir != null && !Files.exists(parentDir)) {
           // Throwing IOException if the parent directory does not exist
@@ -244,7 +243,7 @@ public class FileStore implements PartitionFileStore {
         // Write content to file with create and append options, which will create a new file if file doesn't exist
         // and append to the existing file if file exists
         Future<?> currentAsynWriteTaskFuture = executor.submit(() -> {
-          try (FileOutputStream fos = new FileOutputStream(outputPath.toFile(), true)) {
+          try (FileOutputStream fos = new FileOutputStream(targetOutputPath.toFile(), true)) {
             fos.write(content);
             fos.flush();
           } catch (IOException e) {
@@ -252,14 +251,13 @@ public class FileStore implements PartitionFileStore {
           }
         });
         lastExecutedFuture = currentAsynWriteTaskFuture;
-        Files.write(targetOutputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
       }
     } catch (Exception e) {
       logger.error("Error while writing chunk to file: {}", targetPathString, e);
       throw new FileStoreException("Error while writing chunk to file: " + targetPathString,
           FileStoreWriteError);
     }
-    logger.info("Write successful for chunk to file: {} with size: {}", targetOutputPath, content.length);
+    logger.info("Write successful for chunk to file: {} with size: {}", targetPathString, content.length);
   }
 
   /**

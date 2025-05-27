@@ -266,12 +266,10 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
         // if deletion fails, we log here without throwing exception. Next time when server restarts,
         // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
         logger.error("Failed to delete {}", storeConfig.storeFileCopyTemporaryDirectoryName, e);
-        throw new FileStoreException("Failed to delete file copy in progress file for " + replicaId.getPartitionId().toPathString(), FileStoreFileFailedCleanUp);
       } catch (Exception e) {
         // if store is not found, we log here without throwing exception. Next time when server restarts,
         // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
         logger.error("Failed to clean up staging directory for {}", replicaId.getPartitionId().toPathString(), e);
-        throw new FileStoreException("Failed to clean up staging directory for " + replicaId.getPartitionId().toPathString(), FileStoreFileFailedCleanUp);
       }
     }
   }
