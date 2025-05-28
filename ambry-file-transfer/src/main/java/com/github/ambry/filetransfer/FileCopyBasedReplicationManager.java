@@ -170,18 +170,6 @@ public class FileCopyBasedReplicationManager {
       logger.info("Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
       prioritizationManager.addReplica(replicaId);
 
-      try {
-        logger.info("Waiting for File Copy to be completed for Replica: {}", replicaId.getPartitionId().toPathString());
-        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
-        logger.info("File Copy Completed for Replica: {}", replicaId.getPartitionId().toPathString());
-      } catch (InterruptedException e) {
-        logger.error("File copy for partition {} was interrupted", partitionName);
-        throw new StateTransitionException("File copy for partition " + partitionName + " was interrupted",
-            StateTransitionException.TransitionErrorCode.FileCopyProtocolFailure);
-      } catch (StateTransitionException e){
-        logger.error("File copy for partition {} failed", partitionName);
-        throw e;
-      }
     }
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {

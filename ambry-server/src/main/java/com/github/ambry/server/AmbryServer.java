@@ -389,7 +389,7 @@ public class AmbryServer {
 
           PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
           prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
-
+          prioritizationManager.start();
           FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory =
               new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory, fileCopyBasedReplicationConfig,
                   clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant);
