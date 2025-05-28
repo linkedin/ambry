@@ -179,7 +179,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       List<DiskId> disksToHydrate = fileCopyBasedReplicationThreadPoolManager.getDiskIdsToHydrate();
       for(DiskId diskId: disksToHydrate){
         List<ReplicaId> replicaIds = getNextReplicaToHydrate(diskId, fileCopyBasedReplicationConfig.fileCopyParallelPartitionHydrationCountPerDisk);
-        logger.info("Starting Hydration For Disk: {} with ReplicaId:", diskId);
+        logger.info("Starting Hydration For Disk: {}", diskId);
 
         if(!replicaIds.isEmpty()){
           for(ReplicaId replicaId: replicaIds) {
@@ -269,7 +269,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       } catch (Exception e) {
         // if store is not found, we log here without throwing exception. Next time when server restarts,
         // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
-        logger.error("Failed to clean up staging directory for {}", replicaId.getPartitionId().toPathString(), e);
+        logger.error("Failed to successfully {}", replicaId.getPartitionId().toPathString(), e);
       }
     }
   }

@@ -44,6 +44,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Stream;
+import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -105,6 +106,17 @@ public class FileStore implements PartitionFileStore {
    * This is used to determine how much space to allocate for each segment.
    */
   private long segmentSize;
+
+  /**
+   * Suffix for log files.
+   */
+  private final String LOG_SUFFIX = "_log";
+
+  /**
+   * Suffix for index files.
+   */
+  private final String INDEX_SUFFIX = "_index";
+
 
   /**
    * Creates a new FileStore instance.
@@ -271,6 +283,16 @@ public class FileStore implements PartitionFileStore {
    */
   public void moveAllRegularFiles(String srcDirPath, String destDirPath) throws IOException {
     // Verify service is running.
+    if(lastExecutedFuture != null && !lastExecutedFuture.isDone()) {
+      logger.warn("Last executed future is not done yet, waiting for it to complete before proceeding.");
+      try {
+        lastExecutedFuture.wait();
+      } catch (InterruptedException e) {
+        logger.error("Thread was Interrupted while waiting for last executed future to complete", e);
+        throw new RuntimeException(e);
+      }
+    }
+
     validateIfFileStoreIsRunning();
 
     // Validate inputs.
@@ -410,8 +432,11 @@ public class FileStore implements PartitionFileStore {
    * @throws IOException if an I/O error occurs during cleanup
    */
   @Override
-  public void cleanUpStagingDirectory(String targetPath, String stagingDirectoryName, String storeId)
+  public void cleanUpStagingDirectory(@Nonnull String targetPath, @Nonnull String stagingDirectoryName,@Nonnull String storeId)
       throws IOException {
+    Objects.requireNonNull(targetPath, "targetPath must not be null");
+    Objects.requireNonNull(stagingDirectoryName, "stagingDirectoryName must not be null");
+    Objects.requireNonNull(storeId, "storeId must not be null");
 
     File rootDir = new File(targetPath);
     if (!rootDir.exists() || !rootDir.isDirectory()) {
@@ -430,17 +455,24 @@ public class FileStore implements PartitionFileStore {
     if (stagingFiles != null) {
       for (File file : stagingFiles) {
         String name = file.getName();
-        if (name.endsWith("_index") || name.endsWith("_log")) {
+        if (name.endsWith(INDEX_SUFFIX) || name.endsWith(LOG_SUFFIX)) {
           int lastUnderscore = name.lastIndexOf('_');
-          if (lastUnderscore != -1) {
-            prefixes.add(name.substring(0, lastUnderscore));
+          if(lastUnderscore != -1){
+            if(name.endsWith(LOG_SUFFIX)){
+              // If the file ends with _log, we add the prefix without the last underscore
+              prefixes.add(name.substring(0, lastUnderscore));
+            } else {
+              // If the file ends with _index, we add the prefix without the last underscore
+              int secondLastUnderscore = name.lastIndexOf('_', lastUnderscore - 1);
+              prefixes.add(name.substring(0, secondLastUnderscore));
+            }
           }
         }
       }
 
       // 2. Delete all files in staging directory
       for (File file : stagingFiles) {
-        if(!file.isDirectory() && file.getName().endsWith("_log")) {
+        if(!file.isDirectory() && file.getName().endsWith(LOG_SUFFIX)) {
           cleanLogFile(file.getAbsolutePath(), storeId);
         } else {
           deleteRecursively(file);
@@ -458,7 +490,7 @@ public class FileStore implements PartitionFileStore {
         String name = file.getName();
         for (String prefix : prefixes) {
           if (name.startsWith(prefix)) {
-            if(name.endsWith("_log")) {
+            if(name.endsWith(LOG_SUFFIX)) {
               try {
                 cleanLogFile(file.getAbsolutePath(), storeId);
               } catch (IOException e) {
@@ -532,6 +564,7 @@ public class FileStore implements PartitionFileStore {
    */
   public void shutdown() {
     isRunning = false;
+    executor.shutdown();
   }
 
   /**

@@ -302,8 +302,13 @@ public class BlobStore implements Store {
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
             accountService, remoteTokenTracker, diskMetrics, false);
         fileStore.start(log.getSegmentSize());
+        if(config.storeDeleteFileCopyTemporaryDirectoryOnRestart && fileStore.isRunning()){
+          fileStore.cleanUpStagingDirectory(dataDir, config.storeFileCopyTemporaryDirectoryName, storeId);
+        }
 
         initialized = true;
+        //Clean up temporary Staging Directory created by FileStore
+
       } catch (Exception e) {
         if (fileLock != null) {
           // Release the file lock
@@ -382,14 +387,6 @@ public class BlobStore implements Store {
       final Timer.Context context = metrics.storeStartTime.time();
       try {
         initialize();
-        //Clean up temporary Staging Directory created by FileStore
-        if(config.storeDeleteFileCopyTemporaryDirectoryOnRestart && fileStore.isRunning()){
-          try {
-            fileStore.cleanUpStagingDirectory(dataDir, config.storeFileCopyTemporaryDirectoryName, storeId);
-          } catch (IOException e) {
-            logger.error("Failed to clean up staging directory for store {}. Error: {}", storeId, e.getMessage());
-          }
-        }
         load();
       } finally {
         context.stop();

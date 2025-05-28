@@ -903,18 +903,25 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       // 1. take actions in storage manager (add new replica if necessary)
       onPartitionBecomePreBootstrapFromOffline(partitionName);
 
+      // Invoke FileCopyManagerListener if it exists. This listener is responsible for copying files
+      // from remote store to local disk.
       PartitionStateChangeListener fileCopyStateChangeListener =
           partitionStateChangeListeners.get(StateModelListenerType.FileCopyManagerListener);
-
+      /**
+       *
+       */
       if (fileCopyStateChangeListener != null) {
         try{
           logger.info("Invoking FileCopy Listener for partition {}", partitionName);
           fileCopyStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
           replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
+          //clean Up
         } catch (Exception e){
             logger.error("FileCopy Listener failed for partition {}. Starting Normal Replication For the "
                 + "Partition after clean up", partitionName);
             // If FileCopyListener fails, we can start normal replication
+        } finally {
+
         }
       }
 

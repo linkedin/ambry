@@ -130,12 +130,12 @@ public class FileCopyBasedReplicationManager {
        */
       Store store = storeManager.getStore(storeManager.getReplica(partitionName).getPartitionId());
       if(store != null){
-        logger.error("Store for Partition {} is already started. Ignoring state change", partitionName);
+        logger.info("Store for Partition {} is already started. Ignoring state change", partitionName);
         return;
       }
 
       if(!isRunning){
-        logger.info("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
+        logger.error("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
         throw new StateTransitionException("FileCopyBasedReplicationManager is not running. Ignoring state "
             + "change for partition: " + partitionName, StateTransitionException.
             TransitionErrorCode.FileCopyBasedReplicationManagerNotRunning);

@@ -165,6 +165,8 @@ public class FileStoreTest {
 
     // Verify written data matches original
     byte[] readData = new byte[data.length];
+    // Allow some time for file system operations to complete
+    Thread.sleep(20);
     try (FileInputStream fis = new FileInputStream(outputFile)) {
         assertEquals("Incorrect number of bytes read", data.length, fis.read(readData));
     }
@@ -421,14 +423,29 @@ public class FileStoreTest {
     try (FileOutputStream fos = new FileOutputStream(fileInStaging)) {
       fos.write("test data".getBytes());
     }
+
     File fileInTempDir = new File(tempDir, "10_0_18_index");
+
+    // Create a log and index file in the temp directory that should not be deleted
+    File indexFileNotToBeDeleted = new File(tempDir, "0_0_18_index");
+    File logFileNotToBeDeleted = new File(tempDir, "0_0_log");
+
+    try (FileOutputStream fos = new FileOutputStream(logFileNotToBeDeleted)) {
+      fos.write("log file data".getBytes());
+    }
+
+
+
     fileInTempDir.createNewFile();
+    indexFileNotToBeDeleted.createNewFile();
     // Call cleanUpStagingDirectory
     fileStore.cleanUpStagingDirectory(targetPath, stagingDirectoryName, storeId);
 
     // Verify that the staging directory is deleted
     assertFalse("Staging directory should be deleted", stagingDir.exists());
-    assertTrue("File should be moved to temp directory", fileInTempDir.exists());
+    assertFalse("File should be moved to temp directory", fileInTempDir.exists());
+    assertTrue("Log file should not be deleted", logFileNotToBeDeleted.exists());
+    assertTrue("Index file should not be deleted", indexFileNotToBeDeleted.exists());
   }
 
   @Test(expected = IOException.class)

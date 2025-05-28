@@ -83,15 +83,9 @@ public class FileCopyBasedReplicationSchedulerImplTest {
         .thenReturn(Collections.singletonList(mockReplicaId));
     when(mockHandlerFactory.getFileCopyHandler()).thenReturn(mockFileCopyHandler);
 
-    scheduler = new FileCopyBasedReplicationSchedulerImpl(
-        mockHandlerFactory,
-        mockConfig,
-        mockClusterMap,
-        mockPrioritizationManager,
-        mockReplicaSyncUpManager,
-        mockStoreManager,
-        mockStoreConfig,
-        mockDataNodeId
+    scheduler = new FileCopyBasedReplicationSchedulerImpl(mockHandlerFactory,
+        mockConfig, mockClusterMap, mockPrioritizationManager,
+        mockReplicaSyncUpManager, mockStoreManager, mockStoreConfig, mockDataNodeId
     );
   }
 
