@@ -267,8 +267,8 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
         logger.error("Failed to delete {}", storeConfig.storeFileCopyTemporaryDirectoryName, e);
       } catch (Exception e) {
         // if store is not found, we log here without throwing exception. Next time when server restarts,
-        // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
-        logger.error("Failed to successfully {}", replicaId.getPartitionId().toPathString(), e);
+        // the store should attempt to delete this again and complete BOOTSTRAP -> STANDBY quickly again.
+        logger.error("Failed to get File Store {}", replicaId.getPartitionId().toPathString(), e);
       }
     }
   }

@@ -27,6 +27,8 @@ import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.PartitionFileStore;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -50,9 +52,10 @@ public class FileCopyBasedReplicationSchedulerImplTest {
   private DiskId mockDiskId;
   private PartitionId mockPartitionId;
   private ReplicaId mockReplicaId;
+  private PartitionFileStore mockFileStore;
 
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     mockHandlerFactory = mock(FileCopyHandlerFactory.class);
     mockFileCopyHandler = mock(FileCopyHandler.class);
     mockClusterMap = mock(ClusterMap.class);
@@ -60,6 +63,7 @@ public class FileCopyBasedReplicationSchedulerImplTest {
     mockReplicaSyncUpManager = mock(ReplicaSyncUpManager.class);
     mockStoreManager = mock(StoreManager.class);
     mockDataNodeId = mock(DataNodeId.class);
+    mockFileStore = mock(PartitionFileStore.class);
 
     Properties properties = new Properties();
     properties.setProperty("filecopy.number.of.file.copy.threads", "2");
@@ -75,6 +79,7 @@ public class FileCopyBasedReplicationSchedulerImplTest {
     mockPartitionId = mock(PartitionId.class);
     mockReplicaId = mock(ReplicaId.class);
 
+    when(mockStoreManager.getFileStore(mockReplicaId.getPartitionId())).thenReturn(mockFileStore);
     when(mockDataNodeId.getDiskIds()).thenReturn(Collections.singletonList(mockDiskId));
     when(mockReplicaId.getDiskId()).thenReturn(mockDiskId);
     when(mockReplicaId.getPartitionId()).thenReturn(mockPartitionId);
@@ -103,7 +108,7 @@ public class FileCopyBasedReplicationSchedulerImplTest {
 
 
   @Test
-  public void testFileCopySuccessHandling() {
+  public void testFileCopySuccessHandling() throws IOException {
     FileCopyBasedReplicationSchedulerImpl.FileCopyStatusListenerImpl listener =
         scheduler.new FileCopyStatusListenerImpl(mockReplicaSyncUpManager, mockReplicaId);
 
@@ -112,6 +117,7 @@ public class FileCopyBasedReplicationSchedulerImplTest {
 
     // Verify interactions
     verify(mockReplicaSyncUpManager, times(1)).onFileCopyComplete(mockReplicaId);
+    verify(mockPrioritizationManager, times(1)).removeInProgressReplica(mockDiskId, mockReplicaId);
     assertFalse("Replica should be removed from in-flight replicas", scheduler.getInFlightReplicas().contains(mockReplicaId));
   }
 
@@ -127,6 +133,7 @@ public class FileCopyBasedReplicationSchedulerImplTest {
 
     // Verify interactions
     verify(mockReplicaSyncUpManager, times(1)).onFileCopyError(mockReplicaId);
+    verify(mockPrioritizationManager, times(1)).removeInProgressReplica(mockDiskId, mockReplicaId);
     assertFalse("Replica should be removed from in-flight replicas", scheduler.getInFlightReplicas().contains(mockReplicaId));
   }
 
