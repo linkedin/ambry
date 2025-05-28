@@ -302,6 +302,10 @@ public class BlobStore implements Store {
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
             accountService, remoteTokenTracker, diskMetrics, false);
         fileStore.start(log.getSegmentSize());
+        //Clean up temporary Staging Directory created by FileStore
+        if(config.storeDeleteFileCopyTemporaryDirectoryOnRestart && fileStore.isRunning()){
+          fileStore.cleanUpStagingDirectory(dataDir, config.storeFileCopyTemporaryDirectoryName, storeId);
+        }
 
         initialized = true;
       } catch (Exception e) {

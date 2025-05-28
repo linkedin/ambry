@@ -83,11 +83,6 @@ public class FileCopyBasedReplicationConfig {
   @Default("5000")
   public final int fileCopyHandlerConnectionTimeoutMs;
 
-  public static final String FILE_COPY_TEMPORARY_DIRECTORY_NAME = "filecopy.temporary.directory.name";
-  @Config(FILE_COPY_TEMPORARY_DIRECTORY_NAME)
-  @Default("fileCopyTempDirectory")
-  public final String fileCopyTemporaryDirectoryName;
-
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
     Objects.requireNonNull(verifiableProperties, "verifiableProperties cannot be null");
     fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
@@ -100,6 +95,5 @@ public class FileCopyBasedReplicationConfig {
     fileCopyHandlerRetryBackoffMs = verifiableProperties.getInt(FILECOPYHANDLER_RETRY_BACKOFF_MS, 500);
     getFileCopyHandlerChunkSize = verifiableProperties.getInt(FILECOPYHANDLER_CHUNK_SIZE, 10 * 1024 * 1024); // 10 MB
     fileCopyHandlerConnectionTimeoutMs = verifiableProperties.getInt(FILECOPYHANDLER_CONNECTION_TIMEOUT_MS, 5000);
-    fileCopyTemporaryDirectoryName = verifiableProperties.getString(FILE_COPY_TEMPORARY_DIRECTORY_NAME, "fileCopyTempDirectory");
   }
 }

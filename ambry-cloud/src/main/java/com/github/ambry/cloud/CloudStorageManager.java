@@ -115,6 +115,11 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
+  public Store getInitializedStore(PartitionId id) {
+    return null;
+  }
+
+  @Override
   public boolean scheduleNextForCompaction(PartitionId id) {
     throw new UnsupportedOperationException("Method not supported");
   }

@@ -43,16 +43,24 @@ import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.ReplicaPrioritizationConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.ServerExecutionMode;
+import com.github.ambry.config.ServerReplicationMode;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationManager;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactory;
+import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactoryImpl;
+import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
+import com.github.ambry.filetransfer.handler.StoreFileCopyHandlerFactory;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -76,6 +84,10 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.replica.prioritization.FCFSPrioritizationManager;
+import com.github.ambry.replica.prioritization.FileBasedReplicationPrioritizationManagerFactory;
+import com.github.ambry.replica.prioritization.PrioritizationManager;
+import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.replica.prioritization.ReplicationPrioritizationManager;
 import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replica.prioritization.disruption.factory.DisruptionServiceFactory;
@@ -126,6 +138,8 @@ public class AmbryServer {
   private RequestHandlerPool requestHandlerPool = null;
   private ScheduledExecutorService scheduler = null;
   private StorageManager storageManager = null;
+  private FileCopyBasedReplicationManager fileCopyBasedReplicationManager = null;
+  private PrioritizationManager prioritizationManager = null;
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
   private RecoveryManager recoveryManager = null;
@@ -236,6 +250,8 @@ public class AmbryServer {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
+      FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(properties);
+      ReplicaPrioritizationConfig replicaPrioritizationConfig = new ReplicaPrioritizationConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -366,6 +382,24 @@ public class AmbryServer {
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
 
+        if(serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
+          FileCopyHandlerFactory fileCopyHandlerFactory =
+              new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap,
+                  fileCopyBasedReplicationConfig, storeConfig);
+
+          PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
+          prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
+
+          FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory =
+              new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory, fileCopyBasedReplicationConfig,
+                  clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant);
+          fileCopyBasedReplicationManager =
+              new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig, storageManager,
+                  clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant,
+                  fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory, prioritizationManager, storeConfig,
+                  replicaPrioritizationConfig);
+          fileCopyBasedReplicationManager.start();
+        }
         logger.info("Creating StatsManager to publish stats");
         statsManager =
             new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId),
@@ -573,6 +607,12 @@ public class AmbryServer {
       }
       if (storageManager != null) {
         storageManager.shutdown();
+      }
+      if (fileCopyBasedReplicationManager != null) {
+       fileCopyBasedReplicationManager.shutdown();
+      }
+      if(prioritizationManager != null){
+        prioritizationManager.shutdown();
       }
       if (connectionPool != null) {
         connectionPool.shutdown();

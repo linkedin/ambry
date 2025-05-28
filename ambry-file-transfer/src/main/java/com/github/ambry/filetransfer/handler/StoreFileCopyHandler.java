@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer.handler;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.filetransfer.FileChunkInfo;
 import com.github.ambry.filetransfer.FileCopyInfo;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
@@ -62,6 +63,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private final FileCopyBasedReplicationConfig config;
 
+  private final StoreConfig storeConfig;
+
   /**
    * The cluster map to use for getting the {@link PartitionId}.
    */
@@ -90,16 +93,19 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       @Nonnull ConnectionPool connectionPool,
       @Nonnull StoreManager storeManager,
       @Nonnull ClusterMap clusterMap,
-      @Nonnull FileCopyBasedReplicationConfig config) {
+      @Nonnull FileCopyBasedReplicationConfig config,
+      @Nonnull StoreConfig storeConfig) {
     Objects.requireNonNull(connectionPool, "ConnectionPool cannot be null");
     Objects.requireNonNull(storeManager, "StoreManager cannot be null");
     Objects.requireNonNull(clusterMap, "ClusterMap cannot be null");
     Objects.requireNonNull(config, "FileCopyHandlerConfig cannot be null");
+    Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
 
     this.connectionPool = connectionPool;
     this.storeManager = storeManager;
     this.clusterMap = clusterMap;
     this.config = config;
+    this.storeConfig = storeConfig;
     this.operationRetryHandler = new OperationRetryHandler(config);
   }
 
@@ -156,6 +162,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
+    logger.info("File Copy handler is running for Replica on Mount Path: {} hydrating from DataNode: {}", fileCopyInfo.getSourceReplicaId().getMountPath(), fileCopyInfo.getTargetReplicaId().getDataNodeId());
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
 
@@ -169,17 +176,18 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
       metadataResponse.getLogInfos().forEach(logInfo -> {
         // Process the respective files and copy it to the temporary path.
-        final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + config.fileCopyTemporaryDirectoryName;
-        logInfo.getIndexSegments().forEach(indexFile ->
-          processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore));
+        final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
+        logInfo.getIndexSegments().forEach(indexFile -> {
+          processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
+        });
         // Process log segment
-        Long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
+        long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
         // allocate the file
         FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
             logInfo.getLogSegment().getFileSize());
         String filePath = partitionToMountTempFilePath + File.separator + logFileInfo.getFileName();
         try {
-          fileStore.allocateFile(filePath, storeId.toString());
+          fileStore.allocateFile(filePath, Long.toString(storeId));
         } catch (IOException e) {
           logMessageAndThrow("ProcessLogSegment", "Failed Disk Space Allocation", e,
               FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerFailedDiskSpaceAllocation);
@@ -286,7 +294,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param fileStore the file store
    */
   private void processIndexFile(FileInfo indexFile, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
-      String snapshotId, PartitionFileStore fileStore) {
+      String snapshotId, PartitionFileStore fileStore){
+    validateIfStoreFileCopyHandlerIsRunning();
     final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
     FileCopyGetChunkResponse chunkResponse = null;
     try {
@@ -320,6 +329,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     logger.info("Number of chunks in log segment: {} for filename {}", chunksInLogSegment, logFileInfo.getFileName());
 
     for (int i = 0; i < chunksInLogSegment; i++) {
+      //Throw Exception and come out of the thread a shutdown is called.
+      validateIfStoreFileCopyHandlerIsRunning();
       long startOffset = (long) i * config.getFileCopyHandlerChunkSize;
       long sizeInBytes = Math.min(config.getFileCopyHandlerChunkSize, logFileInfo.getFileSize() - startOffset);
 
