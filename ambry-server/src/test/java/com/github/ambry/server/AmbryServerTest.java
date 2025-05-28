@@ -20,15 +20,20 @@ import com.codahale.metrics.jmx.DefaultObjectNameFactory;
 import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.jmx.ObjectNameFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
+import com.github.ambry.clustermap.DataNodeConfig;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.function.Function;
 import org.junit.Test;
 
+import static com.github.ambry.utils.TestUtils.*;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
@@ -63,5 +68,90 @@ public class AmbryServerTest {
     ambryServer.startup();
     verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());
     ambryServer.shutdown();
+  }
+
+  @Test(timeout = 20000)
+  public void testAmbryServerStartupWithoutDataNodeId() throws Exception {
+    ClusterAgentsFactory spyClusterAgentsFactory = spy(new MockClusterAgentsFactory(false, false, 1, 1, 1));
+    // Mock ClusterMap
+    DataNodeId dataNodeId = spyClusterAgentsFactory.getClusterMap().getDataNodeIds().get(0);
+    MockClusterMap spyClusterMap = spy(new MockClusterMap(false, false, 1, 1, 1, false, false, null));
+    doReturn(null).when(spyClusterMap).getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
+    doReturn(spyClusterMap).when(spyClusterAgentsFactory).getClusterMap();
+
+    // Set up properties
+    Properties props = new Properties();
+    props.setProperty("host.name", dataNodeId.getHostname());
+    props.setProperty("port", Integer.toString(dataNodeId.getPort()));
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "DC1");
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.port", "1234");
+
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    AmbryServer ambryServer =
+        new AmbryServer(verifiableProperties, spyClusterAgentsFactory, null, new LoggingNotificationSystem(),
+            SystemTime.getInstance(), null);
+    // Start the server
+    Thread serverThread = new Thread(() -> {
+      try {
+        ambryServer.startup();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
+    serverThread.start();
+    // check if the thread is alive after waiting for few seconds
+    Thread.sleep(3000);
+    assertTrue("Thread should be alive", serverThread.isAlive());
+    // Spawn a thread that calls the listener after a delay
+    new Thread(() -> {
+      try {
+        Thread.sleep(5000);
+        // change the return value of getDataNodeId to return the dataNodeId
+        doReturn(dataNodeId).when(spyClusterMap).getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
+        spyClusterMap.invokeListenerForDataNodeChange(Collections.singletonList(
+            new DataNodeConfig("localhost_1234", "localhost", 1234, "DC1", null, null, null, 0)));
+        // wait for some time for startup to finish
+        Thread.sleep(5000);
+        // check if the thread is alive after waiting for few seconds
+        assertFalse("Thread should not be alive", serverThread.isAlive());
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+    }).start();
+    // Stop the server
+    ambryServer.shutdown();
+  }
+
+  @Test(timeout = 15000)
+  public void testAmbryServerStartupWithoutDataNodeIdTimeoutCase() throws Exception {
+    ClusterAgentsFactory spyClusterAgentsFactory = spy(new MockClusterAgentsFactory(false, false, 1, 1, 1));
+    // Mock ClusterMap
+    DataNodeId dataNodeId = spyClusterAgentsFactory.getClusterMap().getDataNodeIds().get(0);
+    MockClusterMap spyClusterMap = spy(new MockClusterMap(false, false, 1, 1, 1, false, false, null));
+    doReturn(null).when(spyClusterMap).getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
+    doReturn(spyClusterMap).when(spyClusterAgentsFactory).getClusterMap();
+
+    // Set up properties
+    Properties props = new Properties();
+    props.setProperty("host.name", dataNodeId.getHostname());
+    props.setProperty("port", Integer.toString(dataNodeId.getPort()));
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "DC1");
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.port", "1234");
+    // timeout for dataNode config latch await in 5 seconds
+    props.setProperty("server.datanode.config.timeout", "5");
+
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    // Start the server
+    AmbryServer ambryServer =
+        new AmbryServer(verifiableProperties, spyClusterAgentsFactory, null, new LoggingNotificationSystem(),
+            SystemTime.getInstance(), null);
+    assertException(InstantiationException.class, ambryServer::startup, e -> {
+      assertEquals("Unexpected exception thrown", e.getMessage(),
+          "failure during startup java.lang.IllegalArgumentException: Startup timed out waiting for data node config to be populated");
+    });
   }
 }

@@ -37,6 +37,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
@@ -78,6 +79,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final DataNodeConfigSource dataNodeConfigSource;
   private final HelixAdmin helixAdmin;
   private final MetricRegistry metricRegistry;
+  private CountDownLatch blockStateTransitionLatch = null;
   private volatile boolean disablePartitionsComplete = false;
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
@@ -133,20 +135,22 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
+   * @throws IOException if there is an error connecting to the Helix cluster.
    * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
-   * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-      Callback<AggregatedAccountStorageStats> callback) throws IOException {
+  public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports,
+      AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
+    //Register state transition model
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
     registerTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
+    this.blockStateTransitionLatch = new CountDownLatch(1);
     try {
       // register server as a participant
       manager.connect();
@@ -609,6 +613,16 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
+   * With auto-registration instanceConfig is populated on participant registration, also triggering state transition
+   * We have a latch that blocks state transition until this method is called, which is called after listeners of
+   * StorageManager, StatsManager, and ReplicationManager is registered
+   */
+  @Override
+  public void unblockStateTransition() {
+      this.blockStateTransitionLatch.countDown();
+  }
+
+  /**
    * A zookeeper based implementation for distributed lock.
    */
   static class DistributedLockImpl implements DistributedLock {
@@ -826,6 +840,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
               metricRegistry));
     }
 
+    //Register tasks
     if (!taskFactoryMap.isEmpty()) {
       engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
           new TaskStateModelFactory(manager, taskFactoryMap));
@@ -856,16 +871,37 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return dataNodeConfig;
   }
 
+
+  @Override
+  public void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomePreBootstrapFromOffline(partitionName);
+    }
+  }
+
+  @Override
+  public void onPartitionBecomeBootstrapFromPreBootstrap(String partitionName) {
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
+    }
+  }
+
+
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
     try {
-      // 1. take actions in storage manager (add new replica if necessary)
-      PartitionStateChangeListener storageManagerListener =
-          partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-      if (storageManagerListener != null) {
-        storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+      if (this.blockStateTransitionLatch != null && this.blockStateTransitionLatch.getCount() > 0) {
+        logger.info("Bootstrapping is waiting for blockStateTransitionLatch...");
+        this.blockStateTransitionLatch.await();
       }
+      participantMetrics.incStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
+      // 1. take actions in storage manager (add new replica if necessary)
+      onPartitionBecomePreBootstrapFromOffline(partitionName);
+      onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
       // 2. take actions in replication manager (add new replica if necessary)
       PartitionStateChangeListener replicationManagerListener =
           partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
@@ -878,6 +914,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       if (statsManagerListener != null) {
         statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
       }
+    } catch (InterruptedException e) {
+      logger.error("Waiting for state transition to be unblocked was interrupted", e);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;

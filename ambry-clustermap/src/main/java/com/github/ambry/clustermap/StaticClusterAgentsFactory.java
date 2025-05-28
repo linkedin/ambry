@@ -85,8 +85,8 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         private final Map<StateModelListenerType, PartitionStateChangeListener> listeners = new HashMap<>();
 
         @Override
-        public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-           Callback<AggregatedAccountStorageStats> callback) {
+        public void participateAndBlockStateTransition(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+            Callback<AggregatedAccountStorageStats> callback) {
           DataNodeId currentNode =
               getClusterMap().getDataNodeId(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
           Set<String> partitionsOnNode = getClusterMap().getReplicaIds(currentNode)
@@ -98,6 +98,10 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
               listener.onPartitionBecomeLeaderFromStandby(partitionName);
             }
           }
+        }
+
+        @Override
+        public void unblockStateTransition() {
         }
 
         @Override

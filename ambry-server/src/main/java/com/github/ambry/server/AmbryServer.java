@@ -26,6 +26,8 @@ import com.github.ambry.cloud.RecoveryNetworkClientFactory;
 import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
@@ -129,6 +131,7 @@ import static com.github.ambry.utils.Utils.*;
 public class AmbryServer {
 
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
+  private final CountDownLatch dataNodeLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
   private AmbryRequests requests = null;
   private RequestHandlerPool requestHandlerPool = null;
@@ -142,6 +145,7 @@ public class AmbryServer {
   private final ClusterAgentsFactory clusterAgentsFactory;
   private final Function<MetricRegistry, JmxReporter> reporterFactory;
   private ClusterMap clusterMap;
+  private ClusterMapConfig clusterMapConfig;
   private List<ClusterParticipant> clusterParticipants;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
@@ -209,6 +213,11 @@ public class AmbryServer {
           Utils.getObj(serverConfig.serverSecurityServiceFactory, properties, metrics, registry);
       serverSecurityService = serverSecurityServiceFactory.getServerSecurityService();
       nettyInternalMetrics = new NettyInternalMetrics(registry, new NettyConfig(properties));
+      this.clusterMapConfig = new ClusterMapConfig(properties);
+      ClusterMapChangeListener clusterMapListener = new AmbryServerClusterMapChangeListenerImpl(
+          ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort),
+          dataNodeLatch);
+      clusterMap.registerClusterMapListener(clusterMapListener);
     } catch (Exception e) {
       logger.error("Error during bootup", e);
       throw new InstantiationException("failure during bootup " + e);
@@ -237,7 +246,6 @@ public class AmbryServer {
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
       FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(properties);
       ReplicaPrioritizationConfig replicaPrioritizationConfig = new ReplicaPrioritizationConfig(properties);
@@ -330,20 +338,52 @@ public class AmbryServer {
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
         logger.info("Server execution mode is DATA_SERVING_MODE");
         scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
-        logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
-        DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
-        if (nodeId == null) {
-          throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
-              + "is not present in the clustermap. Failing to start the datanode");
-        }
+        accountStatsMySqlStore =
+            statsConfig.enableMysqlReport ? (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(properties,
+                clusterMapConfig, registry).getAccountStatsStore() : null;
+
         StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
         FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
+        Callback<AggregatedAccountStorageStats> accountServiceCallback = new AccountServiceCallback(accountService);
+
+        logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
+        DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        // Flow for new node ADD
+        // Instance config is populated with auto-registration
+        // Once DataNode config is populated, Storage, Replication and Stats Manager are created
+        // State Machine Model and other tasks are not registered until then to the HelixParticipant
+        List<AmbryStatsReport> ambryStatsReports = getAmbryStatsReports(serverConfig);
+
+        for (ClusterParticipant participant : clusterParticipants) {
+          participant.participateAndBlockStateTransition(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
+        }
+
+        // wait for dataNode to be populated
+        if (nodeId == null) {
+          logger.info("Waiting on dataNode config to be populated...");
+          if(!dataNodeLatch.await(serverConfig.serverDatanodeConfigTimeout, TimeUnit.SECONDS)) {
+            throw new IllegalArgumentException("Startup timed out waiting for data node config to be populated");
+          }
+          nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+          if (nodeId == null) {
+            throw new IllegalArgumentException(String.format("Node %s absent in cluster-map", networkConfig.hostName));
+          }
+          logger.info("DataNode config is populated");
+        }
+
         // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
         // and some components require sole participant, the first one in the list will be primary participant.
+        logger.info("Creating Storage Manager");
         storageManager =
             new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
+
+        logger.info("Creating StatsManager to publish stats");
+        statsManager =
+            new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId),
+                registry, statsConfig, time, clusterParticipant, accountStatsMySqlStore, accountService, nodeId);
+        statsManager.start();
 
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
         // mismatch in sealed/stopped replica lists that maintained by each participant.
@@ -379,16 +419,11 @@ public class AmbryServer {
                 skipPredicate);
         replicationManager.start();
 
-
-        logger.info("Creating StatsManager to publish stats");
-
-        accountStatsMySqlStore =
-            statsConfig.enableMysqlReport ? (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(properties,
-                clusterMapConfig, registry).getAccountStatsStore() : null;
-        statsManager =
-            new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
-                clusterParticipant, accountStatsMySqlStore, accountService, nodeId);
-        statsManager.start();
+        // unblock state transition
+        logger.info("Unblocking state transition");
+        for (ClusterParticipant participant : clusterParticipants) {
+          participant.unblockStateTransition();
+        }
 
         ArrayList<Port> ports = new ArrayList<Port>();
         ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
@@ -459,40 +494,13 @@ public class AmbryServer {
           }
         }
 
-        // Other code
-        List<AmbryStatsReport> ambryStatsReports = new ArrayList<>();
-        Set<String> validStatsTypes = new HashSet<>();
-        for (StatsReportType type : StatsReportType.values()) {
-          validStatsTypes.add(type.toString());
-        }
-
-        // StatsManager would publish account stats to AccountStatsStore, and optionally publish partition class stats
-        // as well. So if serverStatsReportsToPublish contains PARTITION_CLASS_REPORT, then be sure to enable partition
-        // class stats with StatsManagerConfig.publishPartitionClassReportPeriodInSecs.
-        // Also, since StatsManager is tightly coupled with mysql database right now, if variable accountStatsMySqlStore
-        // is null, there is no report to aggregate and publish.
-        if (!serverConfig.serverStatsReportsToPublish.isEmpty() && accountStatsMySqlStore != null) {
-          serverConfig.serverStatsReportsToPublish.forEach(e -> {
-            if (validStatsTypes.contains(e)) {
-              ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
-                  StatsReportType.valueOf(e)));
-            }
-          });
-        }
-
-        Callback<AggregatedAccountStorageStats> accountServiceCallback = new AccountServiceCallback(accountService);
-        for (ClusterParticipant participant : clusterParticipants) {
-          participant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
-        }
-
-
         if (replicationConfig.enableReplicationPrioritization && clusterMap instanceof HelixClusterManager) {
           HelixClusterManager helixClusterManager = (HelixClusterManager) clusterMap;
           DisruptionServiceFactory disruptionServiceFactory = Utils.getObj(replicationConfig.disruptionServiceFactory, properties, nodeId.getDatacenterName());
           DisruptionService disruptionService = disruptionServiceFactory.getDisruptionService();
           ScheduledExecutorService scheduledExecutorService = Utils.newScheduler(1, "ambry-prioritization", false);
           replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager, clusterMap, nodeId, scheduledExecutorService, storageManager, replicationConfig,
-          helixClusterManager.getManagerQueryHelper(), disruptionService);
+          helixClusterManager.getManagerQueryHelper(), disruptionService, registry);
         }
 
       } else {
@@ -637,6 +645,37 @@ public class AmbryServer {
       metrics.serverShutdownTimeInMs.update(processingTime);
       logger.info("Server shutdown time in Ms {}", processingTime);
     }
+  }
+
+  /**
+   * Retrieves a list of AmbryStatsReport objects based on the server configuration.
+   *
+   * @param serverConfig The {@link ServerConfig} containing the server's configuration.
+   * @return A list of {@link AmbryStatsReport} objects to be published.
+   */
+  private List<AmbryStatsReport> getAmbryStatsReports(ServerConfig serverConfig) {
+    // Other code
+    List<AmbryStatsReport> ambryStatsReports = new ArrayList<>();
+    Set<String> validStatsTypes = new HashSet<>();
+    for (StatsReportType type : StatsReportType.values()) {
+      validStatsTypes.add(type.toString());
+    }
+
+    // StatsManager would publish account stats to AccountStatsStore, and optionally publish partition class stats
+    // as well. So if serverStatsReportsToPublish contains PARTITION_CLASS_REPORT, then be sure to enable partition
+    // class stats with StatsManagerConfig.publishPartitionClassReportPeriodInSecs.
+    // Also, since StatsManager is tightly coupled with mysql database right now, if variable accountStatsMySqlStore
+    // is null, there is no report to aggregate and publish.
+    if (!serverConfig.serverStatsReportsToPublish.isEmpty() && accountStatsMySqlStore != null) {
+      serverConfig.serverStatsReportsToPublish.forEach(e -> {
+        if (validStatsTypes.contains(e)) {
+          ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
+              StatsReportType.valueOf(e)));
+        }
+      });
+    }
+
+    return ambryStatsReports;
   }
 
   public void awaitShutdown() throws InterruptedException {

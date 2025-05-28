@@ -89,14 +89,13 @@ public class FileCopyBasedReplicationConfig {
   public final String fileCopyTemporaryDirectoryName;
 
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
+    Objects.requireNonNull(verifiableProperties, "verifiableProperties cannot be null");
     fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
     fileCopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(FILE_COPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
     fileCopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILE_COPY_NUMBER_OF_FILE_COPY_THREADS, 1);
     fileCopyDataFlushIntervalInMbs = verifiableProperties.getLong(FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
     fileCopyReplicaTimeoutSecs = verifiableProperties.getLong(FILE_COPY_REPLICA_TIMEOUT_SECS, 36000);
     fileCopySchedulerWaitTimeSecs = verifiableProperties.getLong(FILE_COPY_SCHEDULER_WAIT_TIME_SECS, 30);
-    Objects.requireNonNull(verifiableProperties, "verifiableProperties cannot be null");
-
     fileCopyHandlerMaxApiRetries = verifiableProperties.getInt(FILECOPYHANDLER_MAX_API_RETRIES, 3);
     fileCopyHandlerRetryBackoffMs = verifiableProperties.getInt(FILECOPYHANDLER_RETRY_BACKOFF_MS, 500);
     getFileCopyHandlerChunkSize = verifiableProperties.getInt(FILECOPYHANDLER_CHUNK_SIZE, 10 * 1024 * 1024); // 10 MB

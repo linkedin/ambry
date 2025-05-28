@@ -55,6 +55,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getDatasetsMetricsGroup;
   public final RestRequestMetricsGroup listDatasetsMetricsGroup;
   public final RestRequestMetricsGroup getStatsReportMetricsGroup;
+  public final RestRequestMetricsGroup listBlobsMetricsGroup;
   // HEAD
   public final RestRequestMetricsGroup headBlobMetricsGroup;
   // OPTIONS
@@ -63,6 +64,9 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup postBlobMetricsGroup;
   public final RestRequestMetricsGroup postAccountsMetricsGroup;
   public final RestRequestMetricsGroup postDatasetsMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartAbortMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartCompleteMetricsGroup;
+  public final RestRequestMetricsGroup s3MultipartCreateMetricsGroup;
 
   // PUT
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
@@ -135,7 +139,6 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics getDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getDatasetsSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics copyDatasetsSecurityPostProcessRequestMetrics;
-
 
   public final AsyncOperationTracker.Metrics listDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics listDatasetsSecurityPostProcessRequestMetrics;
@@ -360,6 +363,9 @@ public class FrontendMetrics {
     getStatsReportMetricsGroup =
         new RestRequestMetricsGroup(GetStatsReportHandler.class, "GetStatsReport", false, metricRegistry,
             frontendConfig);
+    listBlobsMetricsGroup =
+        new RestRequestMetricsGroup(NamedBlobListHandler.class, "ListBlobs", false, metricRegistry, frontendConfig);
+
     // HEAD
     headBlobMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "HeadBlob", false, metricRegistry,
@@ -374,6 +380,16 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, metricRegistry, frontendConfig);
     postDatasetsMetricsGroup =
         new RestRequestMetricsGroup(PostDatasetsHandler.class, "PostDatasets", false, metricRegistry, frontendConfig);
+    s3MultipartAbortMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartAbort", false, metricRegistry,
+            frontendConfig);
+    s3MultipartCompleteMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartComplete", false, metricRegistry,
+            frontendConfig);
+    s3MultipartCreateMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "S3MultipartCreate", false, metricRegistry,
+            frontendConfig);
+
     // PUT
     updateBlobTtlMetricsGroup =
         new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, metricRegistry, frontendConfig);
@@ -381,7 +397,6 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, metricRegistry, frontendConfig);
     putBlobMetricsGroup =
         new RestRequestMetricsGroup(NamedBlobPutHandler.class, "PutBlob", false, metricRegistry, frontendConfig);
-
 
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
@@ -511,7 +526,8 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "RetentionRequest", metricRegistry);
 
     s3DeleteHandleMetrics = new AsyncOperationTracker.Metrics(S3DeleteHandler.class, "S3Handle", metricRegistry);
-    s3BatchDeleteHandleMetrics = new AsyncOperationTracker.Metrics(S3BatchDeleteHandler.class, "S3Handle", metricRegistry);
+    s3BatchDeleteHandleMetrics =
+        new AsyncOperationTracker.Metrics(S3BatchDeleteHandler.class, "S3Handle", metricRegistry);
     s3ListHandleMetrics = new AsyncOperationTracker.Metrics(S3ListHandler.class, "S3Handle", metricRegistry);
     s3PutHandleMetrics = new AsyncOperationTracker.Metrics(S3PutHandler.class, "S3Handle", metricRegistry);
     s3GetHandleMetrics = new AsyncOperationTracker.Metrics(S3GetHandler.class, "S3Handle", metricRegistry);

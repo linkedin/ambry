@@ -13,6 +13,7 @@
  */
 package com.github.ambry.replica.prioritization;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.AmbryDataNode;
 import com.github.ambry.clustermap.AmbryDisk;
 import com.github.ambry.clustermap.AmbryPartition;
@@ -27,6 +28,7 @@ import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 import com.github.ambry.replica.prioritization.disruption.Operation;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -75,6 +77,8 @@ public class ReplicationPrioritizationManager implements Runnable {
   private final DisruptionService disruptionService;
   private Map<PriorityTier, Set<PartitionId>> prioritizedPartitions;
   private final ScheduledExecutorService scheduler;
+  private final ReplicationPrioritizationMetrics replicationPrioritizationMetrics;
+
   /**
    * Creates a new ReplicationPrioritizationManager.
    *
@@ -87,7 +91,7 @@ public class ReplicationPrioritizationManager implements Runnable {
   public ReplicationPrioritizationManager(ReplicationEngine replicationEngine, ClusterMap clusterMap, DataNodeId dataNodeId,
       ScheduledExecutorService scheduler, StorageManager storageManager,
       ReplicationConfig replicationConfig, ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
-      clusterManagerQueryHelper, DisruptionService disruptionService) {
+      clusterManagerQueryHelper, DisruptionService disruptionService, MetricRegistry metricRegistry) {
     this.replicationEngine = replicationEngine;
     this.clusterMap = clusterMap;
     this.dataNodeId = dataNodeId;
@@ -115,6 +119,7 @@ public class ReplicationPrioritizationManager implements Runnable {
     // Schedule periodic runs for prioritization run
     this.scheduler.scheduleAtFixedRate(this, initialDelay, scheduleIntervalMinutes, TimeUnit.MINUTES);
 
+    this.replicationPrioritizationMetrics = new ReplicationPrioritizationMetrics(metricRegistry);
     logger.info("FCH TEST: ReplicationPrioritizationManager initialized with prioritization window of {} hours, schedule interval of {} minutes, " +
             "and min batch size of {} partitions", prioritizationWindowMs, scheduleIntervalMinutes,
         minBatchSizeForHighPriorityPartitions);
@@ -123,6 +128,10 @@ public class ReplicationPrioritizationManager implements Runnable {
 
   public Set<PartitionId> getCurrentlyReplicatingPriorityPartitions() {
     return currentlyReplicatingPriorityPartitions;
+  }
+
+  public ReplicationPrioritizationMetrics getReplicationPrioritizationMetrics() {
+    return replicationPrioritizationMetrics;
   }
 
   /**
@@ -165,6 +174,8 @@ public class ReplicationPrioritizationManager implements Runnable {
 
       // 1. Get all bootstrapping partitions from StorageManager
       allBootstrappingPartitions = getAllBootstrappingPartitionsForNode();
+      // Update metrics for bootstrapping partitions
+      replicationPrioritizationMetrics.updateAllBootstrappingPartitions(allBootstrappingPartitions);
 
       // Process any completed partitions
       processCompletedPartitions();
@@ -189,6 +200,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       }
       // 4. Create prioritized partition lists
       prioritizedPartitions = prioritizePartitions(partitionIds, disruptionsByPartition);
+      replicationPrioritizationMetrics.updatePrioritizedPartitions(prioritizedPartitions);
 
       prioritizedPartitions.keySet().forEach(priorityTier -> logger.info("FCH TEST: Found {} partitions in {} category", prioritizedPartitions.get(priorityTier).size(), priorityTier));
 
@@ -372,6 +384,7 @@ public class ReplicationPrioritizationManager implements Runnable {
       replicationEngine.controlReplicationForPartitions(copyOfDisabledReplicationPartitions, Collections.emptyList(),
           true);
       disabledReplicationPartitions.clear();
+      replicationPrioritizationMetrics.updateDisabledReplicationPartitions(disabledReplicationPartitions);
       logger.debug("Disabling high priority partition flag isHighPriorityReplicationRunning={}",
           isHighPriorityReplicationRunning.get());
     } catch (Exception e) {
@@ -383,11 +396,20 @@ public class ReplicationPrioritizationManager implements Runnable {
    * Process any partitions that have completed replication.
    */
   private void processCompletedPartitions() {
-    currentlyReplicatingPriorityPartitions.stream().filter(this::hasCompletedReplication).forEach(completedPartitions::add);
+    for (PartitionId partitionId : currentlyReplicatingPriorityPartitions) {
+      try {
+        if (hasCompletedReplication(partitionId)) {
+          completedPartitions.add(partitionId);
+        }
+      } catch (Exception e) {
+        logger.error("Error checking replication status for partition {} {}", partitionId, e.getMessage());
+      }
+    }
 
     // Remove completed partitions from current set
     currentlyReplicatingPriorityPartitions.removeAll(completedPartitions);
     logger.info("FCH TEST: Removed {} completed partitions from replication set", completedPartitions.size());
+    replicationPrioritizationMetrics.updateCurrentlyReplicatingPriorityPartitions(currentlyReplicatingPriorityPartitions);
 
     if (currentlyReplicatingPriorityPartitions.isEmpty()) {
       logger.info("FCH TEST: No currently replicating partitions, disabling high-priority replication");
@@ -418,6 +440,7 @@ public class ReplicationPrioritizationManager implements Runnable {
 
       // If we're not already in high-priority mode, start it
       if (!isHighPriorityReplicationRunning.get()) {
+        replicationPrioritizationMetrics.recordNormalToHighPriorityTransition();
         // Start high-priority replication with all identified high-priority partitions
         startHighPriorityReplication(highPriorityPartitions);
       } else {
@@ -426,8 +449,14 @@ public class ReplicationPrioritizationManager implements Runnable {
           logger.info("FCH TEST: Adding {} new high-priority partitions to existing replication set",
               newHighPriorityPartitions.size());
 
+          // Record new high priority partitions
+          replicationPrioritizationMetrics.recordPartitionsAddedToHighPriority(newHighPriorityPartitions);
+
           // Enable replication for the new high-priority partitions
           currentlyReplicatingPriorityPartitions.addAll(newHighPriorityPartitions);
+
+          replicationPrioritizationMetrics.updateCurrentlyReplicatingPriorityPartitions(currentlyReplicatingPriorityPartitions);
+
 
           // Ensure we have at least the minimum batch size
           if (currentlyReplicatingPriorityPartitions.size() < minBatchSizeForHighPriorityPartitions) {
@@ -455,6 +484,10 @@ public class ReplicationPrioritizationManager implements Runnable {
       // Initialize the set of replicating partitions with the high-priority ones
       currentlyReplicatingPriorityPartitions.clear();
       currentlyReplicatingPriorityPartitions.addAll(highPriorityPartitions);
+
+      replicationPrioritizationMetrics.updateCurrentlyReplicatingPriorityPartitions(currentlyReplicatingPriorityPartitions);
+      replicationPrioritizationMetrics.recordPartitionsAddedToHighPriority(highPriorityPartitions);
+
 
       // Ensure we have at least the minimum batch size
       if (currentlyReplicatingPriorityPartitions.size() < minBatchSizeForHighPriorityPartitions) {
@@ -501,6 +534,8 @@ public class ReplicationPrioritizationManager implements Runnable {
     // Prioritize the remaining partitions
     // Add partitions in priority order until we reach the minimum batch size
     fillUptoBatchSize(additionalPartitionsNeeded, remainingPartitions);
+
+    replicationPrioritizationMetrics.updateCurrentlyReplicatingPriorityPartitions(currentlyReplicatingPriorityPartitions);
   }
 
   /**
@@ -515,7 +550,13 @@ public class ReplicationPrioritizationManager implements Runnable {
       if (!partitions.isEmpty()) {
         int toAdd = Math.min(additionalPartitionsNeeded - added, partitions.size());
         Set<PartitionId> partitionsToAdd = partitions.stream().filter(remainingPartitions::contains).limit(toAdd).collect(Collectors.toSet());
+
+        // Record any newly added partitions
+        if (!partitionsToAdd.isEmpty()) {
+          replicationPrioritizationMetrics.recordPartitionsAddedToHighPriority(partitionsToAdd);
+        }
         currentlyReplicatingPriorityPartitions.addAll(partitionsToAdd);
+
         added += partitionsToAdd.size();
         logger.info("FCH TEST: Added {} partitions from {} category", partitionsToAdd.size(), priorityTier);
 
@@ -545,6 +586,8 @@ public class ReplicationPrioritizationManager implements Runnable {
     // Enable high-priority partitions
     logger.info("FCH TEST: Enabling replication for {} high-priority partitions", currentlyReplicatingPriorityPartitions.size());
     replicationEngine.controlReplicationForPartitions(currentlyReplicatingPriorityPartitions, Collections.emptyList(), true);
+    disabledReplicationPartitions.removeAll(currentlyReplicatingPriorityPartitions);
+    replicationPrioritizationMetrics.updateDisabledReplicationPartitions(disabledReplicationPartitions);
   }
 
 
@@ -555,10 +598,22 @@ public class ReplicationPrioritizationManager implements Runnable {
    * @return true if replication is complete (bootstrap finished)
    */
   public boolean hasCompletedReplication(PartitionId partitionId) {
+    Store store = storageManager.getStore(partitionId);
 
-    // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
-    ReplicaState state = storageManager.getStore(partitionId).getCurrentState();
-    return state == ReplicaState.STANDBY || state == ReplicaState.LEADER;
+    if (store != null && store.isStarted()) {
+      ReplicaState state = store.getCurrentState();
+      if (state == null) {
+        logger.error("Replica state not found for partition {}", partitionId);
+        return true;
+      }
+
+      logger.debug("Found state {} for partition {}", state, partitionId);
+      // Check if replica is in STANDBY or LEADER state, which means bootstrap is complete
+      return state == ReplicaState.STANDBY || state == ReplicaState.LEADER || state == ReplicaState.ERROR;
+    } else {
+      logger.error("Store not started or not found for partition {}. Will try this partition in next run", partitionId);
+      return true;
+    }
   }
 
 

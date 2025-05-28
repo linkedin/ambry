@@ -31,6 +31,7 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestRequestService;
@@ -53,8 +54,10 @@ import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Set;
 
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
@@ -175,6 +178,7 @@ class FrontendRestRequestService implements RestRequestService {
   public void setupResponseHandler(RestResponseHandler responseHandler) {
     this.responseHandler = responseHandler;
   }
+
   @Override
   public void start() throws InstantiationException {
     if (responseHandler == null) {
@@ -209,7 +213,8 @@ class FrontendRestRequestService implements RestRequestService {
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);
     deleteDatasetHandler =
-        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector, deleteBlobHandler);
+        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector,
+            deleteBlobHandler);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
@@ -245,7 +250,7 @@ class FrontendRestRequestService implements RestRequestService {
     s3BatchDeleteHandler = new S3BatchDeleteHandler(deleteBlobHandler, frontendMetrics);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, s3BatchDeleteHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
-    s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics, frontendConfig);
     s3GetHandler =
         new S3GetHandler(s3ListHandler, s3MultipartUploadHandler, getBlobHandler, securityService, frontendMetrics,
             accountAndContainerInjector);
@@ -545,10 +550,63 @@ class FrontendRestRequestService implements RestRequestService {
       securityService.preProcessRequest(restRequest, FrontendUtils.buildCallback(preProcessingMetrics, r -> {
         RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
         restRequest.setArg(REQUEST_PATH, requestPath);
+
+        // Reject POST requests for non-S3 named blob requests, named blob uploads happen via PUT
+        if (restRequest.getRestMethod() == RestMethod.POST && requestPath.matchesOperation(Operations.NAMED_BLOB)
+            && !isS3Request(restRequest)) {
+          throw new RestServiceException("POST is not a supported method for named blobs on /" + Operations.NAMED_BLOB,
+              RestServiceErrorCode.NotAllowed, true, false, null);
+        }
+
+        //NamedBlobPath.parse will validate the blobName length
+        //PUT operations have the strictest validation since they control what enters the system.
+        //After that, we only perform basic checks(blobName length check) to ensure compatibility—this way,
+        //even if PUT validation becomes more strict in the future, we can still retrieve previously accepted data.
+        if (frontendConfig.enableBlobNameRuleCheck && (requestPath.matchesOperation(Operations.NAMED_BLOB)
+            && restRequest.getRestMethod() == RestMethod.PUT)) {
+          NamedBlobPath namedBlobPath =
+              NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          validateBlobName(namedBlobPath.getBlobName());
+        }
         routingAction.accept(requestPath);
       }, restRequest.getUri(), logger, errorCallback));
     } catch (Exception e) {
       errorCallback.onCompletion(null, e);
+    }
+  }
+
+  private void validateBlobName(String blobName) throws RestServiceException {
+    // ref: https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+    boolean isPrevWhitespace = false;
+
+    Set<Character> invalidAsciiBlobNameCharsSet =
+        frontendConfig.invalidAsciiBlobNameChars.stream().map(s -> s.charAt(0)).collect(Collectors.toSet());
+
+    for (int i = 0; i < blobName.length(); i++) {
+      char c = blobName.charAt(i);
+
+      // Check for two consecutive whitespace characters
+      if (Character.isWhitespace(c)) {
+        if (isPrevWhitespace) {
+          throw new RestServiceException("Blob name contains consecutive whitespace characters",
+              RestServiceErrorCode.BadRequest);
+        }
+        isPrevWhitespace = true;
+      } else {
+        isPrevWhitespace = false;
+      }
+
+      // Check for control characters or invalid characters
+      if (Character.isISOControl(c) || invalidAsciiBlobNameCharsSet.contains(c)) {
+        throw new RestServiceException("Blob name contains control or disallowed character: " + c,
+            RestServiceErrorCode.BadRequest);
+      }
+    }
+
+    // Check for disallowed path patterns
+    if (blobName.startsWith("../") || blobName.startsWith("./") || blobName.contains("/../") || blobName.contains(
+        "/./")) {
+      throw new RestServiceException("Blob name contains disallowed path pattern", RestServiceErrorCode.BadRequest);
     }
   }
 

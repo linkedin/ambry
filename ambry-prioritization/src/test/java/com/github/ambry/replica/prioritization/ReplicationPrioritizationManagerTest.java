@@ -10,6 +10,7 @@
  */
 package com.github.ambry.replica.prioritization;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.AmbryDataNode;
 import com.github.ambry.clustermap.AmbryDisk;
 import com.github.ambry.clustermap.AmbryPartition;
@@ -28,7 +29,6 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.Time;
 import com.google.common.collect.Lists;
-import java.lang.reflect.Field;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
@@ -88,6 +88,8 @@ public class ReplicationPrioritizationManagerTest {
   @Mock
   private DisruptionService disruptionService;
 
+  private MetricRegistry metricRegistry;
+
   private ReplicationPrioritizationManager manager;
   private ReplicationPrioritizationManager managerWithMockTime;
   private final String datacenterName = "testDC";
@@ -128,6 +130,14 @@ public class ReplicationPrioritizationManagerTest {
     when(storageManager.getStore(partition3)).thenReturn(store3);
     when(storageManager.getStore(partition4)).thenReturn(store4);
     when(storageManager.getStore(partition5)).thenReturn(store5);
+
+    // Setup Stores
+    when(store1.isStarted()).thenReturn(true);
+    when(store2.isStarted()).thenReturn(true);
+    when(store3.isStarted()).thenReturn(true);
+    when(store4.isStarted()).thenReturn(true);
+    when(store5.isStarted()).thenReturn(true);
+
     partitionToStoreMap = new HashMap<>();
     partitionToStoreMap.put(partition1, store1);
     partitionToStoreMap.put(partition2, store2);
@@ -143,25 +153,12 @@ public class ReplicationPrioritizationManagerTest {
 
     when(dataNodeId.getDatacenterName()).thenReturn(datacenterName);
 
+    metricRegistry = new MetricRegistry();
+
     // Create manager instance with system time
     manager = new ReplicationPrioritizationManager(
-        replicationEngine, clusterMap, dataNodeId, scheduler, storageManager, replicationConfig, clusterManagerQueryHelper, disruptionService);
-
-    // Initialize mock time
-   // when(mockTime.milliseconds()).thenReturn(System.currentTimeMillis());
-
-    // Create manager instance with mock time for testing timeouts
-    managerWithMockTime = new ReplicationPrioritizationManager(
-        replicationEngine, clusterMap, dataNodeId, scheduler, storageManager, replicationConfig, clusterManagerQueryHelper, disruptionService);
-
-    // Need to use reflection to set the private time field
-    try {
-      Field timeField = ReplicationPrioritizationManager.class.getDeclaredField("time");
-      timeField.setAccessible(true);
-      timeField.set(managerWithMockTime, mockTime);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to set mock time", e);
-    }
+        replicationEngine, clusterMap, dataNodeId, scheduler, storageManager,
+        replicationConfig, clusterManagerQueryHelper, disruptionService, metricRegistry);
 
     // Default mock for disruption service (override in specific tests)
     when(disruptionService.batchDisruptionsByPartition(any())).thenReturn(Collections.emptyMap());
@@ -191,6 +188,29 @@ public class ReplicationPrioritizationManagerTest {
     // Verify no partition replication was controlled (since there are no bootstrapping partitions)
     verify(replicationEngine, never()).controlReplicationForPartitions(
         any(Set.class), any(List.class), anyBoolean());
+
+    ReplicationPrioritizationMetrics replicationPrioritizationMetrics = manager.getReplicationPrioritizationMetrics();
+    int bootstrappingPartitionCount = replicationPrioritizationMetrics.getAllBootstrappingPartitionsCount().getValue();
+    int currentlyReplicatingPartitionsCount = replicationPrioritizationMetrics.getCurrentlyReplicatingPriorityPartitionsCount().getValue();
+    int disabledReplicationPartitionsCount = replicationPrioritizationMetrics.getDisabledReplicationPartitionsCount().getValue();
+    int minReplicaNoDisruptionCount = replicationPrioritizationMetrics.getMinReplicaNoDisruptionCount().getValue();
+    int minReplicaWithDisruptionCount = replicationPrioritizationMetrics.getMinReplicaWithDisruptionCount().getValue();
+    int belowMinReplicaNoDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaNoDisruptionCount().getValue();
+    int belowMinReplicaWithDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaWithDisruptionCount().getValue();
+    int normalPartitionsCount = replicationPrioritizationMetrics.getNormalPriorityCount().getValue();
+    long partitionsAddedToHighPriorityCount = replicationPrioritizationMetrics.getPartitionsAddedToHighPriorityCount().getCount();
+    long normalToHighPriorityTransitionCount = replicationPrioritizationMetrics.getNormalToHighPriorityTransitionCount().getCount();
+
+    assertEquals("Bootstrapping partition count should be 0", 0, bootstrappingPartitionCount);
+    assertEquals("Replicating partition count should be 0", 0, currentlyReplicatingPartitionsCount);
+    assertEquals("Disabled partition count should be 0", 0, disabledReplicationPartitionsCount);
+    assertEquals("minReplicaNoDisruptionCount should be 0", 0, minReplicaNoDisruptionCount);
+    assertEquals("minReplicaWithDisruptionCount should be 0", 0, minReplicaWithDisruptionCount);
+    assertEquals("belowMinReplicaNoDisruptionCount should be 0", 0, belowMinReplicaNoDisruptionCount);
+    assertEquals("belowMinReplicaWithDisruptionCount should be 0", 0, belowMinReplicaWithDisruptionCount);
+    assertEquals("normalPartitionsCount should be 0", 0, normalPartitionsCount);
+    assertEquals("partitionsAddedToHighPriorityCount should be 0", 0, partitionsAddedToHighPriorityCount);
+    assertEquals("normalToHighPriorityTransitionCount should be 0", 0, normalToHighPriorityTransitionCount);
   }
 
   @Test
@@ -220,6 +240,11 @@ public class ReplicationPrioritizationManagerTest {
     // Verify normal partitions were replicated and control replication was not called
     verify(replicationEngine, never()).controlReplicationForPartitions(
         any(Set.class), any(List.class), anyBoolean());
+
+    ReplicationPrioritizationMetrics replicationPrioritizationMetrics = manager.getReplicationPrioritizationMetrics();
+    int bootstrappingPartitionCount = replicationPrioritizationMetrics.getAllBootstrappingPartitionsCount().getValue();
+
+    assertEquals("Bootstrapping partition count should be 0", 3, bootstrappingPartitionCount);
   }
 
   @Test
@@ -286,6 +311,29 @@ public class ReplicationPrioritizationManagerTest {
       assertFalse("High priority partition1 should not be disabled",
           disabledPartitions.contains(partition1));
     }
+
+    ReplicationPrioritizationMetrics replicationPrioritizationMetrics = manager.getReplicationPrioritizationMetrics();
+    int bootstrappingPartitionCount = replicationPrioritizationMetrics.getAllBootstrappingPartitionsCount().getValue();
+    int currentlyReplicatingPartitionsCount = replicationPrioritizationMetrics.getCurrentlyReplicatingPriorityPartitionsCount().getValue();
+    int disabledReplicationPartitionsCount = replicationPrioritizationMetrics.getDisabledReplicationPartitionsCount().getValue();
+    int minReplicaNoDisruptionCount = replicationPrioritizationMetrics.getMinReplicaNoDisruptionCount().getValue();
+    int minReplicaWithDisruptionCount = replicationPrioritizationMetrics.getMinReplicaWithDisruptionCount().getValue();
+    int belowMinReplicaNoDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaNoDisruptionCount().getValue();
+    int belowMinReplicaWithDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaWithDisruptionCount().getValue();
+    int normalPartitionsCount = replicationPrioritizationMetrics.getNormalPriorityCount().getValue();
+    long partitionsAddedToHighPriorityCount = replicationPrioritizationMetrics.getPartitionsAddedToHighPriorityCount().getCount();
+    long normalToHighPriorityTransitionCount = replicationPrioritizationMetrics.getNormalToHighPriorityTransitionCount().getCount();
+
+    assertEquals("Bootstrapping partition count should be 3", 3, bootstrappingPartitionCount);
+    assertEquals("Replicating partition count should be 3", 3, currentlyReplicatingPartitionsCount);
+    assertEquals("Disabled partition count should be 0", 0, disabledReplicationPartitionsCount);
+    assertEquals("minReplicaNoDisruptionCount should be 1", 1, minReplicaNoDisruptionCount);
+    assertEquals("minReplicaWithDisruptionCount should be 0", 0, minReplicaWithDisruptionCount);
+    assertEquals("belowMinReplicaNoDisruptionCount should be 0", 0, belowMinReplicaNoDisruptionCount);
+    assertEquals("belowMinReplicaWithDisruptionCount should be 0", 0, belowMinReplicaWithDisruptionCount);
+    assertEquals("normalPartitionsCount should be 2", 2, normalPartitionsCount);
+    assertEquals("partitionsAddedToHighPriorityCount should be 3", 3, partitionsAddedToHighPriorityCount);
+    assertEquals("normalToHighPriorityTransitionCount should be 1", 1, normalToHighPriorityTransitionCount);
   }
 
   @Test
@@ -361,6 +409,29 @@ public class ReplicationPrioritizationManagerTest {
     assertNotNull("Should have disabled 2 partitions", disabledPartitions);
     assertTrue("partition4 should be enabled", disabledPartitions.contains(partition4));
     assertTrue("partition5 should be enabled", disabledPartitions.contains(partition5));
+
+    ReplicationPrioritizationMetrics replicationPrioritizationMetrics = manager.getReplicationPrioritizationMetrics();
+    int bootstrappingPartitionCount = replicationPrioritizationMetrics.getAllBootstrappingPartitionsCount().getValue();
+    int currentlyReplicatingPartitionsCount = replicationPrioritizationMetrics.getCurrentlyReplicatingPriorityPartitionsCount().getValue();
+    int disabledReplicationPartitionsCount = replicationPrioritizationMetrics.getDisabledReplicationPartitionsCount().getValue();
+    int minReplicaNoDisruptionCount = replicationPrioritizationMetrics.getMinReplicaNoDisruptionCount().getValue();
+    int minReplicaWithDisruptionCount = replicationPrioritizationMetrics.getMinReplicaWithDisruptionCount().getValue();
+    int belowMinReplicaNoDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaNoDisruptionCount().getValue();
+    int belowMinReplicaWithDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaWithDisruptionCount().getValue();
+    int normalPartitionsCount = replicationPrioritizationMetrics.getNormalPriorityCount().getValue();
+    long partitionsAddedToHighPriorityCount = replicationPrioritizationMetrics.getPartitionsAddedToHighPriorityCount().getCount();
+    long normalToHighPriorityTransitionCount = replicationPrioritizationMetrics.getNormalToHighPriorityTransitionCount().getCount();
+
+    assertEquals("Bootstrapping partition count should be 5", 5, bootstrappingPartitionCount);
+    assertEquals("Replicating partition count should be 3", 3, currentlyReplicatingPartitionsCount);
+    assertEquals("Disabled partition count should be 2", 2, disabledReplicationPartitionsCount);
+    assertEquals("minReplicaNoDisruptionCount should be 0", 0, minReplicaNoDisruptionCount);
+    assertEquals("minReplicaWithDisruptionCount should be 0", 0, minReplicaWithDisruptionCount);
+    assertEquals("belowMinReplicaNoDisruptionCount should be 3", 3, belowMinReplicaNoDisruptionCount);
+    assertEquals("belowMinReplicaWithDisruptionCount should be 0", 0, belowMinReplicaWithDisruptionCount);
+    assertEquals("normalPartitionsCount should be 2", 2, normalPartitionsCount);
+    assertEquals("partitionsAddedToHighPriorityCount should be 3", 3, partitionsAddedToHighPriorityCount);
+    assertEquals("normalToHighPriorityTransitionCount should be 1", 1, normalToHighPriorityTransitionCount);
   }
 
   @Test
@@ -818,6 +889,28 @@ public class ReplicationPrioritizationManagerTest {
 
     // First run - high priority should be enabled, normal priority disabled
     manager.run();
+    ReplicationPrioritizationMetrics replicationPrioritizationMetrics = manager.getReplicationPrioritizationMetrics();
+    int bootstrappingPartitionCount = replicationPrioritizationMetrics.getAllBootstrappingPartitionsCount().getValue();
+    int currentlyReplicatingPartitionsCount = replicationPrioritizationMetrics.getCurrentlyReplicatingPriorityPartitionsCount().getValue();
+    int disabledReplicationPartitionsCount = replicationPrioritizationMetrics.getDisabledReplicationPartitionsCount().getValue();
+    int minReplicaNoDisruptionCount = replicationPrioritizationMetrics.getMinReplicaNoDisruptionCount().getValue();
+    int minReplicaWithDisruptionCount = replicationPrioritizationMetrics.getMinReplicaWithDisruptionCount().getValue();
+    int belowMinReplicaNoDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaNoDisruptionCount().getValue();
+    int belowMinReplicaWithDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaWithDisruptionCount().getValue();
+    int normalPartitionsCount = replicationPrioritizationMetrics.getNormalPriorityCount().getValue();
+    long partitionsAddedToHighPriorityCount = replicationPrioritizationMetrics.getPartitionsAddedToHighPriorityCount().getCount();
+    long normalToHighPriorityTransitionCount = replicationPrioritizationMetrics.getNormalToHighPriorityTransitionCount().getCount();
+
+    assertEquals("Bootstrapping partition count should be 5", 5, bootstrappingPartitionCount);
+    assertEquals("Replicating partition count should be 3", 3, currentlyReplicatingPartitionsCount);
+    assertEquals("Disabled partition count should be 2", 2, disabledReplicationPartitionsCount);
+    assertEquals("minReplicaNoDisruptionCount should be 0", 0, minReplicaNoDisruptionCount);
+    assertEquals("minReplicaWithDisruptionCount should be 0", 0, minReplicaWithDisruptionCount);
+    assertEquals("belowMinReplicaNoDisruptionCount should be 3", 2, belowMinReplicaNoDisruptionCount);
+    assertEquals("belowMinReplicaWithDisruptionCount should be 0", 0, belowMinReplicaWithDisruptionCount);
+    assertEquals("normalPartitionsCount should be 3", 3, normalPartitionsCount);
+    assertEquals("partitionsAddedToHighPriorityCount should be 3", 3, partitionsAddedToHighPriorityCount);
+    assertEquals("normalToHighPriorityTransitionCount should be 1", 1, normalToHighPriorityTransitionCount);
 
     // Verify partitions were prioritized correctly
     ArgumentCaptor<Set<PartitionId>> partitionCaptor = ArgumentCaptor.forClass(Set.class);
@@ -875,6 +968,28 @@ public class ReplicationPrioritizationManagerTest {
 
     assertNotNull("Should have enabled some partitions in second run", enabledPartitions);
     assertEquals("Should have enabled some partitions in second run", 3, enabledPartitions.size());
+
+    bootstrappingPartitionCount = replicationPrioritizationMetrics.getAllBootstrappingPartitionsCount().getValue();
+    currentlyReplicatingPartitionsCount = replicationPrioritizationMetrics.getCurrentlyReplicatingPriorityPartitionsCount().getValue();
+    disabledReplicationPartitionsCount = replicationPrioritizationMetrics.getDisabledReplicationPartitionsCount().getValue();
+    minReplicaNoDisruptionCount = replicationPrioritizationMetrics.getMinReplicaNoDisruptionCount().getValue();
+    minReplicaWithDisruptionCount = replicationPrioritizationMetrics.getMinReplicaWithDisruptionCount().getValue();
+    belowMinReplicaNoDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaNoDisruptionCount().getValue();
+    belowMinReplicaWithDisruptionCount = replicationPrioritizationMetrics.getBelowMinReplicaWithDisruptionCount().getValue();
+    normalPartitionsCount = replicationPrioritizationMetrics.getNormalPriorityCount().getValue();
+    partitionsAddedToHighPriorityCount = replicationPrioritizationMetrics.getPartitionsAddedToHighPriorityCount().getCount();
+    normalToHighPriorityTransitionCount = replicationPrioritizationMetrics.getNormalToHighPriorityTransitionCount().getCount();
+
+    assertEquals("Bootstrapping partition count should be 3", 3, bootstrappingPartitionCount);
+    assertEquals("Replicating partition count should be 3", 3, currentlyReplicatingPartitionsCount);
+    assertEquals("Disabled partition count should be 0", 0, disabledReplicationPartitionsCount);
+    assertEquals("minReplicaNoDisruptionCount should be 0", 0, minReplicaNoDisruptionCount);
+    assertEquals("minReplicaWithDisruptionCount should be 0", 0, minReplicaWithDisruptionCount);
+    assertEquals("belowMinReplicaNoDisruptionCount should be 0", 0, belowMinReplicaNoDisruptionCount);
+    assertEquals("belowMinReplicaWithDisruptionCount should be 0", 0, belowMinReplicaWithDisruptionCount);
+    assertEquals("normalPartitionsCount should be 2", 2, normalPartitionsCount);
+    assertEquals("partitionsAddedToHighPriorityCount should be 5", 5, partitionsAddedToHighPriorityCount);
+    assertEquals("normalToHighPriorityTransitionCount should be 1", 1, normalToHighPriorityTransitionCount);
   }
 
   @Test
@@ -1595,6 +1710,92 @@ public class ReplicationPrioritizationManagerTest {
 
     assertNotNull("Should have enabled some partitions in second run", enabledPartitions);
     assertEquals("Should have enabled 2 partitions in second run", 2, enabledPartitions.size());
+  }
+
+
+  @Test
+  public void testResetOfPrioritizedPartitionMetrics() {
+    // Setup partitions
+    Set<PartitionId> partitions = new HashSet<>(Arrays.asList(partition1, partition2, partition3));
+    when(storageManager.getLocalPartitions()).thenReturn(partitions);
+
+    // All partitions are in BOOTSTRAP state initially
+    when(store1.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+
+    // Partition1 is below the minimum replica count (high priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition1)).thenReturn(3);
+    mockReplicaStates(partition1, 2);
+
+    // Partition2 is at the minimum replica count (medium priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition2)).thenReturn(3);
+    mockReplicaStates(partition2, 3);
+
+    // Partition3 is above the minimum replica count (low priority)
+    when(clusterManagerQueryHelper.getMinActiveReplicas(partition3)).thenReturn(3);
+    mockReplicaStates(partition3, 4);
+
+    // First run - categorize partitions
+    manager.startPrioritizationCycle();
+
+    // Verify prioritization categories are populated
+    assertNotNull("Prioritization categories should not be null", manager.getReplicationPrioritizationMetrics().getBelowMinReplicaWithDisruptionCount());
+    assertTrue("High-priority partitions should be categorized", manager.getCurrentlyReplicatingPriorityPartitions().contains(partition1));
+
+    // Reset mocks for the next run
+    reset(replicationEngine);
+
+    // All partitions complete bootstrapping
+    when(store1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(store2.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(store3.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+
+    // Second run - all partitions should be reset
+    manager.startPrioritizationCycle();
+
+    // Verify prioritization categories are reset
+    assertTrue("Prioritization categories should be reset", manager.getCurrentlyReplicatingPriorityPartitions().isEmpty());
+    assertEquals("All prioritization metrics should be reset to zero", 0, manager.getReplicationPrioritizationMetrics().getBelowMinReplicaWithDisruptionCount().getValue().intValue());
+    assertEquals("All prioritization metrics should be reset to zero", 0, manager.getReplicationPrioritizationMetrics().getMinReplicaWithDisruptionCount().getValue().intValue());
+    assertEquals("All prioritization metrics should be reset to zero", 0, manager.getReplicationPrioritizationMetrics().getNormalPriorityCount().getValue().intValue());
+  }
+
+
+  @Test
+  public void testHasCompletedReplicationErrorCases() {
+    PartitionId mockPartition = mock(PartitionId.class);
+    Store mockStore = mock(Store.class);
+
+    // Case 1: Store is null
+    when(storageManager.getStore(mockPartition)).thenReturn(null);
+    assertTrue("Replication should be considered complete if store is null", manager.hasCompletedReplication(mockPartition));
+
+    // Case 2: Store is not started
+    when(storageManager.getStore(mockPartition)).thenReturn(mockStore);
+    when(mockStore.isStarted()).thenReturn(false);
+    assertTrue("Replication should be considered complete if store is not started", manager.hasCompletedReplication(mockPartition));
+
+    // Case 3: Store is started but state is null
+    when(mockStore.isStarted()).thenReturn(true);
+    when(mockStore.getCurrentState()).thenReturn(null);
+    assertTrue("Replication should be considered complete if replica state is null", manager.hasCompletedReplication(mockPartition));
+
+    // Case 4: Store is started and state is STANDBY
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    assertTrue("Replication should be complete if state is STANDBY", manager.hasCompletedReplication(mockPartition));
+
+    // Case 5: Store is started and state is LEADER
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.LEADER);
+    assertTrue("Replication should be complete if state is LEADER", manager.hasCompletedReplication(mockPartition));
+
+    // Case 6: Store is started and state is ERROR
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.ERROR);
+    assertTrue("Replication should be complete if state is ERROR", manager.hasCompletedReplication(mockPartition));
+
+    // Case 7: Store is started and state is BOOTSTRAP
+    when(mockStore.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    assertFalse("Replication should not be complete if state is BOOTSTRAP", manager.hasCompletedReplication(mockPartition));
   }
 
 

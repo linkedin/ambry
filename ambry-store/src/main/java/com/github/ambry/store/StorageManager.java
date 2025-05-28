@@ -375,6 +375,16 @@ public class StorageManager implements StoreManager {
   }
 
   /**
+   * @param id the {@link PartitionId} to find the store for.
+   * @return the initialized {@link Store} corresponding to given {@link PartitionId}, or {@code null} if no store was found for
+   *         that partition, or that store was not initialized.
+   */
+  Store getInitializedStore(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null ? diskManager.getInitializedStore(id) : null;
+  }
+
+  /**
    * True is the replica is on a failed disk
    * @param replicaId
    * @return
@@ -415,8 +425,33 @@ public class StorageManager implements StoreManager {
    * @return the {@link DiskManager} corresponding to the given {@link PartitionId}, or {@code null} if no DiskManager was found for
    *         that partition
    */
-  DiskManager getDiskManager(PartitionId id) {
+  public DiskManager getDiskManager(PartitionId id) {
     return partitionToDiskManager.get(id);
+  }
+
+  /**
+   * @param id the {@link PartitionId} to find the BootstrapSessionManager for.
+   * @return the {@link BootstrapSessionManager} corresponding to the given {@link PartitionId}, or {@code null} if no BootstrapSessionManager was found.
+   */
+  public BootstrapSessionManager getBootstrapSessionManager(PartitionId id) {
+    DiskManager diskManager = getDiskManager(id);
+    if (diskManager == null) {
+      throw new IllegalArgumentException("Failed to find disk manager for partition " + id);
+    }
+    return diskManager.getBootstrapSessionManager();
+  }
+
+  /**
+   * @param id the {@link PartitionId} for which isCompactionControlBeenSetForBlobStore is requested.
+   * @return {@code true} if compaction control has been set for blob store, {@code false} otherwise.
+   */
+  @Override
+  public boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId id) {
+    DiskManager diskManager = getDiskManager(id);
+    if (diskManager == null) {
+      throw new IllegalArgumentException("Failed to find disk manager for partition " + id);
+    }
+    return diskManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(id);
   }
 
   /**
@@ -871,7 +906,7 @@ public class StorageManager implements StoreManager {
     }
 
     @Override
-    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    public void onPartitionBecomePreBootstrapFromOffline(String partitionName) {
       // check if partition exists on current node
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       Store store;
@@ -893,7 +928,7 @@ public class StorageManager implements StoreManager {
           // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
           // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
           // at some point). Then a brand new store associated with this replica should be created and started.
-          if (!addBlobStore(replicaToAdd)) {
+          if (!initializeBlobStore(replicaToAdd)) {
             // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
             // back since addition of store failed.
             replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
@@ -911,6 +946,9 @@ public class StorageManager implements StoreManager {
           }
         } while (!replicaAdded);
 
+        // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
+        // able to get new replica from storageManager without querying Helix
+
         if (primaryClusterParticipant != null) {
           // update InstanceConfig in Helix
           try {
@@ -925,11 +963,6 @@ public class StorageManager implements StoreManager {
                 StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
           }
         }
-        // if addBlobStore succeeds, it is guaranteed that store is started and thus getStore result is not null.
-        store = getStore(replicaToAdd.getPartitionId(), false);
-
-        // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
-        // able to get new replica from storageManager without querying Helix
       } else {
         // if the replica is already on current node, there are 4 cases need to discuss:
         // 1. replica was initially present in clustermap and this is a regular reboot.
@@ -942,6 +975,9 @@ public class StorageManager implements StoreManager {
         // For case 4, we check it's current used capacity and put it in BOOTSTRAP state if necessary. This is to ensure
         //             it catches up with peers before serving PUT traffic (or being selected as LEADER)
         store = getStore(replica.getPartitionId(), false);
+
+        // store should be in started if this is not a first time added replica
+        // as we will start all stores on the host during a restart
         if (store == null) {
           throw new StateTransitionException(
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
@@ -976,6 +1012,29 @@ public class StorageManager implements StoreManager {
           }
         }
       }
+    }
+
+    @Override
+    public void onPartitionBecomeBootstrapFromPreBootstrap(String partitionName) {
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+
+      if (replica == null) {
+        throw new StateTransitionException("Store not initialized", StoreNotInitialized);
+      }
+
+      Store store = getInitializedStore(replica.getPartitionId());
+      if (store == null) {
+        throw new StateTransitionException("Store not initialized", StoreNotInitialized);
+      }
+
+      // if store is not already started, we start the store by loading it.
+      if (!store.isStarted()) {
+        if (!loadBlobStore(replica)) {
+          throw new StateTransitionException("loading failed for store",
+              StateTransitionException.TransitionErrorCode.StoreNotStarted);
+        }
+      }
+
       if (isPrimaryClusterManagerListener) {
         // Only update store state if this is a state transition for primary participant. Since replication Manager
         // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
@@ -986,6 +1045,12 @@ public class StorageManager implements StoreManager {
           store.setCurrentState(ReplicaState.BOOTSTRAP);
         }
       }
+    }
+
+    @Override
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      onPartitionBecomePreBootstrapFromOffline(partitionName);
+      onPartitionBecomeBootstrapFromPreBootstrap(partitionName);
     }
 
     @Override
