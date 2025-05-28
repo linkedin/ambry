@@ -257,7 +257,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         namedBlobDb.get(account.getName(), container.getName(), blobName).get());
   }
 
-  //TODO: fix this test.. unrelated to cleaner
   @Test
   public void testDeleteWithMultipleVersions() throws Exception {
     Account account = accountService.getAllAccounts().iterator().next();
@@ -339,7 +338,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     }
   }
 
-  // passes
   /**
    * Test behavior with blob cleanup main pipeline
    */
@@ -419,7 +417,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     time.setCurrentMilliseconds(System.currentTimeMillis());
   }
 
-  // DONE
   /**
    * Test behavior with blob cleanup for stale blob case
    * Case 1. created more than staleDataRetentionDays ago, InProgress, is Largest (Don't care about the ttl and delete)
@@ -450,8 +447,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         record.getBlobId());
   }
 
-
-  ///// PASSES
   /**
    * Test behavior with blob cleanup for stale blob case
    * Case 2. created more than staleDataRetentionDays ago, Ready, not Largest and bigger version is ready
@@ -489,7 +484,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         record.getBlobId());
   }
 
-  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 1, created less than staleDataRetentionDays ago, InProgress, is Largest (Don't care about ttl and delete)
@@ -533,8 +527,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertEquals(staleNamedBlobs.size(), 1);
   }
 
-
-  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 3, created more than staleDataRetentionDays ago, Ready, is Largest
@@ -561,8 +553,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 3 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
-
-  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 4, created more than staleDataRetentionDays ago, Ready, not Largest, but bigger version is InProgress.
@@ -599,8 +589,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 4 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
-
-  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 5, two rows created for the same blobId more than staleDataRetentionDays ago,
@@ -631,8 +619,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertEquals("Good blob case 5 pull stale blob result should be empty!", 0, staleNamedBlobs.size());
   }
 
-
-  ///// DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 6, one row created for a blobId more than staleDataRetentionDays ago via TTL Update process,
