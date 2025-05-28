@@ -409,9 +409,8 @@ public class ClusterMapConfig {
 
   /**
    * Flag to enable the file copy-based replication protocol.
-   * This setting is referenced in both AmbryServer and HelixParticipant.
-   * This will enable FileCopyBasedReplicationManager which will register
-   * itself with the Helix Participant and allow automatically trigger File Copy Protocol in Helix Participant.
+   * This setting is referenced in HelixParticipant.
+   * This will enable FileCopyBasedReplicationManager  allowing automatic trigger File Copy Protocol in Helix Participant.
    * It can be removed  from Helix participant later, but kept as an extra check in Helix participant for now.
    */
   @Config(ENABLE_FILE_COPY_PROTOCOL)

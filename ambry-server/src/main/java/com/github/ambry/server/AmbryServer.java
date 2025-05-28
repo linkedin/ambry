@@ -52,6 +52,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.ServerExecutionMode;
+import com.github.ambry.config.ServerReplicationMode;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -381,7 +382,7 @@ public class AmbryServer {
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
 
-        if(clusterMapConfig.enableFileCopyProtocol) {
+        if(serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
           FileCopyHandlerFactory fileCopyHandlerFactory =
               new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap,
                   fileCopyBasedReplicationConfig, storeConfig);
