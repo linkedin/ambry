@@ -379,7 +379,7 @@ public class StorageManager implements StoreManager {
    * @return the initialized {@link Store} corresponding to given {@link PartitionId}, or {@code null} if no store was found for
    *         that partition, or that store was not initialized.
    */
-  Store getInitializedStore(PartitionId id) {
+  public Store getInitializedStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null ? diskManager.getInitializedStore(id) : null;
   }

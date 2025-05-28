@@ -130,7 +130,6 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     return replicaIds;
   }
 
-  @Override
   public boolean isRunning() {
     return isRunning;
   }

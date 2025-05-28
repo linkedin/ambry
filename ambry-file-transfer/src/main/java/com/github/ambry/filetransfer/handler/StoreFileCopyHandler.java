@@ -178,12 +178,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
         // Process the respective files and copy it to the temporary path.
         final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
         logInfo.getIndexSegments().forEach(indexFile -> {
-          try {
-            processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-          }
+          processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
         });
         // Process log segment
         long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
@@ -197,12 +192,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           logMessageAndThrow("ProcessLogSegment", "Failed Disk Space Allocation", e,
               FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerFailedDiskSpaceAllocation);
         }
-        try {
-          processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw new RuntimeException(e);
-        }
+        processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
 
         // Move all files to actual path.
         try {
@@ -304,10 +294,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param fileStore the file store
    */
   private void processIndexFile(FileInfo indexFile, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
-      String snapshotId, PartitionFileStore fileStore) throws InterruptedException {
-    if(!isRunning)
-      throw new InterruptedException("FileCopyHandler is not running, cannot process log segment");
-
+      String snapshotId, PartitionFileStore fileStore){
+    validateIfStoreFileCopyHandlerIsRunning();
     final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
     FileCopyGetChunkResponse chunkResponse = null;
     try {
@@ -330,7 +318,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param fileStore the file store
    */
   private void processLogSegment(LogInfo logInfo, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
-      String snapshotId, PartitionFileStore fileStore) throws InterruptedException {
+      String snapshotId, PartitionFileStore fileStore) {
     if (logInfo.getLogSegment().getFileSize() > fileStore.getSegmentCapacity()) {
       throw new FileCopyHandlerException("Log segment file size is greater than the segment capacity",
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerInvalidLogFileSize);
@@ -342,8 +330,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
     for (int i = 0; i < chunksInLogSegment; i++) {
       //Throw Exception and come out of the thread a shutdown is called.
-      if(!isRunning)
-        throw new InterruptedException("FileCopyHandler is not running, cannot process log segment");
+      validateIfStoreFileCopyHandlerIsRunning();
       long startOffset = (long) i * config.getFileCopyHandlerChunkSize;
       long sizeInBytes = Math.min(config.getFileCopyHandlerChunkSize, logFileInfo.getFileSize() - startOffset);
 

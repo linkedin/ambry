@@ -21,7 +21,6 @@ package com.github.ambry.filetransfer;
  */
 public interface FileCopyBasedReplicationScheduler extends Runnable{
 
-  public boolean isRunning();
   /**
    * Shutdown the scheduler.
    */

@@ -40,6 +40,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -286,8 +287,8 @@ public class FileStore implements PartitionFileStore {
     if(lastExecutedFuture != null && !lastExecutedFuture.isDone()) {
       logger.warn("Last executed future is not done yet, waiting for it to complete before proceeding.");
       try {
-        lastExecutedFuture.wait();
-      } catch (InterruptedException e) {
+        lastExecutedFuture.get();
+      } catch (InterruptedException | ExecutionException e) {
         logger.error("Thread was Interrupted while waiting for last executed future to complete", e);
         throw new RuntimeException(e);
       }

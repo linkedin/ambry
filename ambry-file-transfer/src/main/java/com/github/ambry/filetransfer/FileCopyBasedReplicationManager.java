@@ -123,13 +123,19 @@ public class FileCopyBasedReplicationManager {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       /**
-       * If the store is already started, then we should not do file copy again.
+       * If the store is already started or is not initialized, then we should not do file copy again.
        * We should skip file copy and just return.
        * This scenario will occur when the server is restarted and the partition was already registered with the node.
        * The restarted automatically triggers the staging directory clean up and removes any residual incomplete copied files from the previous File copy run.
        */
-      Store store = storeManager.getStore(storeManager.getReplica(partitionName).getPartitionId());
-      if(store != null){
+      Store store = storeManager.getInitializedStore(storeManager.getReplica(partitionName).getPartitionId());
+
+      if(store == null){
+        logger.error("Store for Partition {} is null. Ignoring state change", partitionName);
+        return;
+      }
+
+      if(store.isStarted()){
         logger.info("Store for Partition {} is already started. Ignoring state change", partitionName);
         return;
       }
