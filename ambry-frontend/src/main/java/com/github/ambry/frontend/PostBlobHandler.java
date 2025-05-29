@@ -154,7 +154,6 @@ class PostBlobHandler {
         // Start the callback chain by parsing blob info headers and performing request security processing.
         BlobInfo blobInfo = getBlobInfoFromRequest();
         checkUploadRequirements(blobInfo.getBlobProperties());
-        restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);
@@ -238,6 +237,7 @@ class PostBlobHandler {
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
         setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
+        restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
       }, uri, LOGGER, finalCallback);
     }

@@ -181,7 +181,6 @@ public class NamedBlobPutHandler {
     private void start() {
       restRequest.getMetricsTracker()
           .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
-      restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
       try {
         // Start the callback chain by parsing blob info headers and performing request security processing.
         securityService.processRequest(restRequest, securityProcessRequestCallback());
@@ -249,6 +248,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
+        restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
         String blobIdClean = stripPrefixAndExtension(blobId);
