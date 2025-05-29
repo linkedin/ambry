@@ -1005,8 +1005,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   private List<StaleNamedBlob> runPullPotentialStaleBlobs(Connection connection) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
-    Set<Container> containerSet = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
-    List<Container> containers = new ArrayList<>(containerSet);
+    Set<Container> activeContainers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+    Set<Container> inactiveContainers = accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE);
+    Set<Container> combinedContainers = new HashSet<>();
+    combinedContainers.addAll(activeContainers);
+    combinedContainers.addAll(inactiveContainers);
+
+    List<Container> containers = new ArrayList<>(combinedContainers);
     for (Container container : containers) {
       int offset = 0;
       boolean hasMore = true;
