@@ -35,10 +35,21 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.Stream;
+import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.store.FileStoreException.FileStoreErrorCode.*;
 
 
 /**
@@ -85,7 +96,28 @@ public class FileStore implements PartitionFileStore {
   // Pre-allocates files on disk on startup and allocates/free on demand
   private final DiskSpaceAllocator diskSpaceAllocator;
   // Size of each log segment
+
+  // Executor service for handling asynchronous writes to disk
+  ExecutorService executor = Executors.newSingleThreadExecutor();
+
+  // Last executed future for async writes to disk. This is used to synchronise the writes to disk in a sequential manner.
+  Future<?> lastExecutedFuture = null;
+  /**
+   * Size of each segment in bytes.
+   * This is used to determine how much space to allocate for each segment.
+   */
   private long segmentSize;
+
+  /**
+   * Suffix for log files.
+   */
+  private final String LOG_SUFFIX = "_log";
+
+  /**
+   * Suffix for index files.
+   */
+  private final String INDEX_SUFFIX = "_index";
+
 
   /**
    * Creates a new FileStore instance.
@@ -205,26 +237,40 @@ public class FileStore implements PartitionFileStore {
     int fileSize = storeFileChunk.getStream().available();
     byte[] content = Utils.readBytesFromStream(storeFileChunk.getStream(), fileSize);
 
+    Path outputPath = Paths.get(outputFilePath);
+    Path parentDir = outputPath.getParent();
+    String targetPathString = "";
     try {
       synchronized (storeWriteLock) {
-        Path outputPath = Paths.get(outputFilePath);
-        Path parentDir = outputPath.getParent();
-
+        String targetOutputString = updatePathWithResetCompactionIndex(outputFilePath);
+        Path targetOutputPath = Paths.get(targetOutputString);
         // Validate if parent directory exists
         if (parentDir != null && !Files.exists(parentDir)) {
           // Throwing IOException if the parent directory does not exist
           throw new IOException("Parent directory does not exist: " + parentDir);
         }
+        if(lastExecutedFuture != null){
+          lastExecutedFuture.get();
+        }
+
         // Write content to file with create and append options, which will create a new file if file doesn't exist
         // and append to the existing file if file exists
-        Files.write(outputPath, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
+        Future<?> currentAsynWriteTaskFuture = executor.submit(() -> {
+          try (FileOutputStream fos = new FileOutputStream(targetOutputPath.toFile(), true)) {
+            fos.write(content);
+            fos.flush();
+          } catch (IOException e) {
+            logger.error("Error while writing chunk to file: {}", outputFilePath, e);
+          }
+        });
+        lastExecutedFuture = currentAsynWriteTaskFuture;
       }
     } catch (Exception e) {
-      logger.error("Error while writing chunk to file: {}", outputFilePath, e);
-      throw new FileStoreException("Error while writing chunk to file: " + outputFilePath,
-          FileStoreErrorCode.FileStoreWriteError);
+      logger.error("Error while writing chunk to file: {}", targetPathString, e);
+      throw new FileStoreException("Error while writing chunk to file: " + targetPathString,
+          FileStoreWriteError);
     }
-    logger.info("Write successful for chunk to file: {} with size: {}", outputFilePath, content.length);
+    logger.info("Write successful for chunk to file: {} with size: {}", targetPathString, content.length);
   }
 
   /**
@@ -238,6 +284,16 @@ public class FileStore implements PartitionFileStore {
    */
   public void moveAllRegularFiles(String srcDirPath, String destDirPath) throws IOException {
     // Verify service is running.
+    if(lastExecutedFuture != null && !lastExecutedFuture.isDone()) {
+      logger.warn("Last executed future is not done yet, waiting for it to complete before proceeding.");
+      try {
+        lastExecutedFuture.get();
+      } catch (InterruptedException | ExecutionException e) {
+        logger.error("Thread was Interrupted while waiting for last executed future to complete", e);
+        throw new RuntimeException(e);
+      }
+    }
+
     validateIfFileStoreIsRunning();
 
     // Validate inputs.
@@ -250,7 +306,7 @@ public class FileStore implements PartitionFileStore {
         if (!srcDirPath.startsWith(partitionToMountPath +  File.separator)) {
           throw new IOException("Source directory is not under mount path: " + partitionToMountPath);
         }
-        if (!destDirPath.startsWith(partitionToMountPath + File.separator)) {
+        if (!destDirPath.startsWith(partitionToMountPath)) {
           throw new IOException("Destination directory is not under mount path: " + partitionToMountPath);
         }
 
@@ -304,6 +360,8 @@ public class FileStore implements PartitionFileStore {
    */
   @Override
   public void allocateFile(String path, String storeId) throws IOException {
+    String targetPath = updatePathWithResetCompactionIndex(path);
+
     try {
       // Verify service is running.
       validateIfFileStoreIsRunning();
@@ -311,11 +369,10 @@ public class FileStore implements PartitionFileStore {
       // Validate inputs.
       Objects.requireNonNull(path, "path must not be null");
       Objects.requireNonNull(storeId, "storeId must not be null");
-
       // throw error if the file exists
-      File file = new File(path);
+      File file = new File(targetPath);
       if (file.exists()) {
-        throw new IOException("File already exists in " + path);
+        throw new IOException("File already exists in " + targetPath);
       }
 
       // Allocate space for the file
@@ -323,12 +380,12 @@ public class FileStore implements PartitionFileStore {
         diskSpaceAllocator.allocate(file, segmentSize, storeId, false);
       }
     } catch (Exception e) {
-      logger.error("Unexpected error while allocating file in path {} for store {}", path, storeId, e);
-      throw new FileStoreException("Error while allocating file in path " + path + " for store: " + storeId,
+      logger.error("Unexpected error while allocating file in path {} for store {}", targetPath, storeId, e);
+      throw new FileStoreException("Error while allocating file in path " + targetPath + " for store: " + storeId,
           FileStoreErrorCode.FileStoreFileAllocationFailed);
     }
 
-    logger.info("Disk Space Allocator has allocated space for file in {}", path);
+    logger.info("Disk Space Allocator has allocated space for file in {}", targetPath);
   }
 
   /**
@@ -337,7 +394,7 @@ public class FileStore implements PartitionFileStore {
    * @throws IOException if an I/O error occurs during the cleanup
    */
   @Override
-  public void cleanFile(String path, String storeId) throws IOException {
+  public void cleanLogFile(String path, String storeId) throws IOException {
     try {
       // Verify service is running.
       validateIfFileStoreIsRunning();
@@ -364,6 +421,135 @@ public class FileStore implements PartitionFileStore {
     logger.info("Disk Space Allocator has free-ed space for file in {}", path);
   }
 
+
+
+  /**
+   * Cleans up the staging directory by deleting all files and directories within it.
+   * It also deletes any files in the root directory that match the prefixes of the staging files.
+   *
+   * @param targetPath The path to the root directory where the staging directory is located
+   * @param stagingDirectoryName The name of the staging directory to clean up
+   * @param storeId The store ID for which the cleanup is being performed
+   * @throws IOException if an I/O error occurs during cleanup
+   */
+  @Override
+  public void cleanUpStagingDirectory(@Nonnull String targetPath, @Nonnull String stagingDirectoryName,@Nonnull String storeId)
+      throws IOException {
+    Objects.requireNonNull(targetPath, "targetPath must not be null");
+    Objects.requireNonNull(stagingDirectoryName, "stagingDirectoryName must not be null");
+    Objects.requireNonNull(storeId, "storeId must not be null");
+
+    File rootDir = new File(targetPath);
+    if (!rootDir.exists() || !rootDir.isDirectory()) {
+      throw new IOException("Invalid target path: " + targetPath);
+    }
+
+    File stagingDir = new File(rootDir, stagingDirectoryName);
+    if (!stagingDir.exists() || !stagingDir.isDirectory()) {
+      logger.info("Staging Directory Does not Exist: {}", stagingDir.getAbsolutePath());
+      return;
+    }
+
+    // 1. Find prefixes from *_index and *_log files in staging directory
+    Set<String> prefixes = new HashSet<>();
+    File[] stagingFiles = stagingDir.listFiles();
+    if (stagingFiles != null) {
+      for (File file : stagingFiles) {
+        String name = file.getName();
+        if (name.endsWith(INDEX_SUFFIX) || name.endsWith(LOG_SUFFIX)) {
+          int lastUnderscore = name.lastIndexOf('_');
+          if(lastUnderscore != -1){
+            if(name.endsWith(LOG_SUFFIX)){
+              // If the file ends with _log, we add the prefix without the last underscore
+              prefixes.add(name.substring(0, lastUnderscore));
+            } else {
+              // If the file ends with _index, we add the prefix without the last underscore
+              int secondLastUnderscore = name.lastIndexOf('_', lastUnderscore - 1);
+              prefixes.add(name.substring(0, secondLastUnderscore));
+            }
+          }
+        }
+      }
+
+      // 2. Delete all files in staging directory
+      for (File file : stagingFiles) {
+        if(!file.isDirectory() && file.getName().endsWith(LOG_SUFFIX)) {
+          cleanLogFile(file.getAbsolutePath(), storeId);
+        } else {
+          deleteRecursively(file);
+        }
+      }
+    }
+    if (!stagingDir.delete()) {
+      throw new IOException("Failed to delete staging directory: " + stagingDir.getAbsolutePath());
+    }
+
+    // 3. Delete files in RootDir with matching prefixes
+    File[] targetFiles = rootDir.listFiles();
+    if (targetFiles != null) {
+      for (File file : targetFiles) {
+        String name = file.getName();
+        for (String prefix : prefixes) {
+          if (name.startsWith(prefix)) {
+            if(name.endsWith(LOG_SUFFIX)) {
+              try {
+                cleanLogFile(file.getAbsolutePath(), storeId);
+              } catch (IOException e) {
+                logger.error("Failed to clean log file: {}", file.getAbsolutePath(), e);
+                throw new FileStoreException("Error while cleaning log file: " + file.getAbsolutePath(),
+                    FileStoreErrorCode.FileStoreFileFailedCleanUp);
+              }
+            } else {
+              file.delete();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private void deleteRecursively(File file) {
+    if (file.isDirectory()) {
+      File[] children = file.listFiles();
+      if (children != null) {
+        for (File child : children) {
+          deleteRecursively(child);
+        }
+      }
+    }
+    file.delete();
+  }
+
+  public String updatePathWithResetCompactionIndex(String outputFileString){
+    Path outputFilePath = Paths.get(outputFileString);
+    Path parent = outputFilePath.getParent();
+    String targetFileName = resetCompactionCycleIndexInFileName(
+        outputFilePath.getFileName().toString());
+    return parent != null ? parent.resolve(targetFileName).toString() : Paths.get(targetFileName).toString();
+  }
+  /**
+   * Resets the compaction cycle index in the file name.
+   * @param fileName the file name to reset the compaction cycle index in.
+   * @return the file name with the compaction cycle index reset to 0.
+   */
+  @Override
+  public String resetCompactionCycleIndexInFileName(String fileName) {
+    String[] parts = fileName.split("_");
+
+    if (parts.length < 3) {
+      logger.error("Not enough parts to have a middle index For Resseting Compaction Cycle Index in FileName: {}",
+          fileName);
+      throw new FileStoreException("Error while splitting file name: " + fileName,
+          FileStoreLogAndIndexFileNamingConventionError);
+    }
+
+    parts[1] = "0";
+
+    return String.join("_", parts);
+  }
+
+
+
   /**
    * Returns the size of the allocated segment in bytes.
    */
@@ -379,6 +565,7 @@ public class FileStore implements PartitionFileStore {
    */
   public void shutdown() {
     isRunning = false;
+    executor.shutdown();
   }
 
   /**

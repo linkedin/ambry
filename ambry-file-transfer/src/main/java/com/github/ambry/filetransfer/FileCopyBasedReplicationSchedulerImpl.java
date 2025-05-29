@@ -25,8 +25,8 @@ import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.utils.Utils;
-import java.io.File;
+import com.github.ambry.store.FileStoreException;
+import com.github.ambry.store.PartitionFileStore;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -39,6 +39,8 @@ import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.FileStoreException.FileStoreErrorCode.*;
+
 
 class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler{
   private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
@@ -47,7 +49,6 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   private final FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager;
   private final Thread fileCopyBasedReplicationThreadPoolManagerThread;
   private final Map<ReplicaId, Long> replicaToStartTimeMap;
-
   private final Map<ReplicaId, FileCopyStatusListener> replicaToStatusListenerMap;
   private boolean isRunning;
   private final ReplicaSyncUpManager replicaSyncUpManager;
@@ -129,6 +130,10 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     return replicaIds;
   }
 
+  public boolean isRunning() {
+    return isRunning;
+  }
+
   @Override
   public void shutdown() throws InterruptedException {
     logger.info("Shutting down FileCopyBasedReplicationSchedulerImpl");
@@ -173,7 +178,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       List<DiskId> disksToHydrate = fileCopyBasedReplicationThreadPoolManager.getDiskIdsToHydrate();
       for(DiskId diskId: disksToHydrate){
         List<ReplicaId> replicaIds = getNextReplicaToHydrate(diskId, fileCopyBasedReplicationConfig.fileCopyParallelPartitionHydrationCountPerDisk);
-        logger.info("Starting Hydration For Disk: {} with ReplicaId: {}", diskId, replicaIds.stream().map(replicaId -> replicaId.getPartitionId().toPathString()));
+        logger.info("Starting Hydration For Disk: {}", diskId);
 
         if(!replicaIds.isEmpty()){
           for(ReplicaId replicaId: replicaIds) {
@@ -182,18 +187,6 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
             }
             FileCopyStatusListener fileCopyStatusListener = new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId);
             FileCopyHandler fileCopyHandler = fileCopyHandlerFactory.getFileCopyHandler();
-            try{
-              /**
-               * Adding Persistence of File Copy In Progress File to disk. This will
-               * be used for recovery during restarts and rollback/roll forward scenarios.
-               */
-              createFileCopyInProgressFileIfAbsent(replicaId);
-            } catch (IOException e){
-              logger.error("Error Creating File Copy In Progress File For Replica: " + replicaId.getPartitionId().toPathString());
-              fileCopyStatusListener.onFileCopyFailure(e);
-              continue;
-            }
-
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
                 fileCopyStatusListener, fileCopyHandler);
 
@@ -210,16 +203,12 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     logger.error("FileCopyBasedReplicationSchedulerImpl Stopped");
   }
 
-  /**
-   * Create a file copy in progress file on the disk for the replica.
-   * @param replica
-   * @throws IOException
-   */
-  void createFileCopyInProgressFileIfAbsent(ReplicaId replica) throws IOException {
-    File fileCopyInProgressFileName = new File(replica.getReplicaPath(), storeConfig.storeFileCopyInProgressFileName);
-    if (!fileCopyInProgressFileName.exists()) {
-      fileCopyInProgressFileName.createNewFile();
-    }
+  public List<ReplicaId> getInFlightReplicas(){
+    return inFlightReplicas;
+  }
+
+  public Map<ReplicaId, Long> getReplicaToStartTimeMap(){
+    return replicaToStartTimeMap;
   }
 
   @Override
@@ -251,7 +240,11 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     public void onFileCopyFailure(Exception e) {
       logger.error("Error Copying File For Replica: " + replicaId.getPartitionId().toPathString());
       logger.error("[Error]: ", e);
-      removeReplicaFromFileCopy(replicaId);
+      try{
+        removeReplicaFromFileCopy(replicaId);
+      } catch (Exception ex) {
+        logger.error("Error Removing Replica From File Copy: " + replicaId.getPartitionId().toPathString(), ex);
+      }
       //TODO: update Metrics For File Copy Failure.
       replicaSyncUpManager.onFileCopyError(replicaId);
     }
@@ -260,18 +253,22 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       inFlightReplicas.remove(replicaId);
       replicaToStartTimeMap.remove(replicaId);
       prioritizationManager.removeInProgressReplica(replicaId.getDiskId(), replicaId);
-      deleteFileCopyInProgressFile(replicaId);
+      cleanUpStagingDirectory(replicaId);
     }
 
-    void deleteFileCopyInProgressFile(ReplicaId replicaId){
-      File fileCopyInProgressFile = new File(replicaId.getReplicaPath(),
-          storeConfig.storeFileCopyInProgressFileName);
+    void cleanUpStagingDirectory(ReplicaId replicaId){
       try {
-        Utils.deleteFileOrDirectory(fileCopyInProgressFile);
+          PartitionFileStore fileStore= storeManager.getFileStore(replicaId.getPartitionId());
+          fileStore.cleanUpStagingDirectory(replicaId.getReplicaPath(),
+              storeConfig.storeFileCopyTemporaryDirectoryName, Long.toString(replicaId.getPartitionId().getId()));
       } catch (IOException e) {
         // if deletion fails, we log here without throwing exception. Next time when server restarts,
         // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
-        logger.error("Failed to delete {}", fileCopyInProgressFile.getName(), e);
+        logger.error("Failed to delete {}", storeConfig.storeFileCopyTemporaryDirectoryName, e);
+      } catch (Exception e) {
+        // if store is not found, we log here without throwing exception. Next time when server restarts,
+        // the store should attempt to delete this again and complete BOOTSTRAP -> STANDBY quickly again.
+        logger.error("Failed to get File Store {}", replicaId.getPartitionId().toPathString(), e);
       }
     }
   }

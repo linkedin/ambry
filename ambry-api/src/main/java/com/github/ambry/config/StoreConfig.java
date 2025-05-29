@@ -724,6 +724,24 @@ public class StoreConfig {
   @Default("bootstrap_in_progress")
   public final String storeBootstrapInProgressFile;
 
+  /**
+   * Name of the staging directory where temporary files are created during file copy operations.
+   */
+  public static final String STORE_FILE_COPY_TEMPORARY_DIRECTORY_NAME = "store.file.copy.temporary.directory.name";
+  @Config(STORE_FILE_COPY_TEMPORARY_DIRECTORY_NAME)
+  @Default("fileCopyTempDirectory")
+  public final String storeFileCopyTemporaryDirectoryName;
+
+  /**
+   * Whether to delete the temporary directory created during file copy operations on restart.
+   * The config can be removed once the correctness of clean up feature is verified.
+   */
+  public static final String STORE_DELETE_FILE_COPY_TEMPORARY_DIRECTORY_ON_RESTART =
+      "store.delete.file.copy.temporary.directory.on.restart";
+  @Config(STORE_DELETE_FILE_COPY_TEMPORARY_DIRECTORY_ON_RESTART)
+  @Default("true")
+  public final boolean storeDeleteFileCopyTemporaryDirectoryOnRestart;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
@@ -912,5 +930,7 @@ public class StoreConfig {
     storeFileCopyInProgressFileName = verifiableProperties.getString(STORE_FILE_COPY_IN_PROGRESS_FILE_NAME, "file_copy_in_progress");
     storeBootstrapInProgressFile = verifiableProperties.getString(STORE_BOOTSTRAP_IN_PROGRESS_FILE, "bootstrap_in_progress");
     storeFileCopyCompletedFileName = verifiableProperties.getString(STORE_FILE_COPY_COMPLETED_FILE_NAME, "file_copy_completed");
+    storeFileCopyTemporaryDirectoryName = verifiableProperties.getString(STORE_FILE_COPY_TEMPORARY_DIRECTORY_NAME, "fileCopyTempDirectory");
+    storeDeleteFileCopyTemporaryDirectoryOnRestart = verifiableProperties.getBoolean(STORE_DELETE_FILE_COPY_TEMPORARY_DIRECTORY_ON_RESTART, true);
   }
 }

@@ -78,7 +78,6 @@ import static com.github.ambry.router.RouterErrorCode.*;
 /**
  * Handles a request for s3 Complete/AbortMultipartUploads according to the
  * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html">...</a>
- * TODO [S3] Add support for Abort multipart uploads.
  */
 public class S3MultipartCompleteUploadHandler<R> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartCompleteUploadHandler.class);
@@ -125,8 +124,7 @@ public class S3MultipartCompleteUploadHandler<R> {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<R> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<R> callback) {
     new S3MultipartCompleteUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -158,7 +156,11 @@ public class S3MultipartCompleteUploadHandler<R> {
     private void start() {
       try {
         accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
-            frontendMetrics.postBlobMetricsGroup);
+            frontendMetrics.s3MultipartCompleteMetricsGroup);
+        restRequest.getMetricsTracker()
+            .injectMetrics(
+                frontendMetrics.s3MultipartCompleteMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(),
+                    false));
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);

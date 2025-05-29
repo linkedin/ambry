@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -30,6 +31,9 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.FileStore;
+import com.github.ambry.store.PartitionFileStore;
+import com.github.ambry.store.Store;
 import java.io.IOException;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -118,8 +122,26 @@ public class FileCopyBasedReplicationManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      /**
+       * If the store is already started or is not initialized, then we should not do file copy again.
+       * We should skip file copy and just return.
+       * This scenario will occur when the server is restarted and the partition was already registered with the node.
+       * The restarted automatically triggers the staging directory clean up and removes any residual incomplete copied files from the previous File copy run.
+       */
+      Store store = storeManager.getInitializedStore(storeManager.getReplica(partitionName).getPartitionId());
+
+      if(store == null){
+        logger.error("Store for Partition {} is null. Ignoring state change", partitionName);
+        return;
+      }
+
+      if(store.isStarted()){
+        logger.info("Store for Partition {} is already started. Ignoring state change", partitionName);
+        return;
+      }
+
       if(!isRunning){
-        logger.info("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
+        logger.error("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
         throw new StateTransitionException("FileCopyBasedReplicationManager is not running. Ignoring state "
             + "change for partition: " + partitionName, StateTransitionException.
             TransitionErrorCode.FileCopyBasedReplicationManagerNotRunning);
@@ -148,18 +170,6 @@ public class FileCopyBasedReplicationManager {
       logger.info("Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
       prioritizationManager.addReplica(replicaId);
 
-      try {
-        logger.info("Waiting for File Copy to be completed for Replica: {}", replicaId.getPartitionId().toPathString());
-        replicaSyncUpManager.waitForFileCopyCompleted(partitionName);
-        logger.info("File Copy Completed for Replica: {}", replicaId.getPartitionId().toPathString());
-      } catch (InterruptedException e) {
-        logger.error("File copy for partition {} was interrupted", partitionName);
-        throw new StateTransitionException("File copy for partition " + partitionName + " was interrupted",
-            StateTransitionException.TransitionErrorCode.FileCopyProtocolFailure);
-      } catch (StateTransitionException e){
-        logger.error("File copy for partition {} failed", partitionName);
-        throw e;
-      }
     }
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
