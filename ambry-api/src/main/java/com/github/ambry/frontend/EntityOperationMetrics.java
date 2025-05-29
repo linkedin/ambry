@@ -83,7 +83,7 @@ public class EntityOperationMetrics {
     String qpsMetricPrefix = entityName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
     totalCount = metricRegistry.counter(MetricRegistry.name(ownerClass, qpsMetricPrefix + "totalCount"));
 
-    throughput = metricRegistry.histogram(MetricRegistry.name(ownerClass, "Throughput"));
+    throughput = metricRegistry.histogram(MetricRegistry.name(ownerClass, metricPrefix + "Throughput"));
   }
 
   /**
