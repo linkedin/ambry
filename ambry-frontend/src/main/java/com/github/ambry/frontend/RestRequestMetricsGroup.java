@@ -42,7 +42,6 @@ public class RestRequestMetricsGroup {
   private final RestRequestMetrics sslUnencryptedMetrics;
   private final RestRequestMetrics nonSslEncryptedMetrics;
   private final RestRequestMetrics sslEncryptedMetrics;
-  private final Set<String> containerMetricsEnabledRequestTypes;
   private final Set<String> containerMetricsEnabledGetRequestTypes;
 
   /**
@@ -68,8 +67,6 @@ public class RestRequestMetricsGroup {
     sslEncryptedMetrics =
         encryptedMetricsEnabled ? new RestRequestMetrics(ownerClass, requestType + SSL_SUFFIX + ENCRYPTED_SUFFIX,
             metricRegistry) : null;
-    this.containerMetricsEnabledRequestTypes =
-        new HashSet<>(Arrays.asList(frontendConfig.containerMetricsEnabledRequestTypes.split(",")));
     this.containerMetricsEnabledGetRequestTypes =
         new HashSet<>(Arrays.asList(frontendConfig.containerMetricsEnabledGetRequestTypes.split(",")));
   }
@@ -101,7 +98,7 @@ public class RestRequestMetricsGroup {
    * operation.
    */
   ContainerMetrics getContainerMetrics(String accountName, String containerName, boolean shouldIncludeAccountMetrics) {
-    return containerMetricsEnabledRequestTypes.contains(requestType) ? instantiatedContainerMetrics.computeIfAbsent(
+    return instantiatedContainerMetrics.computeIfAbsent(
         new Pair<>(accountName, containerName), k -> {
           boolean isGetRequest = containerMetricsEnabledGetRequestTypes.contains(requestType);
           AccountMetrics accountMetrics =
@@ -109,6 +106,6 @@ public class RestRequestMetricsGroup {
                   ak -> new AccountMetrics(accountName, requestType, metricRegistry, isGetRequest)) : null;
           return new ContainerMetrics(accountName, containerName, requestType, metricRegistry, isGetRequest,
               accountMetrics);
-        }) : null;
+        });
   }
 }
