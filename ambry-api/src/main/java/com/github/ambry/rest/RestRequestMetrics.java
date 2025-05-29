@@ -44,6 +44,8 @@ public class RestRequestMetrics {
   static final String UNSATISFIED_REQUEST_COUNT_SUFFIX = "UnsatisfiedRequestCount";
   static final String SATISFIED_REQUEST_COUNT_SUFFIX = "SatisfiedRequestCount";
 
+  static final String THROUGHPUT_SUFFIX = "Throughput";
+
   final Histogram nioRequestProcessingTimeInMs;
   final Histogram nioResponseProcessingTimeInMs;
   final Histogram nioRoundTripTimeInMs;
@@ -60,6 +62,8 @@ public class RestRequestMetrics {
   final Counter operationCount;
   final Counter unsatisfiedRequestCount;
   final Counter satisfiedRequestCount;
+
+  final Histogram throughput;
 
   /**
    * Creates an instance of RestRequestMetrics for {@code requestType} and attaches all the metrics related to the
@@ -103,5 +107,7 @@ public class RestRequestMetrics {
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + UNSATISFIED_REQUEST_COUNT_SUFFIX));
     satisfiedRequestCount =
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SATISFIED_REQUEST_COUNT_SUFFIX));
+
+    throughput = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + THROUGHPUT_SUFFIX));
   }
 }

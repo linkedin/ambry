@@ -60,6 +60,8 @@ public class RestRequestMetricsTracker {
   private boolean satisfied = true;
   private ResponseStatus responseStatus = ResponseStatus.Ok;
 
+  private long bytesTransferred = 0;
+
   /**
    * Tracker for updating NIO related metrics.
    * </p>
@@ -221,6 +223,11 @@ public class RestRequestMetricsTracker {
   }
 
   /**
+   * @param bytesTransferred the number of bytes that was sent by/to the client as a part of this request.
+   */
+  public void setBytesTransferred(long bytesTransferred) { this.bytesTransferred = bytesTransferred; }
+
+  /**
    * Injects a {@link RestRequestMetrics} that can be used to track the metrics of the {@link RestRequest} that this
    * instance of RestRequestMetricsTracker is attached to.
    * @param restRequestMetrics the {@link RestRequestMetrics} instance to use to track the metrics of the
@@ -268,12 +275,20 @@ public class RestRequestMetricsTracker {
           metrics.operationError.inc();
         }
         if (containerMetrics != null) {
-          containerMetrics.recordMetrics(nioMetricsTracker.roundTripTimeInMs, responseStatus);
+          containerMetrics.recordMetrics(nioMetricsTracker.roundTripTimeInMs, responseStatus, bytesTransferred);
         }
         if (satisfied) {
           metrics.satisfiedRequestCount.inc();
         } else {
           metrics.unsatisfiedRequestCount.inc();
+        }
+
+        // Only add throughput metrics when the request is successful and bytes were actually transfered over the wire.
+        // Recording throughput during failure could mean we incorrectly report throughput as something higher than normal since
+        // the round trip time is likely to be shorter.
+        // We also want to make sure we aren't polluting our metrics with a bunch of 0 throughput values.
+        if (!failed && bytesTransferred > 0) {
+          metrics.throughput.update(RestUtils.calculateThroughput(bytesTransferred, nioMetricsTracker.roundTripTimeInMs));
         }
       }
     } else {

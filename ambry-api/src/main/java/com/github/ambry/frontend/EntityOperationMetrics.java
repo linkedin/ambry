@@ -16,6 +16,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestUtils;
 
 
 /**
@@ -50,6 +51,8 @@ public class EntityOperationMetrics {
 
   protected final Counter totalCount;
 
+  protected final Histogram throughput;
+
   /**
    * Constructor to create operation metrics for given entity. The entity can be an account or a container.
    *
@@ -79,6 +82,8 @@ public class EntityOperationMetrics {
     goneCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "GoneCount"));
     String qpsMetricPrefix = entityName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
     totalCount = metricRegistry.counter(MetricRegistry.name(ownerClass, qpsMetricPrefix + "totalCount"));
+
+    throughput = metricRegistry.histogram(MetricRegistry.name(ownerClass, metricPrefix + "Throughput"));
   }
 
   /**
@@ -87,11 +92,12 @@ public class EntityOperationMetrics {
    * @param roundTripTimeInMs the time it took to receive a request and send a response.
    * @param responseStatus    the {@link ResponseStatus} sent in the response.
    */
-  public void recordMetrics(long roundTripTimeInMs, ResponseStatus responseStatus) {
+  public void recordMetrics(long roundTripTimeInMs, ResponseStatus responseStatus, long bytesTransferred) {
     this.roundTripTimeInMs.update(roundTripTimeInMs);
     totalCount.inc();
     if (responseStatus.isSuccess()) {
       successCount.inc();
+      throughput.update(RestUtils.calculateThroughput(bytesTransferred, roundTripTimeInMs));
     } else if (responseStatus.isRedirection()) {
       redirectionCount.inc();
     } else if (responseStatus.isClientError()) {
