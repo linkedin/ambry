@@ -438,6 +438,7 @@ public class DiskManager {
    * @return {@code true} if enabling or disabling was successful. {@code false} if not.
    */
   public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+    logger.info("Control compaction for blob store {} is explicitly set to {}", id, enabled);
     controlCompactionForBlobStoreMap.put(id, enabled);
     return controlCompactionForBlobStoreStub(id, enabled);
   }
