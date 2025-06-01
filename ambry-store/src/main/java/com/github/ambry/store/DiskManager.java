@@ -464,7 +464,7 @@ public class DiskManager {
    * @param enabled whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
-  private boolean controlCompactionForBlobStoreStub(PartitionId id, boolean enabled) {
+  boolean controlCompactionForBlobStoreStub(PartitionId id, boolean enabled) {
     rwLock.readLock().lock();
     boolean succeed = false;
     try {

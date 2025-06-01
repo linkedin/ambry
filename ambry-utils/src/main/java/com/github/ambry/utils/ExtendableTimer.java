@@ -75,7 +75,7 @@ public class ExtendableTimer {
   public void start() {
     if (isRunning) return;
 
-    logger.info("Starting timer with delay of {} ms", scheduledDelayInMs);
+    logger.info("Starting timer with delay of {} seconds ", scheduledDelayInMs / 1000);
     scheduleTask(scheduledDelayInMs);
     isRunning = true;
   }
@@ -91,7 +91,7 @@ public class ExtendableTimer {
     cancel();
 
     // Reschedule the task with the new delay
-    logger.info("Extending timer by {} ms", delayInMs);
+    logger.info("Restarting timer with a delay of {} seconds", delayInMs / 1000);
     scheduleTask(delayInMs);
   }
 
@@ -119,7 +119,7 @@ public class ExtendableTimer {
         task.run();
       }
     };
-    logger.info("Scheduling task with delay of {} ms", delayInMs);
+    logger.info("Scheduling task with delay of {} seconds", delayInMs / 1000);
     timer.schedule(currentTask, delayInMs);
   }
 }
