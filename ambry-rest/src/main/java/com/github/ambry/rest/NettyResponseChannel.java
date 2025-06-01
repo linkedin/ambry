@@ -430,6 +430,7 @@ class NettyResponseChannel implements RestResponseChannel {
           requestPerfToCheck.put(PerformanceIndex.TimeToFirstByte, timeToFirstBytesInMs);
           requestPerfToCheck.put(PerformanceIndex.AverageBandwidth,
               roundTripTimeInMs == 0L ? Long.MAX_VALUE : totalOutboundBytes * 1000L / roundTripTimeInMs);
+          restRequestMetricsTracker.setBytesTransferred(totalOutboundBytes);
         } else if (responseStatus.isClientError() || responseStatus.isRedirection()) {
           requestPerfToCheck.put(PerformanceIndex.RoundTripTime, roundTripTimeInMs);
         }

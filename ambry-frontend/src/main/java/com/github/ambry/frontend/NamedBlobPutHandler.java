@@ -248,6 +248,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
+        restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
         String blobIdClean = stripPrefixAndExtension(blobId);
