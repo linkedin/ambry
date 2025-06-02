@@ -669,11 +669,11 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   @Test
   public void testRemovesOneOlderStaleInProgressBlob() throws Exception {
     // Arrange: create an IN_PROGRESS blob and mark it stale by updating modified_ts
-    NamedBlobRecord record1 = createAndPutNamedBlob(getBlobIdFromService(), NamedBlobState.IN_PROGRESS);
+    NamedBlobRecord record1 = createAndPutNamedBlob(getBlobIdFromService(), NamedBlobState.IN_PROGRESS, "new_cleaner");
     updateModifiedTimestampByBlobName("new_cleaner", 20);
 
     // Add a newer IN_PROGRESS blob with same blobId but fresh modified_ts
-    NamedBlobRecord record2 = createAndPutNamedBlob(getBlobIdFromService(), NamedBlobState.IN_PROGRESS);
+    NamedBlobRecord record2 = createAndPutNamedBlob(getBlobIdFromService(), NamedBlobState.IN_PROGRESS, "new_cleaner");
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -684,8 +684,8 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   @Test
   public void testRemovesTwoStaleInProgressBlobs() throws Exception {
     // Arrange: create two IN_PROGRESS blob records with different blob IDs
-    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS);
-    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS);
+    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS, "new_cleaner");
+    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
 
     // Manipulate modified timestamps to make both blobs stale (older than 21 days)
     updateModifiedTimestamp("6E5A1BFA2775", 22);
@@ -701,12 +701,12 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   @Test
   public void testRemovesStaleInProgressBlobsAddedBeforeAndAfter() throws Exception {
     // Arrange: put one IN_PROGRESS record, then update its timestamp to stale (20 days ago)
-    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS);
+    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS, "new_cleaner");
     updateModifiedTimestampByBlobName("new_cleaner", 20);
 
     // Add two more IN_PROGRESS records
-    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS);
-    NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.IN_PROGRESS);
+    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
+    NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.IN_PROGRESS, "new_cleaner");
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -717,11 +717,11 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testIgnoresReadyBlobsWhenRemovingStale() throws Exception {
-    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS);
+    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS, "new_cleaner");
     updateModifiedTimestampByBlobName("new_cleaner", 20);
 
-    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS);
-    NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.READY);
+    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
+    NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.READY, "new_cleaner");
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -733,9 +733,9 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   @Test
   public void testRemovesOneStaleBlobWithSameBlobIdDifferentStates() throws Exception {
     String blobId = getBlobIdFromService();
-    NamedBlobRecord record1 = createAndPutNamedBlob(blobId, NamedBlobState.IN_PROGRESS);
-    NamedBlobRecord record2 = createAndPutNamedBlob(blobId, NamedBlobState.READY);
-    NamedBlobRecord record3 = createAndPutNamedBlob(blobId, NamedBlobState.IN_PROGRESS);
+    NamedBlobRecord record1 = createAndPutNamedBlob(blobId, NamedBlobState.IN_PROGRESS, "new_cleaner");
+    NamedBlobRecord record2 = createAndPutNamedBlob(blobId, NamedBlobState.READY, "new_cleaner");
+    NamedBlobRecord record3 = createAndPutNamedBlob(blobId, NamedBlobState.IN_PROGRESS, "new_cleaner");
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -746,9 +746,9 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   @Test
   public void testRemovesReadyAndInProgressStaleBlobs() throws Exception {
     // Arrange: three blobs with mixed states (READY and IN_PROGRESS)
-    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.READY);
-    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS);
-    NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.READY);
+    NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.READY, "new_cleaner");
+    NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
+    NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.READY, "new_cleaner");
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -761,10 +761,9 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   /**
    * Helper method to create and put a NamedBlobRecord with given blobId and state.
    */
-  private NamedBlobRecord createAndPutNamedBlob(String blobId, NamedBlobState state) throws Exception {
+  private NamedBlobRecord createAndPutNamedBlob(String blobId, NamedBlobState state, String blobName) throws Exception {
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
-    String blobName = "new_cleaner";
     NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
     namedBlobDb.put(record, state, true).get();
     return record;

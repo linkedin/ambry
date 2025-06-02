@@ -999,6 +999,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     if (keepBlob.getBlobState() == 0 && keepBlob.getModifiedTS().before(cutoffTimestamp)) {
       staleBlobs.add(keepBlob);
     }
+    // TODO: remove after testing
+    logger.debug("These are the staleblobs: {} ", staleBlobs);
     return staleBlobs;
   }
 
