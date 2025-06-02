@@ -196,8 +196,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       MODIFIED_TS
   );
 
-  //  Timestamp deletedTime = resultSet.getTimestamp(6);
-
   /**
    * Pull the stale blobs that need to be cleaned up
    * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)

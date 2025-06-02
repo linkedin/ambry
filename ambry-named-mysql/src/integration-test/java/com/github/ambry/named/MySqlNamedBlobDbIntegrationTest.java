@@ -63,7 +63,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     super(enableHardDelete, MySqlNamedBlobDbConfig.DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
   }
 
-  // DONE
   /**
    * Tests sequences of puts, gets, lists, and deletes across multiple containers.
    * @throws Exception
@@ -216,7 +215,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     }
   }
 
-  /// DONE
   /**
    * Test behavior with expired blobs
    */
@@ -235,7 +233,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
     time.setCurrentMilliseconds(System.currentTimeMillis());
 
-    sleep(100);
+    Thread.sleep(100);
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
         RestServiceErrorCode.Deleted);
     NamedBlobRecord recordFromStore =
@@ -465,8 +463,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     Statement statement = getStatement();
     statement.executeUpdate(sql);
 
-    sleep(10);
-
     String blobIdNew = getBlobId(account, container);
     NamedBlobRecord recordNew =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
@@ -498,7 +494,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 1 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
-  // DONE
   /**
    * Test behavior with blob cleanup for good blob case
    * Case 2, created less than staleDataRetentionDays ago, Ready, not largest, and bigger version is ready
