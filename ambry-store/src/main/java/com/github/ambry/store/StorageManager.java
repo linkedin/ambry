@@ -495,6 +495,20 @@ public class StorageManager implements StoreManager {
   }
 
   /**
+   * To be only used in StateTransition: Bootstrap->Standby, Standby->Inactive
+   * This control differs from `controlCompactionForBlobStore` in that it doesn't update the {@link DiskManager#controlCompactionForBlobStoreMap}
+   * which is further used by FileCopy Apis - GetMetadata, GetChunkdata
+   * Using this info, the Apis can override Compaction control for a requested partition.
+   * @param id the {@link PartitionId} for which compaction control is requested.
+   * @param enabled {@code true} if compaction should be enabled for the blob store, {@code false} if it should be disabled.
+   * @return {@code true} if the operation was successful, {@code false} otherwise.
+   */
+  public boolean controlCompactionForBlobStoreStub(PartitionId id, boolean enabled) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null && diskManager.controlCompactionForBlobStoreStub(id, enabled);
+  }
+
+  /**
    * Return true is compaction is disabled for the given partition id.
    * @param id
    * @return
@@ -1068,7 +1082,7 @@ public class StorageManager implements StoreManager {
             ReplicaNotFound);
       }
       // Operation to enable compaction is idempotent
-      if (!controlCompactionForBlobStore(replica.getPartitionId(), true)) {
+      if (!controlCompactionForBlobStoreStub(replica.getPartitionId(), true)) {
         logger.error("Fail to enable compaction for blob store {}", replica.getReplicaPath());
         throw new StateTransitionException("Replica " + partitionName + " can't enable compaction",
             ReplicaOperationFailure);
@@ -1126,7 +1140,7 @@ public class StorageManager implements StoreManager {
             logger.info("Store {} is set to INACTIVE", partitionName);
           }
           // 2. disable compaction on this store
-          if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
+          if (!controlCompactionForBlobStoreStub(replica.getPartitionId(), false)) {
             logger.error("Failed to disable compaction on store {}", partitionName);
             // we set error code to ReplicaNotFound because that is the only reason why compaction may fail.
             throw new StateTransitionException("Couldn't disable compaction on replica " + replica.getReplicaPath(),
