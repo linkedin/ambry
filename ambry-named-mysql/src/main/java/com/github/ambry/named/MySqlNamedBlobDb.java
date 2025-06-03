@@ -182,7 +182,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
           "FROM %s " +
           "WHERE container_id = ? AND account_id = ? " +
-          "ORDER BY %s DESC " +
+          "ORDER BY %s ASC, %s DESC " +  // <-- Changed this line
           "LIMIT ? OFFSET ?;",
       ACCOUNT_ID,
       CONTAINER_ID,
@@ -193,7 +193,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       MODIFIED_TS,
       DELETED_TS,
       NAMED_BLOBS_V2,
-      MODIFIED_TS
+      BLOB_NAME,    // First order by blob_name alphabetically (ASC)
+      MODIFIED_TS   // Then order by modified_ts descending (DESC)
   );
 
   /**
@@ -998,7 +999,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       staleBlobs.add(keepBlob);
     }
     // TODO: remove after testing
-    logger.debug("These are the staleblobs: {} ", staleBlobs);
+    logger.info("These are the staleblobs: {} ", staleBlobs);
     return staleBlobs;
   }
 
@@ -1035,7 +1036,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
               long version = resultSet.getLong(5);
               int blobState = resultSet.getInt(6);
-              //Timestamp deletedTime = resultSet.getTimestamp(6);
               Timestamp modifiedTime = resultSet.getTimestamp(7);
               Timestamp deletedTime = resultSet.getTimestamp(8);
 
