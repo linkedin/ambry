@@ -382,24 +382,6 @@ public class AmbryServer {
                 new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
         storageManager.start();
 
-        if(serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
-          FileCopyHandlerFactory fileCopyHandlerFactory =
-              new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap,
-                  fileCopyBasedReplicationConfig, storeConfig);
-
-          PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
-          prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
-          prioritizationManager.start();
-          FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory =
-              new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory, fileCopyBasedReplicationConfig,
-                  clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant);
-          fileCopyBasedReplicationManager =
-              new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig, storageManager,
-                  clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant,
-                  fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory, prioritizationManager, storeConfig,
-                  replicaPrioritizationConfig);
-          fileCopyBasedReplicationManager.start();
-        }
         logger.info("Creating StatsManager to publish stats");
         statsManager =
             new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId),
@@ -440,6 +422,24 @@ public class AmbryServer {
                 skipPredicate);
         replicationManager.start();
 
+        if(serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
+          FileCopyHandlerFactory fileCopyHandlerFactory =
+              new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap,
+                  fileCopyBasedReplicationConfig, storeConfig);
+
+          PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
+          prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
+          prioritizationManager.start();
+          FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory =
+              new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory, fileCopyBasedReplicationConfig,
+                  clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant);
+          fileCopyBasedReplicationManager =
+              new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig, storageManager,
+                  clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant,
+                  fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory, prioritizationManager, storeConfig,
+                  replicaPrioritizationConfig);
+          fileCopyBasedReplicationManager.start();
+        }
         // unblock state transition
         logger.info("Unblocking state transition");
         for (ClusterParticipant participant : clusterParticipants) {
