@@ -71,7 +71,7 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
     List<ReplicaId> replicaListForDisk = diskToReplicaMap.get(diskId);
 
     if(replicaListForDisk == null){
-      logger.error("No replicas found for disk {}", diskId);
+      logger.info("No replicas found for disk {}", diskId);
       return null;
     }
 

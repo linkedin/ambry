@@ -178,9 +178,9 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       List<DiskId> disksToHydrate = fileCopyBasedReplicationThreadPoolManager.getDiskIdsToHydrate();
       for(DiskId diskId: disksToHydrate){
         List<ReplicaId> replicaIds = getNextReplicaToHydrate(diskId, fileCopyBasedReplicationConfig.fileCopyParallelPartitionHydrationCountPerDisk);
-        logger.info("Starting Hydration For Disk: {}", diskId);
 
         if(!replicaIds.isEmpty()){
+          logger.info("Starting Hydration For Disk: {}", diskId);
           for(ReplicaId replicaId: replicaIds) {
             if (inFlightReplicas.contains(replicaId)) {
               continue;
