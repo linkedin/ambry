@@ -125,8 +125,9 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
   List<ReplicaId> getNextReplicaToHydrate(DiskId diskId, int numberOfReplicasOnDisk) {
     List<ReplicaId> replicaIds = prioritizationManager.getPartitionListForDisk(diskId, numberOfReplicasOnDisk);
-    if(replicaIds == null || replicaIds.isEmpty())
-      return null;
+    if (replicaIds == null) {
+      return new ArrayList<>();
+    }
     return replicaIds;
   }
 
