@@ -377,7 +377,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
       records.add(record2);
     }
 
-    sleep(100);
+    Thread.sleep(100);
 
     // Confirm the pullStaleBlobs indeed pulled out the stale blob cases
     Set<String> staleInputSet = staleRecords.stream()
@@ -534,12 +534,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
-    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
-        "WHERE blob_name = 'stale/case3/more path segments--'";
-
-    Statement statement = getStatement();
-    statement.executeUpdate(sql);
-
+    updateModifiedTimestampByBlobName(blobName, 20);
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
     assertTrue("Good blob case 3 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
@@ -550,10 +545,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobGoodCase4() throws Exception {
-    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
-    long staleCutoffTime = calendar.getTimeInMillis();
-
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -561,16 +552,9 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
-    time.setCurrentMilliseconds(staleCutoffTime);
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
+    updateModifiedTimestampByBlobName(blobName, 20);
 
-    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
-        "WHERE blob_name = 'good/case4/more path segments--'";
-
-    Statement statement = getStatement();
-    statement.executeUpdate(sql);
-
-    time.setCurrentMilliseconds(staleCutoffTime + 5000);
     String blobIdNew = getBlobId(account, container);
     NamedBlobRecord recordNew =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);

@@ -178,7 +178,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
 
 
-  private static final String NEW_GET_STALE_QUERY = String.format(
+  private static final String GET_BLOBS_FOR_CLEANER = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
           "FROM %s " +
           "WHERE container_id = ? AND account_id = ? " +
@@ -196,49 +196,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       BLOB_NAME,    // First order by blob_name alphabetically (ASC)
       MODIFIED_TS   // Then order by modified_ts descending (DESC)
   );
-
-  /**
-   * Pull the stale blobs that need to be cleaned up
-   * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)
-   * meeting below conditions:
-   * 1. created more than config.staleDataRetentionDays [Default 5] days ago, and
-   * 2. its blob_id does NOT show in any VLR (Valid Latest Record) of any named blob.
-   * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.
-   *
-   * We construct the SQL query in a below steps:
-   * STEP 1: We first pull out the max version per valid record.
-   * STEP 2: Then we pull out the distinct blob_ids for those max versions.
-   * STEP 3: At last we exclude the record with blob_ids in step 2,
-   * and only pull records which are not deleted/expired yet.
-   * We order result by blob_id (which is indexed) to have deterministic results within the limit
-   */
-  // @formatter:off
-  private static final String GET_STALE_QUERY = String.format(""
-          + "SELECT %s, %s, %s, %s, %s, %s "
-          + "FROM %s "
-          + "WHERE blob_id not in "
-          + "   (SELECT distinct(blob_id) "
-          + "    FROM %s "
-          + "    WHERE version in  (SELECT max(version) as version "
-          + "      FROM %s "
-          + "      WHERE blob_state = 1 and version != 0 "
-          + "      GROUP BY account_id, container_id, blob_name))"
-          + " AND %s<? AND (%s IS NULL OR %s>%s) ORDER BY blob_id LIMIT ?",
-      ACCOUNT_ID,
-      CONTAINER_ID,
-      BLOB_NAME,
-      BLOB_ID,
-      VERSION,
-      CURRENT_TIME,
-      NAMED_BLOBS_V2,
-      NAMED_BLOBS_V2,
-      NAMED_BLOBS_V2,
-      VERSION,
-      DELETED_TS,
-      DELETED_TS,
-      CURRENT_TIME
-      );
-  // @formatter:on
 
   private final AccountService accountService;
   private final String localDatacenter;
@@ -529,7 +486,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      List<StaleNamedBlob> potentialStaleNamedBlobResults = runPullPotentialStaleBlobs(connection);
+      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForCleaner(connection);
       List<StaleNamedBlob> staleNamedBlobResults = getStaleBlobs(potentialStaleNamedBlobResults);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
@@ -986,7 +943,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } else if (keepBlobState == 0 && currentBlobState == 0) {
         if (keepBlobModifiedTS.after(cutoffTimestamp)) {
           staleBlobs.add(currentBlob);
-        } else {
+        } else if (keepBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(keepBlob);
           keepBlob = currentBlob;
         }
@@ -998,13 +955,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     if (keepBlob.getBlobState() == 0 && keepBlob.getModifiedTS().before(cutoffTimestamp)) {
       staleBlobs.add(keepBlob);
     }
-    // TODO: remove after testing
-    logger.info("These are the staleblobs: {} ", staleBlobs);
+    logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
     return staleBlobs;
   }
 
-
-  private List<StaleNamedBlob> runPullPotentialStaleBlobs(Connection connection) throws SQLException {
+  /**
+   * Obtains all blobs from the named_blobs_v2 table, grouping them by blob_name and sorting by modified_ts
+   * @param connection
+   * @return list blobs
+   * @throws SQLException
+   */
+  private List<StaleNamedBlob> getAllBlobsForCleaner(Connection connection) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
     Set<Container> activeContainers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
     Set<Container> inactiveContainers = accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE);
@@ -1018,7 +979,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       boolean hasMore = true;
 
       while (hasMore) {
-        try (PreparedStatement statement = connection.prepareStatement(NEW_GET_STALE_QUERY)) {
+        try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
           statement.setInt(1, container.getId());
           statement.setInt(2, container.getParentAccountId());
           statement.setInt(3, config.queryStaleDataMaxResults);
