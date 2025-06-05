@@ -28,6 +28,9 @@ public class StaleNamedBlob {
   private final String blobId;
   private final long version;
   private final Timestamp deleteTs;
+  private final Timestamp modifiedTs;
+  private final int blobState;
+
 
   /**
    * @param accountId the account ID for the stale record.
@@ -38,13 +41,15 @@ public class StaleNamedBlob {
    * @param deleteTs the timestamp of deleting the stale record.
    */
   public StaleNamedBlob(short accountId, short containerId, String blobName, String blobId, long version,
-      Timestamp deleteTs) {
+      Timestamp deleteTs,  int blobState, Timestamp modifiedTs) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.blobName = blobName;
     this.blobId = blobId;
     this.version = version;
     this.deleteTs = deleteTs;
+    this.modifiedTs = modifiedTs;
+    this.blobState = blobState;
   }
 
   /**
@@ -88,6 +93,16 @@ public class StaleNamedBlob {
   public Timestamp getDeleteTs() {
     return deleteTs;
   }
+
+  /**
+   * @return the blob state from the record.
+   */
+  public int getBlobState() { return blobState;}
+
+  /**
+   * @return the blob state from the record.
+   */
+  public Timestamp getModifiedTS() { return modifiedTs;}
 
   @Override
   public boolean equals(Object o) {

@@ -45,6 +45,7 @@ public class MySqlNamedBlobDbIntergrationBase {
   protected final int listSqlOption;
   protected final MySqlNamedBlobDbConfig config;
   protected final MySqlNamedBlobDb namedBlobDb;
+  protected final MySqlNamedBlobDbFactory namedBlobDbFactory;
 
   public MySqlNamedBlobDbIntergrationBase(boolean enableHardDelete, int listSqlOption) throws Exception {
     this.enableHardDelete = enableHardDelete;
@@ -58,7 +59,7 @@ public class MySqlNamedBlobDbIntergrationBase {
     }
     MockClusterMap clusterMap = new MockClusterMap();
     partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
-    MySqlNamedBlobDbFactory namedBlobDbFactory =
+     namedBlobDbFactory =
         new MySqlNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), accountService, time);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
   }
