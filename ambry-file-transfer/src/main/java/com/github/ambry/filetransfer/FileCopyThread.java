@@ -74,8 +74,10 @@ public class FileCopyThread extends Thread {
       //TODO add logic to get the source and target replica id
       ReplicaId targetReplicaId = FileCopyUtils.getPeerForFileCopy(replicaId.getPartitionId(), replicaId.getDataNodeId().getDatacenterName());
 
-      if(targetReplicaId == null) {
-        throw new IllegalStateException("Target ReplicaId cannot be null");
+      if (targetReplicaId == null) {
+        logger.warn("No peer replica found for file copy for replicaId: {}", replicaId);
+        fileCopyStatusListener.onFileCopyFailure(new IOException("No peer replica found for file copy"));
+        return;
       }
 
       FileCopyInfo fileCopyInfo = new FileCopyInfo(START_CORRELATION_ID, CLIENT_ID, replicaId, targetReplicaId);

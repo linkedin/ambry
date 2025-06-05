@@ -27,6 +27,7 @@ import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FileStoreException;
 import com.github.ambry.store.PartitionFileStore;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -188,6 +189,19 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
             }
             FileCopyStatusListener fileCopyStatusListener = new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId);
             FileCopyHandler fileCopyHandler = fileCopyHandlerFactory.getFileCopyHandler();
+            try{
+              /**
+               * Use FileCopyTemporaryDirectoryName to create a temporary directory for file copy.
+               * This will be used to write the files which are not yet written and can be cleaned
+               * up without
+               */
+              createTemporaryDirectoryForFileCopyIfAbsent(replicaId, storeConfig);
+            } catch (IOException e){
+              logger.error("Error Creating Temporary Directory For Replica: " + replicaId.getPartitionId().toPathString());
+              fileCopyStatusListener.onFileCopyFailure(e);
+              continue;
+            }
+
             fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
                 fileCopyStatusListener, fileCopyHandler);
 
@@ -210,6 +224,14 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
   public Map<ReplicaId, Long> getReplicaToStartTimeMap(){
     return replicaToStartTimeMap;
+  }
+
+  void createTemporaryDirectoryForFileCopyIfAbsent(ReplicaId replica, StoreConfig storeConfig) throws IOException {
+    logger.info("FCH TEST: Creating Temporary Directory For File Copy: " + storeConfig.storeFileCopyTemporaryDirectoryName);
+    File fileCopyTemporaryDirectory = new File(replica.getReplicaPath(), storeConfig.storeFileCopyTemporaryDirectoryName);
+    if (!fileCopyTemporaryDirectory.exists()) {
+      fileCopyTemporaryDirectory.mkdirs();
+    }
   }
 
   @Override
