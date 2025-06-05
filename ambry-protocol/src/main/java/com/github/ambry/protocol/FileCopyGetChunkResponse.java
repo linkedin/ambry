@@ -127,7 +127,7 @@ public class FileCopyGetChunkResponse extends Response {
     this.chunkSizeInBytes = -1;
     this.isLastChunk = false;
     this.partitionId = null;
-    this.fileName = null;
+    this.fileName = "";
   }
 
   /**
