@@ -243,9 +243,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       logMessageAndThrow(operationName, "Exception while fetching metadata file",
           e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
-
     validateResponseOrThrow(metadataResponse, operationName);
-    logger.info(operationName + ": Fetched metadata for partition: " + fileCopyInfo.getSourceReplicaId().getPartitionId().getId() + " - " + metadataResponse);
+    logger.info(operationName + ": Fetched metadata for partition: " + fileCopyInfo.getSourceReplicaId().getPartitionId().getId() + " - " + metadataResponse.toString());
     return metadataResponse;
   }
 
@@ -283,7 +282,6 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       logMessageAndThrow(operationName, "Exception" + errorSuffix, e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
-
     validateResponseOrThrow(chunkResponse, operationName);
     return chunkResponse;
   }
