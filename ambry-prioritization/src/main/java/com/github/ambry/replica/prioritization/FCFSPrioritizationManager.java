@@ -62,7 +62,7 @@ public class FCFSPrioritizationManager implements PrioritizationManager {
   }
 
   @Override
-  public List<ReplicaId> getPartitionListForDisk(@Nonnull DiskId diskId, @Nonnegative int numberOfReplicasPerDisk) {
+  public synchronized List<ReplicaId> getPartitionListForDisk(@Nonnull DiskId diskId, @Nonnegative int numberOfReplicasPerDisk) {
     if(!isRunning){
       logger.error("Failed to get partition list for disk {}", diskId);
       throw new StateTransitionException("Failed to get partition list for disk " + diskId, PrioritizationManagerRunningFailure);
