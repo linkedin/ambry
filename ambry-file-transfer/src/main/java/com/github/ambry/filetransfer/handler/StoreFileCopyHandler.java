@@ -162,7 +162,9 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
-    logger.info("File Copy handler is running for Replica on Mount Path: {} hydrating from DataNode: {}", fileCopyInfo.getSourceReplicaId().getMountPath(), fileCopyInfo.getTargetReplicaId().getDataNodeId());
+    logger.info("File Copy handler is running for partition: {} on Mount Path: {} hydrating from DataNode: {}",
+        fileCopyInfo.getSourceReplicaId().getPartitionId().getId(),
+        fileCopyInfo.getSourceReplicaId().getMountPath(), fileCopyInfo.getTargetReplicaId().getDataNodeId());
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
 
@@ -241,9 +243,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       logMessageAndThrow(operationName, "Exception while fetching metadata file",
           e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
-
     validateResponseOrThrow(metadataResponse, operationName);
-    logger.info(operationName + ": Fetched metadata");
+    logger.info(operationName + ": Fetched metadata for partition: " + fileCopyInfo.getSourceReplicaId().getPartitionId().getId() + " - " + metadataResponse.toString());
     return metadataResponse;
   }
 
@@ -281,7 +282,6 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       logMessageAndThrow(operationName, "Exception" + errorSuffix, e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
-
     validateResponseOrThrow(chunkResponse, operationName);
     return chunkResponse;
   }

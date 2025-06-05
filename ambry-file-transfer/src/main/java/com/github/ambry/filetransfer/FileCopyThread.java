@@ -84,7 +84,10 @@ public class FileCopyThread extends Thread {
       fileCopyHandler.start();
       // Start the file copy process
 
+      long startTime = System.currentTimeMillis();
       fileCopyHandler.copy(fileCopyInfo);
+      logger.info("File copy completed for partition: {} in {} seconds",
+          replicaId.getPartitionId().getId(), (System.currentTimeMillis() - startTime) / 1000);
 
       fileCopyStatusListener.onFileCopySuccess();
     } catch (Exception e) {

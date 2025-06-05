@@ -108,6 +108,8 @@ public class StoreFileCopyHandlerTest {
   @Test
   public void testGetFileCopyGetMetaDataResponseExpectSuccess() throws Exception {
     // Arrange: Mock successful metadata retrieval
+    when(fileCopyInfo.getSourceReplicaId()).thenReturn(mock(ReplicaId.class));
+    when(fileCopyInfo.getSourceReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
     when(handler.getOperationRetryHandler().executeWithRetry(any(), anyString())).thenReturn(metadataResponse);
 
     // Act: Call getFileCopyGetMetaDataResponse

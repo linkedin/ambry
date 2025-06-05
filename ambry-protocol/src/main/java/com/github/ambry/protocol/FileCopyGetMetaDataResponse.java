@@ -94,7 +94,7 @@ public class FileCopyGetMetaDataResponse extends Response {
    * @param serverErrorCode The error code of the response.
    */
   public FileCopyGetMetaDataResponse(int correlationId, String clientId, ServerErrorCode serverErrorCode) {
-    this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), null, serverErrorCode, null);
+    this(CURRENT_VERSION, correlationId, clientId, 0, new ArrayList<>(), "", serverErrorCode, null);
   }
 
   /**
@@ -102,7 +102,7 @@ public class FileCopyGetMetaDataResponse extends Response {
    * @param serverErrorCode The error code of the response.
    */
   public FileCopyGetMetaDataResponse(ServerErrorCode serverErrorCode) {
-    this(CURRENT_VERSION, -1, "", 0, new ArrayList<>(), null, serverErrorCode, null);
+    this(CURRENT_VERSION, -1, "", 0, new ArrayList<>(), "", serverErrorCode, null);
   }
 
   /**
