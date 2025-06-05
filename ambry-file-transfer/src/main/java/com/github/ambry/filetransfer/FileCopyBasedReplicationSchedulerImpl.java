@@ -227,7 +227,8 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   }
 
   void createTemporaryDirectoryForFileCopyIfAbsent(ReplicaId replica, StoreConfig storeConfig) throws IOException {
-    logger.info("Creating Temporary Directory For File Copy: " + storeConfig.storeFileCopyTemporaryDirectoryName);
+    String tempDirPath = replica.getReplicaPath() + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
+    logger.info("Creating Temporary Directory For File Copy: " + tempDirPath);
     File fileCopyTemporaryDirectory = new File(replica.getReplicaPath(), storeConfig.storeFileCopyTemporaryDirectoryName);
     if (!fileCopyTemporaryDirectory.exists()) {
       fileCopyTemporaryDirectory.mkdirs();
