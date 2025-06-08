@@ -929,30 +929,30 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         continue;
       }
 
-      int keepBlobState = keepBlob.getBlobState();
-      int currentBlobState = currentBlob.getBlobState();
+      NamedBlobState keepBlobState = keepBlob.getBlobState();
+      NamedBlobState currentBlobState = currentBlob.getBlobState();
       Timestamp keepBlobModifiedTS = keepBlob.getModifiedTS();
 
-      if (keepBlobState == 0 && currentBlobState == 1) {
+      if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.READY) {
         if (keepBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(keepBlob);
           keepBlob = currentBlob;
         }
-      } else if (keepBlobState == 1 && currentBlobState == 1) {
+      } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.READY) {
         staleBlobs.add(currentBlob);
-      } else if (keepBlobState == 0 && currentBlobState == 0) {
+      } else if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.IN_PROGRESS) {
         if (keepBlobModifiedTS.after(cutoffTimestamp)) {
           staleBlobs.add(currentBlob);
         } else if (keepBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(keepBlob);
           keepBlob = currentBlob;
         }
-      } else if (keepBlobState == 1 && currentBlobState == 0) {
+      } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.IN_PROGRESS) {
         staleBlobs.add(currentBlob);
       }
     }
 
-    if (keepBlob.getBlobState() == 0 && keepBlob.getModifiedTS().before(cutoffTimestamp)) {
+    if (keepBlob.getBlobState() == NamedBlobState.IN_PROGRESS && keepBlob.getModifiedTS().before(cutoffTimestamp)) {
       staleBlobs.add(keepBlob);
     }
     logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
@@ -996,9 +996,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               String blobName = resultSet.getString(3);
               String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
               long version = resultSet.getLong(5);
-              int blobState = resultSet.getInt(6);
+              int blobStateInt = resultSet.getInt(6);
               Timestamp modifiedTime = resultSet.getTimestamp(7);
               Timestamp deletedTime = resultSet.getTimestamp(8);
+
+              NamedBlobState blobState = null;
+              if (blobStateInt == 1) {
+                blobState = NamedBlobState.READY;
+              } else if (blobStateInt == 0) {
+                blobState = NamedBlobState.IN_PROGRESS;
+              }
 
               StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
               resultList.add(result);

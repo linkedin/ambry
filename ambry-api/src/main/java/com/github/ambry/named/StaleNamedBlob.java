@@ -14,6 +14,7 @@
 
 package com.github.ambry.named;
 
+import com.github.ambry.protocol.NamedBlobState;
 import java.sql.Timestamp;
 import java.util.Objects;
 
@@ -29,7 +30,7 @@ public class StaleNamedBlob {
   private final long version;
   private final Timestamp deleteTs;
   private final Timestamp modifiedTs;
-  private final int blobState;
+  private final NamedBlobState blobState;
 
 
   /**
@@ -41,7 +42,7 @@ public class StaleNamedBlob {
    * @param deleteTs the timestamp of deleting the stale record.
    */
   public StaleNamedBlob(short accountId, short containerId, String blobName, String blobId, long version,
-      Timestamp deleteTs,  int blobState, Timestamp modifiedTs) {
+      Timestamp deleteTs,  NamedBlobState blobState, Timestamp modifiedTs) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.blobName = blobName;
@@ -97,7 +98,7 @@ public class StaleNamedBlob {
   /**
    * @return the blob state from the record.
    */
-  public int getBlobState() { return blobState;}
+  public NamedBlobState getBlobState() { return blobState;}
 
   /**
    * @return the blob state from the record.
