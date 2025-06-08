@@ -45,8 +45,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -487,7 +485,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
       List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForCleaner(connection);
-      List<StaleNamedBlob> staleNamedBlobResults = getStaleBlobs(potentialStaleNamedBlobResults);
+      List<StaleNamedBlob> staleNamedBlobResults = getStaleBlobs(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
@@ -909,13 +907,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return new DeleteResult(blobVersions);
   }
 
-  public static List<StaleNamedBlob> getStaleBlobs(List<StaleNamedBlob> blobList) {
+  public static List<StaleNamedBlob> getStaleBlobs(List<StaleNamedBlob> blobList, int cutOffDays) {
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
     if (blobList.isEmpty()) {
       return staleBlobs;
     }
     StaleNamedBlob keepBlob = blobList.get(0);
-    long cutoffTime = System.currentTimeMillis() - fiveDaysMillis;
+    long cutoffTime = System.currentTimeMillis() - cutOffDays * 24 * 60 * 60 * 1000;
     Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
 
     for (int i = 1; i < blobList.size(); i++) {

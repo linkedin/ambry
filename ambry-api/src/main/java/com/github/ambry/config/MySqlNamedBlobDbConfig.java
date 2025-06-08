@@ -33,6 +33,7 @@ public class MySqlNamedBlobDbConfig {
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
   public static final String ENABLE_HARD_DELETE = PREFIX + "enable.hard.delete";
+  public static final String HARD_DELETE_ON_CLOSE = PREFIX + "hard.delete.close";
 
   /**
    * Option to pick the SQL query to use for listing named blobs.
@@ -83,7 +84,7 @@ public class MySqlNamedBlobDbConfig {
    * The maximum number of days for a stale blob to say uncleaned.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
-  @Default("20")
+  @Default("5")
   public final int staleDataRetentionDays;
 
   /**
@@ -111,7 +112,7 @@ public class MySqlNamedBlobDbConfig {
     this.queryStaleDataMaxResults =
         verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays =
-        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);
