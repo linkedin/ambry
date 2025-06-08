@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;

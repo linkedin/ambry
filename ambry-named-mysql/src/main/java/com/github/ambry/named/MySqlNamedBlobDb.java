@@ -75,8 +75,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
   private static final String MULTI_VERSION_PLACE_HOLDER = "MULTI_VERSION_PLACE_HOLDER";
   private static final int VERSION_BASE = 100000;
-
-  private static final long fiveDaysMillis = 5L * 24 * 60 * 60 * 1000;
   // table name
   private static final String NAMED_BLOBS_V2 = "named_blobs_v2";
   // column names
