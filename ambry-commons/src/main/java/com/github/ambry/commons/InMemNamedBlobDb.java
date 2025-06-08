@@ -231,7 +231,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
               // when the last ready version is found, then all the prior versions that are not deleted are stale.
               StaleNamedBlob result =
                   new StaleNamedBlob((short) accountName.hashCode(), (short) containerName.hashCode(), blobName,
-                      row.getRecord().getBlobId(), row.getRecord().getVersion(), new Timestamp(time.milliseconds()), row.blobState.ordinal(), new Timestamp(row.getRecord().getModifiedTimeMs()));
+                      row.getRecord().getBlobId(), row.getRecord().getVersion(), new Timestamp(time.milliseconds()), row.blobState, new Timestamp(row.getRecord().getModifiedTimeMs()));
               resultList.add(result);
             }
             if (!isDeleted && row.getBlobState() == NamedBlobState.READY) {

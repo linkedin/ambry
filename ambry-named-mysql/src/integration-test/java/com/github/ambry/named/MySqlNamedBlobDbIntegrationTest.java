@@ -40,9 +40,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import org.apache.commons.codec.binary.Base64;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.apache.commons.codec.binary.Hex;
 
 import static java.lang.Thread.*;
 import static org.junit.Assert.*;
@@ -667,8 +669,8 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
 
     // Manipulate modified timestamps to make both blobs stale (older than 21 days)
-    updateModifiedTimestamp("6E5A1BFA2775", 22);
-    updateModifiedTimestamp("6E5A1BFA2776", 21);
+    updateModifiedTimestamp(base64BlobIdToHex(record1.getBlobId()), 22);
+    updateModifiedTimestamp(base64BlobIdToHex(record2.getBlobId()), 21);
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -795,9 +797,25 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     }
   }
 
+  /**
+   * Helper method that gets a SQL Statement object from the first available DataSource in namedBlobDb.
+   * This allows executing SQL queries or updates on the database.
+   *
+   */
   private Statement getStatement() throws Exception {
     DataSource dataSource = namedBlobDb.getDataSources().values().iterator().next();
     Connection conn = dataSource.getConnection();
     return conn.createStatement();
+  }
+
+  /**
+   * Helper method that converts a Base64-encoded blob ID string into an uppercase hexadecimal string.
+   *
+   * @param base64BlobId the Base64-encoded blob ID string
+   * @return the uppercase hexadecimal string representation
+   */
+  public static String base64BlobIdToHex(String base64BlobId) {
+    byte[] decodedBytes = Base64.decodeBase64(base64BlobId);
+    return Hex.encodeHexString(decodedBytes).toUpperCase();
   }
 }
