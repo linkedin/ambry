@@ -493,11 +493,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs() {
-    throw new UnsupportedOperationException("pullStaleBlobs() without a Container is not supported for NamedBlobDb.");
-  }
-
-  @Override
   public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);

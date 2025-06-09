@@ -109,12 +109,6 @@ public interface NamedBlobDb extends Closeable {
    */
   CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName);
 
-
-  /**
-   * Pull the stale blobs that need to be cleaned up
-   */
-  CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs();
-
   /**
    * Pull the stale blobs that need to be cleaned up
    */

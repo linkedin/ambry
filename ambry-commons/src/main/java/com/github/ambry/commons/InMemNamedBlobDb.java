@@ -214,42 +214,51 @@ public class InMemNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container) {
-    throw new UnsupportedOperationException("pullStaleBlobs() with a Container is not supported.");
-  }
-
-  @Override
-  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs() {
-    // TODO: pull stale blobs implementation is not the same as the real Mysql db implementation. Fix it later.
     CompletableFuture<List<StaleNamedBlob>> future = new CompletableFuture<>();
     List<StaleNamedBlob> resultList = new ArrayList<>();
+    String containerName = container.getName();  // adjust if your Container has a different getter
+
     for (String accountName : allRecords.keySet()) {
       Map<String, TreeMap<String, List<NamedBlobRow>>> rowsPerAccount = allRecords.get(accountName);
-      for (String containerName : rowsPerAccount.keySet()) {
-        TreeMap<String, List<NamedBlobRow>> rowsPerContainer = rowsPerAccount.get(containerName);
-        for (String blobName : rowsPerContainer.keySet()) {
-          List<NamedBlobRow> rows = rowsPerContainer.get(blobName);
-          int latestReadyIndex = -1;
-          for (int i = rows.size() - 1; i >= 0; i--) {
-            NamedBlobRow row = rows.get(i);
-            long deletedTs = row.getRecord().getExpirationTimeMs();
-            boolean isDeleted = deletedTs != Utils.Infinite_Time && deletedTs < time.milliseconds();
-            if (latestReadyIndex != -1 && !isDeleted) {
-              // when the last ready version is found, then all the prior versions that are not deleted are stale.
-              StaleNamedBlob result =
-                  new StaleNamedBlob((short) accountName.hashCode(), (short) containerName.hashCode(), blobName,
-                      row.getRecord().getBlobId(), row.getRecord().getVersion(), new Timestamp(time.milliseconds()), row.blobState, new Timestamp(row.getRecord().getModifiedTimeMs()));
-              resultList.add(result);
-            }
-            if (!isDeleted && row.getBlobState() == NamedBlobState.READY) {
-              latestReadyIndex = i;
-            }
+      TreeMap<String, List<NamedBlobRow>> rowsPerContainer = rowsPerAccount.get(containerName);
+      if (rowsPerContainer == null) {
+        // No blobs for this container in this account, skip
+        continue;
+      }
+
+      for (String blobName : rowsPerContainer.keySet()) {
+        List<NamedBlobRow> rows = rowsPerContainer.get(blobName);
+        int latestReadyIndex = -1;
+        for (int i = rows.size() - 1; i >= 0; i--) {
+          NamedBlobRow row = rows.get(i);
+          long deletedTs = row.getRecord().getExpirationTimeMs();
+          boolean isDeleted = deletedTs != Utils.Infinite_Time && deletedTs < time.milliseconds();
+          if (latestReadyIndex != -1 && !isDeleted) {
+            // when the last ready version is found, then all the prior versions that are not deleted are stale.
+            StaleNamedBlob result = new StaleNamedBlob(
+                (short) accountName.hashCode(),
+                (short) containerName.hashCode(),
+                blobName,
+                row.getRecord().getBlobId(),
+                row.getRecord().getVersion(),
+                new Timestamp(time.milliseconds()),
+                row.blobState,
+                new Timestamp(row.getRecord().getModifiedTimeMs())
+            );
+            resultList.add(result);
+          }
+          if (!isDeleted && row.getBlobState() == NamedBlobState.READY) {
+            latestReadyIndex = i;
           }
         }
       }
     }
+
     future.complete(resultList);
     return future;
   }
+
+
 
   @Override
   public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords) {
