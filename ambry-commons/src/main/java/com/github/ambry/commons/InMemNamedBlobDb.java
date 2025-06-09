@@ -218,11 +218,6 @@ public class InMemNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public Set<Container> getActiveContainers() {
-    throw new UnsupportedOperationException("getActiveContainers() is not supported for inMemNamedBlobDB.");
-  }
-
-  @Override
   public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs() {
     // TODO: pull stale blobs implementation is not the same as the real Mysql db implementation. Fix it later.
     CompletableFuture<List<StaleNamedBlob>> future = new CompletableFuture<>();

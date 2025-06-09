@@ -45,6 +45,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -173,8 +174,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String TTL_UPDATE_QUERY =
       String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
 
+  private static final String GET_BLOBS_FOR_INACTIVE_CONTAINER = String.format(
+      "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
+          "FROM %s " +
+          "WHERE container_id = ? AND account_id = ? " +
+          "LIMIT ? OFFSET ?;",
+      ACCOUNT_ID,
+      CONTAINER_ID,
+      BLOB_NAME,
+      BLOB_ID,
+      VERSION,
+      BLOB_STATE,
+      MODIFIED_TS,
+      DELETED_TS,
+      NAMED_BLOBS_V2
+  );
 
-  private static final String GET_BLOBS_FOR_CLEANER = String.format(
+  private static final String GET_BLOBS_FOR_ACTIVE_CONTAINER = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
           "FROM %s " +
           "WHERE container_id = ? AND account_id = ? " +
@@ -218,7 +234,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                 dataSourceFactory.getDataSource(dbEndpoint),
                 localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
-    this.metricsRecoder = new MySqlNamedBlobDb.Metrics(metricRegistry);
+    this.metricsRecoder = new Metrics(metricRegistry);
     this.time = time;
   }
 
@@ -487,12 +503,19 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForCleaner(connection, container);
-      List<StaleNamedBlob> staleNamedBlobResults = getStaleBlobs(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+
+      List<StaleNamedBlob> staleNamedBlobResults;
+      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container);
+      if (container.getStatus() == Container.ContainerStatus.ACTIVE) {
+        staleNamedBlobResults = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+      } else {
+        staleNamedBlobResults = potentialStaleNamedBlobResults;
+      }
+
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
-    //TODO: local hard delete
+    //TODO IN LATER PR: local hard delete
   }
 
   @Override
@@ -911,7 +934,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return new DeleteResult(blobVersions);
   }
 
-  public static List<StaleNamedBlob> getStaleBlobs(List<StaleNamedBlob> blobList, int cutOffDays) {
+  public static List<StaleNamedBlob> getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutOffDays) {
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
     if (blobList.isEmpty()) {
       return staleBlobs;
@@ -961,12 +984,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return staleBlobs;
   }
 
-  private List<StaleNamedBlob> getAllBlobsForCleaner(Connection connection, Container container) throws SQLException {
+  private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
     int offset = 0;
     boolean hasMore = true;
 
     while (hasMore) {
+      String GET_BLOBS_FOR_CLEANER = (container.getStatus() == Container.ContainerStatus.ACTIVE) ? GET_BLOBS_FOR_ACTIVE_CONTAINER : GET_BLOBS_FOR_INACTIVE_CONTAINER;
       try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
         statement.setInt(1, container.getId());
         statement.setInt(2, container.getParentAccountId());
@@ -1115,11 +1139,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private static long timestampToMs(Timestamp timestamp) {
     return timestamp == null ? Utils.Infinite_Time : timestamp.getTime();
-  }
-
-  @Override
-  public Set<Container> getActiveContainers() {
-    return accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
   }
 
   private static RestServiceException buildException(String message, RestServiceErrorCode errorCode, String accountName,

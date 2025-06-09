@@ -13,12 +13,14 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -33,10 +35,12 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final Router router;
   private final NamedBlobDb namedBlobDb;
   private static final Logger logger = LoggerFactory.getLogger(NamedBlobsCleanupRunner.class);
+  private final AccountService accountService;
 
-  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb) {
+  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService) {
     this.router = router;
     this.namedBlobDb = namedBlobDb;
+    this.accountService = accountService;
   }
 
   @Override
@@ -44,9 +48,12 @@ public class NamedBlobsCleanupRunner implements Runnable {
     logger.info("Named Blobs Cleanup Runner is initiated");
     try {
       List<StaleNamedBlob> staleResultList;
-      // pass into constructor
-      Set<Container> containers = namedBlobDb.getActiveContainers();
-      for (Container container : containers) {
+      Set<Container> activeContainers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+      Set<Container> inactiveContainers = accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE);
+      Set<Container> combinedContainers = new HashSet<>(activeContainers);
+      combinedContainers.addAll(inactiveContainers);
+
+      for (Container container : combinedContainers) {
         staleResultList = namedBlobDb.pullStaleBlobs(container).get();
         List<StaleNamedBlob> failedResults = new ArrayList<>();
 

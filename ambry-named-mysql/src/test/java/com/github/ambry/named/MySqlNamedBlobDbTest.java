@@ -154,7 +154,7 @@ public class MySqlNamedBlobDbTest {
     List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
     List<StaleNamedBlob> staleNamedBlobs;
 
-    Set<Container> containers = namedBlobDb.getActiveContainers();
+    Set<Container> containers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
     for (Container container : containers) {
       staleNamedBlobs = namedBlobDb.pullStaleBlobs(container).get();
       staleNamedBlobsList.addAll(staleNamedBlobs);

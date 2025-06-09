@@ -124,6 +124,4 @@ public interface NamedBlobDb extends Closeable {
    * Cleanup the stale blobs records
    */
   CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords);
-
-  Set<Container> getActiveContainers();
 }
