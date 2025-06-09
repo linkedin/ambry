@@ -190,7 +190,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       DELETED_TS,
       NAMED_BLOBS_V2,
       BLOB_NAME,    // First order by blob_name alphabetically (ASC)
-      MODIFIED_TS   // Then order by modified_ts descending (DESC)
+      VERSION   // Then order by modified_ts descending (DESC)
   );
 
   private final AccountService accountService;
@@ -492,6 +492,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
+    //TODO: local hard delete
   }
 
   @Override

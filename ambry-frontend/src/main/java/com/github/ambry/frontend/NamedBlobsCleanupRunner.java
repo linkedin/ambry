@@ -43,11 +43,14 @@ public class NamedBlobsCleanupRunner implements Runnable {
   public void run() {
     logger.info("Named Blobs Cleanup Runner is initiated");
     try {
-      List<StaleNamedBlob> staleResultList = new ArrayList<>();
+      List<StaleNamedBlob> staleResultList;
+      // pass into constructor
       Set<Container> containers = namedBlobDb.getActiveContainers();
       for (Container container : containers) {
         staleResultList = namedBlobDb.pullStaleBlobs(container).get();
         List<StaleNamedBlob> failedResults = new ArrayList<>();
+
+        int deletedCount = 0;
         for (StaleNamedBlob staleResult : staleResultList) {
           try {
             router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
@@ -57,10 +60,15 @@ public class NamedBlobsCleanupRunner implements Runnable {
               failedResults.add(staleResult);
             }
           }
+          deletedCount++;
+          if (deletedCount % 1000 == 0) {
+            logger.info("Deleted {} blobs, sleeping for a while...", deletedCount);
+            Thread.sleep(1000); // sleep for 1 second (adjust as needed)
+          }
         }
         staleResultList.removeAll(failedResults);
-        // do batch delete here?
         namedBlobDb.cleanupStaleData(staleResultList);
+        // TODO: do batch delete here?
         logger.info("Named Blobs Cleanup Runner is completed for {} stale cases (there are {} failed cases)",
             staleResultList.size(), failedResults.size());
         Set<String> cleanedBlobIds =
