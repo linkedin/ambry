@@ -1008,6 +1008,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         logger.error("Error executing query: {}", e.getMessage());
         throw e;
       }
+
     }
 
     return resultList;

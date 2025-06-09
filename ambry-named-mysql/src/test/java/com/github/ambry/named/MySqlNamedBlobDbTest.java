@@ -34,6 +34,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -141,8 +142,24 @@ public class MySqlNamedBlobDbTest {
   public void testPullAndCleanStaleNamedBlobs() throws Exception {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
     dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     namedBlobDb.cleanupStaleData(staleNamedBlobs);
+  }
+
+
+  /**
+   * Helper method to obtain stale blobs
+   */
+  private List<StaleNamedBlob> getStaleBlobList() throws ExecutionException, InterruptedException {
+    List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
+    List<StaleNamedBlob> staleNamedBlobs;
+
+    Set<Container> containers = namedBlobDb.getActiveContainers();
+    for (Container container : containers) {
+      staleNamedBlobs = namedBlobDb.pullStaleBlobs(container).get();
+      staleNamedBlobsList.addAll(staleNamedBlobs);
+    }
+    return staleNamedBlobsList;
   }
 
   @Test
