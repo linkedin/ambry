@@ -47,25 +47,26 @@ public class NamedBlobsCleanupRunner implements Runnable {
       Set<Container> containers = namedBlobDb.getActiveContainers();
       for (Container container : containers) {
         staleResultList = namedBlobDb.pullStaleBlobs(container).get();
-      }
-      List<StaleNamedBlob> failedResults = new ArrayList<>();
-      for (StaleNamedBlob staleResult : staleResultList) {
-        try {
-          router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
-        } catch (Exception e) {
-          if (!e.getMessage().contains(RouterErrorCode.BlobDoesNotExist.name())) {
-            logger.error("Failed to cleanup named stale blob {}", staleResult, e);
-            failedResults.add(staleResult);
+        List<StaleNamedBlob> failedResults = new ArrayList<>();
+        for (StaleNamedBlob staleResult : staleResultList) {
+          try {
+            router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
+          } catch (Exception e) {
+            if (!e.getMessage().contains(RouterErrorCode.BlobDoesNotExist.name())) {
+              logger.error("Failed to cleanup named stale blob {}", staleResult, e);
+              failedResults.add(staleResult);
+            }
           }
         }
+        staleResultList.removeAll(failedResults);
+        // do batch delete here?
+        namedBlobDb.cleanupStaleData(staleResultList);
+        logger.info("Named Blobs Cleanup Runner is completed for {} stale cases (there are {} failed cases)",
+            staleResultList.size(), failedResults.size());
+        Set<String> cleanedBlobIds =
+            staleResultList.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
+        logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
       }
-      staleResultList.removeAll(failedResults);
-      // do batch delete here?
-      namedBlobDb.cleanupStaleData(staleResultList);
-      logger.info("Named Blobs Cleanup Runner is completed for {} stale cases (there are {} failed cases)",
-          staleResultList.size(), failedResults.size());
-      Set<String> cleanedBlobIds = staleResultList.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
-      logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
     } catch (Throwable t) {
       logger.error("Exception occurs when running Named Blobs Cleanup Runner", t);
     }
