@@ -478,11 +478,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs() {
+    throw new UnsupportedOperationException("pullStaleBlobs() without a Container is not supported for NamedBlobDb.");
+  }
+
+  @Override
+  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForCleaner(connection);
+      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForCleaner(connection, container);
       List<StaleNamedBlob> staleNamedBlobResults = getStaleBlobs(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
@@ -955,72 +960,59 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return staleBlobs;
   }
 
-  /**
-   * Obtains all blobs from the named_blobs_v2 table, grouping them by blob_name and sorting by modified_ts
-   * @param connection
-   * @return list blobs
-   * @throws SQLException
-   */
-  private List<StaleNamedBlob> getAllBlobsForCleaner(Connection connection) throws SQLException {
+  private List<StaleNamedBlob> getAllBlobsForCleaner(Connection connection, Container container) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
-    Set<Container> activeContainers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
-    Set<Container> inactiveContainers = accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE);
-    Set<Container> combinedContainers = new HashSet<>();
-    combinedContainers.addAll(activeContainers);
-    combinedContainers.addAll(inactiveContainers);
+    int offset = 0;
+    boolean hasMore = true;
 
-    List<Container> containers = new ArrayList<>(combinedContainers);
-    for (Container container : containers) {
-      int offset = 0;
-      boolean hasMore = true;
+    while (hasMore) {
+      try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
+        statement.setInt(1, container.getId());
+        statement.setInt(2, container.getParentAccountId());
+        statement.setInt(3, config.queryStaleDataMaxResults);
+        statement.setInt(4, offset);
 
-      while (hasMore) {
-        try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
-          statement.setInt(1, container.getId());
-          statement.setInt(2, container.getParentAccountId());
-          statement.setInt(3, config.queryStaleDataMaxResults);
-          statement.setInt(4, offset);
+        String query = statement.toString();
+        logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
 
-          String query = statement.toString();
-          logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
+        try (ResultSet resultSet = statement.executeQuery()) {
+          int rowCount = 0;
+          while (resultSet.next()) {
+            short accountId = resultSet.getShort(1);
+            short contId = resultSet.getShort(2);
+            String blobName = resultSet.getString(3);
+            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+            long version = resultSet.getLong(5);
+            int blobStateInt = resultSet.getInt(6);
+            Timestamp modifiedTime = resultSet.getTimestamp(7);
+            Timestamp deletedTime = resultSet.getTimestamp(8);
 
-          try (ResultSet resultSet = statement.executeQuery()) {
-            int rowCount = 0;
-            while (resultSet.next()) {
-              short accountId = resultSet.getShort(1);
-              short containerId = resultSet.getShort(2);
-              String blobName = resultSet.getString(3);
-              String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
-              long version = resultSet.getLong(5);
-              int blobStateInt = resultSet.getInt(6);
-              Timestamp modifiedTime = resultSet.getTimestamp(7);
-              Timestamp deletedTime = resultSet.getTimestamp(8);
-
-              NamedBlobState blobState = null;
-              if (blobStateInt == 1) {
-                blobState = NamedBlobState.READY;
-              } else if (blobStateInt == 0) {
-                blobState = NamedBlobState.IN_PROGRESS;
-              }
-
-              StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
-              resultList.add(result);
-              rowCount++;
+            NamedBlobState blobState = null;
+            if (blobStateInt == 1) {
+              blobState = NamedBlobState.READY;
+            } else if (blobStateInt == 0) {
+              blobState = NamedBlobState.IN_PROGRESS;
             }
-            if (rowCount < config.queryStaleDataMaxResults) {
-              hasMore = false;
-            } else {
-              offset += config.queryStaleDataMaxResults;
-            }
+
+            StaleNamedBlob result = new StaleNamedBlob(accountId, contId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
+            resultList.add(result);
+            rowCount++;
           }
-        } catch (SQLException e) {
-          logger.error("Error executing query: {}", e.getMessage());
-          throw e;
+
+          hasMore = rowCount == config.queryStaleDataMaxResults;
+          if (hasMore) {
+            offset += config.queryStaleDataMaxResults;
+          }
         }
+      } catch (SQLException e) {
+        logger.error("Error executing query: {}", e.getMessage());
+        throw e;
       }
     }
+
     return resultList;
   }
+
 
   private void applySoftDeleteWithVersion(short accountId, short containerId, String blobName, long version,
       Timestamp deleteTs, Connection connection) throws Exception {
@@ -1121,6 +1113,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private static long timestampToMs(Timestamp timestamp) {
     return timestamp == null ? Utils.Infinite_Time : timestamp.getTime();
+  }
+
+  @Override
+  public Set<Container> getActiveContainers() {
+    return accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
   }
 
   private static RestServiceException buildException(String message, RestServiceErrorCode errorCode, String accountName,

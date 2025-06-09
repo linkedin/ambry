@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
@@ -209,6 +210,16 @@ public class InMemNamedBlobDb implements NamedBlobDb {
       future.complete(new DeleteResult(blobVersions));
     }
     return future;
+  }
+
+  @Override
+  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container) {
+    throw new UnsupportedOperationException("pullStaleBlobs() with a Container is not supported.");
+  }
+
+  @Override
+  public Set<Container> getActiveContainers() {
+    throw new UnsupportedOperationException("getActiveContainers() is not supported for inMemNamedBlobDB.");
   }
 
   @Override

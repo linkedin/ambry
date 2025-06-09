@@ -387,7 +387,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         .map((r) -> String.join("|", r.getBlobName(), r.getBlobId()))
         .collect(Collectors.toSet());
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     Set<String> staleResultSet = staleNamedBlobs.stream()
         .map((s) -> String.join("|", s.getBlobName(), s.getBlobId()))
         .collect(Collectors.toSet());
@@ -396,7 +396,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
     // Confirm pullStaleBlobs return empty list after cleanupStaleData is called
     Integer cleanedUpStaleCount = namedBlobDb.cleanupStaleData(staleNamedBlobs).get();
-    List<StaleNamedBlob> staleNamedBlobsNew = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobsNew = getStaleBlobList();
 
     assertEquals("Cleaned Stale records count does not match!", needCleanupCount, cleanedUpStaleCount.intValue());
     assertTrue("Still pulled out stale blobs after cleanup!", staleNamedBlobsNew.isEmpty());
@@ -428,14 +428,9 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
     namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
+    updateModifiedTimestampByBlobName(blobName, 20);
 
-    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
-        "WHERE blob_name = 'stale/case1/more path segments--'";
-
-    Statement statement = getStatement();
-    statement.executeUpdate(sql);
-
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     assertEquals("Stale blob case 1 count does not match!", 1, staleNamedBlobs.size());
     assertEquals("Stale blob case 1 pulled out blob name does not meet expectation",
         staleNamedBlobs.get(0).getBlobName(), record.getBlobName());
@@ -458,19 +453,14 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
-
-    String sql = "UPDATE named_blobs_v2 SET modified_ts = NOW() - INTERVAL 20 DAY " +
-        "WHERE blob_name = 'stale/case2/more path segments--'";
-
-    Statement statement = getStatement();
-    statement.executeUpdate(sql);
+    updateModifiedTimestampByBlobName(blobName, 20);
 
     String blobIdNew = getBlobId(account, container);
     NamedBlobRecord recordNew =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
     namedBlobDb.put(recordNew, NamedBlobState.READY, true).get();
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     assertEquals("Stale blob case 2 count does not match!", 1, staleNamedBlobs.size());
     assertEquals("Stale blob case 2 pulled out blob name does not meet expectation",
         staleNamedBlobs.get(0).getBlobName(), record.getBlobName());
@@ -492,7 +482,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
     namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     assertTrue("Good blob case 1 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
@@ -516,7 +506,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
     namedBlobDb.put(recordNew, NamedBlobState.READY, true).get();
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     assertEquals(staleNamedBlobs.size(), 1);
   }
 
@@ -537,7 +527,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
     updateModifiedTimestampByBlobName(blobName, 20);
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     assertTrue("Good blob case 3 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
@@ -562,7 +552,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
     namedBlobDb.put(recordNew, NamedBlobState.IN_PROGRESS, true).get();
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     assertTrue("Good blob case 4 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
@@ -591,7 +581,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
             record.getBlobId(), record.getExpirationTimeMs(), putResult.getInsertedRecord().getVersion());
     namedBlobDb.updateBlobTtlAndStateToReady(updatedRecord).get();
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     assertEquals("Good blob case 5 pull stale blob result should be empty!", 0, staleNamedBlobs.size());
   }
@@ -623,7 +613,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
             record.getBlobId(), record.getExpirationTimeMs(), putResult.getInsertedRecord().getVersion());
     PutResult updateResult = namedBlobDb.updateBlobTtlAndStateToReady(updatedRecord).get();
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     NamedBlobRecord recordFromDb =
         namedBlobDb.get(updatedRecord.getAccountName(), updatedRecord.getContainerName(), updatedRecord.getBlobName())
@@ -656,7 +646,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     // Add a newer IN_PROGRESS blob with same blobId but fresh modified_ts
     NamedBlobRecord record2 = createAndPutNamedBlob(getBlobIdFromService(), NamedBlobState.IN_PROGRESS, "new_cleaner");
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     assertEquals("Should remove the older one, total 1 stale blob", 1, staleNamedBlobs.size());
     assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(0).getBlobId(), record1.getBlobId());
@@ -672,7 +662,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     updateModifiedTimestamp(base64BlobIdToHex(record1.getBlobId()), 22);
     updateModifiedTimestamp(base64BlobIdToHex(record2.getBlobId()), 21);
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
     assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
@@ -689,7 +679,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
     NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.IN_PROGRESS, "new_cleaner");
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
     assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
@@ -704,7 +694,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
     NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.READY, "new_cleaner");
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
     assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
@@ -718,7 +708,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record2 = createAndPutNamedBlob(blobId, NamedBlobState.READY, "new_cleaner");
     NamedBlobRecord record3 = createAndPutNamedBlob(blobId, NamedBlobState.IN_PROGRESS, "new_cleaner");
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     assertEquals("Should remove both, total 1 stale blob", 1, staleNamedBlobs.size());
     assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(0).getBlobId(), record1.getBlobId());
@@ -731,7 +721,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record2 = createAndPutNamedBlob("blob-id2", NamedBlobState.IN_PROGRESS, "new_cleaner");
     NamedBlobRecord record3 = createAndPutNamedBlob("blob-id3", NamedBlobState.READY, "new_cleaner");
 
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
 
     assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
     assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
@@ -817,5 +807,20 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   public static String base64BlobIdToHex(String base64BlobId) {
     byte[] decodedBytes = Base64.decodeBase64(base64BlobId);
     return Hex.encodeHexString(decodedBytes).toUpperCase();
+  }
+
+  /**
+   *
+   */
+  public List<StaleNamedBlob> getStaleBlobList() throws ExecutionException, InterruptedException {
+    List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
+    List<StaleNamedBlob> staleNamedBlobs;
+
+    Set<Container> containers = namedBlobDb.getActiveContainers();
+    for (Container container : containers) {
+      staleNamedBlobs = namedBlobDb.pullStaleBlobs(container).get();
+      staleNamedBlobsList.addAll(staleNamedBlobs);
+    }
+    return staleNamedBlobsList;
   }
 }

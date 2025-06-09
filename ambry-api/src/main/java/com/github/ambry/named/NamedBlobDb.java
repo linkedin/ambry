@@ -14,11 +14,13 @@
  */
 package com.github.ambry.named;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import java.io.Closeable;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -107,13 +109,21 @@ public interface NamedBlobDb extends Closeable {
    */
   CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName);
 
+
   /**
    * Pull the stale blobs that need to be cleaned up
    */
   CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs();
 
   /**
+   * Pull the stale blobs that need to be cleaned up
+   */
+  CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container);
+
+  /**
    * Cleanup the stale blobs records
    */
   CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords);
+
+  Set<Container> getActiveContainers();
 }
