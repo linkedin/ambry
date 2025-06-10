@@ -80,11 +80,12 @@ public class FileCopyThread extends Thread {
         fileCopyStatusListener.onFileCopyFailure(new IOException("No peer replica found for file copy"));
         return;
       }
-
+      if (replicaId.getDataNodeId().getHostname().equals(targetReplicaId.getDataNodeId().getHostname())) {
+        logger.info("FCH TEST: Source and target replicas are on the same node, skipping file copy for replicaId: {}", replicaId);
+        fileCopyStatusListener.onFileCopyFailure(new IOException("Source and target replicas are on the same node"));
+        return;
+      }
       logger.info("FCH TEST: Starting file copy from {} to {}", replicaId.getDataNodeId(), targetReplicaId.getDataNodeId());
-
-
-
       FileCopyInfo fileCopyInfo = new FileCopyInfo(START_CORRELATION_ID, CLIENT_ID, replicaId, targetReplicaId);
       fileCopyHandler.start();
       // Start the file copy process

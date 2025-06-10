@@ -494,6 +494,11 @@ public class StorageManager implements StoreManager {
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
   }
 
+  public boolean controlCompactionForBlobStoreStub(PartitionId id, boolean enabled) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null && diskManager.controlCompactionForBlobStoreStub(id, enabled);
+  }
+
   /**
    * Return true is compaction is disabled for the given partition id.
    * @param id
@@ -1068,7 +1073,7 @@ public class StorageManager implements StoreManager {
             ReplicaNotFound);
       }
       // Operation to enable compaction is idempotent
-      if (!controlCompactionForBlobStore(replica.getPartitionId(), true)) {
+      if (!controlCompactionForBlobStoreStub(replica.getPartitionId(), true)) {
         logger.error("Fail to enable compaction for blob store {}", replica.getReplicaPath());
         throw new StateTransitionException("Replica " + partitionName + " can't enable compaction",
             ReplicaOperationFailure);
@@ -1126,7 +1131,7 @@ public class StorageManager implements StoreManager {
             logger.info("Store {} is set to INACTIVE", partitionName);
           }
           // 2. disable compaction on this store
-          if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
+          if (!controlCompactionForBlobStoreStub(replica.getPartitionId(), false)) {
             logger.error("Failed to disable compaction on store {}", partitionName);
             // we set error code to ReplicaNotFound because that is the only reason why compaction may fail.
             throw new StateTransitionException("Couldn't disable compaction on replica " + replica.getReplicaPath(),

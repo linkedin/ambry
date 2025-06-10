@@ -251,7 +251,7 @@ public class FileStore implements PartitionFileStore {
           throw new IOException("Source directory is not under mount path: " + partitionToMountPath);
         }
         if (!destDirPath.startsWith(partitionToMountPath + File.separator)) {
-          throw new IOException("Destination directory is not under mount path: " + partitionToMountPath);
+          //throw new IOException("Destination directory is not under mount path: " + partitionToMountPath);
         }
 
         Path source = Paths.get(srcDirPath);

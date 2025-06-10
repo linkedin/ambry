@@ -113,7 +113,7 @@ public class FileCopyBasedReplicationManager {
     isRunning = true;
     logger.info("FCH TEST: FileCopyBasedReplicationManager started");
     PartitionStateChangeListenerImpl partitionStateChangeListener = new PartitionStateChangeListenerImpl();
-    List<Long> partitionIds = Arrays.asList(20l, 127l);
+    List<Long> partitionIds = Arrays.asList(43l);
 
     logger.info("FCH TEST: All Partitions to be hydrated up: {}", storeManager.getLocalPartitions().stream().map(
         PartitionId::getId).collect(Collectors.toList()));
