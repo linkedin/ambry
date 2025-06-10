@@ -17,6 +17,7 @@ package com.github.ambry.filetransfer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -53,6 +54,7 @@ public class FileCopyBasedReplicationSchedulerImplTest {
   private PartitionId mockPartitionId;
   private ReplicaId mockReplicaId;
   private PartitionFileStore mockFileStore;
+  private FileCopyMetrics fileCopyMetrics;
 
   @Before
   public void setUp() throws Exception {
@@ -64,6 +66,7 @@ public class FileCopyBasedReplicationSchedulerImplTest {
     mockStoreManager = mock(StoreManager.class);
     mockDataNodeId = mock(DataNodeId.class);
     mockFileStore = mock(PartitionFileStore.class);
+    fileCopyMetrics = new FileCopyMetrics(new MockClusterMap().getMetricRegistry());
 
     Properties properties = new Properties();
     properties.setProperty("filecopy.number.of.file.copy.threads", "2");
@@ -88,10 +91,9 @@ public class FileCopyBasedReplicationSchedulerImplTest {
         .thenReturn(Collections.singletonList(mockReplicaId));
     when(mockHandlerFactory.getFileCopyHandler()).thenReturn(mockFileCopyHandler);
 
-    scheduler = new FileCopyBasedReplicationSchedulerImpl(mockHandlerFactory,
-        mockConfig, mockClusterMap, mockPrioritizationManager,
-        mockReplicaSyncUpManager, mockStoreManager, mockStoreConfig, mockDataNodeId
-    );
+    scheduler = new FileCopyBasedReplicationSchedulerImpl(mockHandlerFactory, mockConfig, mockClusterMap,
+        mockPrioritizationManager, mockReplicaSyncUpManager, mockStoreManager, mockStoreConfig, mockDataNodeId,
+        fileCopyMetrics);
   }
 
   @Test

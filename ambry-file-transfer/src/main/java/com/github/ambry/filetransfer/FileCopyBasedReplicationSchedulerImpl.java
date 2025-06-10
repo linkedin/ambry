@@ -57,6 +57,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   private final List<ReplicaId> inFlightReplicas;
   private final StoreManager storeManager;
   private final StoreConfig storeConfig;
+  private final FileCopyMetrics fileCopyMetrics;
 
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
@@ -65,7 +66,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig,
       ClusterMap clusterMap, @Nonnull PrioritizationManager prioritizationManager,
       @Nonnull ReplicaSyncUpManager replicaSyncUpManager,
-      StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId){
+      StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId, FileCopyMetrics fileCopyMetrics){
 
     Objects.requireNonNull(fileCopyHandlerFactory, "fileCopyHandlerFactory param cannot be null");
     Objects.requireNonNull(fileCopyBasedReplicationConfig, "fileCopyBasedReplicationConfig param cannot be null");
@@ -79,7 +80,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.clusterMap = clusterMap;
     this.fileCopyBasedReplicationThreadPoolManager = new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(),
-        fileCopyBasedReplicationConfig.fileCopyNumberOfFileCopyThreads);
+        fileCopyBasedReplicationConfig.fileCopyNumberOfFileCopyThreads, fileCopyMetrics);
     this.fileCopyBasedReplicationThreadPoolManagerThread = new Thread(fileCopyBasedReplicationThreadPoolManager);
     this.replicaToStartTimeMap = new ConcurrentHashMap<>();
     this.inFlightReplicas = new LinkedList<>();
@@ -87,6 +88,7 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     this.replicaSyncUpManager = replicaSyncUpManager;
     this.storeManager = storeManager;
     this.storeConfig = storeConfig;
+    this.fileCopyMetrics = fileCopyMetrics;
     this.replicaToStatusListenerMap = new ConcurrentHashMap<>();
   }
 

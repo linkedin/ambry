@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 public class FileCopyThread extends Thread {
   private final FileCopyStatusListener fileCopyStatusListener;
   private final FileCopyHandler fileCopyHandler;
+  private final FileCopyMetrics fileCopyMetrics;
 
   private boolean isRunning;
 
@@ -50,15 +51,17 @@ public class FileCopyThread extends Thread {
    * @param fileCopyHandler the file copy handler
    * @param fileCopyStatusListener the file copy status listener
    */
-  FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener) {
+  FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener, FileCopyMetrics fileCopyMetrics) {
     Objects.requireNonNull(fileCopyHandler, "fileCopyHandler must not be null");
     Objects.requireNonNull(fileCopyStatusListener, "fileCopyStatusListener must not be null");
 
     this.fileCopyStatusListener = fileCopyStatusListener;
     this.fileCopyHandler = fileCopyHandler;
+    this.fileCopyMetrics = fileCopyMetrics;
     this.threadName = "FileCopyThread-" + fileCopyStatusListener.getReplicaId().getPartitionId().toPathString();
     this.isRunning = true;
     this.shutDownLatch = new CountDownLatch(1);
+    super.setName(threadName);
   }
 
   @Override
@@ -66,6 +69,7 @@ public class FileCopyThread extends Thread {
     logger.info("Starting FileCopyThread: {} for replicaId: {}", threadName, fileCopyStatusListener.getReplicaId());
 
     try {
+      fileCopyMetrics.incrementFileCopyRunningThreadCount();
       ReplicaId replicaId = fileCopyStatusListener.getReplicaId();
       if (replicaId == null) {
         throw new IllegalStateException("ReplicaId cannot be null");
@@ -93,6 +97,7 @@ public class FileCopyThread extends Thread {
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);
     } finally {
+      fileCopyMetrics.decrementFileCopyRunningThreadCount();
       shutDownLatch.countDown();
     }
   }
