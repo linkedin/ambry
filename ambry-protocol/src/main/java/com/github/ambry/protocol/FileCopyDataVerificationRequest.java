@@ -28,7 +28,7 @@ import javax.annotation.Nonnull;
 
 public class FileCopyDataVerificationRequest extends RequestOrResponse {
 
-  // The replica in which the requested log segment resides
+  // The Partition in which the requested log segment resides
   private final PartitionId partitionId;
 
   // The logsegment fileName
@@ -50,10 +50,10 @@ public class FileCopyDataVerificationRequest extends RequestOrResponse {
   static short CURRENT_VERSION = FILE_COPY_DATA_VERIFICATION_REQUEST_VERSION_V_1;
 
   public FileCopyDataVerificationRequest(short versionId, int correlationId, @Nonnull  String clientId,
-      @Nonnull PartitionId replicaId, @Nonnull String fileName, @Nonnull List<Pair<Integer, Integer>> ranges) {
+      @Nonnull PartitionId partitionId, @Nonnull String fileName, @Nonnull List<Pair<Integer, Integer>> ranges) {
     super(RequestOrResponseType.FileCopyDataVerificationRequest, versionId, correlationId, clientId);
 
-    this.partitionId = Objects.requireNonNull(replicaId, "replicaId must not be null");
+    this.partitionId = Objects.requireNonNull(partitionId, "partitionId must not be null");
     this.fileName = Objects.requireNonNull(fileName, "fileName must not be null");
 
     if (ranges.isEmpty()) {

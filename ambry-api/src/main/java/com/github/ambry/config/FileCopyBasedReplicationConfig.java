@@ -83,6 +83,16 @@ public class FileCopyBasedReplicationConfig {
   @Default("5000")
   public final int fileCopyHandlerConnectionTimeoutMs;
 
+  public static final String FILECOPYHANDLER_DATA_VERIFICATION_RANGES_COUNT = "filecopyhandler.data.verification.ranges.count";
+  @Config(FILECOPYHANDLER_DATA_VERIFICATION_RANGES_COUNT)
+  @Default("10")
+  public final int fileCopyHandlerDataVerificationRangesCount;
+
+  public static final String FILECOPYHANDLER_DATA_VERIFICATION_RANGE_SIZE_IN_MB = "filecopyhandler.data.verification.range.size.in.mb";
+  @Config(FILECOPYHANDLER_DATA_VERIFICATION_RANGE_SIZE_IN_MB)
+  @Default("10")
+  public final int fileCopyHandlerDataVerificationRangeSizeInMb;
+
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
     Objects.requireNonNull(verifiableProperties, "verifiableProperties cannot be null");
     fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
@@ -95,5 +105,7 @@ public class FileCopyBasedReplicationConfig {
     fileCopyHandlerRetryBackoffMs = verifiableProperties.getInt(FILECOPYHANDLER_RETRY_BACKOFF_MS, 500);
     getFileCopyHandlerChunkSize = verifiableProperties.getInt(FILECOPYHANDLER_CHUNK_SIZE, 10 * 1024 * 1024); // 10 MB
     fileCopyHandlerConnectionTimeoutMs = verifiableProperties.getInt(FILECOPYHANDLER_CONNECTION_TIMEOUT_MS, 5000);
+    fileCopyHandlerDataVerificationRangesCount = verifiableProperties.getInt(FILECOPYHANDLER_DATA_VERIFICATION_RANGES_COUNT, 10);
+    fileCopyHandlerDataVerificationRangeSizeInMb = verifiableProperties.getInt(FILECOPYHANDLER_DATA_VERIFICATION_RANGE_SIZE_IN_MB, 10);
   }
 }

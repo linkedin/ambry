@@ -1908,8 +1908,8 @@ public class AmbryRequests implements RequestAPI {
         }
         List<String> checksums = fileStore.getChecksumsForRanges(request.getPartitionId(), request.getFileName(), request.getRanges());
         response = new FileCopyDataVerificationResponse(FileCopyDataVerificationResponse.FILE_COPY_DATA_VERIFICATION_RESPONSE_VERSION_V_1,
-            request.getCorrelationId(), request.getClientId(),
-            ServerErrorCode.NoError, checksums);
+          request.getCorrelationId(), request.getClientId(),
+          ServerErrorCode.NoError, checksums);
       }
     }
     catch (Exception e) {
