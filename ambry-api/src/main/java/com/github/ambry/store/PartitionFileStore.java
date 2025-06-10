@@ -13,7 +13,10 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
+import java.util.List;
 
 
 /**
@@ -87,4 +90,7 @@ public interface PartitionFileStore {
    * @return size of allocated segment in bytes
    */
   long getSegmentCapacity();
+
+  List<String> getChecksumsForRanges(PartitionId partitionId, String fileName, List<Pair<Integer, Integer>> ranges)
+      throws StoreException;
 }

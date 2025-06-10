@@ -132,4 +132,6 @@ public interface RequestAPI {
    * @throws IOException if there are I/O errors carrying our the required operation.
    */
   void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException, IOException;
+
+  void handleFileCopyDataVerificationRequest(NetworkRequest request) throws InterruptedException, IOException;
 }
