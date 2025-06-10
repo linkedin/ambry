@@ -53,9 +53,10 @@ public class FileCopyThread extends Thread {
    * @param fileCopyStatusListener the file copy status listener
    */
   FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener,
-      FileCopyMetrics fileCopyMetrics) {
+      @Nonnull FileCopyMetrics fileCopyMetrics) {
     Objects.requireNonNull(fileCopyHandler, "fileCopyHandler must not be null");
     Objects.requireNonNull(fileCopyStatusListener, "fileCopyStatusListener must not be null");
+    Objects.requireNonNull(fileCopyMetrics, "fileCopyMetrics must not be null");
 
     this.fileCopyStatusListener = fileCopyStatusListener;
     this.fileCopyHandler = fileCopyHandler;

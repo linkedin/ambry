@@ -46,6 +46,7 @@ public class FileCopyBasedReplicationSchedulerFactoryImpl implements FileCopyBas
       DataNodeId dataNodeId, ClusterParticipant clusterParticipant, FileCopyMetrics fileCopyMetrics) {
 
     Objects.requireNonNull(clusterParticipant, "ClusterParticipant cannot be null");
+    Objects.requireNonNull(fileCopyMetrics, "FileCopyMetrics cannot be null");
 
     this.fileCopyHandlerFactory = fileCopyHandlerFactory;
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
