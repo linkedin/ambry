@@ -46,12 +46,14 @@ public class FileCopyThread extends Thread {
    * The logger for this class.
    */
   protected final Logger logger = LoggerFactory.getLogger(getClass());
+
   /**
    * Constructor for FileCopyThread
    * @param fileCopyHandler the file copy handler
    * @param fileCopyStatusListener the file copy status listener
    */
-  FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener, FileCopyMetrics fileCopyMetrics) {
+  FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener,
+      FileCopyMetrics fileCopyMetrics) {
     Objects.requireNonNull(fileCopyHandler, "fileCopyHandler must not be null");
     Objects.requireNonNull(fileCopyStatusListener, "fileCopyStatusListener must not be null");
 
@@ -67,7 +69,7 @@ public class FileCopyThread extends Thread {
   @Override
   public void run() {
     logger.info("Starting FileCopyThread: {} for replicaId: {}", threadName, fileCopyStatusListener.getReplicaId());
-
+    long startTime = System.currentTimeMillis();
     try {
       fileCopyMetrics.incrementFileCopyRunningThreadCount();
       ReplicaId replicaId = fileCopyStatusListener.getReplicaId();
@@ -76,7 +78,8 @@ public class FileCopyThread extends Thread {
       }
 
       //TODO add logic to get the source and target replica id
-      ReplicaId targetReplicaId = FileCopyUtils.getPeerForFileCopy(replicaId.getPartitionId(), replicaId.getDataNodeId().getDatacenterName());
+      ReplicaId targetReplicaId =
+          FileCopyUtils.getPeerForFileCopy(replicaId.getPartitionId(), replicaId.getDataNodeId().getDatacenterName());
 
       if (targetReplicaId == null) {
         logger.warn("No peer replica found for file copy for replicaId: {}", replicaId);
@@ -88,15 +91,14 @@ public class FileCopyThread extends Thread {
       fileCopyHandler.start();
       // Start the file copy process
 
-      long startTime = System.currentTimeMillis();
       fileCopyHandler.copy(fileCopyInfo);
-      logger.info("File copy completed for partition: {} in {} seconds",
-          replicaId.getPartitionId().getId(), (System.currentTimeMillis() - startTime) / 1000);
-
+      logger.info("File copy completed for partition: {} in {} seconds", replicaId.getPartitionId().getId(),
+          (System.currentTimeMillis() - startTime) / 1000);
       fileCopyStatusListener.onFileCopySuccess();
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);
     } finally {
+      fileCopyMetrics.updateFileCopyPerPartitionTimeMs(System.currentTimeMillis() - startTime);
       fileCopyMetrics.decrementFileCopyRunningThreadCount();
       shutDownLatch.countDown();
     }

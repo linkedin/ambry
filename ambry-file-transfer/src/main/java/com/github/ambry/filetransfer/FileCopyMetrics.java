@@ -14,6 +14,7 @@
 package com.github.ambry.filetransfer;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 
 
@@ -22,6 +23,8 @@ public class FileCopyMetrics {
   private final Counter partitionsFileCopyInitiated;
   private final Counter partitionsFileCopySkipped;
   private final Counter fileCopyRunningThreadCount;
+
+  private final Histogram fileCopyPerPartitionTimeMs;
 
   public FileCopyMetrics(MetricRegistry registry) {
     partitionsInFileCopyPath =
@@ -32,6 +35,8 @@ public class FileCopyMetrics {
         registry.counter(MetricRegistry.name(FileCopyBasedReplicationManager.class, "PartitionsFileCopySkipped"));
     fileCopyRunningThreadCount =
         registry.counter(MetricRegistry.name(FileCopyThread.class, "FileCopyRunningThreadCount"));
+    fileCopyPerPartitionTimeMs =
+        registry.histogram(MetricRegistry.name(FileCopyThread.class, "FileCopyPerPartitionTimeMs"));
   }
 
   public void incrementFileCopyInitiated() {
@@ -56,5 +61,9 @@ public class FileCopyMetrics {
 
   public void decrementFileCopyRunningThreadCount() {
     fileCopyRunningThreadCount.dec();
+  }
+
+  public void updateFileCopyPerPartitionTimeMs(long timeTaken) {
+    fileCopyPerPartitionTimeMs.update(timeTaken);
   }
 }
