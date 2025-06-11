@@ -737,7 +737,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertEquals("Should remove both, total 2 stale blobs", 2, staleNamedBlobs.size());
     assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(1).getBlobId(), record1.getBlobId());
     assertEquals("Blob-id from record2 should be removed", staleNamedBlobs.get(0).getBlobId(), record2.getBlobId());
-
   }
 
   /**

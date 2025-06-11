@@ -519,10 +519,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords) {
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      for (StaleNamedBlob record : staleRecords) {
-        applySoftDeleteWithVersion(record.getAccountId(), record.getContainerId(), record.getBlobName(),
-            record.getVersion(), record.getDeleteTs(), connection);
-      }
+      batchSoftDelete(staleRecords, connection);
       metricsRecoder.namedBlobCleanupTimeInMs.update(this.time.milliseconds() - startTime);
       return staleRecords.size();
     }, null);
@@ -1024,78 +1021,21 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return resultList;
   }
 
-//
-//  private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container, int pageIndex) throws SQLException {
-//    List<StaleNamedBlob> resultList = new ArrayList<>();
-//    int offset = 0;
-//    boolean hasMore = true;
-//
-//    while (hasMore) {
-//      String GET_BLOBS_FOR_CLEANER = (container.getStatus() == Container.ContainerStatus.ACTIVE) ? GET_BLOBS_FOR_ACTIVE_CONTAINER : GET_BLOBS_FOR_INACTIVE_CONTAINER;
-//      try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
-//        statement.setInt(1, container.getId());
-//        statement.setInt(2, container.getParentAccountId());
-//        statement.setInt(3, config.queryStaleDataMaxResults);
-//        statement.setInt(4, pageIndex * config.queryStaleDataMaxResults);
-//
-//        String query = statement.toString();
-//        logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
-//
-//        try (ResultSet resultSet = statement.executeQuery()) {
-//          int rowCount = 0;
-//          while (resultSet.next()) {
-//            short accountId = resultSet.getShort(1);
-//            short contId = resultSet.getShort(2);
-//            String blobName = resultSet.getString(3);
-//            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
-//            long version = resultSet.getLong(5);
-//            int blobStateInt = resultSet.getInt(6);
-//            Timestamp modifiedTime = resultSet.getTimestamp(7);
-//            Timestamp deletedTime = resultSet.getTimestamp(8);
-//
-//            NamedBlobState blobState = null;
-//            if (blobStateInt == 1) {
-//              blobState = NamedBlobState.READY;
-//            } else if (blobStateInt == 0) {
-//              blobState = NamedBlobState.IN_PROGRESS;
-//            }
-//
-//            StaleNamedBlob result = new StaleNamedBlob(accountId, contId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
-//            resultList.add(result);
-//            rowCount++;
-//          }
-//
-//          hasMore = rowCount == config.queryStaleDataMaxResults;
-//          if (hasMore) {
-//            offset += config.queryStaleDataMaxResults;
-//          }
-//        }
-//      } catch (SQLException e) {
-//        logger.error("Error executing query: {}", e.getMessage());
-//        throw e;
-//      }
-//
-//    }
-//
-//    return resultList;
-//  }
-
-
-  private void applySoftDeleteWithVersion(short accountId, short containerId, String blobName, long version,
-      Timestamp deleteTs, Connection connection) throws Exception {
-    String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_WITH_VERSION_QUERY)) {
-      // use the current time
-      statement.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
-      statement.setInt(2, accountId);
-      statement.setInt(3, containerId);
-      statement.setString(4, blobName);
-      statement.setLong(5, version);
-      query = statement.toString();
-      logger.debug("Soft deleting blob in MySql. Query {}", query);
-      statement.executeUpdate();
+  private void batchSoftDelete(List<StaleNamedBlob> staleNamedBlobs, Connection connection) throws Exception {
+    String query = SOFT_DELETE_WITH_VERSION_QUERY;
+    try (PreparedStatement statement = connection.prepareStatement(query)) {
+      for (StaleNamedBlob blob : staleNamedBlobs) {
+        statement.setTimestamp(1, blob.getDeleteTs());  // Or use new Timestamp(System.currentTimeMillis()) if needed
+        statement.setInt(2, blob.getAccountId());
+        statement.setInt(3, blob.getContainerId());
+        statement.setString(4, blob.getBlobName());
+        statement.setLong(5, blob.getVersion());
+        statement.addBatch();
+      }
+      int[] results = statement.executeBatch();
+      logger.debug("Batch soft delete completed. Number of blobs deleted: {}", results.length);
     } catch (SQLException e) {
-      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      logger.error("Failed to execute batch soft delete. Error: {}", e.getMessage());
       throw e;
     }
   }
