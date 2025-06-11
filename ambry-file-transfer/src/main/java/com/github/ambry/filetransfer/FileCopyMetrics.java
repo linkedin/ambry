@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.filetransfer.handler.StoreFileCopyHandler;
 
 
 public class FileCopyMetrics {
@@ -23,8 +24,9 @@ public class FileCopyMetrics {
   private final Counter partitionsFileCopyInitiated;
   private final Counter partitionsFileCopySkipped;
   private final Counter fileCopyRunningThreadCount;
-
   private final Histogram fileCopyPerPartitionTimeMs;
+  private final Histogram fileCopyEligibleDataPerPartitionInBytes;
+  private final Histogram fileCopyAverageSpeedPerPartition;
 
   public FileCopyMetrics(MetricRegistry registry) {
     partitionsInFileCopyPath =
@@ -37,6 +39,10 @@ public class FileCopyMetrics {
         registry.counter(MetricRegistry.name(FileCopyThread.class, "FileCopyRunningThreadCount"));
     fileCopyPerPartitionTimeMs =
         registry.histogram(MetricRegistry.name(FileCopyThread.class, "FileCopyPerPartitionTimeMs"));
+    fileCopyEligibleDataPerPartitionInBytes =
+        registry.histogram(MetricRegistry.name(StoreFileCopyHandler.class, "FileCopyEligibleDataPerPartitionInBytes"));
+    fileCopyAverageSpeedPerPartition =
+        registry.histogram(MetricRegistry.name(StoreFileCopyHandler.class, "FileCopyAverageSpeedPerPartition"));
   }
 
   public void incrementFileCopyInitiated() {
@@ -65,5 +71,13 @@ public class FileCopyMetrics {
 
   public void updateFileCopyPerPartitionTimeMs(long timeTaken) {
     fileCopyPerPartitionTimeMs.update(timeTaken);
+  }
+
+  public void updateFileCopyDataPerPartitionInBytes(long bytes) {
+    fileCopyEligibleDataPerPartitionInBytes.update(bytes);
+  }
+
+  public void updateFileCopyAverageSpeedPerPartition(long bytesPerSec) {
+    fileCopyAverageSpeedPerPartition.update(bytesPerSec);
   }
 }

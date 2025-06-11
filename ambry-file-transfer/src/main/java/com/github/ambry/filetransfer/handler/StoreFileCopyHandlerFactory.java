@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer.handler;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.filetransfer.FileCopyMetrics;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.filetransfer.handler.StoreFileCopyHandler;
@@ -54,8 +55,11 @@ public class StoreFileCopyHandlerFactory implements FileCopyHandlerFactory {
    */
   private final StoreConfig storeConfig;
 
+  private final FileCopyMetrics fileCopyMetrics;
+
   public StoreFileCopyHandlerFactory(@Nonnull ConnectionPool connectionPool, @Nonnull StoreManager storeManager,
-      @Nonnull ClusterMap clusterMap, @Nonnull FileCopyBasedReplicationConfig config, @Nonnull StoreConfig storeConfig) throws Exception {
+      @Nonnull ClusterMap clusterMap, @Nonnull FileCopyBasedReplicationConfig config, @Nonnull StoreConfig storeConfig, @Nonnull
+      FileCopyMetrics fileCopyMetrics) throws Exception {
     Objects.requireNonNull(connectionPool, "connectionPool cannot be null");
     Objects.requireNonNull(storeManager, "storeManager cannot be null");
     Objects.requireNonNull(clusterMap, "clusterMap cannot be null");
@@ -66,10 +70,11 @@ public class StoreFileCopyHandlerFactory implements FileCopyHandlerFactory {
     this.storeManager = storeManager;
     this.config = config;
     this.storeConfig = storeConfig;
+    this.fileCopyMetrics = fileCopyMetrics;
   }
 
   @Override
   public FileCopyHandler getFileCopyHandler() {
-    return new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, config, storeConfig);
+    return new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, config, storeConfig,fileCopyMetrics);
   }
 }

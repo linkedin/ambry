@@ -427,7 +427,7 @@ public class AmbryServer {
           FileCopyMetrics fileCopyMetrics = new FileCopyMetrics(registry);
           FileCopyHandlerFactory fileCopyHandlerFactory =
               new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap,
-                  fileCopyBasedReplicationConfig, storeConfig);
+                  fileCopyBasedReplicationConfig, storeConfig, fileCopyMetrics);
 
           PrioritizationManagerFactory prioritizationManagerFactory =
               new FileBasedReplicationPrioritizationManagerFactory();

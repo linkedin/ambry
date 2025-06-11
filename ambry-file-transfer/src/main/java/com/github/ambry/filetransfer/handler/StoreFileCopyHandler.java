@@ -19,6 +19,7 @@ import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.filetransfer.FileChunkInfo;
 import com.github.ambry.filetransfer.FileCopyInfo;
+import com.github.ambry.filetransfer.FileCopyMetrics;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetChunkDataWorkflow;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
@@ -36,9 +37,11 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +78,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private OperationRetryHandler operationRetryHandler;
 
+  private FileCopyMetrics fileCopyMetrics;
+
   /**
    * Flag to indicate if the handler is running.
    */
@@ -89,17 +94,15 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param clusterMap the {@link ClusterMap} to use for getting the {@link PartitionId}.
    * @param config the configuration for the file copy handler.
    */
-  public StoreFileCopyHandler(
-      @Nonnull ConnectionPool connectionPool,
-      @Nonnull StoreManager storeManager,
-      @Nonnull ClusterMap clusterMap,
-      @Nonnull FileCopyBasedReplicationConfig config,
-      @Nonnull StoreConfig storeConfig) {
+  public StoreFileCopyHandler(@Nonnull ConnectionPool connectionPool, @Nonnull StoreManager storeManager,
+      @Nonnull ClusterMap clusterMap, @Nonnull FileCopyBasedReplicationConfig config, @Nonnull StoreConfig storeConfig,
+      @Nonnull FileCopyMetrics fileCopyMetrics) {
     Objects.requireNonNull(connectionPool, "ConnectionPool cannot be null");
     Objects.requireNonNull(storeManager, "StoreManager cannot be null");
     Objects.requireNonNull(clusterMap, "ClusterMap cannot be null");
     Objects.requireNonNull(config, "FileCopyHandlerConfig cannot be null");
     Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
+    Objects.requireNonNull(fileCopyMetrics, "FileCopyMetrics cannot be null");
 
     this.connectionPool = connectionPool;
     this.storeManager = storeManager;
@@ -107,6 +110,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     this.config = config;
     this.storeConfig = storeConfig;
     this.operationRetryHandler = new OperationRetryHandler(config);
+    this.fileCopyMetrics = fileCopyMetrics;
   }
 
   /**
@@ -163,30 +167,45 @@ public class StoreFileCopyHandler implements FileCopyHandler {
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
     logger.info("File Copy handler is running for partition: {} on Mount Path: {} hydrating from DataNode: {}",
-        fileCopyInfo.getSourceReplicaId().getPartitionId().getId(),
-        fileCopyInfo.getSourceReplicaId().getMountPath(), fileCopyInfo.getTargetReplicaId().getDataNodeId());
+        fileCopyInfo.getSourceReplicaId().getPartitionId().getId(), fileCopyInfo.getSourceReplicaId().getMountPath(),
+        fileCopyInfo.getTargetReplicaId().getDataNodeId());
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
-
+    long startTimeInMs = System.currentTimeMillis();
+    long totalSizeToDownloadInBytes = 0;
+    AtomicLong totalSizeDownloadedInBytes = new AtomicLong();
     final PartitionFileStore fileStore = storeManager.getFileStore(fileCopyInfo.getSourceReplicaId().getPartitionId());
-    final String partitionToMountFilePath = fileCopyInfo.getSourceReplicaId().getMountPath() + File.separator +
-        fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
+    final String partitionToMountFilePath =
+        fileCopyInfo.getSourceReplicaId().getMountPath() + File.separator + fileCopyInfo.getSourceReplicaId()
+            .getPartitionId()
+            .getId();
     FileCopyGetMetaDataResponse metadataResponse = null;
     try {
       metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
+
+      for (LogInfo logInfo : metadataResponse.getLogInfos()) {
+        totalSizeToDownloadInBytes = totalSizeToDownloadInBytes + logInfo.getLogSegment().getFileSize();
+        for (FileInfo indexSegment : logInfo.getIndexSegments()) {
+          totalSizeToDownloadInBytes = totalSizeToDownloadInBytes + indexSegment.getFileSize();
+        }
+      }
+      fileCopyMetrics.updateFileCopyDataPerPartitionInBytes(totalSizeToDownloadInBytes);
+
       String snapshotId = metadataResponse.getSnapshotId();
 
       metadataResponse.getLogInfos().forEach(logInfo -> {
         // Process the respective files and copy it to the temporary path.
-        final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
+        final String partitionToMountTempFilePath =
+            partitionToMountFilePath + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
         logInfo.getIndexSegments().forEach(indexFile -> {
           processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
+          totalSizeDownloadedInBytes.addAndGet(indexFile.getFileSize());
         });
         // Process log segment
         long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
         // allocate the file
-        FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
-            logInfo.getLogSegment().getFileSize());
+        FileInfo logFileInfo =
+            new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log", logInfo.getLogSegment().getFileSize());
         String filePath = partitionToMountTempFilePath + File.separator + logFileInfo.getFileName();
         try {
           fileStore.allocateFile(filePath, Long.toString(storeId));
@@ -195,6 +214,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
               FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerFailedDiskSpaceAllocation);
         }
         processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
+        totalSizeDownloadedInBytes.addAndGet(logInfo.getLogSegment().getFileSize());
 
         // Move all files to actual path.
         try {
@@ -208,6 +228,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       if (metadataResponse != null) {
         metadataResponse.release();
       }
+      int totalTimeInSec = (int) ((System.currentTimeMillis() - startTimeInMs) / 1000);
+      fileCopyMetrics.updateFileCopyAverageSpeedPerPartition(totalSizeDownloadedInBytes.get() / totalTimeInSec);
     }
   }
 
@@ -218,33 +240,37 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   FileCopyGetMetaDataResponse getFileCopyGetMetaDataResponse(FileCopyInfo fileCopyInfo) {
     validateIfStoreFileCopyHandlerIsRunning();
-    String operationName = GetMetadataWorkflow.GET_METADATA_OPERATION_NAME + "[Partition=" +
-        fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
+    String operationName =
+        GetMetadataWorkflow.GET_METADATA_OPERATION_NAME + "[Partition=" + fileCopyInfo.getTargetReplicaId()
+            .getPartitionId()
+            .getId() + "]";
     FileCopyGetMetaDataResponse metadataResponse = null;
 
     try {
       metadataResponse = operationRetryHandler.executeWithRetry(
           () -> new GetMetadataWorkflow(connectionPool, fileCopyInfo, config).execute(), operationName);
     } catch (IOException e) {
-      logMessageAndThrow(operationName, "IO error while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+      logMessageAndThrow(operationName, "IO error while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
     } catch (ConnectionPoolTimeoutException e) {
-      logMessageAndThrow(operationName, "Connection pool timeout while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+      logMessageAndThrow(operationName, "Connection pool timeout while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt(); // Preserve interrupt status
 
-      logMessageAndThrow(operationName, "Thread interrupted while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+      logMessageAndThrow(operationName, "Thread interrupted while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
     } catch (RuntimeException e) {
-      logMessageAndThrow(operationName, "Unexpected runtime error while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+      logMessageAndThrow(operationName, "Unexpected runtime error while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     } catch (Exception e) {
-      logMessageAndThrow(operationName, "Exception while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+      logMessageAndThrow(operationName, "Exception while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
     validateResponseOrThrow(metadataResponse, operationName);
-    logger.info(operationName + ": Fetched metadata for partition: " + fileCopyInfo.getSourceReplicaId().getPartitionId().getId() + " - " + metadataResponse.toString());
+    logger.info(operationName + ": Fetched metadata for partition: " + fileCopyInfo.getSourceReplicaId()
+        .getPartitionId()
+        .getId() + " - " + metadataResponse.toString());
     return metadataResponse;
   }
 
@@ -262,8 +288,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     String errorSuffix = " while processing the " + (isChunked ? "chunk" : "file");
     try {
       chunkResponse = operationRetryHandler.executeWithRetry(
-          () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, fileChunkInfo, snapshotId, clusterMap, config)
-              .execute(), operationName);
+          () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, fileChunkInfo, snapshotId, clusterMap,
+              config).execute(), operationName);
     } catch (IOException e) {
       logMessageAndThrow(operationName, "IO error" + errorSuffix, e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
@@ -294,13 +320,14 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param fileStore the file store
    */
   private void processIndexFile(FileInfo indexFile, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
-      String snapshotId, PartitionFileStore fileStore){
+      String snapshotId, PartitionFileStore fileStore) {
     validateIfStoreFileCopyHandlerIsRunning();
     final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
     FileCopyGetChunkResponse chunkResponse = null;
     try {
-      chunkResponse = getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_FILE_OPERATION_NAME, fileCopyInfo,
-          fileChunkInfo, snapshotId, false);
+      chunkResponse =
+          getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_FILE_OPERATION_NAME, fileCopyInfo, fileChunkInfo,
+              snapshotId, false);
       String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
     } finally {
@@ -323,8 +350,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       throw new FileCopyHandlerException("Log segment file size is greater than the segment capacity",
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerInvalidLogFileSize);
     }
-    FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
-        logInfo.getLogSegment().getFileSize());
+    FileInfo logFileInfo =
+        new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log", logInfo.getLogSegment().getFileSize());
     int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSize() / config.getFileCopyHandlerChunkSize);
     logger.info("Number of chunks in log segment: {} for filename {}", chunksInLogSegment, logFileInfo.getFileName());
 
@@ -334,20 +361,21 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       long startOffset = (long) i * config.getFileCopyHandlerChunkSize;
       long sizeInBytes = Math.min(config.getFileCopyHandlerChunkSize, logFileInfo.getFileSize() - startOffset);
 
-      String operationName = GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME + "[Partition=" +
-          fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + ", FileName=" + logFileInfo.getFileName() +
-          ", Chunk=" + (i + 1) + "]";
+      String operationName =
+          GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME + "[Partition=" + fileCopyInfo.getTargetReplicaId()
+              .getPartitionId()
+              .getId() + ", FileName=" + logFileInfo.getFileName() + ", Chunk=" + (i + 1) + "]";
       FileChunkInfo fileChunkInfo = new FileChunkInfo(logFileInfo.getFileName(), startOffset, sizeInBytes, true);
 
-       FileCopyGetChunkResponse chunkResponse = null;
-       try {
-         chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, snapshotId,true);
-         String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
-         writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+      FileCopyGetChunkResponse chunkResponse = null;
+      try {
+        chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, snapshotId, true);
+        String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
+        writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
       } finally {
-         if (chunkResponse != null) {
-            chunkResponse.release();
-         }
+        if (chunkResponse != null) {
+          chunkResponse.release();
+        }
       }
     }
   }
@@ -384,7 +412,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private void logMessageAndThrow(String operationName, String message, Exception e,
       FileCopyHandlerException.FileCopyHandlerErrorCode fileCopyHandlerErrorCode) {
-    String s = operationName + ": " +  message;
+    String s = operationName + ": " + message;
     logger.error(s, e);
     throw new FileCopyHandlerException(s, e, fileCopyHandlerErrorCode);
   }
