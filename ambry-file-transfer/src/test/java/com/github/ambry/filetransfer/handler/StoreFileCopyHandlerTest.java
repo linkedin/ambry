@@ -13,11 +13,13 @@
  */
 package com.github.ambry.filetransfer.handler;
 
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.filetransfer.FileCopyMetrics;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
 import com.github.ambry.server.ServerErrorCode;
@@ -79,7 +81,10 @@ public class StoreFileCopyHandlerTest {
    */
   @Before
   public void setUp() throws Exception {
-    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig , storeConfig);
+    FileCopyMetrics fileCopyMetrics = new FileCopyMetrics(new MockClusterMap().getMetricRegistry());
+    handler =
+        new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig, storeConfig,
+            fileCopyMetrics);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
 

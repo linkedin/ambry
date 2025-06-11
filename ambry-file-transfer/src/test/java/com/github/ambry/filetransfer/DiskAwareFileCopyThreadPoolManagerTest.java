@@ -23,17 +23,24 @@ import com.github.ambry.filecopy.MockFileCopyHandlerFactory;
 import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+
 public class DiskAwareFileCopyThreadPoolManagerTest {
+  private FileCopyMetrics fileCopyMetrics;
+
+  @Before
+  public void setUp() throws Exception {
+    this.fileCopyMetrics = new FileCopyMetrics(new MockClusterMap().getMetricRegistry());
+  }
 
   /**
    * Tests basic thread submission and scheduling
@@ -48,7 +55,8 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
     MockDataNodeId dataNodeId = new MockDataNodeId("peerNode", Collections.singletonList(port), mountPaths, "peerDatacenter");
 
     // Create thread pool manager with 2 threads per disk
-    DiskAwareFileCopyThreadPoolManager threadPoolManager = new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(), 2);
+    DiskAwareFileCopyThreadPoolManager threadPoolManager =
+        new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(), 2, fileCopyMetrics);
     Thread threadPoolManagerThread = new Thread(threadPoolManager);
     threadPoolManagerThread.start();
 
@@ -107,7 +115,8 @@ public class DiskAwareFileCopyThreadPoolManagerTest {
     MockDataNodeId dataNodeId = new MockDataNodeId("peerNode", Collections.singletonList(port), mountPaths, "peerDatacenter");
 
     int threadsPerDisk = 2;
-    DiskAwareFileCopyThreadPoolManager threadPoolManager = new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(), threadsPerDisk);
+    DiskAwareFileCopyThreadPoolManager threadPoolManager =
+        new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(), threadsPerDisk, fileCopyMetrics);
 
     // Get available disks for hydration before submitting any threads
     List<DiskId> availableDisks = threadPoolManager.getDiskIdsToHydrate();
