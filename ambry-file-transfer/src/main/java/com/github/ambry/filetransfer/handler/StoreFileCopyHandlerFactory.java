@@ -55,6 +55,9 @@ public class StoreFileCopyHandlerFactory implements FileCopyHandlerFactory {
    */
   private final StoreConfig storeConfig;
 
+  /**
+   * File copy related metrics
+   */
   private final FileCopyMetrics fileCopyMetrics;
 
   public StoreFileCopyHandlerFactory(@Nonnull ConnectionPool connectionPool, @Nonnull StoreManager storeManager,
@@ -65,6 +68,7 @@ public class StoreFileCopyHandlerFactory implements FileCopyHandlerFactory {
     Objects.requireNonNull(clusterMap, "clusterMap cannot be null");
     Objects.requireNonNull(config, "config cannot be null");
     Objects.requireNonNull(storeConfig, "storeConfig cannot be null");
+    Objects.requireNonNull(fileCopyMetrics, "fileCopyMetrics cannot be null");
     this.connectionPool = connectionPool;
     this.clusterMap = clusterMap;
     this.storeManager = storeManager;

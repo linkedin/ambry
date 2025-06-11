@@ -51,6 +51,7 @@ public class FileCopyThread extends Thread {
    * Constructor for FileCopyThread
    * @param fileCopyHandler the file copy handler
    * @param fileCopyStatusListener the file copy status listener
+   * @param fileCopyMetrics file copy related metrics
    */
   FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener,
       @Nonnull FileCopyMetrics fileCopyMetrics) {

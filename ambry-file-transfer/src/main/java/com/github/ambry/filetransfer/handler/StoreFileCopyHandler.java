@@ -78,7 +78,10 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private OperationRetryHandler operationRetryHandler;
 
-  private FileCopyMetrics fileCopyMetrics;
+  /**
+   * File copy related metrics
+   */
+  private final FileCopyMetrics fileCopyMetrics;
 
   /**
    * Flag to indicate if the handler is running.
@@ -93,6 +96,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param storeManager the {@link StoreManager} to use for getting the {@link PartitionFileStore}.
    * @param clusterMap the {@link ClusterMap} to use for getting the {@link PartitionId}.
    * @param config the configuration for the file copy handler.
+   * @param storeConfig store config
+   * @param fileCopyMetrics file copy related metrics
    */
   public StoreFileCopyHandler(@Nonnull ConnectionPool connectionPool, @Nonnull StoreManager storeManager,
       @Nonnull ClusterMap clusterMap, @Nonnull FileCopyBasedReplicationConfig config, @Nonnull StoreConfig storeConfig,

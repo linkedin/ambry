@@ -61,6 +61,7 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
    * Constructor to initialize the thread pool manager with specified disk IDs and number of threads.
    * @param diskIds List of disk IDs to manage threads for
    * @param numberOfThreads Maximum number of threads allowed per disk
+   * @param fileCopyMetrics file copy related metrics
    */
   public DiskAwareFileCopyThreadPoolManager(List<DiskId> diskIds, int numberOfThreads, FileCopyMetrics fileCopyMetrics) {
     this.numberOfThreadsPerDisk = numberOfThreads;

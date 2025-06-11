@@ -19,6 +19,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.filetransfer.handler.StoreFileCopyHandler;
 
 
+/**
+ * File copy related metrics
+ */
 public class FileCopyMetrics {
   private final Counter partitionsInFileCopyPath;
   private final Counter partitionsFileCopyInitiated;
