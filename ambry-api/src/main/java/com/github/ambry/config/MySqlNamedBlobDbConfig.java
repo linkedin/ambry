@@ -33,7 +33,6 @@ public class MySqlNamedBlobDbConfig {
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
   public static final String ENABLE_HARD_DELETE = PREFIX + "enable.hard.delete";
-  public static final String HARD_DELETE_ON_CLOSE = PREFIX + "hard.delete.close";
 
   /**
    * Option to pick the SQL query to use for listing named blobs.

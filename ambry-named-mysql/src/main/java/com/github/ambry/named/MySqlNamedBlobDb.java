@@ -88,6 +88,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String DELETED_TS = "deleted_ts";
   private static final String MODIFIED_TS = "modified_ts";
   private static final String BLOB_SIZE = "blob_size";
+  private static final int CLEANER_FIXED_BATCH_SIZE = 1000; // or use config.queryStaleDataMaxResults
+
   // query building blocks
   private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
   private static final String STATE_MATCH = String.format("%s = %s", BLOB_STATE, NamedBlobState.READY.ordinal());
@@ -493,14 +495,14 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container) {
+  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container, int pageIndex) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
 
       List<StaleNamedBlob> staleNamedBlobResults;
-      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container);
+      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, pageIndex);
       if (container.getStatus() == Container.ContainerStatus.ACTIVE) {
         staleNamedBlobResults = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
       } else {
@@ -979,60 +981,104 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return staleBlobs;
   }
 
-  private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container) throws SQLException {
+  private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container, int idx) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
-    int offset = 0;
-    boolean hasMore = true;
 
-    while (hasMore) {
-      String GET_BLOBS_FOR_CLEANER = (container.getStatus() == Container.ContainerStatus.ACTIVE) ? GET_BLOBS_FOR_ACTIVE_CONTAINER : GET_BLOBS_FOR_INACTIVE_CONTAINER;
-      try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
-        statement.setInt(1, container.getId());
-        statement.setInt(2, container.getParentAccountId());
-        statement.setInt(3, config.queryStaleDataMaxResults);
-        statement.setInt(4, offset);
+    String GET_BLOBS_FOR_CLEANER = (container.getStatus() == Container.ContainerStatus.ACTIVE) ? GET_BLOBS_FOR_ACTIVE_CONTAINER : GET_BLOBS_FOR_INACTIVE_CONTAINER;
 
-        String query = statement.toString();
-        logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
+    try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
+      statement.setInt(1, container.getId());
+      statement.setInt(2, container.getParentAccountId());
+      statement.setInt(3, config.queryStaleDataMaxResults); // limit
+      statement.setInt(4, idx * config.queryStaleDataMaxResults); // offset = idx * batchSize
 
-        try (ResultSet resultSet = statement.executeQuery()) {
-          int rowCount = 0;
-          while (resultSet.next()) {
-            short accountId = resultSet.getShort(1);
-            short contId = resultSet.getShort(2);
-            String blobName = resultSet.getString(3);
-            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
-            long version = resultSet.getLong(5);
-            int blobStateInt = resultSet.getInt(6);
-            Timestamp modifiedTime = resultSet.getTimestamp(7);
-            Timestamp deletedTime = resultSet.getTimestamp(8);
+      logger.debug("Pulling potential stale blobs from MySql. Query {}", statement.toString());
 
-            NamedBlobState blobState = null;
-            if (blobStateInt == 1) {
-              blobState = NamedBlobState.READY;
-            } else if (blobStateInt == 0) {
-              blobState = NamedBlobState.IN_PROGRESS;
-            }
+      try (ResultSet resultSet = statement.executeQuery()) {
+        while (resultSet.next()) {
+          short accountId = resultSet.getShort(1);
+          short contId = resultSet.getShort(2);
+          String blobName = resultSet.getString(3);
+          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+          long version = resultSet.getLong(5);
+          int blobStateInt = resultSet.getInt(6);
+          Timestamp modifiedTime = resultSet.getTimestamp(7);
+          Timestamp deletedTime = resultSet.getTimestamp(8);
 
-            StaleNamedBlob result = new StaleNamedBlob(accountId, contId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
-            resultList.add(result);
-            rowCount++;
+          NamedBlobState blobState = null;
+          if (blobStateInt == 1) {
+            blobState = NamedBlobState.READY;
+          } else if (blobStateInt == 0) {
+            blobState = NamedBlobState.IN_PROGRESS;
           }
 
-          hasMore = rowCount == config.queryStaleDataMaxResults;
-          if (hasMore) {
-            offset += config.queryStaleDataMaxResults;
-          }
+          StaleNamedBlob result = new StaleNamedBlob(accountId, contId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
+          resultList.add(result);
         }
-      } catch (SQLException e) {
-        logger.error("Error executing query: {}", e.getMessage());
-        throw e;
       }
-
+    } catch (SQLException e) {
+      logger.error("Error executing query: {}", e.getMessage());
+      throw e;
     }
 
     return resultList;
   }
+
+//
+//  private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container, int pageIndex) throws SQLException {
+//    List<StaleNamedBlob> resultList = new ArrayList<>();
+//    int offset = 0;
+//    boolean hasMore = true;
+//
+//    while (hasMore) {
+//      String GET_BLOBS_FOR_CLEANER = (container.getStatus() == Container.ContainerStatus.ACTIVE) ? GET_BLOBS_FOR_ACTIVE_CONTAINER : GET_BLOBS_FOR_INACTIVE_CONTAINER;
+//      try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
+//        statement.setInt(1, container.getId());
+//        statement.setInt(2, container.getParentAccountId());
+//        statement.setInt(3, config.queryStaleDataMaxResults);
+//        statement.setInt(4, pageIndex * config.queryStaleDataMaxResults);
+//
+//        String query = statement.toString();
+//        logger.debug("Pulling potential stale blobs from MySql. Query {}", query);
+//
+//        try (ResultSet resultSet = statement.executeQuery()) {
+//          int rowCount = 0;
+//          while (resultSet.next()) {
+//            short accountId = resultSet.getShort(1);
+//            short contId = resultSet.getShort(2);
+//            String blobName = resultSet.getString(3);
+//            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+//            long version = resultSet.getLong(5);
+//            int blobStateInt = resultSet.getInt(6);
+//            Timestamp modifiedTime = resultSet.getTimestamp(7);
+//            Timestamp deletedTime = resultSet.getTimestamp(8);
+//
+//            NamedBlobState blobState = null;
+//            if (blobStateInt == 1) {
+//              blobState = NamedBlobState.READY;
+//            } else if (blobStateInt == 0) {
+//              blobState = NamedBlobState.IN_PROGRESS;
+//            }
+//
+//            StaleNamedBlob result = new StaleNamedBlob(accountId, contId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
+//            resultList.add(result);
+//            rowCount++;
+//          }
+//
+//          hasMore = rowCount == config.queryStaleDataMaxResults;
+//          if (hasMore) {
+//            offset += config.queryStaleDataMaxResults;
+//          }
+//        }
+//      } catch (SQLException e) {
+//        logger.error("Error executing query: {}", e.getMessage());
+//        throw e;
+//      }
+//
+//    }
+//
+//    return resultList;
+//  }
 
 
   private void applySoftDeleteWithVersion(short accountId, short containerId, String blobName, long version,

@@ -213,7 +213,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container) {
+  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container, int pageIndex) {
     CompletableFuture<List<StaleNamedBlob>> future = new CompletableFuture<>();
     List<StaleNamedBlob> resultList = new ArrayList<>();
     String containerName = container.getName();  // adjust if your Container has a different getter

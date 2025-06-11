@@ -112,7 +112,7 @@ public interface NamedBlobDb extends Closeable {
   /**
    * Pull the stale blobs that need to be cleaned up
    */
-  CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container);
+  CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container, int pageIndex);
 
   /**
    * Cleanup the stale blobs records
