@@ -96,8 +96,10 @@ public class FileCopyThread extends Thread {
       logger.info("File copy completed for partition: {} in {} seconds", replicaId.getPartitionId().getId(),
           (System.currentTimeMillis() - startTime) / 1000);
       fileCopyStatusListener.onFileCopySuccess();
+      fileCopyMetrics.incrementPartitionFileCopySuccess();
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);
+      fileCopyMetrics.incrementPartitionFileCopyFailure();
     } finally {
       fileCopyMetrics.updateFileCopyPerPartitionTimeMs(System.currentTimeMillis() - startTime);
       fileCopyMetrics.decrementFileCopyRunningThreadCount();

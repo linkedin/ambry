@@ -23,6 +23,8 @@ public class FileCopyMetrics {
   private final Counter partitionsInFileCopyPath;
   private final Counter partitionsFileCopyInitiated;
   private final Counter partitionsFileCopySkipped;
+  private final Counter partitionFileCopySuccess;
+  private final Counter partitionFileCopyFailure;
   private final Counter fileCopyRunningThreadCount;
   private final Histogram fileCopyPerPartitionTimeMs;
   private final Histogram fileCopyEligibleDataPerPartitionInBytes;
@@ -35,6 +37,10 @@ public class FileCopyMetrics {
         registry.counter(MetricRegistry.name(FileCopyBasedReplicationManager.class, "PartitionsFileCopyInitiated"));
     partitionsFileCopySkipped =
         registry.counter(MetricRegistry.name(FileCopyBasedReplicationManager.class, "PartitionsFileCopySkipped"));
+    partitionFileCopySuccess =
+        registry.counter(MetricRegistry.name(FileCopyBasedReplicationManager.class, "PartitionsFileCopySuccess"));
+    partitionFileCopyFailure =
+        registry.counter(MetricRegistry.name(FileCopyBasedReplicationManager.class, "PartitionsFileCopyFailure"));
     fileCopyRunningThreadCount =
         registry.counter(MetricRegistry.name(FileCopyThread.class, "FileCopyRunningThreadCount"));
     fileCopyPerPartitionTimeMs =
@@ -59,6 +65,14 @@ public class FileCopyMetrics {
 
   public void decrementPartitionInFileCopyPath() {
     partitionsInFileCopyPath.dec();
+  }
+
+  public void incrementPartitionFileCopySuccess() {
+    partitionFileCopySuccess.inc();
+  }
+
+  public void incrementPartitionFileCopyFailure() {
+    partitionFileCopyFailure.inc();
   }
 
   public void incrementFileCopyRunningThreadCount() {
