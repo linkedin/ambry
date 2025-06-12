@@ -216,7 +216,6 @@ public class NamedBlobMysqlDatabasePerf {
     jsonArray.put(dbEndpoint.toJson());
     System.out.println("DB_INFO: " + jsonArray);
     newProperties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, jsonArray.toString());
-    newProperties.setProperty(MySqlNamedBlobDbConfig.DB_RELY_ON_NEW_TABLE, "true");
     newProperties.setProperty(MySqlNamedBlobDbConfig.LOCAL_POOL_SIZE, String.valueOf(2 * Integer.valueOf(props.getProperty(PARALLELISM))));
     newProperties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, props.getProperty(DB_DATACENTER));
 
