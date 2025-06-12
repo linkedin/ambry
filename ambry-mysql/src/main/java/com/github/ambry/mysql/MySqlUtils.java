@@ -81,7 +81,8 @@ public class MySqlUtils {
    */
   public static String addSslSettingsToUrl(String url, SSLConfig sslConfig) {
     //@formatter:off
-    String sslSuffix = "&useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2"
+    String delimiter = url.contains("?") ? "&" : "?";
+    String sslSuffix = delimiter + "useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2"
         + "&clientCertificateKeyStoreType=" + sslConfig.sslKeystoreType
         + "&clientCertificateKeyStoreUrl=file:" + sslConfig.sslKeystorePath
         + "&clientCertificateKeyStorePassword=" + sslConfig.sslKeystorePassword
