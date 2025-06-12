@@ -28,6 +28,11 @@ public class CompositeAccountServiceConfig {
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "primary.account.service.factory";
   public static final String SECONDARY_ACCOUNT_SERVICE_FACTORY =
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "secondary.account.service.factory";
+  public static final String ACCOUNT_SYNC_DUAL_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "account.sync.dual.write";
+  public static final String CONTAINER_SYNC_DUAL_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "container.sync.dual.write";
+  public static final String SYNC_READ = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "sync.read";
+
+
 
   /**
    * The time interval in minutes for checking consistency in account data between primary and secondary sources.
@@ -66,6 +71,29 @@ public class CompositeAccountServiceConfig {
   @Default("com.github.ambry.account.MySqlAccountServiceFactory")
   public final String secondaryAccountServiceFactory;
 
+  /**
+   * The AccountSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on account sync dual write.
+   */
+  @Config(ACCOUNT_SYNC_DUAL_WRITE)
+  @Default("false")
+  public final boolean accountSyncDualWrite;
+
+  /**
+   * The ContainerSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on container sync dual write.
+   */
+  @Config(CONTAINER_SYNC_DUAL_WRITE)
+  @Default("false")
+  public final boolean containerSyncDualWrite;
+
+  /**
+   * The SyncRead is used in {@code CompositeLiAccountService} as the key to turn on sync read.
+   */
+  @Config(SYNC_READ)
+  @Default("false")
+  public final boolean syncRead;
+
+
+
   public CompositeAccountServiceConfig(VerifiableProperties verifiableProperties) {
     consistencyCheckerIntervalMinutes =
         verifiableProperties.getIntInRange(CONSISTENCY_CHECKER_INTERVAL_MINUTES, 5, 0, Integer.MAX_VALUE);
@@ -75,5 +103,8 @@ public class CompositeAccountServiceConfig {
         verifiableProperties.getIntInRange(SAMPLING_PERCENTAGE_FOR_GET_CONSISTENCY_CHECK, 50, 0, 100);
     primaryAccountServiceFactory = verifiableProperties.getString(PRIMARY_ACCOUNT_SERVICE_FACTORY);
     secondaryAccountServiceFactory = verifiableProperties.getString(SECONDARY_ACCOUNT_SERVICE_FACTORY);
+    accountSyncDualWrite = verifiableProperties.getBoolean(ACCOUNT_SYNC_DUAL_WRITE, false);
+    containerSyncDualWrite = verifiableProperties.getBoolean(CONTAINER_SYNC_DUAL_WRITE, false);
+    syncRead = verifiableProperties.getBoolean(SYNC_READ, false);
   }
 }
