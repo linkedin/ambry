@@ -13,6 +13,7 @@
  */
 package com.github.ambry.mysql;
 
+import com.github.ambry.config.SSLConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -70,6 +71,25 @@ public class MySqlUtils {
     }
     Collections.sort(remoteDatacenters);
     return Collections.unmodifiableList(remoteDatacenters);
+  }
+
+  /**
+   * Adding ssl settings to url to enable ssl certificate based authentication.
+   * @param url The original url
+   * @param sslConfig The {@link SSLConfig} that contains the ssl settings.
+   * @return The new url with ssl settings
+   */
+  public static String addSslSettingsToUrl(String url, SSLConfig sslConfig) {
+    //@formatter:off
+    String sslSuffix = "&useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2"
+        + "&clientCertificateKeyStoreType=" + sslConfig.sslKeystoreType
+        + "&clientCertificateKeyStoreUrl=file:" + sslConfig.sslKeystorePath
+        + "&clientCertificateKeyStorePassword=" + sslConfig.sslKeystorePassword
+        + "&trustCertificateKeyStoreType=" + sslConfig.sslTruststoreType
+        + "&trustCertificateKeyStoreUrl=file:" + sslConfig.sslTruststorePath
+        + "&trustCertificateKeyStorePassword=" + sslConfig.sslTruststorePassword;
+    return url + sslSuffix;
+    //@formatter:on
   }
 
   /**
