@@ -88,7 +88,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String DELETED_TS = "deleted_ts";
   private static final String MODIFIED_TS = "modified_ts";
   private static final String BLOB_SIZE = "blob_size";
-  private static final int CLEANER_FIXED_BATCH_SIZE = 1000; // or use config.queryStaleDataMaxResults
+  private StaleNamedBlob keepBlobAcrossBatches = null;
 
   // query building blocks
   private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
@@ -500,6 +500,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
+
+      // for every new container, reset keepblob
+      if (pageIndex == 0) {
+        resetKeepBlob();
+      }
 
       List<StaleNamedBlob> staleNamedBlobResults;
       List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, pageIndex);
@@ -928,20 +933,28 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return new DeleteResult(blobVersions);
   }
 
-  public static List<StaleNamedBlob> getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutOffDays) {
+  public List<StaleNamedBlob> getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutOffDays) {
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
     if (blobList.isEmpty()) {
       return staleBlobs;
     }
-    StaleNamedBlob keepBlob = blobList.get(0);
+
     long cutoffTime = System.currentTimeMillis() - cutOffDays * 24 * 60 * 60 * 1000;
     Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
 
-    for (int i = 1; i < blobList.size(); i++) {
+    // Use keepBlobAcrossBatches only for initial keepBlob; after that use local keepBlob
+    StaleNamedBlob keepBlob = (keepBlobAcrossBatches != null) ? keepBlobAcrossBatches : blobList.get(0);
+
+    // If using global keepBlob, we start from the first item;
+    // otherwise skip the first item as it is the initial keepBlob
+    int startIndex = (keepBlobAcrossBatches != null) ? 0 : 1;
+
+    for (int i = startIndex; i < blobList.size(); i++) {
       StaleNamedBlob currentBlob = blobList.get(i);
+
       if (currentBlob.getDeleteTs() != null) {
         continue;
-        }
+      }
 
       if (!keepBlob.getBlobName().equals(currentBlob.getBlobName())) {
         keepBlob = currentBlob;
@@ -974,9 +987,64 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     if (keepBlob.getBlobState() == NamedBlobState.IN_PROGRESS && keepBlob.getModifiedTS().before(cutoffTimestamp)) {
       staleBlobs.add(keepBlob);
     }
+
+    // Update the global keepBlobAcrossBatches for next batch call
+    keepBlobAcrossBatches = keepBlob;
+
     logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
     return staleBlobs;
   }
+
+
+//  public static List<StaleNamedBlob> getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutOffDays) {
+//    List<StaleNamedBlob> staleBlobs = new ArrayList<>();
+//    if (blobList.isEmpty()) {
+//      return staleBlobs;
+//    }
+//    StaleNamedBlob keepBlob = blobList.get(0);
+//    long cutoffTime = System.currentTimeMillis() - cutOffDays * 24 * 60 * 60 * 1000;
+//    Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
+//
+//    for (int i = 1; i < blobList.size(); i++) {
+//      StaleNamedBlob currentBlob = blobList.get(i);
+//      if (currentBlob.getDeleteTs() != null) {
+//        continue;
+//        }
+//
+//      if (!keepBlob.getBlobName().equals(currentBlob.getBlobName())) {
+//        keepBlob = currentBlob;
+//        continue;
+//      }
+//
+//      NamedBlobState keepBlobState = keepBlob.getBlobState();
+//      NamedBlobState currentBlobState = currentBlob.getBlobState();
+//      Timestamp keepBlobModifiedTS = keepBlob.getModifiedTS();
+//
+//      if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.READY) {
+//        if (keepBlobModifiedTS.before(cutoffTimestamp)) {
+//          staleBlobs.add(keepBlob);
+//          keepBlob = currentBlob;
+//        }
+//      } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.READY) {
+//        staleBlobs.add(currentBlob);
+//      } else if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.IN_PROGRESS) {
+//        if (keepBlobModifiedTS.after(cutoffTimestamp)) {
+//          staleBlobs.add(currentBlob);
+//        } else if (keepBlobModifiedTS.before(cutoffTimestamp)) {
+//          staleBlobs.add(keepBlob);
+//          keepBlob = currentBlob;
+//        }
+//      } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.IN_PROGRESS) {
+//        staleBlobs.add(currentBlob);
+//      }
+//    }
+//
+//    if (keepBlob.getBlobState() == NamedBlobState.IN_PROGRESS && keepBlob.getModifiedTS().before(cutoffTimestamp)) {
+//      staleBlobs.add(keepBlob);
+//    }
+//    logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
+//    return staleBlobs;
+//  }
 
   private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container, int idx) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
@@ -1038,6 +1106,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       logger.error("Failed to execute batch soft delete. Error: {}", e.getMessage());
       throw e;
     }
+  }
+
+  public void resetKeepBlob() {
+    keepBlobAcrossBatches = null;
   }
 
   /**
