@@ -35,6 +35,15 @@ public class MySqlUtils {
   static final String USERNAME_STR = "username";
   static final String PASSWORD_STR = "password";
 
+  // SSL connection static values
+  static final String SSL_SETTING_USE_SSL = "useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2";
+  static final String SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_TYPE = "&clientCertificateKeyStoreType=";
+  static final String SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_URL = "&clientCertificateKeyStoreUrl=file:";
+  static final String SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_PASSWORD = "&clientCertificateKeyStorePassword=";
+  static final String SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_TYPE = "&trustCertificateKeyStoreType=";
+  static final String SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_URL = "&trustCertificateKeyStoreUrl=file:";
+  static final String SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_PASSWORD = "&trustCertificateKeyStorePassword=";
+
   /**
    * Parses DB information JSON string and returns a map of datacenter name to list of {@link DbEndpoint}s.
    * @param dbInfoJsonString the string containing the MySql DB info.
@@ -82,13 +91,13 @@ public class MySqlUtils {
   public static String addSslSettingsToUrl(String url, SSLConfig sslConfig) {
     //@formatter:off
     String delimiter = url.contains("?") ? "&" : "?";
-    String sslSuffix = delimiter + "useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2"
-        + "&clientCertificateKeyStoreType=" + sslConfig.sslKeystoreType
-        + "&clientCertificateKeyStoreUrl=file:" + sslConfig.sslKeystorePath
-        + "&clientCertificateKeyStorePassword=" + sslConfig.sslKeystorePassword
-        + "&trustCertificateKeyStoreType=" + sslConfig.sslTruststoreType
-        + "&trustCertificateKeyStoreUrl=file:" + sslConfig.sslTruststorePath
-        + "&trustCertificateKeyStorePassword=" + sslConfig.sslTruststorePassword;
+    String sslSuffix = delimiter + SSL_SETTING_USE_SSL
+        + SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_TYPE + sslConfig.sslKeystoreType
+        + SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_URL + sslConfig.sslKeystorePath
+        + SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_PASSWORD + sslConfig.sslKeystorePassword
+        + SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_TYPE + sslConfig.sslTruststoreType
+        + SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_URL + sslConfig.sslTruststorePath
+        + SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_PASSWORD + sslConfig.sslTruststorePassword;
     return url + sslSuffix;
     //@formatter:on
   }
