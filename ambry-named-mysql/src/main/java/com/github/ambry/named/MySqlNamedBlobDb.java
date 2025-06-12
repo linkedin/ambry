@@ -1025,7 +1025,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     String query = SOFT_DELETE_WITH_VERSION_QUERY;
     try (PreparedStatement statement = connection.prepareStatement(query)) {
       for (StaleNamedBlob blob : staleNamedBlobs) {
-        statement.setTimestamp(1, blob.getDeleteTs());  // Or use new Timestamp(System.currentTimeMillis()) if needed
+        statement.setTimestamp(1,  new Timestamp(System.currentTimeMillis()));  // Or use new Timestamp(System.currentTimeMillis()) if needed
         statement.setInt(2, blob.getAccountId());
         statement.setInt(3, blob.getContainerId());
         statement.setString(4, blob.getBlobName());
