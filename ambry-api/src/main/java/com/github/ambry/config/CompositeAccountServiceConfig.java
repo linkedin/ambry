@@ -28,10 +28,10 @@ public class CompositeAccountServiceConfig {
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "primary.account.service.factory";
   public static final String SECONDARY_ACCOUNT_SERVICE_FACTORY =
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "secondary.account.service.factory";
-  public static final String ACCOUNT_SYNC_DUAL_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "account.sync.dual.write";
-  public static final String CONTAINER_SYNC_DUAL_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "container.sync.dual.write";
-  public static final String SYNC_READ = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "sync.read";
-
+  public static final String ENABLE_ACCOUNT_SYNC_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.account.sync.write";
+  public static final String ENABLE_CONTAINER_SYNC_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.container.sync.write";
+  public static final String ENABLE_ACCOUNT_SYNC_READ = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.account.sync.read";
+  public static final String ENABLE_CONTAINER_SYNC_READ = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.container.sync.read";
 
 
   /**
@@ -72,27 +72,32 @@ public class CompositeAccountServiceConfig {
   public final String secondaryAccountServiceFactory;
 
   /**
-   * The AccountSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on account sync dual write.
+   * The EnableAccountSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on account sync dual write.
    */
-  @Config(ACCOUNT_SYNC_DUAL_WRITE)
+  @Config(ENABLE_ACCOUNT_SYNC_WRITE)
   @Default("false")
-  public final boolean accountSyncDualWrite;
+  public final boolean enableAccountSyncWrite;
 
   /**
-   * The ContainerSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on container sync dual write.
+   * The EnableContainerSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on container sync dual write.
    */
-  @Config(CONTAINER_SYNC_DUAL_WRITE)
+  @Config(ENABLE_CONTAINER_SYNC_WRITE)
   @Default("false")
-  public final boolean containerSyncDualWrite;
+  public final boolean enableContainerSyncWrite;
 
   /**
-   * The SyncRead is used in {@code CompositeLiAccountService} as the key to turn on sync read.
+   * The EnableAccountSyncRead is used in {@code CompositeLiAccountService} as the key to turn on account sync read.
    */
-  @Config(SYNC_READ)
+  @Config(ENABLE_ACCOUNT_SYNC_READ)
   @Default("false")
-  public final boolean syncRead;
+  public final boolean enableAccountSyncRead;
 
-
+  /**
+   * The EnableContainerSyncRead is used in {@code CompositeLiAccountService} as the key to turn on container sync read.
+   */
+  @Config(ENABLE_CONTAINER_SYNC_READ)
+  @Default("false")
+  public final boolean enableContainerSyncRead;
 
   public CompositeAccountServiceConfig(VerifiableProperties verifiableProperties) {
     consistencyCheckerIntervalMinutes =
@@ -103,8 +108,9 @@ public class CompositeAccountServiceConfig {
         verifiableProperties.getIntInRange(SAMPLING_PERCENTAGE_FOR_GET_CONSISTENCY_CHECK, 50, 0, 100);
     primaryAccountServiceFactory = verifiableProperties.getString(PRIMARY_ACCOUNT_SERVICE_FACTORY);
     secondaryAccountServiceFactory = verifiableProperties.getString(SECONDARY_ACCOUNT_SERVICE_FACTORY);
-    accountSyncDualWrite = verifiableProperties.getBoolean(ACCOUNT_SYNC_DUAL_WRITE, false);
-    containerSyncDualWrite = verifiableProperties.getBoolean(CONTAINER_SYNC_DUAL_WRITE, false);
-    syncRead = verifiableProperties.getBoolean(SYNC_READ, false);
+    enableAccountSyncWrite = verifiableProperties.getBoolean(ENABLE_ACCOUNT_SYNC_WRITE, false);
+    enableContainerSyncWrite = verifiableProperties.getBoolean(ENABLE_CONTAINER_SYNC_WRITE, false);
+    enableAccountSyncRead = verifiableProperties.getBoolean(ENABLE_ACCOUNT_SYNC_READ, false);
+    enableContainerSyncRead = verifiableProperties.getBoolean(ENABLE_CONTAINER_SYNC_READ, false);
   }
 }
