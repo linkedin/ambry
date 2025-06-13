@@ -28,6 +28,11 @@ public class CompositeAccountServiceConfig {
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "primary.account.service.factory";
   public static final String SECONDARY_ACCOUNT_SERVICE_FACTORY =
       COMPOSITE_ACCOUNT_SERVICE_PREFIX + "secondary.account.service.factory";
+  public static final String ENABLE_ACCOUNT_SYNC_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.account.sync.write";
+  public static final String ENABLE_CONTAINER_SYNC_WRITE = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.container.sync.write";
+  public static final String ENABLE_ACCOUNT_SYNC_READ = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.account.sync.read";
+  public static final String ENABLE_CONTAINER_SYNC_READ = COMPOSITE_ACCOUNT_SERVICE_PREFIX + "enable.container.sync.read";
+
 
   /**
    * The time interval in minutes for checking consistency in account data between primary and secondary sources.
@@ -66,6 +71,34 @@ public class CompositeAccountServiceConfig {
   @Default("com.github.ambry.account.MySqlAccountServiceFactory")
   public final String secondaryAccountServiceFactory;
 
+  /**
+   * The EnableAccountSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on account sync dual write.
+   */
+  @Config(ENABLE_ACCOUNT_SYNC_WRITE)
+  @Default("false")
+  public final boolean enableAccountSyncWrite;
+
+  /**
+   * The EnableContainerSyncDualWrite is used in {@code CompositeLiAccountService} as the key to turn on container sync dual write.
+   */
+  @Config(ENABLE_CONTAINER_SYNC_WRITE)
+  @Default("false")
+  public final boolean enableContainerSyncWrite;
+
+  /**
+   * The EnableAccountSyncRead is used in {@code CompositeLiAccountService} as the key to turn on account sync read.
+   */
+  @Config(ENABLE_ACCOUNT_SYNC_READ)
+  @Default("false")
+  public final boolean enableAccountSyncRead;
+
+  /**
+   * The EnableContainerSyncRead is used in {@code CompositeLiAccountService} as the key to turn on container sync read.
+   */
+  @Config(ENABLE_CONTAINER_SYNC_READ)
+  @Default("false")
+  public final boolean enableContainerSyncRead;
+
   public CompositeAccountServiceConfig(VerifiableProperties verifiableProperties) {
     consistencyCheckerIntervalMinutes =
         verifiableProperties.getIntInRange(CONSISTENCY_CHECKER_INTERVAL_MINUTES, 5, 0, Integer.MAX_VALUE);
@@ -75,5 +108,9 @@ public class CompositeAccountServiceConfig {
         verifiableProperties.getIntInRange(SAMPLING_PERCENTAGE_FOR_GET_CONSISTENCY_CHECK, 50, 0, 100);
     primaryAccountServiceFactory = verifiableProperties.getString(PRIMARY_ACCOUNT_SERVICE_FACTORY);
     secondaryAccountServiceFactory = verifiableProperties.getString(SECONDARY_ACCOUNT_SERVICE_FACTORY);
+    enableAccountSyncWrite = verifiableProperties.getBoolean(ENABLE_ACCOUNT_SYNC_WRITE, false);
+    enableContainerSyncWrite = verifiableProperties.getBoolean(ENABLE_CONTAINER_SYNC_WRITE, false);
+    enableAccountSyncRead = verifiableProperties.getBoolean(ENABLE_ACCOUNT_SYNC_READ, false);
+    enableContainerSyncRead = verifiableProperties.getBoolean(ENABLE_CONTAINER_SYNC_READ, false);
   }
 }
