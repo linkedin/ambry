@@ -37,6 +37,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final NamedBlobDb namedBlobDb;
   private static final Logger logger = LoggerFactory.getLogger(NamedBlobsCleanupRunner.class);
   private final AccountService accountService;
+  private final int MaxBatchSize = 1000;
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService) {
     this.router = router;
@@ -81,7 +82,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
           logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
 
           pageIdx++;
-        } while (batchStaleBlobs.size() == 1000);
+        } while (batchStaleBlobs.size() == MaxBatchSize);
       }
     } catch (ExecutionException e) {
       throw new RuntimeException(e);

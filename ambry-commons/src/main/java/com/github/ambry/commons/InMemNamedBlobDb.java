@@ -216,7 +216,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container, int pageIndex) {
     CompletableFuture<List<StaleNamedBlob>> future = new CompletableFuture<>();
     List<StaleNamedBlob> resultList = new ArrayList<>();
-    String containerName = container.getName();  // adjust if your Container has a different getter
+    String containerName = container.getName();
 
     for (String accountName : allRecords.keySet()) {
       Map<String, TreeMap<String, List<NamedBlobRow>>> rowsPerAccount = allRecords.get(accountName);
