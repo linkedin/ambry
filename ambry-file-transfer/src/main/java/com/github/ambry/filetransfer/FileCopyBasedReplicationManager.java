@@ -13,10 +13,8 @@
  */
 package com.github.ambry.filetransfer;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -29,15 +27,13 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
-import com.github.ambry.replica.prioritization.PrioritizationManagerFactory;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.store.FileStore;
-import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.Store;
 import java.io.IOException;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 public class FileCopyBasedReplicationManager {
 
@@ -48,29 +44,30 @@ public class FileCopyBasedReplicationManager {
   private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
   private final ClusterParticipant clusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
+  private final FileCopyMetrics fileCopyMetrics;
   private final FileCopyBasedReplicationScheduler fileCopyBasedReplicationScheduler;
   private final Thread fileCopyBasedReplicationSchedulerThread;
-  private  final NetworkClientFactory networkClientFactory;
+  private final NetworkClientFactory networkClientFactory;
   private final ClusterMap clusterMap;
   private final StoreConfig storeConfig;
   private boolean isRunning = false;
   private final FileCopyHandlerFactory fileCopyHandlerFactory;
 
-  public FileCopyBasedReplicationManager(FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMapConfig clusterMapConfig,
-     StoreManager storeManager, ClusterMap clusterMap,
-      NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, ClusterParticipant clusterParticipant,
+  public FileCopyBasedReplicationManager(FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig,
+      ClusterMapConfig clusterMapConfig, StoreManager storeManager, ClusterMap clusterMap,
+      NetworkClientFactory networkClientFactory, FileCopyMetrics fileCopyMetrics, ClusterParticipant clusterParticipant,
       FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory,
       FileCopyHandlerFactory fileCopyHandlerFactory, PrioritizationManager prioritizationManager,
-      StoreConfig storeConfig, ReplicaPrioritizationConfig replicaPrioritizationConfig)
-      throws InstantiationException {
+      StoreConfig storeConfig, ReplicaPrioritizationConfig replicaPrioritizationConfig) throws InstantiationException {
 
     Objects.requireNonNull(fileCopyBasedReplicationConfig, "FileCopyBasedReplicationConfig cannot be null");
     Objects.requireNonNull(clusterMapConfig, "ClusterMapConfig cannot be null");
     Objects.requireNonNull(storeManager, "StoreManager cannot be null");
     Objects.requireNonNull(clusterMap, "ClusterMap cannot be null");
     Objects.requireNonNull(networkClientFactory, "NetworkClientFactory cannot be null");
-    Objects.requireNonNull(metricRegistry, "MetricRegistry cannot be null");
-    Objects.requireNonNull(fileCopyBasedReplicationSchedulerFactory, "FileCopyBasedReplicationSchedulerFactory cannot be null");
+    Objects.requireNonNull(fileCopyMetrics, "FileCopyMetrics cannot be null");
+    Objects.requireNonNull(fileCopyBasedReplicationSchedulerFactory,
+        "FileCopyBasedReplicationSchedulerFactory cannot be null");
     Objects.requireNonNull(prioritizationManager, "PrioritizationManager cannot be null");
     Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
     Objects.requireNonNull(fileCopyHandlerFactory, "FileCopyHandlerFactory cannot be null");
@@ -92,9 +89,11 @@ public class FileCopyBasedReplicationManager {
     this.replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
 
     this.prioritizationManager = prioritizationManager;
-    this.fileCopyBasedReplicationScheduler = fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
+    this.fileCopyMetrics = fileCopyMetrics;
+    this.fileCopyBasedReplicationScheduler =
+        fileCopyBasedReplicationSchedulerFactory.getFileCopyBasedReplicationScheduler();
     this.fileCopyBasedReplicationSchedulerThread = new Thread(fileCopyBasedReplicationScheduler);
-    if(!prioritizationManager.isRunning()) {
+    if (!prioritizationManager.isRunning()) {
       throw new InstantiationException("File Copy cannot run when Prioritization Manager is not running");
     }
 
@@ -122,55 +121,71 @@ public class FileCopyBasedReplicationManager {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-      /**
-       * If the store is already started or is not initialized, then we should not do file copy again.
-       * We should skip file copy and just return.
-       * This scenario will occur when the server is restarted and the partition was already registered with the node.
-       * The restarted automatically triggers the staging directory clean up and removes any residual incomplete copied files from the previous File copy run.
-       */
-      Store store = storeManager.getInitializedStore(storeManager.getReplica(partitionName).getPartitionId());
+      boolean initiatingFileCopy = false;
+      try {
+        fileCopyMetrics.incrementPartitionInFileCopyPath();
+        /**
+         * If the store is already started or is not initialized, then we should not do file copy again.
+         * We should skip file copy and just return.
+         * This scenario will occur when the server is restarted and the partition was already registered with the node.
+         * The restarted automatically triggers the staging directory clean up and removes any residual incomplete copied files from the previous File copy run.
+         */
+        Store store = storeManager.getInitializedStore(storeManager.getReplica(partitionName).getPartitionId());
 
-      if(store == null){
-        logger.error("Store for Partition {} is null. Ignoring state change", partitionName);
-        return;
-      }
+        if (store == null) {
+          logger.error("Store for Partition {} is null. Ignoring state change", partitionName);
+          return;
+        }
 
-      if(store.isStarted()){
-        logger.info("Store for Partition {} is already started. Ignoring state change", partitionName);
-        return;
-      }
+        if (store.isStarted()) {
+          logger.info("Store for Partition {} is already started. Ignoring state change", partitionName);
+          return;
+        }
 
-      if(!isRunning){
-        logger.error("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}", partitionName);
-        throw new StateTransitionException("FileCopyBasedReplicationManager is not running. Ignoring state "
-            + "change for partition: " + partitionName, StateTransitionException.
-            TransitionErrorCode.FileCopyBasedReplicationManagerNotRunning);
-      }
+        if (!isRunning) {
+          logger.error("FileCopyBasedReplicationManager is not running. Ignoring state change for partition: {}",
+              partitionName);
+          throw new StateTransitionException(
+              "FileCopyBasedReplicationManager is not running. Ignoring state " + "change for partition: "
+                  + partitionName,
+              StateTransitionException.TransitionErrorCode.FileCopyBasedReplicationManagerNotRunning);
+        }
 
-      ReplicaId replicaId = storeManager.getReplica(partitionName);
+        ReplicaId replicaId = storeManager.getReplica(partitionName);
 
-      if (replicaId == null) {
-        // Replica set up should have succeeded before this state transition.
-        logger.error("Replica setup for partition {} failed", partitionName);
-        throw new StateTransitionException("Replica setup for partition " + partitionName + " failed",
+        if (replicaId == null) {
+          // Replica set up should have succeeded before this state transition.
+          logger.error("Replica setup for partition {} failed", partitionName);
+          throw new StateTransitionException("Replica setup for partition " + partitionName + " failed",
               StateTransitionException.TransitionErrorCode.ReplicaSetUpFailure);
+        }
+
+        /**
+         * If the file copy was already completed, then no need to do it again.
+         */
+        if (storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName)) {
+          logger.info("File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
+          return;
+        }
+
+        logger.info("Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}",
+            replicaId.getPartitionId().toPathString());
+        initiatingFileCopy = true;
+        replicaSyncUpManager.initiateFileCopy(replicaId);
+
+        logger.info("Adding Replica to Prioritization Manager For Replica: {}",
+            replicaId.getPartitionId().toPathString());
+        prioritizationManager.addReplica(replicaId);
+      } finally {
+        fileCopyMetrics.decrementPartitionInFileCopyPath();
+        if (initiatingFileCopy) {
+          fileCopyMetrics.incrementFileCopyInitiated();
+        } else {
+          fileCopyMetrics.incrementFileCopySkipped();
+        }
       }
-
-      /**
-       * If the file copy was already completed, then no need to do it again.
-       */
-      if(storeManager.isFileExists(replicaId.getPartitionId(), storeConfig.storeFileCopyCompletedFileName)){
-        logger.info("File Copy Was Completed For Replica: " + replicaId.getPartitionId().toPathString());
-        return;
-      }
-
-      logger.info("Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}", replicaId.getPartitionId().toPathString());
-      replicaSyncUpManager.initiateFileCopy(replicaId);
-
-      logger.info("Adding Replica to Prioritization Manager For Replica: {}", replicaId.getPartitionId().toPathString());
-      prioritizationManager.addReplica(replicaId);
-
     }
+
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
 

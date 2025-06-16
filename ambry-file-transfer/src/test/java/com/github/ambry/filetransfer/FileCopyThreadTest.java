@@ -28,14 +28,16 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+
 public class FileCopyThreadTest {
 
   public ClusterMap clusterMap;
+  public FileCopyMetrics fileCopyMetrics;
+
   @Before
   public void setUp() throws IOException {
-    clusterMap = new MockClusterMap(false, true, 1,
-        10, 3, false,
-        false, null);
+    clusterMap = new MockClusterMap(false, true, 1, 10, 3, false, false, null);
+    fileCopyMetrics = new FileCopyMetrics(clusterMap.getMetricRegistry());
   }
 
   /**
@@ -83,7 +85,7 @@ public class FileCopyThreadTest {
     assertEquals(1, successFailCount.get("fail").intValue());
   }
 
-  private static Thread getThread(Map<String, Integer> successFailCount, FileCopyHandler fileCopyHandler) {
+  private Thread getThread(Map<String, Integer> successFailCount, FileCopyHandler fileCopyHandler) {
     FileCopyStatusListener fileCopyStatusListener = new FileCopyStatusListener() {
       @Override
       public void onFileCopySuccess() {
@@ -94,14 +96,12 @@ public class FileCopyThreadTest {
       public ReplicaId getReplicaId() {
         MockClusterMap mockClusterMap = null;
         try {
-          mockClusterMap = new MockClusterMap(false, true, 1,
-              10, 3, false,
-              false, null);
+          mockClusterMap = new MockClusterMap(false, true, 1, 10, 3, false, false, null);
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
-        MockPartitionId partitionId = new MockPartitionId(1L, mockClusterMap.DEFAULT_PARTITION_CLASS,
-            mockClusterMap.getDataNodes(), 0);
+        MockPartitionId partitionId =
+            new MockPartitionId(1L, mockClusterMap.DEFAULT_PARTITION_CLASS, mockClusterMap.getDataNodes(), 0);
         return partitionId.getReplicaIds().get(0);
       }
 
@@ -111,7 +111,7 @@ public class FileCopyThreadTest {
       }
     };
 
-    FileCopyThread fileCopyThread = new FileCopyThread(fileCopyHandler, fileCopyStatusListener);
+    FileCopyThread fileCopyThread = new FileCopyThread(fileCopyHandler, fileCopyStatusListener, fileCopyMetrics);
     Thread fileCopyThreadThread = new Thread(fileCopyThread);
     return fileCopyThreadThread;
   }
