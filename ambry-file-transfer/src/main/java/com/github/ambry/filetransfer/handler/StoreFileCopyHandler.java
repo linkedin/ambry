@@ -44,6 +44,7 @@ import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
@@ -387,13 +388,24 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
     }
     int rangeSizeInBytes = fileCopyHandlerDataVerificationRangeSizeInMb * 1024 * 1024; // Convert MB to bytes
-    int totalRanges = (int) Math.ceil((double) fileSize / rangeSizeInBytes);
+    int totalChunks = (int) Math.ceil((double) fileSize / rangeSizeInBytes);
+    int rangeCount = Math.min(totalChunks, fileCopyHandlerDataVerificationRangesCount);
 
-    int rangeCount = Math.min(totalRanges, fileCopyHandlerDataVerificationRangesCount);
+    // Generate all possible chunk indices [0, totalChunks)
+    List<Integer> chunkIndices = new ArrayList<>();
+    for (int i = 0; i < totalChunks; i++) {
+      chunkIndices.add(i);
+    }
+    // Shuffle and pick the first `rangeCount` unique chunks
+    Collections.shuffle(chunkIndices);
+    List<Integer> selectedChunks = chunkIndices.subList(0, rangeCount);
+    // keep them sorted for better readability
+    Collections.sort(selectedChunks);
+
     List<Pair<Integer, Integer>> ranges = new ArrayList<>(rangeCount);
-    for (int i = 0; i < rangeCount; i++) {
-      int start = i * rangeSizeInBytes;
-      int end = Math.min(start + rangeSizeInBytes - 1, fileSize.intValue() - 1);
+    for (int chunkIndex : selectedChunks) {
+      int start = chunkIndex * rangeSizeInBytes;
+      int end = (int) Math.min(start + rangeSizeInBytes - 1, fileSize - 1);
       ranges.add(new Pair<>(start, end));
     }
     return ranges;
