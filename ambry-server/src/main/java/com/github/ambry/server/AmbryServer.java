@@ -59,6 +59,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.filetransfer.FileCopyBasedReplicationManager;
 import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactory;
 import com.github.ambry.filetransfer.FileCopyBasedReplicationSchedulerFactoryImpl;
+import com.github.ambry.filetransfer.FileCopyMetrics;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.filetransfer.handler.StoreFileCopyHandlerFactory;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
@@ -422,20 +423,24 @@ public class AmbryServer {
                 skipPredicate);
         replicationManager.start();
 
-        if(serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
+        if (serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
+          FileCopyMetrics fileCopyMetrics = new FileCopyMetrics(registry);
           FileCopyHandlerFactory fileCopyHandlerFactory =
               new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap,
-                  fileCopyBasedReplicationConfig, storeConfig);
+                  fileCopyBasedReplicationConfig, storeConfig, fileCopyMetrics);
 
-          PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
-          prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(replicaPrioritizationConfig.replicaPrioritizationStrategy);
+          PrioritizationManagerFactory prioritizationManagerFactory =
+              new FileBasedReplicationPrioritizationManagerFactory();
+          prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(
+              replicaPrioritizationConfig.replicaPrioritizationStrategy);
           prioritizationManager.start();
           FileCopyBasedReplicationSchedulerFactory fileCopyBasedReplicationSchedulerFactory =
               new FileCopyBasedReplicationSchedulerFactoryImpl(fileCopyHandlerFactory, fileCopyBasedReplicationConfig,
-                  clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant);
+                  clusterMap, prioritizationManager, storageManager, storeConfig, nodeId, clusterParticipant,
+                  fileCopyMetrics);
           fileCopyBasedReplicationManager =
               new FileCopyBasedReplicationManager(fileCopyBasedReplicationConfig, clusterMapConfig, storageManager,
-                  clusterMap, networkClientFactory, new MetricRegistry(), clusterParticipant,
+                  clusterMap, networkClientFactory, fileCopyMetrics, clusterParticipant,
                   fileCopyBasedReplicationSchedulerFactory, fileCopyHandlerFactory, prioritizationManager, storeConfig,
                   replicaPrioritizationConfig);
           fileCopyBasedReplicationManager.start();

@@ -38,12 +38,15 @@ public class FileCopyBasedReplicationSchedulerFactoryImpl implements FileCopyBas
   private final StoreConfig storeConfig;
   private final DataNodeId dataNodeId;
   private final ReplicaSyncUpManager replicaSyncUpManager;
+  private final FileCopyMetrics fileCopyMetrics;
 
   public FileCopyBasedReplicationSchedulerFactoryImpl(FileCopyHandlerFactory fileCopyHandlerFactory,
       FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMap clusterMap,
-      PrioritizationManager prioritizationManager, StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId, ClusterParticipant clusterParticipant) {
+      PrioritizationManager prioritizationManager, StoreManager storeManager, StoreConfig storeConfig,
+      DataNodeId dataNodeId, ClusterParticipant clusterParticipant, FileCopyMetrics fileCopyMetrics) {
 
     Objects.requireNonNull(clusterParticipant, "ClusterParticipant cannot be null");
+    Objects.requireNonNull(fileCopyMetrics, "FileCopyMetrics cannot be null");
 
     this.fileCopyHandlerFactory = fileCopyHandlerFactory;
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
@@ -52,12 +55,13 @@ public class FileCopyBasedReplicationSchedulerFactoryImpl implements FileCopyBas
     this.storeManager = storeManager;
     this.storeConfig = storeConfig;
     this.dataNodeId = dataNodeId;
+    this.fileCopyMetrics = fileCopyMetrics;
     this.replicaSyncUpManager = clusterParticipant.getReplicaSyncUpManager();
   }
 
   @Override
   public FileCopyBasedReplicationScheduler getFileCopyBasedReplicationScheduler() {
     return new FileCopyBasedReplicationSchedulerImpl(fileCopyHandlerFactory, fileCopyBasedReplicationConfig, clusterMap,
-        prioritizationManager, replicaSyncUpManager, storeManager, storeConfig, dataNodeId);
+        prioritizationManager, replicaSyncUpManager, storeManager, storeConfig, dataNodeId, fileCopyMetrics);
   }
 }
