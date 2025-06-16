@@ -22,6 +22,7 @@ import java.util.Objects;
  * Represents a metadata record in a {@link NamedBlobDb} implementation.
  */
 public class NamedBlobRecord {
+  public static final long UNINITIALIZED_VERSION = 0L;
   private final String accountName;
   private final String containerName;
   private final String blobName;

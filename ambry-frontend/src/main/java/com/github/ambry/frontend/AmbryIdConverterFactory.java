@@ -207,7 +207,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
           // Please note that the modified_ts column in DB will be auto-populated by the DB server.
           NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), blobId, expirationTimeMs, 0, blobProperties.getBlobSize());
+              namedBlobPath.getBlobName(), blobId, expirationTimeMs, NamedBlobRecord.UNINITIALIZED_VERSION,
+              blobProperties.getBlobSize());
           NamedBlobState state = NamedBlobState.READY;
           if (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
             // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback

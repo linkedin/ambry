@@ -15,10 +15,6 @@
 
 package com.github.ambry.named;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -72,11 +68,11 @@ import org.slf4j.LoggerFactory;
  */
 class MySqlNamedBlobDb implements NamedBlobDb {
   private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
+  private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
+  private static final int VERSION_BASE = 100000;
 
   private final Time time;
-  private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
   private static final String MULTI_VERSION_PLACE_HOLDER = "MULTI_VERSION_PLACE_HOLDER";
-  private static final int VERSION_BASE = 100000;
   // table name
   private static final String NAMED_BLOBS_V2 = "named_blobs_v2";
   // column names
@@ -226,7 +222,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private final Metrics metricsRecoder;
 
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
-      String localDatacenter, MetricRegistry metricRegistry, Time time) {
+      String localDatacenter, Metrics metricRecorder, Time time) {
     this.accountService = accountService;
     this.config = config;
     this.LIST_WITH_PREFIX_SQL = getListWithPrefixSQLStatement(config);
@@ -242,13 +238,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                 dataSourceFactory.getDataSource(dbEndpoint),
                 localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
-    this.metricsRecoder = new MySqlNamedBlobDb.Metrics(metricRegistry);
+    this.metricsRecoder = metricRecorder;
     this.time = time;
   }
 
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
-      String localDatacenter, MetricRegistry metricRegistry) {
-    this(accountService, config, dataSourceFactory, localDatacenter, metricRegistry, SystemTime.getInstance());
+      String localDatacenter, Metrics metricRecorder) {
+    this(accountService, config, dataSourceFactory, localDatacenter, metricRecorder, SystemTime.getInstance());
   }
 
   private String getListWithPrefixSQLStatement(MySqlNamedBlobDbConfig config) {
@@ -329,90 +325,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public void close() throws IOException {
     this.transactionExecutors.values().forEach(TransactionExecutor::close);
-  }
-
-  private static class Metrics {
-    public final Counter namedDataNotFoundGetCount;
-    public final Counter namedDataErrorGetCount;
-    public final Counter namedDataInconsistentGetCount;
-
-    public final Counter namedDataInconsistentListCount;
-
-    public final Counter namedDataNotFoundDeleteCount;
-    public final Counter namedDataErrorDeleteCount;
-    public final Counter namedDataInconsistentDeleteCount;
-
-    public final Counter namedDataErrorPutCount;
-
-    public final Counter namedTtlupdateErrorCount;
-
-    public final Histogram namedBlobGetTimeInMs;
-    public final Histogram namedBlobListTimeInMs;
-    public final Histogram namedBlobPutTimeInMs;
-    public final Histogram namedBlobDeleteTimeInMs;
-
-    public final Histogram namedBlobPullStaleTimeInMs;
-    public final Histogram namedBlobCleanupTimeInMs;
-
-    public final Histogram namedTtlupdateTimeInMs;
-
-    public final Meter namedBlobGetRate;
-    public final Meter namedBlobListRate;
-    public final Meter namedBlobDeleteRate;
-    public final Meter namedBlobInsertRate;
-    public final Meter namedBlobUpdateRate;
-
-    /**
-     * Constructor to create the Metrics.
-     * @param metricRegistry The {@link MetricRegistry}.
-     */
-    public Metrics(MetricRegistry metricRegistry) {
-      namedDataNotFoundGetCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundGetCount"));
-      namedDataErrorGetCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorGetCount"));
-      namedDataInconsistentGetCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentGetCount"));
-
-      namedDataInconsistentListCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentListCount"));
-
-      namedDataNotFoundDeleteCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundDeleteCount"));
-      namedDataErrorDeleteCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorDeleteCount"));
-      namedDataInconsistentDeleteCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentDeleteCount"));
-
-      namedDataErrorPutCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorPutCount"));
-
-      namedTtlupdateErrorCount =
-          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateErrorCount"));
-
-      namedBlobGetTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetTimeInMs"));
-      namedBlobListTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobListTimeInMs"));
-      namedBlobPutTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPutTimeInMs"));
-      namedBlobDeleteTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDeleteTimeInMs"));
-
-      namedBlobPullStaleTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPullStaleTimeInMs"));
-      namedBlobCleanupTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobCleanupTimeInMs"));
-
-      namedTtlupdateTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateTimeInMs"));
-
-      namedBlobGetRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetRate"));
-      namedBlobListRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobListRate"));
-      namedBlobDeleteRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDeleteRate"));
-      namedBlobInsertRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPutRate"));
-      namedBlobUpdateRate = metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobUpdateRate"));
-    }
   }
 
   @Override
@@ -843,12 +755,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } else {
         statement.setTimestamp(5, null);
       }
-      final long newVersion = buildVersion();
-      updatedRecord = new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-          record.getBlobId(), record.getExpirationTimeMs(), newVersion);
+      final long newVersion =
+          record.getVersion() == NamedBlobRecord.UNINITIALIZED_VERSION ? buildVersion(this.time) : record.getVersion();
       statement.setLong(6, newVersion);
       statement.setInt(7, state.ordinal());
       statement.setLong(8, record.getBlobSize());
+      updatedRecord = new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+          record.getBlobId(), record.getExpirationTimeMs(), newVersion);
       query = statement.toString();
       logger.debug("Putting blob name in MySql. Query {}", query);
       metricsRecoder.namedBlobInsertRate.mark();
@@ -1034,8 +947,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Build the version for Named Blob row based on timestamp and uuid postfix.
    * @return a long number whose rightmost 5 digits are uuid postfix, and the remaining digits are current timestamp
    */
-  private long buildVersion() {
-    long currentTime = this.time.milliseconds();
+  static long buildVersion(Time time) {
+    long currentTime = time.milliseconds();
     UUID uuid = UUID.randomUUID();
     return currentTime * VERSION_BASE + Long.parseLong(uuid.toString().split("-")[0], 16) % VERSION_BASE;
   }

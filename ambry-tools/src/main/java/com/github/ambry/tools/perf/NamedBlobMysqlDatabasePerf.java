@@ -225,7 +225,8 @@ public class NamedBlobMysqlDatabasePerf {
     // Mock an account service
     AccountService accountService = createInMemoryAccountService();
     MySqlNamedBlobDbFactory factory =
-        new MySqlNamedBlobDbFactory(new VerifiableProperties(newProperties), registry, accountService, SystemTime.getInstance());
+        new MySqlNamedBlobDbFactory(new VerifiableProperties(newProperties), registry, accountService,
+            SystemTime.getInstance(), "");
     DataSource dataSource = factory.buildDataSource(dbEndpoint);
     NamedBlobDb namedBlobDb = factory.getNamedBlobDb();
 
