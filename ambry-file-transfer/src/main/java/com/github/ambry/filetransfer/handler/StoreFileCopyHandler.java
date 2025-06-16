@@ -233,9 +233,13 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       if (metadataResponse != null) {
         metadataResponse.release();
       }
-      int totalTimeInSec = (int) ((System.currentTimeMillis() - startTimeInMs) / 1000);
-      if (totalTimeInSec != 0) {
-        fileCopyMetrics.updateFileCopyAverageSpeedPerPartition(totalSizeDownloadedInBytes.get() / totalTimeInSec);
+      try {
+        int totalTimeInSec = (int) ((System.currentTimeMillis() - startTimeInMs) / 1000);
+        if (totalTimeInSec != 0) {
+          fileCopyMetrics.updateFileCopyAverageSpeedPerPartition(totalSizeDownloadedInBytes.get() / totalTimeInSec);
+        }
+      } catch (Exception e) {
+        logger.error("Encountered exception while updating metric", e);
       }
     }
   }

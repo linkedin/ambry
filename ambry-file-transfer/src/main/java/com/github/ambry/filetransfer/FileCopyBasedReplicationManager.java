@@ -170,12 +170,12 @@ public class FileCopyBasedReplicationManager {
 
         logger.info("Initiated File Copy Wait On ReplicaSyncUpManager for Replica: {}",
             replicaId.getPartitionId().toPathString());
+        initiatingFileCopy = true;
         replicaSyncUpManager.initiateFileCopy(replicaId);
 
         logger.info("Adding Replica to Prioritization Manager For Replica: {}",
             replicaId.getPartitionId().toPathString());
         prioritizationManager.addReplica(replicaId);
-        initiatingFileCopy = true;
       } finally {
         fileCopyMetrics.decrementPartitionInFileCopyPath();
         if (initiatingFileCopy) {
