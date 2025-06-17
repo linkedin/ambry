@@ -25,7 +25,10 @@ import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 
-
+/**
+ * Request to verify the data integrity of a file copy operation by checking specific byte ranges in a log segment.
+ * This request is used to ensure that the copied data matches the expected data in the source log segment.
+ */
 public class FileCopyDataVerificationRequest extends RequestOrResponse {
 
   // The Partition in which the requested log segment resides
@@ -62,6 +65,13 @@ public class FileCopyDataVerificationRequest extends RequestOrResponse {
     this.ranges = Objects.requireNonNull(ranges, "ranges must not be null");
   }
 
+  /**
+   * Reads a {@link FileCopyDataVerificationRequest} from the provided {@link DataInputStream}.
+   * @param stream the input stream to read from.
+   * @param clusterMap the cluster map to resolve partition IDs.
+   * @return a {@link FileCopyDataVerificationRequest} object.
+   * @throws IOException if an I/O error occurs while reading from the stream.
+   */
   public static FileCopyDataVerificationRequest readFrom(@Nonnull DataInputStream stream, @Nonnull ClusterMap clusterMap)
       throws IOException {
     Objects.requireNonNull(stream, "stream must not be null");
@@ -98,6 +108,9 @@ public class FileCopyDataVerificationRequest extends RequestOrResponse {
         Integer.BYTES + ((long) ranges.size() * Long.BYTES * 2); // each range has two longs (start and end);
   }
 
+  /**
+   * Prepares the buffer to be sent over the network.
+   */
   @Override
   protected void prepareBuffer() {
     super.prepareBuffer();
@@ -119,14 +132,26 @@ public class FileCopyDataVerificationRequest extends RequestOrResponse {
     }
   }
 
+  /**
+   * Get the partition ID of the log segment to verify.
+   * @return the partition ID.
+   */
   public PartitionId getPartitionId() {
     return partitionId;
   }
 
+  /**
+   * Get the file name of the log segment to verify.
+   * @return the file name.
+   */
   public String getFileName() {
     return fileName;
   }
 
+  /**
+   * Get the list of byte ranges to verify.
+   * @return a list of byte ranges, each represented as a pair of start and end offsets.
+   */
   public List<Pair<Integer, Integer>> getRanges() {
     return new ArrayList<>(ranges);
   }

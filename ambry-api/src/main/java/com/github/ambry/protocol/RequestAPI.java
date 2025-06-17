@@ -133,5 +133,12 @@ public interface RequestAPI {
    */
   void handleFileCopyGetChunkRequest(NetworkRequest request) throws InterruptedException, IOException;
 
+  /**
+   * Handles a request to verify the data copied during a file copy operation.
+   * This is typically used to ensure that the data integrity is maintained after a file copy.
+   * @param request The request that contains the necessary information for data verification.
+   * @throws InterruptedException if request processing is interrupted.
+   * @throws IOException if there are I/O errors carrying out the required operation.
+   */
   void handleFileCopyDataVerificationRequest(NetworkRequest request) throws InterruptedException, IOException;
 }

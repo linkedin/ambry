@@ -79,7 +79,9 @@ public class FileCopyHandlerException extends RuntimeException {
      * Indicates that FileCopyHandler encountered an error while making DataVerification Api request.
      */
     FileCopyHandlerDataVerificationApiError,
-
+    /**
+     * Indicates that FileCopyHandler encountered an error while verifying data.
+     */
     FileCopyHandlerDataVerificationError,
     /**
      * Indicates that FileCopyHandler encountered an error while allocating file from Disk Space Allocator.

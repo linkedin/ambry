@@ -252,6 +252,9 @@ public class AmbryRequests implements RequestAPI {
         case FileCopyGetChunkRequest:
           handleFileCopyGetChunkRequest(networkRequest);
           break;
+        case FileCopyDataVerificationRequest:
+          handleFileCopyDataVerificationRequest(networkRequest);
+          break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
@@ -1883,6 +1886,9 @@ public class AmbryRequests implements RequestAPI {
             null, null, totalTimeSpent));
   }
 
+  /**
+   * Handler for FileCopyDataVerificationRequest
+   */
   @Override
   public void handleFileCopyDataVerificationRequest(NetworkRequest networkRequest) throws InterruptedException, IOException {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - networkRequest.getStartTimeInMs();
@@ -1928,7 +1934,7 @@ public class AmbryRequests implements RequestAPI {
 
       RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
       if (null != request) {
-        //request.accept(metricsUpdater);
+        request.accept(metricsUpdater);
       }
     }
     requestResponseChannel.sendResponse(response, networkRequest,
@@ -2338,6 +2344,20 @@ public class AmbryRequests implements RequestAPI {
       requestTotalTimeHistogram = metrics.fileCopyGetChunkTotalTimeInMs;
       if (isRequestDropped) {
         metrics.fileCopyGetChunkDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(FileCopyDataVerificationRequest fileCopyDataVerificationRequest) {
+      metrics.fileCopyDataVerificationRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.fileCopyDataVerificationRequestRate.mark();
+      metrics.fileCopyDataVerificationProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.fileCopyGetChunkResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.fileCopyGetChunkSendTimeInMs;
+      requestTotalTimeHistogram = metrics.fileCopyGetChunkTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.fileCopyDataVerificationDroppedRate.mark();
         metrics.totalRequestDroppedRate.mark();
       }
     }

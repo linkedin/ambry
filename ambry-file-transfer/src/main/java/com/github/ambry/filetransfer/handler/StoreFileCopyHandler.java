@@ -38,9 +38,7 @@ import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -267,6 +265,12 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     }
   }
 
+  /**
+   * Get the file copy data verification response.
+   * @param fileCopyInfo the file copy info of type {@link FileCopyInfo}
+   * @throws FileCopyHandlerException if the handler is not running
+   * @return the data verification response of type {@link FileCopyDataVerificationResponse}
+   */
   FileCopyDataVerificationResponse getFileCopyDataVerificationResponse(FileCopyInfo fileCopyInfo) {
     validateIfStoreFileCopyHandlerIsRunning();
     String operationName = "GetDataVerificationWorkflow" + "[Partition=" + fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
@@ -377,19 +381,24 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     return chunkResponse;
   }
 
-  private List<Pair<Integer, Integer>> getChecksumRanges(Long fileSize, int fileCopyHandlerDataVerificationRangesCount,
-      int fileCopyHandlerDataVerificationRangeSizeInMb) {
+  /**
+   * Create a list of ranges for checksum verification.
+   * @param fileSize the size of the file in bytes
+   * @param rangesCount the number of ranges to create
+   * @param rangeSizeInMb the size of each range in MB
+   */
+  private List<Pair<Integer, Integer>> getChecksumRanges(Long fileSize, int rangesCount, int rangeSizeInMb) {
     if (fileSize <= 0) {
       throw new FileCopyHandlerException("File size must be greater than 0",
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
     }
-    if (fileCopyHandlerDataVerificationRangesCount <= 0 || fileCopyHandlerDataVerificationRangeSizeInMb <= 0) {
+    if (rangesCount <= 0 || rangeSizeInMb <= 0) {
       throw new FileCopyHandlerException("File copy handler data verification ranges count and size must be greater than 0",
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
     }
-    int rangeSizeInBytes = fileCopyHandlerDataVerificationRangeSizeInMb * 1024 * 1024; // Convert MB to bytes
+    int rangeSizeInBytes = rangeSizeInMb * 1024 * 1024; // Convert MB to bytes
     int totalChunks = (int) Math.ceil((double) fileSize / rangeSizeInBytes);
-    int rangeCount = Math.min(totalChunks, fileCopyHandlerDataVerificationRangesCount);
+    int rangeCount = Math.min(totalChunks, rangesCount);
 
     // Generate all possible chunk indices [0, totalChunks)
     List<Integer> chunkIndices = new ArrayList<>();
@@ -399,7 +408,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     // Shuffle and pick the first `rangeCount` unique chunks
     Collections.shuffle(chunkIndices);
     List<Integer> selectedChunks = chunkIndices.subList(0, rangeCount);
-    // keep them sorted for better readability
+    // keep them sorted in ascending order for better readability
     Collections.sort(selectedChunks);
 
     List<Pair<Integer, Integer>> ranges = new ArrayList<>(rangeCount);

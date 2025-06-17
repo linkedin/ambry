@@ -557,13 +557,19 @@ public class FileStore implements PartitionFileStore {
     return segmentSize;
   }
 
-  public List<String> getChecksumsForRanges(PartitionId partitionId, String fileName, List<Pair<Integer, Integer>> ranges)
-      throws StoreException {
+  /**
+   * Calculates checksums for specified byte ranges in a file.
+   * @param partitionId The partition ID for which the file belongs
+   * @param fileName The name of the file to read
+   * @param ranges List of byte ranges for which checksums are to be calculated
+   * @return List of checksums for each specified range
+   * @throws StoreException if there are issues reading the file or calculating checksums
+   */
+  public List<String> getChecksumsForRanges(@Nonnull PartitionId partitionId, String fileName, @Nonnull List<Pair<Integer, Integer>> ranges) throws StoreException {
     validateIfFileStoreIsRunning();
 
     List<String> checksums = new ArrayList<>();
     File file = validateAndGetFile(fileName);
-
     try {
       for (Pair<Integer, Integer> range : ranges) {
         if (range.getFirst() < 0 || range.getSecond() < 0 || range.getFirst() > range.getSecond()) {

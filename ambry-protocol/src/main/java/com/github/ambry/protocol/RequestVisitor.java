@@ -61,6 +61,12 @@ public interface RequestVisitor {
   void visit(FileCopyGetChunkRequest fileCopyGetChunkRequest);
 
   /**
+   * Performs any actions related to File Copy data verification request.
+   * @param fileCopyDataVerificationRequest to visit.
+   */
+  void visit(FileCopyDataVerificationRequest fileCopyDataVerificationRequest);
+
+  /**
    * Performs any actions related to Un-delete request.
    * @param undeleteRequest to visit.
    */
