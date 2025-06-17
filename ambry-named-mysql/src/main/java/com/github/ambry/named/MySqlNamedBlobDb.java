@@ -15,6 +15,7 @@
 
 package com.github.ambry.named;
 
+import com.codahale.metrics.Counter;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -340,7 +341,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
       metricsRecoder.namedBlobGetTimeInMs.update(this.time.milliseconds() - startTime);
       return record;
-    }, transactionStateTracker);
+    }, transactionStateTracker, this.metricsRecoder.namedBlobDBGetErrorCount);
   }
 
   @Override
@@ -353,7 +354,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               maxKeys);
       metricsRecoder.namedBlobListTimeInMs.update(this.time.milliseconds() - startTime);
       return recordPage;
-    }, null);
+    }, null, this.metricsRecoder.namedBlobDBListErrorCount);
   }
 
   @Override
@@ -386,7 +387,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
           metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
           return putResult;
-        }, null);
+        }, null, this.metricsRecoder.namedBlobDBInsertErrorCount);
   }
 
   @Override
@@ -398,7 +399,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           PutResult result = apply_ttl_update(record, accountId, containerId, connection);
           metricsRecoder.namedTtlupdateTimeInMs.update(this.time.milliseconds() - startTime);
           return result;
-        }, null);
+        }, null, this.metricsRecoder.namedBlobDBUpdateErrorCount);
   }
 
   @Override
@@ -409,7 +410,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
       metricsRecoder.namedBlobDeleteTimeInMs.update(this.time.milliseconds() - startTime);
       return deleteResult;
-    }, null);
+    }, null, this.metricsRecoder.namedBlobDBDeleteErrorCount);
   }
 
   @Override
@@ -450,7 +451,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * @return a {@link CompletableFuture} that will eventually contain the result of the transaction or an exception.
    */
   private <T> CompletableFuture<T> executeTransactionAsync(String accountName, String containerName, boolean autoCommit,
-      Transaction<T> transaction, TransactionStateTracker transactionStateTracker) {
+      Transaction<T> transaction, TransactionStateTracker transactionStateTracker, Counter dbErrorCounter) {
     CompletableFuture<T> future = new CompletableFuture<>();
     // Look up account and container IDs. This is common logic needed for all types of transactions.
     Account account = accountService.getAccountByName(accountName);
@@ -468,6 +469,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     Callback<T> finalCallback = (result, exception) -> {
       if (exception != null) {
+        if (exception instanceof SQLException) {
+          dbErrorCounter.inc();
+        }
         future.completeExceptionally(exception);
       } else {
         future.complete(result);

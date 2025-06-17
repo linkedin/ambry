@@ -37,6 +37,15 @@ public class Metrics {
   public final Meter namedBlobInsertRate;
   public final Meter namedBlobUpdateRate;
 
+  // This list of DBxxxErrorCount metrics records the error count
+  // when performancing db operations on named blobs. It doesn't include
+  // the error for argument validation, state validation etc.
+  public final Counter namedBlobDBGetErrorCount;
+  public final Counter namedBlobDBListErrorCount;
+  public final Counter namedBlobDBDeleteErrorCount;
+  public final Counter namedBlobDBInsertErrorCount;
+  public final Counter namedBlobDBUpdateErrorCount;
+
   /**
    * Constructor to create the Metrics.
    * @param metricRegistry The {@link MetricRegistry}.
@@ -90,5 +99,16 @@ public class Metrics {
         metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobPutRate"));
     namedBlobUpdateRate =
         metricRegistry.meter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobUpdateRate"));
+
+    namedBlobDBGetErrorCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBGetErrorCount"));
+    namedBlobDBListErrorCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBListErrorCount"));
+    namedBlobDBDeleteErrorCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBDeleteErrorCount"));
+    namedBlobDBInsertErrorCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBInsertErrorCount"));
+    namedBlobDBUpdateErrorCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBUpdateErrorCount"));
   }
 }
