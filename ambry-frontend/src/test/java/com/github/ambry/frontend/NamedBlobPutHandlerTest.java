@@ -653,8 +653,7 @@ public class NamedBlobPutHandlerTest {
   private void initNamedBlobPutHandler(Properties properties) {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    namedBlobPutHandler = new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb,
-        idConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
+    namedBlobPutHandler = new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
         QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
   }
 

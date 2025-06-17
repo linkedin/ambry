@@ -27,7 +27,6 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
@@ -90,8 +89,6 @@ public class NamedBlobPutHandler {
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
   private final SecurityService securityService;
-  private final NamedBlobDb namedBlobDb;
-  private final IdConverter idConverter;
   private final IdSigningService idSigningService;
   private final AccountService accountService;
   private final Router router;
@@ -108,26 +105,22 @@ public class NamedBlobPutHandler {
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
-   * @param securityService the {@link SecurityService} to use.
-   * @param namedBlobDb the {@link NamedBlobDb} to use.
-   * @param idConverter the {@link IdConverter} to use.
-   * @param idSigningService the {@link IdSigningService} to use.
-   * @param router the {@link Router} to use.
+   *
+   * @param securityService             the {@link SecurityService} to use.
+   * @param idSigningService            the {@link IdSigningService} to use.
+   * @param router                      the {@link Router} to use.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
-   * @param frontendConfig the {@link FrontendConfig} to use.
-   * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
-   * @param clusterName the name of the storage cluster that the router communicates with
-   * @param quotaManager The {@link QuotaManager} class to account for quota usage in serving requests.
-   * @param accountService The {@link AccountService} to get the account and container id based on names.
+   * @param frontendConfig              the {@link FrontendConfig} to use.
+   * @param frontendMetrics             {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param clusterName                 the name of the storage cluster that the router communicates with
+   * @param quotaManager                The {@link QuotaManager} class to account for quota usage in serving requests.
+   * @param accountService              The {@link AccountService} to get the account and container id based on names.
    * @param deleteBlobHandler
    */
-  NamedBlobPutHandler(SecurityService securityService, NamedBlobDb namedBlobDb, IdConverter idConverter,
-      IdSigningService idSigningService, Router router, AccountAndContainerInjector accountAndContainerInjector,
+  NamedBlobPutHandler(SecurityService securityService, IdSigningService idSigningService, Router router, AccountAndContainerInjector accountAndContainerInjector,
       FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager,
       AccountService accountService, DeleteBlobHandler deleteBlobHandler) {
     this.securityService = securityService;
-    this.namedBlobDb = namedBlobDb;
-    this.idConverter = idConverter;
     this.idSigningService = idSigningService;
     this.router = router;
     this.accountAndContainerInjector = accountAndContainerInjector;

@@ -633,15 +633,39 @@ public class NonBlockingRouter implements Router {
   /**
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
-   * 1.Named Blob ttl update (RestMethod PUT)
-   * RequestPath = updateTtl, input = /named/* -> Id converter (BlobId = /AAY*, add version)
-   * -> router.ttlUpdate -> RequestPath = updateTtl,input = /AAY* -> Id converter (has version, updateBlobTtlAndStateToReady)
-   * 2.Regular Blob ttl update (RestMethod PUT)
-   * RequestPath = updateTtl, input = /AAY* -> Id converter(Strip Slash And ext) -> router.ttlUpdate -> RequestPath = updateTtl,
-   * input = AAY* -> Id converter(Strip again)
-   * 3.Put/Stitch permanent named blob. (RestMethod PUT)
-   * RequestPath = /named/*, input = null -> Id converter(BlobId = /AAY*, add version) -> skip first idConverter
-   * -> (Strip Slash And ext) router.ttlUpdate -> RequestPath = /named/*, input = AAY* -> Id converter(has version, updateBlobTtlAndStateToReady)
+   * There are 3 primary flows based on blob type and request path:
+   *
+   * 1. Named Blob TTL Update (RestMethod: PUT)
+   *    - RequestPath: updateTtl
+   *    - Input: /named/*
+   *    - Flow:
+   *        -> IdConverter: generates BlobId = /AAY*, adds version
+   *        -> router.ttlUpdate
+   *        -> RequestPath: updateTtl
+   *        -> Input: /AAY*
+   *        -> IdConverter (version present): triggers updateBlobTtlAndStateToReady
+   *
+   * 2. Regular Blob TTL Update (RestMethod: PUT)
+   *    - RequestPath: updateTtl
+   *    - Input: /AAY*
+   *    - Flow:
+   *        -> IdConverter: strips slash and extension
+   *        -> router.ttlUpdate
+   *        -> RequestPath: updateTtl
+   *        -> Input: AAY*
+   *        -> IdConverter: strips again
+   *
+   * 3. Put/Stitch Permanent Named Blob (RestMethod: PUT)
+   *    - RequestPath: /named/*
+   *    - Input: null
+   *    - Flow:
+   *        -> IdConverter: generates BlobId = /AAY*, adds version
+   *        -> (first idConverter is skipped)
+   *        -> Strips slash and extension
+   *        -> router.ttlUpdate
+   *        -> RequestPath: /named/*
+   *        -> Input: AAY*
+   *        -> IdConverter (version present): triggers updateBlobTtlAndStateToReady
    * @param restRequest The {@link RestRequest} of updateBlobTtl
    * @param blobId      The ID of the blob that needs its TTL updated.
    * @param serviceId   The service ID of the service updating the blob. This can be null if unknown.
