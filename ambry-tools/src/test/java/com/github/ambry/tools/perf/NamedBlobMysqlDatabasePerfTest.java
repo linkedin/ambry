@@ -14,6 +14,7 @@
 package com.github.ambry.tools.perf;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import java.util.Collections;
 import java.util.Properties;
@@ -30,11 +31,20 @@ public class NamedBlobMysqlDatabasePerfTest {
     when(accountService.getAllAccounts()).thenReturn(Collections.emptyList());
     NamedBlobDb db = mock(NamedBlobDb.class);
     Properties props = new Properties();
+    props.setProperty("db.datacenter", "datacenter");
+    props.setProperty("db.host", "host");
+    props.setProperty("db.name", "name");
+    props.setProperty("db.user.name", "name");
+    props.setProperty("parallelism", "10");
+    props.setProperty("num.operations", "10");
+    NamedBlobMysqlDatabasePerf.PerfConfig perfConfig =
+        new NamedBlobMysqlDatabasePerf.PerfConfig(new VerifiableProperties(props));
 
     NamedBlobMysqlDatabasePerf.PerformanceTestWorker worker =
         (NamedBlobMysqlDatabasePerf.PerformanceTestWorker) NamedBlobMysqlDatabasePerf.TestType.LIST.getWorkerClass()
-            .getConstructor(int.class, NamedBlobDb.class, AccountService.class, int.class, Properties.class)
-            .newInstance(0, db, accountService, 10, props);
+            .getConstructor(int.class, NamedBlobDb.class, AccountService.class, int.class,
+                NamedBlobMysqlDatabasePerf.PerfConfig.class)
+            .newInstance(0, db, accountService, 10, perfConfig);
     Assert.assertNotNull(worker);
   }
 }
