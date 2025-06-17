@@ -63,7 +63,7 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   public HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
     String url = dbEndpoint.getUrl();
     if (config.enableCertificateBasedAuthentication) {
-      url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig);
+      url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, config.sslMode);
     }
     HikariConfig hikariConfig = new HikariConfig();
     hikariConfig.setJdbcUrl(url);

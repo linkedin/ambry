@@ -13,6 +13,7 @@
  */
 package com.github.ambry.mysql;
 
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.SSLConfig;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,6 +38,7 @@ public class MySqlUtils {
 
   // SSL connection static values
   static final String SSL_SETTING_USE_SSL = "useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2";
+  static final String SSL_SETTING_SSL_MODE = "&sslMode=";
   static final String SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_TYPE = "&clientCertificateKeyStoreType=";
   static final String SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_URL = "&clientCertificateKeyStoreUrl=file:";
   static final String SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_PASSWORD = "&clientCertificateKeyStorePassword=";
@@ -88,10 +90,11 @@ public class MySqlUtils {
    * @param sslConfig The {@link SSLConfig} that contains the ssl settings.
    * @return The new url with ssl settings
    */
-  public static String addSslSettingsToUrl(String url, SSLConfig sslConfig) {
+  public static String addSslSettingsToUrl(String url, SSLConfig sslConfig, MySqlNamedBlobDbConfig.SSLMode sslMode) {
     //@formatter:off
     String delimiter = url.contains("?") ? "&" : "?";
     String sslSuffix = delimiter + SSL_SETTING_USE_SSL
+        + SSL_SETTING_SSL_MODE + sslMode.name()
         + SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_TYPE + sslConfig.sslKeystoreType
         + SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_URL + sslConfig.sslKeystorePath
         + SSL_SETTING_CLIENT_CERTIFICATE_KEY_STORE_PASSWORD + sslConfig.sslKeystorePassword
