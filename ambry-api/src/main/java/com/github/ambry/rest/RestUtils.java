@@ -1606,6 +1606,7 @@ public class RestUtils {
     if (transferTimeInMs > 0) {
       msForThroughputCalculation = transferTimeInMs;
     }
-    return Math.round((double) bytesTransferred / msForThroughputCalculation / 1000.0);
+    double throughputSeconds = (double) msForThroughputCalculation / 1000;
+    return Math.round(bytesTransferred / throughputSeconds);
   }
 }
