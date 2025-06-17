@@ -521,10 +521,6 @@ public class RestUtils {
      * The version for the NamedBlob record in MySQL DB
      */
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
-    /**
-     * The source blob name from renaming
-     */
-    public static final String SOURCE_BLOB_NAME_FROM_RENAMING = KEY_PREFIX + "source-blob-name-from-renaming";
 
     /**
      * Boolean field set to "true" if this is a S3 request.
@@ -913,7 +909,7 @@ public class RestUtils {
     // This request has to be NamedBlob Request, which means it's PUT request and the operation in requestPath is namedBlob.
     try {
       String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
-      return restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+      return blobIdStr != null && restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.UPDATE_TTL) && RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB);
     } catch (RestServiceException e) {
       return false;

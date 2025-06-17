@@ -42,6 +42,7 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SocketNetworkClient;
+import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.repair.MysqlRepairRequestsDb;
@@ -105,6 +106,7 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -122,7 +124,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   protected static MysqlRepairRequestsDb repairDb = null;
   protected static MockTime staticMockTime = new MockTime();
-
   /**
    * Initialize parameters common to all tests.
    * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
@@ -1138,6 +1139,180 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test named blob stitch after we move id converter into router.
+   */
+  @Test
+  public void testStitchedNamedBlob() throws Exception {
+    try {
+      final AtomicInteger stitchInitiated = new AtomicInteger();
+      Properties props = getNonBlockingRouterProperties(localDcName);
+      LoggingNotificationSystem updateTtlTrackingNotificationSystem = new LoggingNotificationSystem() {
+        @Override
+        public void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
+            NotificationBlobType notificationBlobType) {
+          stitchInitiated.incrementAndGet();
+        }
+      };
+      // setup mock idconverter
+      IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
+      IdConverter mockIdConverter = mock(IdConverter.class);
+      when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
+      when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
+        FutureResult<String> futureResult = new FutureResult<>();
+        String blobId = invocation.getArgument(1);
+        Callback<String> callback = invocation.getArgument(3);
+        if (callback != null) {
+          callback.onCompletion(blobId, null);
+        }
+        futureResult.done(blobId, null);
+        return futureResult;
+      });
+
+      setRouterWithIdConverterFactory(props, new MockServerLayout(mockClusterMap), updateTtlTrackingNotificationSystem,
+          mockIdConverterFactory);
+
+      LinkedList<String> blobIds = new LinkedList<>();
+      for (int i = 0; i < 2; i++) {
+        setOperationParams();
+        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload)
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        blobIds.add(blobId);
+      }
+
+      final String ACCOUNT_NAME = "accountName";
+      final String CONTAINER_NAME = "containerName";
+      final String BLOB_NAME = "blobName";
+      setOperationParams();
+      RestRequest request =
+          createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, true);
+
+      String stitchedBlobId = router.stitchBlob(request, putBlobProperties, putUserMetadata, blobIds.stream()
+          .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
+          .collect(Collectors.toList()), null, null, null).get();
+
+      GetBlobResult getBlobResult =
+          router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
+
+      Assert.assertEquals("Blob Size should match", PUT_CONTENT_SIZE * 2,
+          getBlobResult.getBlobInfo().getBlobProperties().getBlobSize());
+
+      when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
+        FutureResult<String> futureResult = new FutureResult<>();
+        Callback<String> callback = invocation.getArgument(3);
+
+        if (callback != null) {
+          callback.onCompletion(stitchedBlobId, null);
+        }
+        futureResult.done(stitchedBlobId, null);
+
+        return futureResult;
+      });
+
+      request =
+          createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, false);
+      router.deleteBlob(request, null, "deleteServiceId", null, null).get();
+    } finally {
+      if (router != null) {
+        router.close();
+        assertClosed();
+        Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+      }
+    }
+  }
+
+
+    /**
+     * Test named blob put and ttl update after we move id converter into router.
+     * @throws Exception
+     */
+  @Test
+  public void testNamedBlobPutAndTtlUpdate() throws Exception {
+    try {
+      maxPutChunkSize = PUT_CONTENT_SIZE;
+      String updateTtlServiceId = "updateTtl-service";
+      final AtomicInteger updateTtlInitiated = new AtomicInteger();
+      final AtomicReference<String> receivedTtlUpdateServiceId = new AtomicReference<>();
+
+      LoggingNotificationSystem updateTtlTrackingNotificationSystem = new LoggingNotificationSystem() {
+        @Override
+        public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, Account account,
+            Container container) {
+          updateTtlInitiated.incrementAndGet();
+          receivedTtlUpdateServiceId.set(serviceId);
+        }
+      };
+
+      final String ACCOUNT_NAME = "accountName";
+      final String CONTAINER_NAME = "containerName";
+      final String BLOB_NAME = "blobName";
+      // setup mock idconverter
+      IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
+      IdConverter mockIdConverter = mock(IdConverter.class);
+      when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
+      when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
+        FutureResult<String> futureResult = new FutureResult<>();
+        String blobId = invocation.getArgument(1);
+        Callback<String> callback = invocation.getArgument(3);
+        if (callback != null) {
+          callback.onCompletion(blobId, null);
+        }
+        futureResult.done(blobId, null);
+        return futureResult;
+      });
+      Properties props = getNonBlockingRouterProperties(localDcName);
+      setRouterWithIdConverterFactory(props, new MockServerLayout(mockClusterMap), updateTtlTrackingNotificationSystem,
+          mockIdConverterFactory);
+      //put blob
+      setOperationParams();
+      RestRequest request =
+          createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, true, false);
+      String blobIdFromRouter =
+          router.putBlob(request, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+              null, null).get();
+      GetBlobResult getBlobResult =
+          router.getBlob(blobIdFromRouter, new GetBlobOptionsBuilder().build(), null, null).get();
+      Assert.assertEquals(getBlobResult.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds(), TTL_SECS);
+
+      when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
+        FutureResult<String> futureResult = new FutureResult<>();
+        Callback<String> callback = invocation.getArgument(3);
+
+        if (callback != null) {
+          callback.onCompletion(blobIdFromRouter, null);
+        }
+        futureResult.done(blobIdFromRouter, null);
+
+        return futureResult;
+      });
+      // ttl update
+      request = createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, true, false, false);
+      router.updateBlobTtl(request, RestUtils.getHeader(request.getArgs(), RestUtils.Headers.BLOB_ID, true),
+          updateTtlServiceId, -1, null, null).get();
+      getBlobResult = router.getBlob(blobIdFromRouter, new GetBlobOptionsBuilder().build(), null, null).get();
+      Assert.assertEquals(getBlobResult.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds(),
+          Utils.Infinite_Time);
+      request = createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME,
+          false, false, false);
+      router.deleteBlob(request, null, "deleteServiceId", null, null).get();
+      long waitStart = SystemTime.getInstance().milliseconds();
+      while (router.getBackgroundOperationsCount() != 0
+          && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
+        Thread.sleep(1000);
+      }
+      Assert.assertEquals("All background operations should be complete ", 0, router.getBackgroundOperationsCount());
+      Assert.assertEquals("The update ttl service ID should match the expected value", updateTtlServiceId,
+          receivedTtlUpdateServiceId.get());
+      Assert.assertEquals(updateTtlInitiated.get(), 1);
+    } finally {
+      if (router != null) {
+        router.close();
+        assertClosed();
+        Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+      }
+    }
+  }
+
+  /**
    * Test to ensure when deleting a named blob, all versions are deleted and all blob ids are deleted.
    * @throws Exception
    */
@@ -1192,13 +1367,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // Create 3 versions of the same named blob
       for (int i = 0; i < NUM_VERSIONS; i++) {
         setOperationParams();
-        RestRequest request = createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME);
+        RestRequest request = createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false,
+            true, false);
         String blobId =
             router.putBlob(request, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
                 null, null).get();
         blobIds.add(blobId);
       }
-      RestRequest request = createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME);
+      RestRequest request = createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME,
+          false, false, false);
       router.deleteBlob(request, null, deleteServiceId, null, null).get();
       long waitStart = SystemTime.getInstance().milliseconds();
       while (router.getBackgroundOperationsCount() != 0
@@ -2641,13 +2818,26 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   private RestRequest createNamedBlobRestRequest(RestMethod method, String accountName, String containerName,
-      String blobName) throws Exception {
+      String blobName, boolean isTtlUpdate, boolean isTemporary, boolean isStitchRequest) throws Exception {
     JSONObject headers = new JSONObject();
-    headers.put(RestUtils.Headers.NAMED_UPSERT, true);
     JSONObject request = new JSONObject();
     request.put(MockRestRequest.REST_METHOD_KEY, method.name());
-    request.put(MockRestRequest.URI_KEY,
-        String.format("/%s/%s/%s/%s", Operations.NAMED_BLOB, accountName, containerName, blobName));
+    if (isTtlUpdate) {
+      headers.put(BLOB_ID,
+          String.format("/%s/%s/%s/%s", Operations.NAMED_BLOB, accountName, containerName, blobName));
+      request.put(MockRestRequest.URI_KEY, Operations.UPDATE_TTL);
+    } else if (isStitchRequest) {
+      headers.put(BLOB_ID,
+          String.format("/%s/%s/%s/%s", Operations.NAMED_BLOB, accountName, containerName, blobName));
+      request.put(MockRestRequest.URI_KEY, Operations.STITCH);
+    } else {
+      if (isTemporary) {
+        headers.put(RestUtils.Headers.TTL, TTL_SECS);
+      }
+      headers.put(RestUtils.Headers.NAMED_UPSERT, true);
+      request.put(MockRestRequest.URI_KEY,
+          String.format("/%s/%s/%s/%s", Operations.NAMED_BLOB, accountName, containerName, blobName));
+    }
     request.put(MockRestRequest.HEADERS_KEY, headers);
     MockRestRequest restRequest = new MockRestRequest(request, null);
     restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,

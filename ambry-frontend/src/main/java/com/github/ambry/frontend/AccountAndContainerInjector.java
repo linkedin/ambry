@@ -128,18 +128,11 @@ public class AccountAndContainerInjector {
   public void injectAccountContainerForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
       throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
-    NamedBlobPath namedBlobPath;
     //For ttl update, the named blob path is defined in RestUtils.Headers.BLOB_ID
     String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, false);
-    if (blobIdStr != null) {
-      if (!RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
-        throw new RestServiceException("Expecting named blob in blob id", RestServiceErrorCode.InvalidArgs);
-      } else {
-        namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
-      }
-    } else {
-      namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
-    }
+    NamedBlobPath namedBlobPath =
+        blobIdStr == null ? NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs())
+            : NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
     String accountName = namedBlobPath.getAccountName();
     Account targetAccount = accountService.getAccountByName(accountName);
     if (targetAccount == null) {

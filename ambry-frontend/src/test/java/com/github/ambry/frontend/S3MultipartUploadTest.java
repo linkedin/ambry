@@ -354,7 +354,7 @@ public class S3MultipartUploadTest {
     IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
     InMemoryRouter router = new InMemoryRouter(verifiableProperties, clusterMap, ambryIdConverterFactory);
     NamedBlobPutHandler namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, injector,
+        new NamedBlobPutHandler(securityService, idSigningService, router, injector,
             frontendConfig, metrics, CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     QuotaManager quotaManager = QuotaTestUtils.createDummyQuotaManager();
     getBlobHandler =

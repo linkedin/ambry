@@ -169,7 +169,7 @@ public class S3PutHandlerTest {
     InMemoryRouter router = new InMemoryRouter(verifiableProperties, clusterMap, ambryIdConverterFactory);
     IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
     NamedBlobPutHandler namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, injector,
+        new NamedBlobPutHandler(securityService, idSigningService, router, injector,
             frontendConfig, metrics, CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     GetBlobHandler getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,

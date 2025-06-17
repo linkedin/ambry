@@ -99,6 +99,7 @@ class TtlUpdateHandler {
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
     private String blobIdStr;
+    private String originalBlobIdStr;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -131,6 +132,7 @@ class TtlUpdateHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessRequestMetrics, result -> {
         blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        originalBlobIdStr = blobIdStr;
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           String datasetVersionPathString = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
           DatasetVersionRecord datasetVersionRecord =
@@ -139,7 +141,7 @@ class TtlUpdateHandler {
             DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(blobIdStr, restRequest.getArgs());
             blobIdStr = datasetVersionRecord.getRenamedPath(datasetVersionPath.getAccountName(),
                 datasetVersionPath.getContainerName());
-            restRequest.setArg(SOURCE_BLOB_NAME_FROM_RENAMING, blobIdStr);
+            restRequest.setArg(RestUtils.Headers.BLOB_ID, blobIdStr);
           }
         }
         if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
@@ -173,6 +175,8 @@ class TtlUpdateHandler {
      */
     private Callback<Void> routerCallback() {
       return buildCallback(metrics.updateBlobTtlRouterMetrics, result -> {
+        //must reset the blobId to the original id (when renaming dataset) before updateTtlForDatasetVersion.
+        restRequest.setArg(RestUtils.Headers.BLOB_ID, originalBlobIdStr);
         if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB) && RestUtils.isDatasetVersionQueryEnabled(
             restRequest.getArgs())) {
           metrics.updateTtlDatasetVersionRate.mark();

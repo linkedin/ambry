@@ -51,7 +51,7 @@ public class CompositeAccountServiceFactory implements AccountServiceFactory {
 
   @Override
   public AccountService getAccountService() {
-    try {TtlUpdateHandler.java
+    try {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a CompositeAccountService");
       CompositeAccountService compositeAccountService =
