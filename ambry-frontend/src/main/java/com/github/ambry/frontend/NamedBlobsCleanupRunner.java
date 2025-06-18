@@ -64,6 +64,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
         String blobName = "\0";
         do {
           staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, blobName).get();
+          batchStaleBlobs = staleBlobsWithLatestBlobName.getStaleBlobs();
           List<StaleNamedBlob> failedResults = new ArrayList<>();
           for (StaleNamedBlob staleBlob : staleBlobsWithLatestBlobName.getStaleBlobs()) {
             try {
@@ -85,8 +86,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
           Set<String> cleanedBlobIds =
               batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
           logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
-
-        } while (batchStaleBlobs.size() == MaxBatchSize);
+        } while (staleBlobsWithLatestBlobName.getLatestBlob() != "DONE");
       }
     } catch (ExecutionException e) {
       throw new RuntimeException(e);

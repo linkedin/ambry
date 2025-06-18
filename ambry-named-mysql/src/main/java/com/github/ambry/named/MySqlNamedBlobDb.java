@@ -524,6 +524,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       List<StaleNamedBlob> staleNamedBlobResults;
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
       List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, blobName);
+      if (potentialStaleNamedBlobResults.isEmpty()) {
+        return new StaleBlobsWithLatestBlobName(new ArrayList<>(), "DONE");
+      }
       if (container.getStatus() == Container.ContainerStatus.ACTIVE) {
         staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
       } else {
