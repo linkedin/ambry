@@ -20,6 +20,7 @@ import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -53,14 +54,15 @@ public class NamedBlobsCleanupRunner implements Runnable {
       Set<Container> inactiveContainers = accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE);
       Set<Container> combinedContainers = new HashSet<>(activeContainers);
       combinedContainers.addAll(inactiveContainers);
-
-      List<StaleNamedBlob> batchStaleBlobs;
+      List<StaleNamedBlob> batchStaleBlobs = Collections.emptyList();
+      NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
       for (Container container : combinedContainers) {
-        int pageIdx = 0;
+        // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
+        String blobName = "\0";
         do {
-          batchStaleBlobs = namedBlobDb.pullStaleBlobs(container, pageIdx).get();
+          staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, blobName).get();
           List<StaleNamedBlob> failedResults = new ArrayList<>();
-          for (StaleNamedBlob staleBlob : batchStaleBlobs) {
+          for (StaleNamedBlob staleBlob : staleBlobsWithLatestBlobName.getStaleBlobs()) {
             try {
               router.deleteBlob(staleBlob.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
             } catch (Exception e) {
@@ -81,7 +83,6 @@ public class NamedBlobsCleanupRunner implements Runnable {
               batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
           logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
 
-          pageIdx++;
         } while (batchStaleBlobs.size() == MaxBatchSize);
       }
     } catch (ExecutionException e) {

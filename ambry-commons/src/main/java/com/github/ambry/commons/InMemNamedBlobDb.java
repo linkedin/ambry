@@ -213,8 +213,8 @@ public class InMemNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container, int pageIndex) {
-    CompletableFuture<List<StaleNamedBlob>> future = new CompletableFuture<>();
+  public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String latestBlob) {
+    CompletableFuture<StaleBlobsWithLatestBlobName> future = new CompletableFuture<>();
     List<StaleNamedBlob> resultList = new ArrayList<>();
     String containerName = container.getName();
 
@@ -253,12 +253,10 @@ public class InMemNamedBlobDb implements NamedBlobDb {
         }
       }
     }
-
-    future.complete(resultList);
+    StaleBlobsWithLatestBlobName resultObj = new StaleBlobsWithLatestBlobName(resultList, "");
+    future.complete(resultObj);
     return future;
   }
-
-
 
   @Override
   public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords) {

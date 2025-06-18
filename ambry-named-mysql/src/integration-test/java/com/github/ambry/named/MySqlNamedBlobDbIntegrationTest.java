@@ -826,10 +826,9 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
     List<StaleNamedBlob> staleNamedBlobs;
 
-    int pageIndex = 0;
     Set<Container> containers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
     for (Container container : containers) {
-      staleNamedBlobs = namedBlobDb.pullStaleBlobs(container,pageIndex).get();
+      staleNamedBlobs =  namedBlobDb.pullStaleBlobs(container,"\0").get().getStaleBlobs();
       staleNamedBlobsList.addAll(staleNamedBlobs);
     }
     return staleNamedBlobsList;

@@ -152,13 +152,13 @@ public class MySqlNamedBlobDbTest {
    */
   private List<StaleNamedBlob> getStaleBlobList() throws ExecutionException, InterruptedException {
     List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
-    List<StaleNamedBlob> staleNamedBlobs;
+    NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
 
-    int pageIndex = 0;
     Set<Container> containers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
     for (Container container : containers) {
-      staleNamedBlobs = namedBlobDb.pullStaleBlobs(container, pageIndex).get();
-      staleNamedBlobsList.addAll(staleNamedBlobs);
+
+      staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, "\0").get();
+      staleNamedBlobsList.addAll(staleBlobsWithLatestBlobName.getStaleBlobs());
     }
     return staleNamedBlobsList;
   }

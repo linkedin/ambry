@@ -20,7 +20,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import java.io.Closeable;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -112,10 +111,31 @@ public interface NamedBlobDb extends Closeable {
   /**
    * Pull the stale blobs that need to be cleaned up
    */
-  CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs(Container container, int pageIndex);
+  CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName);
 
   /**
    * Cleanup the stale blobs records
    */
   CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords);
+
+  /**
+   * A data container for a list of stale blobs and a latest blob identifier.
+   */
+  public static class StaleBlobsWithLatestBlobName {
+    private final List<StaleNamedBlob> staleBlobs;
+    private final String latestBlob;
+
+    public StaleBlobsWithLatestBlobName(List<StaleNamedBlob> staleBlobs, String latestBlob) {
+      this.staleBlobs = staleBlobs;
+      this.latestBlob = latestBlob;
+    }
+
+    public List<StaleNamedBlob> getStaleBlobs() {
+      return staleBlobs;
+    }
+
+    public String getLatestBlob() {
+      return latestBlob;
+    }
+  }
 }
