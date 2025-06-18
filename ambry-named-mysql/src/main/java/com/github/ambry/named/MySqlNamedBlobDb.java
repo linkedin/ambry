@@ -67,7 +67,7 @@ import org.slf4j.LoggerFactory;
  * It uses the Hikari library for connection pooling, which is a widely used and performant JDBC connection pool
  * implementation.
  */
-class MySqlNamedBlobDb implements NamedBlobDb {
+public class MySqlNamedBlobDb implements NamedBlobDb {
   private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
   private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
   private static final int VERSION_BASE = 100000;
