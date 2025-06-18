@@ -187,6 +187,11 @@ public class FileCopyGetChunkRequest extends RequestOrResponse {
     return sb.toString();
   }
 
+  @Override
+  public void accept(RequestVisitor visitor) {
+    visitor.visit(this);
+  }
+
   /**
    * Get the size of the request in bytes
    * @return long
