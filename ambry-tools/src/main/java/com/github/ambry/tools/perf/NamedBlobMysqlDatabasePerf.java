@@ -27,6 +27,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlUtils;
@@ -101,42 +102,102 @@ public class NamedBlobMysqlDatabasePerf {
   public static final PartitionId PARTITION_ID = new MockPartitionId();
 
   public static class PerfConfig {
+    /**
+     * Dataceneter from there this cli is executed
+     */
     @Config("db.datacenter")
     public final String dbDatacenter;
 
+    /**
+     * The host of database instance (or cluster), including port
+     */
     @Config("db.host")
     public final String dbHost;
 
+    /**
+     * The name of database
+     */
     @Config("db.name")
     public final String dbName;
 
+    /**
+     * The user name to access database
+     */
     @Config("db.user.name")
     public final String dbUserName;
 
+    /**
+     * The password for the given username. If you enable certificate based authentication, this will
+     * be ignored, just provide a random string.
+     *
+     * You can also provide an empty string when certificate based authentication is not enabled,
+     * you will be prompted to type password when running this cli.
+     */
     @Config("db.password")
     public final String dbPassword;
 
+    /**
+     * True to enable certificate based authentication. If this is true, you must also provide ssl configuration
+     * including
+     * <ul>
+     *   <li>{@link SSLConfig#sslKeystoreType}</li>
+     *   <li>{@link SSLConfig#sslKeystorePath}</li>
+     *   <li>{@link SSLConfig#sslKeystorePassword}</li>
+     *   <li>{@link SSLConfig#sslTruststoreType}</li>
+     *   <li>{@link SSLConfig#sslTruststorePath}</li>
+     *   <li>{@link SSLConfig#sslTruststorePassword}</li>
+     * </ul>
+     */
     @Config("enable.certificate.based.authentication")
     public final boolean enableCertificateBasedAuthentication;
 
+    /**
+     * The number of parallel threads to run the performance test.
+     */
     @Config("parallelism")
     public final int parallelism;
 
+    /**
+     * The target number of rows in the database, in millions. If there are not enough rows in the database before
+     * running the performance test, this tool will fill the database with new rows until it hits the target number.
+     */
     @Config("target.rows.in.million")
     public final int targetRowsInMillion;
 
+    /**
+     * Enable hard delete when deleting named blobs.
+     */
     @Config("enable.hard.delete")
     public final boolean enableHardDelete;
 
+    /**
+     * The number of operations to exuected in performance test.
+     */
     @Config("num.operations")
     public final int numOperations;
 
+    /**
+     * The test type to run. It can be one of the following:
+     * <ul>
+     *   <li>{@link TestType#CUSTOM}</li>
+     *   <li>{@link TestType#LIST}</li>
+     *   <li>{@link TestType#READ_WRITE}</li>
+     * </ul>
+     */
     @Config("test.type")
     public final TestType testType;
 
+    /**
+     * Only do write operations in CUSTOM test type when this is true.
+     */
     @Config("custom.only.writes")
     public final boolean onlyWrites;
 
+    /**
+     * Create a {@link PerfConfig} given a {@link VerifiableProperties} object.
+     * @param verifiableProperties
+     * @throws Exception
+     */
     public PerfConfig(VerifiableProperties verifiableProperties) throws Exception {
       dbDatacenter = verifiableProperties.getString("db.datacenter", "");
       dbHost = verifiableProperties.getString("db.host", "");
@@ -154,6 +215,10 @@ public class NamedBlobMysqlDatabasePerf {
       validate();
     }
 
+    /**
+     * Validate if the configurations are valid
+     * @throws Exception
+     */
     public void validate() throws Exception {
       validateNotEmpty(dbDatacenter, "db.datacenter");
       validateNotEmpty(dbHost, "db.host");
@@ -176,9 +241,20 @@ public class NamedBlobMysqlDatabasePerf {
     }
   }
 
+  /**
+   * The type of test to run. This cli tool can be used to run various types of tests. Reach {@Link TestType} is
+   * associated with a {@link PerformanceTestWorker} class that implements several static methods.
+   * <ul>
+   *   <li>getNumberOfExistingRows, which takes in a {@link DataSource} and return long</li>
+   *   <li>generateNewNamedBlobRecord, which takes in a {@link Random} and a list of {@link Account}s and return a {@link NamedBlobRecord}</li>
+   * </ul>
+   */
   public enum TestType {
     READ_WRITE, LIST, CUSTOM;
 
+    /**
+     * Associate TestType with {@link PerformanceTestWorker} class.
+     */
     static final Map<TestType, Class> workerClassMap = new HashMap<TestType, Class>() {
       {
         put(READ_WRITE, ReadWritePerformanceTestWorker.class);
@@ -187,6 +263,12 @@ public class NamedBlobMysqlDatabasePerf {
       }
     };
 
+    /**
+     * Return the number of existing rows for each {@link TestType}.
+     * @param dataSource
+     * @return
+     * @throws Exception
+     */
     public long getNumberOfExistingRows(DataSource dataSource) throws Exception {
       Class<?> clazz = workerClassMap.get(this);
       Method method = clazz.getDeclaredMethod("getNumberOfExistingRows", DataSource.class);
@@ -198,6 +280,13 @@ public class NamedBlobMysqlDatabasePerf {
       }
     }
 
+    /**
+     * Return the newly generated {@link NamedBlobRecord} for each {@link TestType}.
+     * @param random
+     * @param allAccounts
+     * @return
+     * @throws Exception
+     */
     public NamedBlobRecord generateNewNamedBlobRecord(Random random, List<Account> allAccounts) throws Exception {
       Class<?> clazz = workerClassMap.get(this);
       Method method = clazz.getDeclaredMethod("generateNewNamedBlobRecord", Random.class, List.class);
@@ -209,6 +298,10 @@ public class NamedBlobMysqlDatabasePerf {
       }
     }
 
+    /**
+     * Get class object associated with each {@link TestType}.
+     * @return
+     */
     public Class getWorkerClass() {
       return workerClassMap.get(this);
     }
@@ -240,8 +333,7 @@ public class NamedBlobMysqlDatabasePerf {
     }
 
     // Now create a mysql named blob data accessor
-    String dbUrl =
-        "jdbc:mysql://" + config.dbHost + "/" + config.dbName + "?serverTimezone=UTC&enabledTLSProtocols=TLSv1.2";
+    String dbUrl = "jdbc:mysql://" + config.dbHost + "/" + config.dbName + "?serverTimezone=UTC";
     MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint(dbUrl, config.dbDatacenter, true, config.dbUserName, password);
     JSONArray jsonArray = new JSONArray();
