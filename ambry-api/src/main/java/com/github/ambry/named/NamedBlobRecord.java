@@ -15,6 +15,7 @@
 
 package com.github.ambry.named;
 
+import com.github.ambry.utils.Utils;
 import java.util.Objects;
 
 
@@ -34,6 +35,34 @@ public class NamedBlobRecord {
   private final boolean isDirectory;
 
   /**
+   * A helper method to create a {@link NamedBlobRecord} for Put operation.
+   * @param accountName      the account name.
+   * @param containerName    the container name.
+   * @param blobName         the blob name within the container.
+   * @param blobId           the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param blobSize         the size of the blob.
+   * @return
+   */
+  public static NamedBlobRecord forPut(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long blobSize) {
+    return new NamedBlobRecord(accountName, containerName, blobName, blobId, expirationTimeMs, UNINITIALIZED_VERSION,
+        blobSize, 0, false);
+  }
+
+  /**
+   * A helper method to create a {@link NamedBlobRecord} for ttl update operation.
+   * @param accountName      the account name.
+   * @param containerName    the container name.
+   * @param blobName         the blob name within the container.
+   * @param version          the version of this named blob.
+   * @return
+   */
+  public static NamedBlobRecord forUpdate(String accountName, String containerName, String blobName, long version) {
+    return new NamedBlobRecord(accountName, containerName, blobName, null, Utils.Infinite_Time, version, 0, 0, false);
+  }
+
+  /**
    * @param accountName the account name.
    * @param containerName the container name.
    * @param blobName the blob name within the container.
@@ -42,7 +71,7 @@ public class NamedBlobRecord {
    */
   public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
       long expirationTimeMs) {
-    this(accountName, containerName, blobName, blobId, expirationTimeMs, 0);
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, UNINITIALIZED_VERSION);
   }
 
   /**

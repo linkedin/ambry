@@ -284,10 +284,10 @@ public class S3MultipartCompleteUploadHandler<R> {
               RestServiceErrorCode.InternalServerError);
         }
         long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-        String blobIdClean = stripSlashAndExtensionFromId(blobId);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
-        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
+        NamedBlobRecord record =
+            NamedBlobRecord.forUpdate(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                namedBlobPath.getBlobName(), namedBlobVersion);
         namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);

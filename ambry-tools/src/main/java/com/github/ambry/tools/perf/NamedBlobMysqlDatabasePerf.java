@@ -144,18 +144,21 @@ public class NamedBlobMysqlDatabasePerf {
     ArgumentAcceptingOptionSpec<String> dbHostOpt =
         parser.accepts(DB_HOST, "Database host").withRequiredArg().describedAs("db_host").ofType(String.class);
 
-    ArgumentAcceptingOptionSpec<Integer> parallelismOpt = parser.accepts(PARALLELISM, "Number of thread to execute sql statement")
-        .withRequiredArg()
-        .describedAs("parallelism")
-        .ofType(Integer.class);
+    ArgumentAcceptingOptionSpec<Integer> parallelismOpt =
+        parser.accepts(PARALLELISM, "Number of thread to execute sql statement")
+            .withRequiredArg()
+            .describedAs("parallelism")
+            .ofType(Integer.class);
 
     ArgumentAcceptingOptionSpec<Integer> targetMRowsOpt = parser.accepts(TARGET_ROWS,
-            "Number of rows to insert so the total database rows would reach this target." + "Notice that this target is in in millions. If the value is 1, this command would make sure database would have 1 million rows.")
+            "Number of rows to insert so the total database rows would reach this target."
+                + "Notice that this target is in in millions. If the value is 1, this command would make sure database would have 1 million rows.")
         .withRequiredArg()
         .describedAs("target_rows")
         .ofType(Integer.class);
 
-    OptionSpec<Void> includeListTestOpt = parser.accepts(INCLUDE_LIST, "Including list operation in the performance tests.");
+    OptionSpec<Void> includeListTestOpt =
+        parser.accepts(INCLUDE_LIST, "Including list operation in the performance tests.");
 
     OptionSet options = parser.parse(args);
     Properties props = new Properties();
@@ -192,10 +195,12 @@ public class NamedBlobMysqlDatabasePerf {
       props.setProperty(INCLUDE_LIST, "false");
     }
 
-    List<String> requiredArguments = Arrays.asList(DB_USERNAME, DB_DATACENTER, DB_NAME, DB_HOST, PARALLELISM, TARGET_ROWS, INCLUDE_LIST);
+    List<String> requiredArguments =
+        Arrays.asList(DB_USERNAME, DB_DATACENTER, DB_NAME, DB_HOST, PARALLELISM, TARGET_ROWS, INCLUDE_LIST);
     for (String requiredArgument : requiredArguments) {
       if (!props.containsKey(requiredArgument)) {
-        System.err.println("Missing " + requiredArgument + "! Please provide it through property file or the command line argument");
+        System.err.println(
+            "Missing " + requiredArgument + "! Please provide it through property file or the command line argument");
         parser.printHelpOn(System.err);
         System.exit(1);
       }
@@ -203,20 +208,24 @@ public class NamedBlobMysqlDatabasePerf {
 
     // Now ask for password if it's not provided in the propFile
     if (!props.containsKey(DB_PASSWORD)) {
-      String password = ToolUtils.passwordInput("Please input database password for user " + props.getProperty(DB_USERNAME) + ": ");
+      String password =
+          ToolUtils.passwordInput("Please input database password for user " + props.getProperty(DB_USERNAME) + ": ");
       props.setProperty(DB_PASSWORD, password);
     }
 
     // Now create a mysql named blob data accessor
     Properties newProperties = new Properties();
-    String dbUrl = "jdbc:mysql://" + props.getProperty(DB_HOST) + "/" + props.getProperty(DB_NAME) + "?serverTimezone=UTC";
+    String dbUrl =
+        "jdbc:mysql://" + props.getProperty(DB_HOST) + "/" + props.getProperty(DB_NAME) + "?serverTimezone=UTC";
     MySqlUtils.DbEndpoint dbEndpoint =
-        new MySqlUtils.DbEndpoint(dbUrl, props.getProperty(DB_DATACENTER), true, props.getProperty(DB_USERNAME), props.getProperty(DB_PASSWORD));
+        new MySqlUtils.DbEndpoint(dbUrl, props.getProperty(DB_DATACENTER), true, props.getProperty(DB_USERNAME),
+            props.getProperty(DB_PASSWORD));
     JSONArray jsonArray = new JSONArray();
     jsonArray.put(dbEndpoint.toJson());
     System.out.println("DB_INFO: " + jsonArray);
     newProperties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, jsonArray.toString());
-    newProperties.setProperty(MySqlNamedBlobDbConfig.LOCAL_POOL_SIZE, String.valueOf(2 * Integer.valueOf(props.getProperty(PARALLELISM))));
+    newProperties.setProperty(MySqlNamedBlobDbConfig.LOCAL_POOL_SIZE,
+        String.valueOf(2 * Integer.valueOf(props.getProperty(PARALLELISM))));
     newProperties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, props.getProperty(DB_DATACENTER));
 
     int numThreads = Integer.valueOf(props.getProperty(PARALLELISM));
@@ -267,9 +276,11 @@ public class NamedBlobMysqlDatabasePerf {
       for (int j = 0; j < numContainer; j++) {
         short containerId = (short) (j + 2);
         String containerName = String.format(CONTAINER_NAME_FORMAT, containerId);
-        containers.add(new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "", accountId).build());
+        containers.add(
+            new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "", accountId).build());
       }
-      Account account = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(containers).build();
+      Account account =
+          new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(containers).build();
       accounts.add(account);
     }
     // Now add the special account
@@ -391,7 +402,8 @@ public class NamedBlobMysqlDatabasePerf {
         new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, account.getId(), container.getId(),
             PARTITION_ID, false, BlobId.BlobDataType.DATACHUNK);
     NamedBlobRecord record =
-        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId.toString(), -1);
+        NamedBlobRecord.forPut(account.getName(), container.getName(), blobName, blobId.toString(), Utils.Infinite_Time,
+            1024);
     return record;
   }
 

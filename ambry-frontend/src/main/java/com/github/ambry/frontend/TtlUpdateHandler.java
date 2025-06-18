@@ -13,10 +13,8 @@
  */
 package com.github.ambry.frontend;
 
-import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
-import com.github.ambry.account.Container;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -41,7 +39,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
-import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
@@ -195,8 +192,9 @@ class TtlUpdateHandler {
           }
           long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
-          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
+          NamedBlobRecord record =
+              NamedBlobRecord.forUpdate(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                  namedBlobPath.getBlobName(), namedBlobVersion);
           CallbackUtils.callCallbackAfter(namedBlobDb.updateBlobTtlAndStateToReady(record),
               updateNamedBlobTtlCallback());
         } else {
