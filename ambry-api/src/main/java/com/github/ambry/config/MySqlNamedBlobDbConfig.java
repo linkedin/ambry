@@ -16,15 +16,22 @@
 package com.github.ambry.config;
 
 import com.github.ambry.named.TransactionIsolationLevel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 import static com.github.ambry.rest.RestUtils.*;
 
 
 public class MySqlNamedBlobDbConfig {
+  /**
+   * SSLMode when it's enabled
+   */
+  public enum SSLMode {
+    VERIFY_CA, VERIFY_IDENTITY
+  }
+
   private static final String PREFIX = "mysql.named.blob.";
   public static final String DB_INFO = PREFIX + "db.info";
-  public static final String DB_TRANSITION = PREFIX + "db.transition";
-  public static final String DB_RELY_ON_NEW_TABLE = PREFIX + "db.rely.on.new.table";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
@@ -33,6 +40,9 @@ public class MySqlNamedBlobDbConfig {
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
   public static final String ENABLE_HARD_DELETE = PREFIX + "enable.hard.delete";
+  public static final String ENABLE_CERTIFICATE_BASED_AUTHENTICATION =
+      PREFIX + "enable.certificate.based.authentication";
+  public static final String SSL_MODE = PREFIX + "ssl.mode";
 
   /**
    * Option to pick the SQL query to use for listing named blobs.
@@ -99,6 +109,30 @@ public class MySqlNamedBlobDbConfig {
   @Config(ENABLE_HARD_DELETE)
   public final boolean enableHardDelete;
 
+  /**
+   * True to use certificate based authentication for MYSQL connections. SSL certificates must be configured in the
+   * configuration files. The keys are the same as keys in {@link SSLConfig}. We are expecting the following keys
+   * to be set:
+   * <ul>
+   *   <li>{@link SSLConfig#sslKeystoreType}</li>
+   *   <li>{@link SSLConfig#sslKeystorePath}</li>
+   *   <li>{@link SSLConfig#sslKeystorePassword}</li>
+   *   <li>{@link SSLConfig#sslTruststoreType}</li>
+   *   <li>{@link SSLConfig#sslTruststorePath}</li>
+   *   <li>{@link SSLConfig#sslTruststorePassword}</li>
+   * </ul>
+   */
+  @Config(ENABLE_CERTIFICATE_BASED_AUTHENTICATION)
+  public final boolean enableCertificateBasedAuthentication;
+
+  /**
+   * SSL Mode when certificate based authentication is enabled.
+   */
+  @Config(SSL_MODE)
+  public final SSLMode sslMode;
+
+  public final SSLConfig sslConfig;
+
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
     this.listNamedBlobsSQLOption =
         verifiableProperties.getIntInRange(LIST_NAMED_BLOBS_SQL_OPTION, DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION,
@@ -116,5 +150,24 @@ public class MySqlNamedBlobDbConfig {
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);
     this.enableHardDelete = verifiableProperties.getBoolean(ENABLE_HARD_DELETE, false);
+    this.enableCertificateBasedAuthentication =
+        verifiableProperties.getBoolean(ENABLE_CERTIFICATE_BASED_AUTHENTICATION, false);
+    this.sslConfig = this.enableCertificateBasedAuthentication ? new SSLConfig(verifiableProperties) : null;
+    this.sslMode = this.enableCertificateBasedAuthentication ? verifiableProperties.getEnum(SSL_MODE, SSLMode.class,
+        SSLMode.VERIFY_CA) : null;
+    if (this.enableCertificateBasedAuthentication) {
+      // validate the sslConfig is valid
+      validateFilePath(this.sslConfig.sslKeystorePath, "ssl.keystore.path");
+      validateFilePath(this.sslConfig.sslTruststorePath, "ssl.truststore.path");
+    }
+  }
+
+  private void validateFilePath(String filePath, String configName) {
+    if (filePath == null || filePath.isEmpty()) {
+      throw new IllegalArgumentException(configName + " cannot be null or empty");
+    }
+    if (Files.notExists(Paths.get(filePath))) {
+      throw new IllegalArgumentException(configName + "'s file " + filePath + " does not exist");
+    }
   }
 }

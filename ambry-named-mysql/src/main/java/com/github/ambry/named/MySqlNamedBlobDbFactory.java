@@ -20,6 +20,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -58,9 +59,14 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
    * @param dbEndpoint struct containing JDBC connection information.
    * @return the {@link HikariDataSource} for the {@link DbEndpoint}.
    */
+  //TODO: Build a util method to reuse HikariDataSource creation logic across Ambry modules.
   public HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
+    String url = dbEndpoint.getUrl();
+    if (config.enableCertificateBasedAuthentication) {
+      url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, config.sslMode);
+    }
     HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
+    hikariConfig.setJdbcUrl(url);
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
     hikariConfig.setMaximumPoolSize(
