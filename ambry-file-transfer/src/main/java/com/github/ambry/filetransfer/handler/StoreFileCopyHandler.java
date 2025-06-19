@@ -225,23 +225,25 @@ public class StoreFileCopyHandler implements FileCopyHandler {
         processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
         totalSizeDownloadedInBytes.addAndGet(logInfo.getLogSegment().getFileSize());
 
-        List<Pair<Integer, Integer>> ranges = getChecksumRanges(logInfo.getLogSegment().getFileSize(),
-            config.fileCopyHandlerDataVerificationRangesCount, config.fileCopyHandlerDataVerificationRangeSizeInMb);
-        try {
-          List<String> checkSums = fileStore.getChecksumsForRanges(fileCopyInfo.getSourceReplicaId().getPartitionId(),
-              logInfo.getLogSegment().getFileName(), ranges);
+        if (config.fileCopyHandlerDataVerificationIsEnabled) {
+          List<Pair<Integer, Integer>> ranges = getChecksumRanges(logInfo.getLogSegment().getFileSize(),
+              config.fileCopyHandlerDataVerificationRangesCount, config.fileCopyHandlerDataVerificationRangeSizeInMb);
+          try {
+            List<String> checkSums = fileStore.getChecksumsForRanges(fileCopyInfo.getSourceReplicaId().getPartitionId(),
+                logInfo.getLogSegment().getFileName(), ranges);
+            FileCopyDataVerificationResponse checksumsFromServingNode = getFileCopyDataVerificationResponse(fileCopyInfo);
 
-          FileCopyDataVerificationResponse checksumsFromServingNode = getFileCopyDataVerificationResponse(fileCopyInfo);
-          if (!checkSums.equals(checksumsFromServingNode.getChecksums())) {
-            logger.error("Checksums do not match for log segment: {}", logInfo.getLogSegment().getFileName());
-            throw new FileCopyHandlerException("Checksums do not match for log segment: " + logInfo.getLogSegment().getFileName(),
-                FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerChecksumMismatch);
+            if (!checkSums.equals(checksumsFromServingNode.getChecksums())) {
+              logger.error("Checksums do not match for log segment: {}", logInfo.getLogSegment().getFileName());
+              throw new FileCopyHandlerException(
+                  "Checksums do not match for log segment: " + logInfo.getLogSegment().getFileName(),
+                  FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerChecksumMismatch);
+            }
+          } catch (StoreException e) {
+            logMessageAndThrow("ProcessLogSegment", "Error getting checksums for log segment", e,
+                FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
           }
-        } catch (StoreException e) {
-          logMessageAndThrow("ProcessLogSegment", "Error getting checksums for log segment", e,
-              FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
         }
-
         // Move all files to actual path.
         try {
           fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
@@ -387,7 +389,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param rangesCount the number of ranges to create
    * @param rangeSizeInMb the size of each range in MB
    */
-  private List<Pair<Integer, Integer>> getChecksumRanges(Long fileSize, int rangesCount, int rangeSizeInMb) {
+  List<Pair<Integer, Integer>> getChecksumRanges(Long fileSize, int rangesCount, int rangeSizeInMb) {
     if (fileSize <= 0) {
       throw new FileCopyHandlerException("File size must be greater than 0",
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);

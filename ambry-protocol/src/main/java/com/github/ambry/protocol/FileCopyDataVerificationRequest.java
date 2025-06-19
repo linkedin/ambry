@@ -55,14 +55,27 @@ public class FileCopyDataVerificationRequest extends RequestOrResponse {
   public FileCopyDataVerificationRequest(short versionId, int correlationId, @Nonnull  String clientId,
       @Nonnull PartitionId partitionId, @Nonnull String fileName, @Nonnull List<Pair<Integer, Integer>> ranges) {
     super(RequestOrResponseType.FileCopyDataVerificationRequest, versionId, correlationId, clientId);
+    validateVersion(versionId);
+    Objects.requireNonNull(clientId, "clientId must not be null");
 
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId must not be null");
-    this.fileName = Objects.requireNonNull(fileName, "fileName must not be null");
 
+    Objects.requireNonNull(fileName, "fileName must not be null");
+    if (fileName.isEmpty()) {
+      throw new IllegalArgumentException("fileName must not be empty");
+    }
+    this.fileName = fileName;
+
+    Objects.requireNonNull(ranges, "ranges must not be null");
     if (ranges.isEmpty()) {
       throw new IllegalArgumentException("ranges must not be empty");
     }
-    this.ranges = Objects.requireNonNull(ranges, "ranges must not be null");
+    for (Pair<Integer, Integer> range : ranges) {
+      if (range.getFirst() < 0 || range.getSecond() < 0 || range.getFirst() > range.getSecond()) {
+        throw new IllegalArgumentException("Invalid byte range: [" + range.getFirst() + ", " + range.getSecond() + "]");
+      }
+    }
+    this.ranges = ranges;
   }
 
   /**
@@ -82,8 +95,8 @@ public class FileCopyDataVerificationRequest extends RequestOrResponse {
 
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     String fileName = Utils.readIntString(stream);
+    PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
 
     int rangeCount = stream.readInt();
     List<Pair<Integer, Integer>> ranges = new ArrayList<>(rangeCount);
@@ -115,12 +128,17 @@ public class FileCopyDataVerificationRequest extends RequestOrResponse {
   protected void prepareBuffer() {
     super.prepareBuffer();
     Utils.serializeString(bufferToSend, fileName, Charset.defaultCharset());
+    bufferToSend.writeBytes(partitionId.getBytes());
     bufferToSend.writeInt(ranges.size());
     for (Pair<Integer, Integer> range : ranges) {
       bufferToSend.writeLong(range.getFirst());
       bufferToSend.writeLong(range.getSecond());
     }
-    bufferToSend.writeBytes(partitionId.getBytes());
+  }
+
+  @Override
+  public void accept(RequestVisitor visitor) {
+    visitor.visit(this);
   }
 
   /**

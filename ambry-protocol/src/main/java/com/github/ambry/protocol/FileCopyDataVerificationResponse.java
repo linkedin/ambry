@@ -53,11 +53,18 @@ public class FileCopyDataVerificationResponse extends Response {
    * @param errorCode the error code indicating success or failure
    * @param checksums the list of checksums for the copied data
    */
-  public FileCopyDataVerificationResponse(short versionId, int correlationId, String clientId, ServerErrorCode errorCode,
-      @Nonnull List<String> checksums) {
+  public FileCopyDataVerificationResponse(short versionId, int correlationId, String clientId,
+      @Nonnull ServerErrorCode errorCode, @Nonnull List<String> checksums) {
     super(RequestOrResponseType.FileCopyDataVerificationResponse, versionId, correlationId, clientId, errorCode);
 
-    this.checksums = Objects.requireNonNull(checksums, "checksums must not be null");
+    validateVersion(versionId);
+    Objects.requireNonNull(clientId, "clientId must not be null");
+
+    Objects.requireNonNull(checksums, "checksums must not be null");
+    if (checksums.isEmpty() && errorCode == ServerErrorCode.NoError) {
+      throw new IllegalArgumentException("Checksums cannot be empty when there is no error");
+    }
+    this.checksums = checksums;
   }
 
   /**
@@ -66,7 +73,7 @@ public class FileCopyDataVerificationResponse extends Response {
    * @param clientId the client ID that made the request
    * @param serverErrorCode the error code indicating success or failure
    */
-  public FileCopyDataVerificationResponse(int correlationId, String clientId, ServerErrorCode serverErrorCode) {
+  public FileCopyDataVerificationResponse(int correlationId, String clientId, @Nonnull ServerErrorCode serverErrorCode) {
     this(CURRENT_VERSION, correlationId, clientId, serverErrorCode, new ArrayList<>());
   }
 
@@ -75,7 +82,7 @@ public class FileCopyDataVerificationResponse extends Response {
    * This constructor is used when there is an error and no checksums are provided.
    * @param serverErrorCode the error code indicating the failure
    */
-  public FileCopyDataVerificationResponse(ServerErrorCode serverErrorCode) {
+  public FileCopyDataVerificationResponse(@Nonnull ServerErrorCode serverErrorCode) {
     this(-1, "", serverErrorCode);
   }
 
@@ -88,18 +95,20 @@ public class FileCopyDataVerificationResponse extends Response {
   public static FileCopyDataVerificationResponse readFrom(@Nonnull DataInputStream stream) throws IOException {
     Objects.requireNonNull(stream, "stream should not be null");
 
+    RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
+    if (type != RequestOrResponseType.FileCopyDataVerificationResponse) {
+      throw new IllegalArgumentException("The type of request response is not compatible");
+    }
     short versionId = stream.readShort();
     validateVersion(versionId);
 
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-
     ServerErrorCode errorCode = ServerErrorCode.values()[stream.readShort()];
 
     if (errorCode != ServerErrorCode.NoError) {
       return new FileCopyDataVerificationResponse(versionId, correlationId, clientId, errorCode, new ArrayList<>());
     }
-
     int checksumCount = stream.readInt();
     List<String> checksums = new java.util.ArrayList<>(checksumCount);
     for (int i = 0; i < checksumCount; i++) {
