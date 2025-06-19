@@ -14,9 +14,11 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.FileStoreException.FileStoreErrorCode;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -28,14 +30,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -44,7 +44,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -542,9 +541,7 @@ public class FileStore implements PartitionFileStore {
       throw new FileStoreException("Error while splitting file name: " + fileName,
           FileStoreLogAndIndexFileNamingConventionError);
     }
-
     parts[1] = "0";
-
     return String.join("_", parts);
   }
 
@@ -558,6 +555,50 @@ public class FileStore implements PartitionFileStore {
     // Verify service is running.
     validateIfFileStoreIsRunning();
     return segmentSize;
+  }
+
+  /**
+   * Calculates checksums for specified byte ranges in a file.
+   * @param partitionId The partition ID for which the file belongs
+   * @param fileName The name of the file to read
+   * @param ranges List of byte ranges for which checksums are to be calculated
+   * @return List of checksums for each specified range
+   * @throws StoreException if there are issues reading the file or calculating checksums
+   */
+  public List<String> getChecksumsForRanges(@Nonnull PartitionId partitionId, String fileName, @Nonnull List<Pair<Integer, Integer>> ranges) throws StoreException {
+    validateIfFileStoreIsRunning();
+
+    List<String> checksums = new ArrayList<>();
+    File file = validateAndGetFile(fileName);
+    try {
+      for (Pair<Integer, Integer> range : ranges) {
+        if (range.getFirst() < 0 || range.getSecond() < 0 || range.getFirst() > range.getSecond()) {
+          throw new IllegalArgumentException("Invalid byte range: [" + range.getFirst() + ", " + range.getSecond() + "]");
+        }
+        try (RandomAccessFile raf = new RandomAccessFile(file, "r"); FileChannel channel = raf.getChannel()) {
+          long size = range.getSecond() - range.getFirst();
+          ByteBuffer buffer = ByteBuffer.allocateDirect((int) size);
+          channel.position(range.getFirst());
+          channel.read(buffer);
+          buffer.flip();
+
+          byte[] arr = new byte[buffer.remaining()];
+          buffer.get(arr);
+          checksums.add(Long.toString(Utils.crc32(arr)));
+        }
+      }
+    } catch (FileNotFoundException e) {
+      logger.error("File not found: {}", fileName, e);
+      throw new FileStoreException("File not found: " + fileName, FileStoreReadError);
+    } catch (IOException e) {
+      logger.error("IO error while reading file: {}", fileName, e);
+      throw new FileStoreException("IO error while reading file: " + fileName, FileStoreReadError);
+    } catch (Exception e) {
+      logger.error("Unexpected error while calculating checksums for ranges in file: {}", fileName, e);
+      throw new FileStoreException("Unexpected error while calculating checksums for ranges in file: " + fileName, e,
+          FileStoreErrorCode.UnknownError);
+    }
+    return checksums;
   }
 
   /**

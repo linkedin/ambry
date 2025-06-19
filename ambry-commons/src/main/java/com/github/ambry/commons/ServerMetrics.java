@@ -117,6 +117,14 @@ public class ServerMetrics {
   public final Meter fileCopyGetChunkRequestRate;
   public final Meter fileCopyGetChunkDroppedRate;
 
+  public final Histogram fileCopyDataVerificationRequestQueueTimeInMs;
+  public final Histogram fileCopyDataVerificationProcessingTimeInMs;
+  public final Histogram fileCopyDataVerificationResponseQueueTimeInMs;
+  public final Histogram fileCopyDataVerificationSendTimeInMs;
+  public final Histogram fileCopyDataVerificationTotalTimeInMs;
+  public final Meter fileCopyDataVerificationRequestRate;
+  public final Meter fileCopyDataVerificationDroppedRate;
+
 
   public final Histogram batchDeleteBlobRequestQueueTimeInMs;
   public final Histogram batchDeleteBlobProcessingTimeInMs;
@@ -466,6 +474,21 @@ public class ServerMetrics {
         registry.meter(MetricRegistry.name(requestClass, "FileCopyGetChunkRequestRate"));
     fileCopyGetChunkDroppedRate =
         registry.meter(MetricRegistry.name(requestClass, "FileCopyGetChunkDroppedRate"));
+
+    fileCopyDataVerificationRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyDataVerificationRequestQueueTimeInMs"));
+    fileCopyDataVerificationProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyDataVerificationProcessingTimeInMs"));
+    fileCopyDataVerificationResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyDataVerificationResponseQueueTimeInMs"));
+    fileCopyDataVerificationSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyDataVerificationSendTimeInMs"));
+    fileCopyDataVerificationTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "FileCopyDataVerificationTotalTimeInMs"));
+    fileCopyDataVerificationRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "FileCopyDataVerificationRequestRate"));
+    fileCopyDataVerificationDroppedRate =
+        registry.meter(MetricRegistry.name(requestClass, "FileCopyDataVerificationDroppedRate"));
 
     batchDeleteBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "BatchDeleteBlobRequestQueueTimeInMs"));

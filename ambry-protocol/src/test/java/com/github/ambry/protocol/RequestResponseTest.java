@@ -44,6 +44,7 @@ import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -863,6 +864,123 @@ public class RequestResponseTest {
     FileCopyGetMetaDataResponse response2 = FileCopyGetMetaDataResponse.readFrom(requestStream2);
     Assert.assertEquals(ServerErrorCode.IOError, response2.getError());
     response.release();
+  }
+
+  @Test
+  public void doFileCopyDataVerificationRequestTest() throws IOException {
+    short requestVersionToUse = FileCopyDataVerificationRequest.CURRENT_VERSION;
+    FileCopyDataVerificationRequest request = new FileCopyDataVerificationRequest(requestVersionToUse, 111,
+        "id1", new MockPartitionId(), "0_0_log", Collections.singletonList(new Pair<>(0, 1000)));
+    DataInputStream requestStream = serAndPrepForRead(request, -1, true);
+    FileCopyDataVerificationRequest deserialisedRequest = FileCopyDataVerificationRequest.readFrom(requestStream, new MockClusterMap());
+
+    Assert.assertEquals("0_0_log", deserialisedRequest.getFileName());
+    Assert.assertEquals(0, deserialisedRequest.getPartitionId().getId());
+    Assert.assertEquals("0", deserialisedRequest.getPartitionId().toPathString());
+    Assert.assertEquals(111, deserialisedRequest.getCorrelationId());
+
+    Assert.assertEquals(1, deserialisedRequest.getRanges().size());
+    Assert.assertEquals(0, deserialisedRequest.getRanges().get(0).getFirst().longValue());
+    Assert.assertEquals(1000, deserialisedRequest.getRanges().get(0).getSecond().longValue());
+
+    Assert.assertEquals(requestVersionToUse, deserialisedRequest.getVersionId());
+    request.release();
+
+    try {
+      // Sending CURRENT_VERSION + 1 as version. Expected to throw exception.
+      new FileCopyDataVerificationRequest((short) (FileCopyDataVerificationRequest.CURRENT_VERSION + 1), 111, "id1",
+          new MockPartitionId(), "0_0_log",  new ArrayList<>());
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null partition id. Expected to throw exception.
+      new FileCopyDataVerificationRequest(requestVersionToUse, 111, "id1", null, "0_0_log",
+          Collections.singletonList(new Pair<>(0, 1000)));
+      Assert.fail("Should have failed");
+    } catch (NullPointerException e) {
+      //expected
+    }
+    try {
+      // Sending empty file name. Expected to throw exception.
+      new FileCopyDataVerificationRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "",
+          Collections.singletonList(new Pair<>(0, 1000)));
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null ranges. Expected to throw exception.
+      new FileCopyDataVerificationRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "",  null);
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending empty list as ranges. Expected to throw exception.
+      new FileCopyDataVerificationRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "",  new ArrayList<>());
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending invalid ranges [100, 50]. Expected to throw exception.
+      new FileCopyDataVerificationRequest(requestVersionToUse, 111, "id1", new MockPartitionId(), "",
+          Collections.singletonList(new Pair<>(100, 50)));
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+  }
+
+  @Test
+  public void doFileCopyDataVerificationResponseTest() throws IOException {
+    short requestVersionToUse = FileCopyDataVerificationResponse.CURRENT_VERSION;
+    FileCopyDataVerificationResponse response = new FileCopyDataVerificationResponse(requestVersionToUse, 111, "id1",
+            ServerErrorCode.NoError, Collections.singletonList("checksum1"));
+    DataInputStream requestStream = serAndPrepForRead(response, -1, false);
+    FileCopyDataVerificationResponse deserialisedResponse = FileCopyDataVerificationResponse.readFrom(requestStream);
+
+    Assert.assertEquals(111, deserialisedResponse.getCorrelationId());
+    Assert.assertEquals(ServerErrorCode.NoError, deserialisedResponse.getError());
+    Assert.assertEquals("id1", deserialisedResponse.getClientId());
+    Assert.assertEquals(1, deserialisedResponse.getChecksums().size());
+    Assert.assertEquals("checksum1", deserialisedResponse.getChecksums().get(0));
+    Assert.assertEquals(requestVersionToUse, deserialisedResponse.getVersionId());
+    response.release();
+
+    try {
+      // Sending CURRENT_VERSION + 1 as version. Expected to throw exception.
+      new FileCopyDataVerificationResponse((short) (FileCopyDataVerificationResponse.CURRENT_VERSION + 1), 111, "id1",
+          ServerErrorCode.NoError, Collections.singletonList("checksum1"));
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null clientId. Expected to throw exception.
+      new FileCopyDataVerificationResponse(requestVersionToUse, 111, null, ServerErrorCode.NoError,
+          Collections.singletonList("checksum1"));
+      Assert.fail("Should have failed");
+    } catch (NullPointerException e) {
+      //expected
+    }
+    try {
+      // Sending empty checksums. Expected to throw exception.
+      new FileCopyDataVerificationResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError,
+          new ArrayList<>());
+      Assert.fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
+    try {
+      // Sending null checksums. Expected to throw exception.
+      new FileCopyDataVerificationResponse(requestVersionToUse, 111, "id1", ServerErrorCode.NoError, null);
+      Assert.fail("Should have failed");
+    } catch (NullPointerException e) {
+      //expected
+    }
   }
 
   @Test

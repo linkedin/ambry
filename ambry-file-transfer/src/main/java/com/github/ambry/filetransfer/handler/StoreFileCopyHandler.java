@@ -22,9 +22,11 @@ import com.github.ambry.filetransfer.FileCopyInfo;
 import com.github.ambry.filetransfer.FileCopyMetrics;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetChunkDataWorkflow;
+import com.github.ambry.filetransfer.workflow.GetDataVerificationWorkflow;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.protocol.FileCopyDataVerificationResponse;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.Response;
@@ -36,10 +38,12 @@ import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
-import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
@@ -221,6 +225,25 @@ public class StoreFileCopyHandler implements FileCopyHandler {
         processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
         totalSizeDownloadedInBytes.addAndGet(logInfo.getLogSegment().getFileSize());
 
+        if (config.fileCopyHandlerDataVerificationIsEnabled) {
+          List<Pair<Integer, Integer>> ranges = getChecksumRanges(logInfo.getLogSegment().getFileSize(),
+              config.fileCopyHandlerDataVerificationRangesCount, config.fileCopyHandlerDataVerificationRangeSizeInMb);
+          try {
+            List<String> checkSums = fileStore.getChecksumsForRanges(fileCopyInfo.getSourceReplicaId().getPartitionId(),
+                logInfo.getLogSegment().getFileName(), ranges);
+            FileCopyDataVerificationResponse checksumsFromServingNode = getFileCopyDataVerificationResponse(fileCopyInfo);
+
+            if (!checkSums.equals(checksumsFromServingNode.getChecksums())) {
+              logger.error("Checksums do not match for log segment: {}", logInfo.getLogSegment().getFileName());
+              throw new FileCopyHandlerException(
+                  "Checksums do not match for log segment: " + logInfo.getLogSegment().getFileName(),
+                  FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerChecksumMismatch);
+            }
+          } catch (StoreException e) {
+            logMessageAndThrow("ProcessLogSegment", "Error getting checksums for log segment", e,
+                FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
+          }
+        }
         // Move all files to actual path.
         try {
           fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
@@ -242,6 +265,43 @@ public class StoreFileCopyHandler implements FileCopyHandler {
         logger.error("Encountered exception while updating metric", e);
       }
     }
+  }
+
+  /**
+   * Get the file copy data verification response.
+   * @param fileCopyInfo the file copy info of type {@link FileCopyInfo}
+   * @throws FileCopyHandlerException if the handler is not running
+   * @return the data verification response of type {@link FileCopyDataVerificationResponse}
+   */
+  FileCopyDataVerificationResponse getFileCopyDataVerificationResponse(FileCopyInfo fileCopyInfo) {
+    validateIfStoreFileCopyHandlerIsRunning();
+    String operationName = "GetDataVerificationWorkflow" + "[Partition=" + fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
+    FileCopyDataVerificationResponse dataVerificationResponse = null;
+
+    try {
+      dataVerificationResponse = operationRetryHandler.executeWithRetry(
+          () -> new GetDataVerificationWorkflow(connectionPool, fileCopyInfo, config).execute(), operationName);
+    } catch (IOException e) {
+      logMessageAndThrow(operationName, "IO error while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationApiError);
+    } catch (ConnectionPoolTimeoutException e) {
+      logMessageAndThrow(operationName, "Connection pool timeout while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationApiError);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt(); // Preserve interrupt status
+
+      logMessageAndThrow(operationName, "Thread interrupted while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationApiError);
+    } catch (RuntimeException e) {
+      logMessageAndThrow(operationName, "Unexpected runtime error while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+    } catch (Exception e) {
+      logMessageAndThrow(operationName, "Exception while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+    }
+    validateResponseOrThrow(dataVerificationResponse, operationName);
+    logger.info(operationName + ": Fetched data verification for partition: " + fileCopyInfo.getSourceReplicaId().getPartitionId().getId());
+    return dataVerificationResponse;
   }
 
   /**
@@ -321,6 +381,45 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     }
     validateResponseOrThrow(chunkResponse, operationName);
     return chunkResponse;
+  }
+
+  /**
+   * Create a list of ranges for checksum verification.
+   * @param fileSize the size of the file in bytes
+   * @param rangesCount the number of ranges to create
+   * @param rangeSizeInMb the size of each range in MB
+   */
+  List<Pair<Integer, Integer>> getChecksumRanges(Long fileSize, int rangesCount, int rangeSizeInMb) {
+    if (fileSize <= 0) {
+      throw new FileCopyHandlerException("File size must be greater than 0",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
+    }
+    if (rangesCount <= 0 || rangeSizeInMb <= 0) {
+      throw new FileCopyHandlerException("File copy handler data verification ranges count and size must be greater than 0",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
+    }
+    int rangeSizeInBytes = rangeSizeInMb * 1024 * 1024; // Convert MB to bytes
+    int totalChunks = (int) Math.ceil((double) fileSize / rangeSizeInBytes);
+    int rangeCount = Math.min(totalChunks, rangesCount);
+
+    // Generate all possible chunk indices [0, totalChunks)
+    List<Integer> chunkIndices = new ArrayList<>();
+    for (int i = 0; i < totalChunks; i++) {
+      chunkIndices.add(i);
+    }
+    // Shuffle and pick the first `rangeCount` unique chunks
+    Collections.shuffle(chunkIndices);
+    List<Integer> selectedChunks = chunkIndices.subList(0, rangeCount);
+    // keep them sorted in ascending order for better readability
+    Collections.sort(selectedChunks);
+
+    List<Pair<Integer, Integer>> ranges = new ArrayList<>(rangeCount);
+    for (int chunkIndex : selectedChunks) {
+      int start = chunkIndex * rangeSizeInBytes;
+      int end = (int) Math.min(start + rangeSizeInBytes - 1, fileSize - 1);
+      ranges.add(new Pair<>(start, end));
+    }
+    return ranges;
   }
 
   /**
