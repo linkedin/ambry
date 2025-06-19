@@ -88,7 +88,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String DELETED_TS = "deleted_ts";
   private static final String MODIFIED_TS = "modified_ts";
   private static final String BLOB_SIZE = "blob_size";
-  private StaleNamedBlob keepBlobAcrossBatches = null;
 
   // query building blocks
   private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
@@ -176,47 +175,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String TTL_UPDATE_QUERY =
       String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
 
-  private static final String GET_BLOBS_FOR_INACTIVE_CONTAINER = String.format(
-      "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
-          "FROM %s " +
-          "WHERE container_id = ? AND account_id = ? " +
-          "LIMIT ? OFFSET ?;",
-      ACCOUNT_ID,
-      CONTAINER_ID,
-      BLOB_NAME,
-      BLOB_ID,
-      VERSION,
-      BLOB_STATE,
-      MODIFIED_TS,
-      DELETED_TS,
-      NAMED_BLOBS_V2
-  );
-
-//  private static final String GET_BLOBS_FOR_ACTIVE_CONTAINER = String.format(
-//      "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
-//          "FROM %s " +
-//          "WHERE container_id = ? AND account_id = ? " +
-//          "ORDER BY %s ASC, %s DESC " +  // <-- Changed this line
-//          "LIMIT ? OFFSET ?;",
-//      ACCOUNT_ID,
-//      CONTAINER_ID,
-//      BLOB_NAME,
-//      BLOB_ID,
-//      VERSION,
-//      BLOB_STATE,
-//      MODIFIED_TS,
-//      DELETED_TS,
-//      NAMED_BLOBS_V2,
-//      BLOB_NAME,    // First order by blob_name alphabetically (ASC)
-//      VERSION   // Then order by modified_ts descending (DESC)
-//  );
-
   private static final String GET_BLOBS_FOR_ACTIVE_CONTAINER = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
           "FROM %s " +
-          "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND deleted_ts IS NULL " +
+          "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND (deleted_ts IS NULL or deleted_ts > NOW()) " +
           "ORDER BY %s ASC, %s DESC " +
-          "LIMIT ?;",
+          "LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
@@ -524,14 +488,25 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       List<StaleNamedBlob> staleNamedBlobResults;
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
       List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, blobName);
-      if (potentialStaleNamedBlobResults.isEmpty()) {
-        return new StaleBlobsWithLatestBlobName(new ArrayList<>(), "DONE");
-      }
-      if (container.getStatus() == Container.ContainerStatus.ACTIVE) {
-        staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
-      } else {
-        staleNamedBlobResults = potentialStaleNamedBlobResults;
-        return new StaleBlobsWithLatestBlobName(staleNamedBlobResults, "\0");
+
+      int resultSize = potentialStaleNamedBlobResults.size();
+      Container.ContainerStatus status = container.getStatus();
+
+      if (resultSize == config.queryStaleDataMaxResults) {
+        if (status == Container.ContainerStatus.ACTIVE) {
+          staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+          return staleBlobsWithLatestBlobName;
+        } else if (status == Container.ContainerStatus.INACTIVE) {
+          staleNamedBlobResults = potentialStaleNamedBlobResults;
+          return new StaleBlobsWithLatestBlobName(staleNamedBlobResults, "\0");
+        }
+      } else if (resultSize < config.queryStaleDataMaxResults) {
+        if (status == Container.ContainerStatus.ACTIVE) {
+          staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+          return new StaleBlobsWithLatestBlobName(staleBlobsWithLatestBlobName.getStaleBlobs(), null);
+        } else if (status == Container.ContainerStatus.INACTIVE) {
+          return new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults, null);
+        }
       }
 
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
@@ -539,11 +514,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }, transactionStateTracker);
     //TODO IN LATER PR: local hard delete
   }
-
-
-
-
-
 
   @Override
   public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords) {
@@ -959,51 +929,36 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   /**
-   * Identifies stale blobs in a list of named blobs for an active container.
+   * Identifies stale blobs from a list of blobs belonging to an active container,
+   * based on their state and last modified timestamp relative to a cutoff period.
    *
-   * A "stale" blob is determined based on its state transitions and timestamps.
-   * The logic compares consecutive blobs with the same blob name to determine
-   * if the earlier version is outdated and can be marked for deletion.
+   * The method iterates through the sorted list of blobs, comparing adjacent blobs
+   * with the same name and marking blobs as stale according to these rules:
+   * - If a blob is IN_PROGRESS and an equivalent READY blob exists,
+   *   the IN_PROGRESS blob is stale if last modified before the cutoff.
+   * - If two READY blobs exist with the same name, the later one is stale.
+   * - If two IN_PROGRESS blobs exist, the older one is stale if last modified before cutoff.
+   * - If a READY blob is followed by an IN_PROGRESS blob, the IN_PROGRESS blob is stale.
    *
-   * Rules applied to determine stale blobs:
-   * - Blobs with a non-null delete timestamp are skipped.
-   * - If a blob transitions from IN_PROGRESS to READY and the IN_PROGRESS blob
-   *   is older than the cutoff time, it is marked stale.
-   * - If both blobs are in READY state with the same name, the current one is marked stale.
-   * - If both are IN_PROGRESS:
-   *   - If the first is newer than cutoff, the current is stale.
-   *   - If the first is older, it is stale and replaced by the current.
-   * - If the earlier is READY and the current is IN_PROGRESS, the current is stale.
+   * At the end, if the last considered blob is IN_PROGRESS and older than the cutoff, it is also marked stale.
    *
-   * The method maintains a global reference (keepBlobAcrossBatches) to carry over
-   * the last processed blob across multiple batch calls.
-   *
-   * @param blobList   A list of StaleNamedBlob objects to evaluate.
-   * @param cutoffDays The cutoff period in days to determine staleness based on modified timestamp.
-   * @return A list of StaleNamedBlob objects that are considered stale and eligible for deletion.
+   * @param blobList      The list of StaleNamedBlob objects to process. Should be sorted by blob name and timestamp.
+   * @param cutoffDays    The number of days used to calculate the cutoff timestamp for staleness.
+   * @return              A StaleBlobsWithLatestBlobName object containing the list of stale blobs
+   *                      and the name of the latest blob considered.
    */
   public StaleBlobsWithLatestBlobName getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutoffDays) {
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
     if (blobList.isEmpty()) {
-      return new StaleBlobsWithLatestBlobName(staleBlobs, "\0");
+      return new StaleBlobsWithLatestBlobName(staleBlobs, null);
     }
 
     long cutoffTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(cutoffDays);
     Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
 
-    // Use keepBlobAcrossBatches only for initial keepBlob; after that use local keepBlob
-    StaleNamedBlob keepBlob = (keepBlobAcrossBatches != null) ? keepBlobAcrossBatches : blobList.get(0);
-
-    // If using global keepBlob, we start from the first item;
-    // otherwise skip the first item as it is the initial keepBlob
-    int startIndex = (keepBlobAcrossBatches != null) ? 0 : 1;
-
-    for (int i = startIndex; i < blobList.size(); i++) {
+    StaleNamedBlob keepBlob = blobList.get(0);
+    for (int i = 1; i < blobList.size(); i++) {
       StaleNamedBlob currentBlob = blobList.get(i);
-
-      if (currentBlob.getDeleteTs() != null) {
-        continue;
-      }
 
       if (!keepBlob.getBlobName().equals(currentBlob.getBlobName())) {
         keepBlob = currentBlob;
@@ -1022,11 +977,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.READY) {
         staleBlobs.add(currentBlob);
       } else if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.IN_PROGRESS) {
-        if (keepBlobModifiedTS.after(cutoffTimestamp)) {
-          staleBlobs.add(currentBlob);
-        } else if (keepBlobModifiedTS.before(cutoffTimestamp)) {
-          staleBlobs.add(keepBlob);
-          keepBlob = currentBlob;
+          if (keepBlobModifiedTS.before(cutoffTimestamp)) {
+            staleBlobs.add(keepBlob);
+            keepBlob = currentBlob;
         }
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.IN_PROGRESS) {
         staleBlobs.add(currentBlob);
@@ -1064,14 +1017,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container, String latestBlobName) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
 
-    String GET_BLOBS_FOR_CLEANER = (container.getStatus() == Container.ContainerStatus.ACTIVE) ? GET_BLOBS_FOR_ACTIVE_CONTAINER : GET_BLOBS_FOR_INACTIVE_CONTAINER;
-
-    try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CLEANER)) {
+    try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_ACTIVE_CONTAINER)) {
       statement.setInt(1, container.getId());
       statement.setInt(2, container.getParentAccountId());
       statement.setString(3, latestBlobName);
-      statement.setInt(4, config.queryStaleDataMaxResults); // limit
-      //statement.setInt(4, idx * config.queryStaleDataMaxResults); // offset = idx * batchSize
+      statement.setInt(4, config.queryStaleDataMaxResults);
 
       logger.debug("Pulling potential stale blobs from MySql. Query {}", statement.toString());
 

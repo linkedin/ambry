@@ -38,7 +38,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final NamedBlobDb namedBlobDb;
   private static final Logger logger = LoggerFactory.getLogger(NamedBlobsCleanupRunner.class);
   private final AccountService accountService;
-  private final int MaxBatchSize = 1000;
+  private final String smallestASCII = "\0";
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService) {
     this.router = router;
@@ -61,7 +61,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
           continue;
         }
         // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
-        String blobName = "\0";
+        String blobName = smallestASCII;
         do {
           staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, blobName).get();
           batchStaleBlobs = staleBlobsWithLatestBlobName.getStaleBlobs();
@@ -86,7 +86,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
           Set<String> cleanedBlobIds =
               batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
           logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
-        } while (staleBlobsWithLatestBlobName.getLatestBlob() != "DONE");
+        } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
       }
     } catch (ExecutionException e) {
       throw new RuntimeException(e);
