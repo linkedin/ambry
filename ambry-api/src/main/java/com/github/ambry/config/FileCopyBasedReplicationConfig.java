@@ -121,7 +121,7 @@ public class FileCopyBasedReplicationConfig {
     getFileCopyHandlerChunkSize = verifiableProperties.getInt(FILECOPYHANDLER_CHUNK_SIZE, 10 * 1024 * 1024); // 10 MB
     fileCopyHandlerConnectionTimeoutMs = verifiableProperties.getInt(FILECOPYHANDLER_CONNECTION_TIMEOUT_MS, 5000);
     fileCopyMetricsReservoirTimeWindowMs = verifiableProperties.getInt(FileCopyMetricsReservoirTimeWindowMs,
-        Integer.parseInt(FileCopyMetricsReservoirTimeWindowMs));
+        Integer.parseInt(DefaultFileCopyMetricReservoirTimeWindowMs));
     fileCopyHandlerDataVerificationRangesCount = verifiableProperties.getInt(FILECOPYHANDLER_DATA_VERIFICATION_RANGES_COUNT, 10);
     fileCopyHandlerDataVerificationRangeSizeInMb = verifiableProperties.getInt(FILECOPYHANDLER_DATA_VERIFICATION_RANGE_SIZE_IN_MB, 10);
     fileCopyHandlerDataVerificationIsEnabled = verifiableProperties.getBoolean(FILECOPYHANDLER_DATA_VERIFICATION_IS_ENABLED, false);
