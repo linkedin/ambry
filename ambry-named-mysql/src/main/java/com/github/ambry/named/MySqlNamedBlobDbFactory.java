@@ -31,27 +31,29 @@ import com.zaxxer.hikari.HikariDataSource;
 public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   private final MySqlNamedBlobDbConfig config;
   private final String localDatacenter;
-  private final MetricRegistry metricRegistry;
   private final AccountService accountService;
+  private final MetricRegistry metricRegistry;
+  private final Metrics metricRecorder;
   private final Time time;
 
   public MySqlNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      AccountService accountService, Time time) {
+      AccountService accountService, Time time, String metricPrefix) {
     config = new MySqlNamedBlobDbConfig(verifiableProperties);
     localDatacenter = verifiableProperties.getString(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME);
     this.metricRegistry = metricRegistry;
+    this.metricRecorder = new Metrics(metricRegistry, metricPrefix);
     this.accountService = accountService;
     this.time = time;
   }
 
   public MySqlNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       AccountService accountService) {
-    this(verifiableProperties, metricRegistry, accountService, SystemTime.getInstance());
+    this(verifiableProperties, metricRegistry, accountService, SystemTime.getInstance(), "");
   }
 
   @Override
   public MySqlNamedBlobDb getNamedBlobDb() {
-    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter, metricRegistry,
+    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter, metricRecorder,
         this.time);
   }
 

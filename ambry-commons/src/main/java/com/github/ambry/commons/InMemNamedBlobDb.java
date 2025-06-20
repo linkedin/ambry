@@ -146,7 +146,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
         return future;
       }
     }
-    if (record.getVersion() == 0) {
+    if (record.getVersion() == NamedBlobRecord.UNINITIALIZED_VERSION) {
       record = new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
           record.getBlobId(), record.getExpirationTimeMs(), time.milliseconds(), record.getBlobSize(),
           record.getModifiedTimeMs(), record.isDirectory());

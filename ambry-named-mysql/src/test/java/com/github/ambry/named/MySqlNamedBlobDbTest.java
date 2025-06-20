@@ -29,7 +29,6 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -86,7 +85,7 @@ public class MySqlNamedBlobDbTest {
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
-        dataSourceFactory, localDatacenter, new MetricRegistry());
+        dataSourceFactory, localDatacenter, new Metrics(new MetricRegistry(), ""));
     account = accountService.createAndAddRandomAccount();
     container = account.getAllContainers().iterator().next();
     MockClusterMap clusterMap = new MockClusterMap();
