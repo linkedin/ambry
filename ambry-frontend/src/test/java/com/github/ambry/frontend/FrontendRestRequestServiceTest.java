@@ -210,6 +210,7 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.enable.blob.name.rule.check", "true");
     configProps.setProperty(FrontendConfig.INVALID_ASCII_BLOB_NAME_CHARS, "\\\\,{,},^,%,`,[,],\",<,>,~,#,|\n");
     CommonTestUtils.populateRequiredRouterProps(configProps);
+    configProps.put("clustermap.cluster.name", clusterName);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
@@ -407,16 +408,16 @@ public class FrontendRestRequestServiceTest {
     String blobIdWithClusterName = "/" + CLUSTER_NAME + "/" + blobIdFromRouter + ".bin";
     reset(namedBlobDb);
     NamedBlobRecord namedBlobRecord =
-        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName, blobIdWithClusterName, 3600);
-    NamedBlobRecord namedBlobRecordAfterTtlUpdate =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName, blobIdFromRouter, 3600);
+    NamedBlobRecord namedBlobRecordWithClusterPrefix =
         new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName, blobIdWithClusterName,
             Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
-        CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName, GetOption.None,
-        false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecordWithClusterPrefix)));
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName,
+        GetOption.None, false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
-        CompletableFuture.completedFuture(new PutResult(namedBlobRecordAfterTtlUpdate)));
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
@@ -4457,6 +4458,8 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if ((restRequest.getRestMethod() == RestMethod.PUT || restRequest.getRestMethod() == RestMethod.POST)
           && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
+      } else {
+        returnInputIfTranslationNull = true;
       }
       return completeOperation(input, blobProperties, callback);
     }
@@ -4665,7 +4668,7 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.StitchBlob);
   }

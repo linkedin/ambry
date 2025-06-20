@@ -188,12 +188,19 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption, localGetHeader).thenApply(NamedBlobRecord::getBlobId);
         }
-      } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
+      } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)
+          || RestUtils.isNamedBlobTtlUpdateRequest(restRequest)) {
         if (restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
           long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
           String blobIdClean = RestUtils.stripSlashAndExtensionFromId(input);
-          NamedBlobPath namedBlobPath =
-              NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          NamedBlobPath namedBlobPath;
+          if (RestUtils.isNamedBlobTtlUpdateRequest(restRequest)) {
+            namedBlobPath =
+                NamedBlobPath.parse(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true),
+                    restRequest.getArgs());
+          } else {
+            namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          }
           NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
           conversionFuture = namedBlobDb.updateBlobTtlAndStateToReady(record).thenApply(result -> {
