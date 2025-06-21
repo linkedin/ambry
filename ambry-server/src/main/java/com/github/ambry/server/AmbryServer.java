@@ -424,7 +424,8 @@ public class AmbryServer {
         replicationManager.start();
 
         if (serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
-          FileCopyMetrics fileCopyMetrics = new FileCopyMetrics(registry);
+          FileCopyMetrics fileCopyMetrics =
+              new FileCopyMetrics(registry, fileCopyBasedReplicationConfig.fileCopyMetricsReservoirTimeWindowMs);
           FileCopyHandlerFactory fileCopyHandlerFactory =
               new StoreFileCopyHandlerFactory(connectionPool, storageManager, clusterMap,
                   fileCopyBasedReplicationConfig, storeConfig, fileCopyMetrics);

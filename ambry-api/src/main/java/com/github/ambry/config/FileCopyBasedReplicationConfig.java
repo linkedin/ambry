@@ -83,6 +83,15 @@ public class FileCopyBasedReplicationConfig {
   @Default("5000")
   public final int fileCopyHandlerConnectionTimeoutMs;
 
+  /**
+   * File Copy Metrics Reservoir Time Window in Ms
+   */
+  public static final String FileCopyMetricsReservoirTimeWindowMs = "filecopymetrics.reservoir.time.window.ms";
+  public static final String DefaultFileCopyMetricReservoirTimeWindowMs = "100";
+  @Config(FileCopyMetricsReservoirTimeWindowMs)
+  @Default(DefaultFileCopyMetricReservoirTimeWindowMs)
+  public final int fileCopyMetricsReservoirTimeWindowMs;
+
   public static final String FILECOPYHANDLER_DATA_VERIFICATION_RANGES_COUNT = "filecopyhandler.data.verification.ranges.count";
   @Config(FILECOPYHANDLER_DATA_VERIFICATION_RANGES_COUNT)
   @Default("10")
@@ -101,7 +110,8 @@ public class FileCopyBasedReplicationConfig {
   public FileCopyBasedReplicationConfig(VerifiableProperties verifiableProperties) {
     Objects.requireNonNull(verifiableProperties, "verifiableProperties cannot be null");
     fileCopyMetaDataFileName = verifiableProperties.getString(FILE_COPY_META_DATA_FILE_NAME, "segments_metadata_file");
-    fileCopyParallelPartitionHydrationCountPerDisk = verifiableProperties.getInt(FILE_COPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
+    fileCopyParallelPartitionHydrationCountPerDisk =
+        verifiableProperties.getInt(FILE_COPY_PARALLEL_PARTITION_HYDRATION_COUNT_PER_DISK, 1);
     fileCopyNumberOfFileCopyThreads = verifiableProperties.getInt(FILE_COPY_NUMBER_OF_FILE_COPY_THREADS, 4);
     fileCopyDataFlushIntervalInMbs = verifiableProperties.getLong(FILE_COPY_DATA_FLUSH_INTERVAL_IN_MBS, 1000);
     fileCopyReplicaTimeoutSecs = verifiableProperties.getLong(FILE_COPY_REPLICA_TIMEOUT_SECS, 36000);
@@ -110,6 +120,8 @@ public class FileCopyBasedReplicationConfig {
     fileCopyHandlerRetryBackoffMs = verifiableProperties.getInt(FILECOPYHANDLER_RETRY_BACKOFF_MS, 500);
     getFileCopyHandlerChunkSize = verifiableProperties.getInt(FILECOPYHANDLER_CHUNK_SIZE, 10 * 1024 * 1024); // 10 MB
     fileCopyHandlerConnectionTimeoutMs = verifiableProperties.getInt(FILECOPYHANDLER_CONNECTION_TIMEOUT_MS, 5000);
+    fileCopyMetricsReservoirTimeWindowMs = verifiableProperties.getInt(FileCopyMetricsReservoirTimeWindowMs,
+        Integer.parseInt(DefaultFileCopyMetricReservoirTimeWindowMs));
     fileCopyHandlerDataVerificationRangesCount = verifiableProperties.getInt(FILECOPYHANDLER_DATA_VERIFICATION_RANGES_COUNT, 10);
     fileCopyHandlerDataVerificationRangeSizeInMb = verifiableProperties.getInt(FILECOPYHANDLER_DATA_VERIFICATION_RANGE_SIZE_IN_MB, 10);
     fileCopyHandlerDataVerificationIsEnabled = verifiableProperties.getBoolean(FILECOPYHANDLER_DATA_VERIFICATION_IS_ENABLED, false);
