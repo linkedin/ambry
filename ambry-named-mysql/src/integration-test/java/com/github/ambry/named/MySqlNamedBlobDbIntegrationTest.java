@@ -59,6 +59,33 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     super(enableHardDelete, MySqlNamedBlobDbConfig.DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
   }
 
+  @Test
+  public void testPutWithVersion() throws Exception {
+    List<NamedBlobRecord> records = new ArrayList<>();
+    for (Account account : accountService.getAllAccounts()) {
+      for (Container container : account.getAllContainers()) {
+        String blobId = getBlobId(account, container);
+        String blobName = "name/more path segments--";
+        long expirationTime = Utils.Infinite_Time;
+        long blobSize = 20;
+        NamedBlobRecord record =
+            new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime,
+                time.milliseconds(), blobSize);
+        namedBlobDb.put(record).get();
+        records.add(record);
+        time.sleep(1000);
+      }
+    }
+
+    // get records just inserted
+    for (NamedBlobRecord record : records) {
+      NamedBlobRecord recordFromStore =
+          namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+      assertEquals("Record does not match expectations.", record, recordFromStore);
+      assertEquals("Version should match", record.getVersion(), recordFromStore.getVersion());
+    }
+  }
+
   /**
    * Tests sequences of puts, gets, lists, and deletes across multiple containers.
    * @throws Exception
@@ -327,7 +354,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
       }
     }
   }
-
 
   /**
    * Test behavior with blob cleanup main pipeline
@@ -658,7 +684,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 6 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
-
   /**
    * @param callable an async call, where the {@link Future} is expected to be completed with an exception.
    * @param errorCode the expected {@link RestServiceErrorCode}.
@@ -669,7 +694,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
       assertEquals("Unexpected error code for get after delete", errorCode, rse.getErrorCode());
     });
   }
-
 
   private void checkRecordsEqual(NamedBlobRecord record1, NamedBlobRecord record2) {
     assertEquals("AccountName mismatch", record1.getAccountName(), record2.getAccountName());
