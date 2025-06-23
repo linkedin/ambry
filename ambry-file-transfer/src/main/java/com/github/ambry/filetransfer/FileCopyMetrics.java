@@ -16,7 +16,10 @@ package com.github.ambry.filetransfer;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
+import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.filetransfer.handler.StoreFileCopyHandler;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -33,7 +36,7 @@ public class FileCopyMetrics {
   private final Histogram fileCopyEligibleDataPerPartitionInBytes;
   private final Histogram fileCopyAverageSpeedPerPartition;
 
-  public FileCopyMetrics(MetricRegistry registry) {
+  public FileCopyMetrics(MetricRegistry registry, int fileCopyMetricsReservoirTimeWindowMs) {
     partitionsInFileCopyPath =
         registry.counter(MetricRegistry.name(FileCopyBasedReplicationManager.class, "PartitionsInFileCopyPath"));
     partitionsFileCopyInitiated =
@@ -46,12 +49,24 @@ public class FileCopyMetrics {
         registry.counter(MetricRegistry.name(FileCopyBasedReplicationManager.class, "PartitionsFileCopyFailure"));
     fileCopyRunningThreadCount =
         registry.counter(MetricRegistry.name(FileCopyThread.class, "FileCopyRunningThreadCount"));
+
     fileCopyPerPartitionTimeMs =
-        registry.histogram(MetricRegistry.name(FileCopyThread.class, "FileCopyPerPartitionTimeMs"));
+        registry.histogram(MetricRegistry.name(FileCopyThread.class, "FileCopyPerPartitionTimeMs"), () -> new Histogram(
+            new SlidingTimeWindowArrayReservoir(fileCopyMetricsReservoirTimeWindowMs, TimeUnit.MILLISECONDS)));
+
     fileCopyEligibleDataPerPartitionInBytes =
-        registry.histogram(MetricRegistry.name(StoreFileCopyHandler.class, "FileCopyEligibleDataPerPartitionInBytes"));
+        registry.histogram(MetricRegistry.name(StoreFileCopyHandler.class, "FileCopyEligibleDataPerPartitionInBytes"),
+            () -> new Histogram(
+                new SlidingTimeWindowArrayReservoir(fileCopyMetricsReservoirTimeWindowMs, TimeUnit.MILLISECONDS)));
+
     fileCopyAverageSpeedPerPartition =
-        registry.histogram(MetricRegistry.name(StoreFileCopyHandler.class, "FileCopyAverageSpeedPerPartition"));
+        registry.histogram(MetricRegistry.name(StoreFileCopyHandler.class, "FileCopyAverageSpeedPerPartition"),
+            () -> new Histogram(
+                new SlidingTimeWindowArrayReservoir(fileCopyMetricsReservoirTimeWindowMs, TimeUnit.MILLISECONDS)));
+  }
+
+  public FileCopyMetrics(MetricRegistry registry) {
+    this(registry, Integer.parseInt(FileCopyBasedReplicationConfig.DefaultFileCopyMetricReservoirTimeWindowMs));
   }
 
   public void incrementFileCopyInitiated() {
