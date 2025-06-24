@@ -24,10 +24,6 @@ public class FileBasedReplicationPrioritizationManagerFactory implements Priorit
   final ClusterManagerQueryHelper clusterManagerQueryHelper;
   final String datacenterName;
 
-  public FileBasedReplicationPrioritizationManagerFactory() {
-    this(null, null, null);
-  }
-
   public FileBasedReplicationPrioritizationManagerFactory(DisruptionService disruptionService,
       ClusterManagerQueryHelper clusterManagerQueryHelper, String datacenterName) {
     this.disruptionService = disruptionService;
