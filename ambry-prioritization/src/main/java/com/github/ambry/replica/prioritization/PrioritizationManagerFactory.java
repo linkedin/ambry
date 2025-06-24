@@ -14,7 +14,10 @@
 
 package com.github.ambry.replica.prioritization;
 
+import com.github.ambry.clustermap.ClusterManagerQueryHelper;
 import com.github.ambry.config.ReplicaPrioritizationStrategy;
+import com.github.ambry.replica.prioritization.disruption.DisruptionService;
+
 
 /**
  * Interface for Factory class which returns the {@link PrioritizationManager} depending on the implementation

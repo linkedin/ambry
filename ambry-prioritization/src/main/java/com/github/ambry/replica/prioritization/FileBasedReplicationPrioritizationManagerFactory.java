@@ -14,17 +14,36 @@
 
 package com.github.ambry.replica.prioritization;
 
+import com.github.ambry.clustermap.ClusterManagerQueryHelper;
 import com.github.ambry.config.ReplicaPrioritizationStrategy;
+import com.github.ambry.replica.prioritization.disruption.DisruptionService;
 
 
-public class FileBasedReplicationPrioritizationManagerFactory implements PrioritizationManagerFactory{
+public class FileBasedReplicationPrioritizationManagerFactory implements PrioritizationManagerFactory {
+  final DisruptionService disruptionService;
+  final ClusterManagerQueryHelper clusterManagerQueryHelper;
+  final String datacenterName;
+
+  public FileBasedReplicationPrioritizationManagerFactory() {
+    this(null, null, null);
+  }
+
+  public FileBasedReplicationPrioritizationManagerFactory(DisruptionService disruptionService,
+      ClusterManagerQueryHelper clusterManagerQueryHelper, String datacenterName) {
+    this.disruptionService = disruptionService;
+    this.clusterManagerQueryHelper = clusterManagerQueryHelper;
+    this.datacenterName = datacenterName;
+  }
 
   @Override
   public PrioritizationManager getPrioritizationManager(ReplicaPrioritizationStrategy replicaPrioritizationStrategy) {
-    if(replicaPrioritizationStrategy == ReplicaPrioritizationStrategy.FirstComeFirstServe) {
+    if (replicaPrioritizationStrategy == ReplicaPrioritizationStrategy.FirstComeFirstServe) {
       return new FCFSPrioritizationManager();
-    }
-    else
+    } else if (replicaPrioritizationStrategy == ReplicaPrioritizationStrategy.ACMAdvanceNotificationsBased) {
+      return new FileCopyDisruptionBasedPrioritizationManager(disruptionService, datacenterName,
+          clusterManagerQueryHelper);
+    } else {
       return null;
+    }
   }
 }
