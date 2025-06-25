@@ -1593,4 +1593,20 @@ public class RestUtils {
       return valueMap;
     }
   }
+
+  /**
+   * Calculate the throughput of a request
+   * @param bytesTransferred the number of bytes that was transfered to/from the client
+   * @param transferTimeInMs the total time it took for the request to complete in milliseconds
+   * @return a throughput value in bytes/second
+   */
+  public static Long calculateThroughput(long bytesTransferred, long transferTimeInMs) {
+    // If for some reason we completed the request in less than a ms, set ms to 1 when calculating throughput
+    long msForThroughputCalculation = 1;
+    if (transferTimeInMs > 0) {
+      msForThroughputCalculation = transferTimeInMs;
+    }
+    double throughputSeconds = (double) msForThroughputCalculation / 1000;
+    return Math.round(bytesTransferred / throughputSeconds);
+  }
 }

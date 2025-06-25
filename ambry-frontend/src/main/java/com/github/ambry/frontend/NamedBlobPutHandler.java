@@ -234,8 +234,9 @@ public class NamedBlobPutHandler {
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(restRequest, getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          router.putBlob(restRequest, getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest,
+              options, routerPutBlobCallback(blobInfo),
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -248,6 +249,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
+        restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
         String blobIdClean = stripPrefixAndExtension(blobId);
@@ -257,8 +259,8 @@ public class NamedBlobPutHandler {
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(restRequest, blobIdClean, serviceId, Utils.Infinite_Time, callback,
-                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)),
-              this::isRetriable, routerTtlUpdateCallbackForPut(blobInfo));
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+              routerTtlUpdateCallbackForPut(blobInfo));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
@@ -380,10 +382,10 @@ public class NamedBlobPutHandler {
               + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
         }
         long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
+        NamedBlobRecord record =
+            NamedBlobRecord.forUpdate(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                namedBlobPath.getBlobName(), namedBlobVersion);
         namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished

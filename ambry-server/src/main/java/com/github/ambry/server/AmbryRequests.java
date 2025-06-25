@@ -27,6 +27,10 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
+import com.github.ambry.protocol.FileCopyDataVerificationRequest;
+import com.github.ambry.protocol.FileCopyDataVerificationResponse;
+import com.github.ambry.store.BootstrapSession;
+import com.github.ambry.store.BootstrapSessionManager;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -92,6 +96,7 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.store.PartitionFileStore;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
@@ -246,6 +251,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case FileCopyGetChunkRequest:
           handleFileCopyGetChunkRequest(networkRequest);
+          break;
+        case FileCopyDataVerificationRequest:
+          handleFileCopyDataVerificationRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -1695,39 +1703,57 @@ public class AmbryRequests implements RequestAPI {
 
     FileCopyGetMetaDataResponse response = null;
     FileCopyGetMetaDataRequest fileCopyGetMetaDataRequest = null;
-
+    PartitionId partitionId = null;
     try {
-      fileCopyGetMetaDataRequest =
-          FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+      fileCopyGetMetaDataRequest = FileCopyGetMetaDataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+      partitionId = fileCopyGetMetaDataRequest.getPartitionId();
 
-      ServerErrorCode error = validateRequest(fileCopyGetMetaDataRequest.getPartitionId(),
-              RequestOrResponseType.FileCopyGetMetaDataRequest, false);
+      ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.FileCopyGetMetaDataRequest, false);
       if (error != ServerErrorCode.NoError) {
         logger.error("Validating FileCopyGetMetaDataRequest failed with error {} for request {}",
             error, fileCopyGetMetaDataRequest);
-        response = new FileCopyGetMetaDataResponse(
-            fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), error);
+        response = new FileCopyGetMetaDataResponse(fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), error);
       } else {
-        Store blobStore = storeManager.getStore(fileCopyGetMetaDataRequest.getPartitionId());
+        Store blobStore = storeManager.getStore(partitionId);
         if (null == blobStore) {
-          logger.error("BlobStore is not available for partition {}", fileCopyGetMetaDataRequest.getPartitionId().getId());
-          throw new StoreException("BlobStore is not available for partition " +
-              fileCopyGetMetaDataRequest.getPartitionId(), StoreErrorCodes.StoreNotStarted);
+          logger.error("BlobStore is not available for partition {}", partitionId.getId());
+          throw new StoreException("BlobStore is not available for partition " + partitionId, StoreErrorCodes.StoreNotStarted);
         }
-        List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(false);
-        String snapshotId = ""; // TODO: Add support in blobStore to calculate snapshotId
-        response = new FileCopyGetMetaDataResponse(
-            FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
-            fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
-            logSegments.size(), logSegments, snapshotId, ServerErrorCode.NoError, null);
+        BootstrapSessionManager bootstrapSessionManager = ((StorageManager)storeManager).getBootstrapSessionManager(partitionId);
+        BootstrapSession existingSession = bootstrapSessionManager.getBootstrapSession(partitionId, fileCopyGetMetaDataRequest.getHostName());
+
+        // if BootstrapSession exists for (requested partition, requesting Node) then delete existing session
+        if (existingSession != null) {
+          logger.info("FileCopyGetMetaDataRequest: Session already exists for partition {}. Deleting existing session", partitionId.getId());
+          bootstrapSessionManager.removeBootstrapSession(partitionId, fileCopyGetMetaDataRequest.getHostName());
+        }
+        // Check if compaction is in progress.
+        //  If yes, then reject the request with error code = SnapshotUnavailable.
+        if (blobStore.isCompactionInProgress()) {
+          logger.info("FileCopyGetMetaDataRequest: Compaction is in progress for partition {}. Rejecting request", partitionId.getId());
+          response = new FileCopyGetMetaDataResponse(ServerErrorCode.SnapshotUnavailable);
+        } else if (storeManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(partitionId)) {
+          logger.info("FileCopyGetMetaDataRequest: Compaction control has been set for partition {}. Rejecting request", partitionId.getId());
+          response = new FileCopyGetMetaDataResponse(ServerErrorCode.SnapshotUnavailable);
+        } else {
+          List<LogInfo> logSegments = blobStore.getLogSegmentMetadataFiles(false);
+          String snapshotId = blobStore.getSnapshotId(logSegments);
+
+          // Create a new bootstrap session and get snapshotId for the available downloadable files.
+          bootstrapSessionManager.addAndStartBootstrapSession(partitionId, snapshotId, fileCopyGetMetaDataRequest.getHostName());
+
+          response = new FileCopyGetMetaDataResponse(
+              FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
+              fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(),
+              logSegments.size(), logSegments, snapshotId, ServerErrorCode.NoError, null);
+        }
       }
     } catch (Exception e) {
       if (null == fileCopyGetMetaDataRequest) {
         logger.error("Error while deserializing FileCopyGetMetaDataRequest", e);
         response = new FileCopyGetMetaDataResponse(ServerErrorCode.UnknownError);
       } else {
-        logger.error("Error while getting log segment metadata for partition {}",
-            fileCopyGetMetaDataRequest.getPartitionId().getId(), e);
+        logger.error("Error while getting log segment metadata for partition {}", partitionId.getId(), e);
         response = new FileCopyGetMetaDataResponse(
             FileCopyGetMetaDataResponse.FILE_COPY_PROTOCOL_METADATA_RESPONSE_VERSION_V_1,
             fileCopyGetMetaDataRequest.getCorrelationId(), fileCopyGetMetaDataRequest.getClientId(), 0,
@@ -1738,8 +1764,7 @@ public class AmbryRequests implements RequestAPI {
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", fileCopyGetMetaDataRequest, response, processingTime);
 
-      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(
-          requestQueueTime, processingTime, 0, 0, false);
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
       if (null != fileCopyGetMetaDataRequest) {
         fileCopyGetMetaDataRequest.accept(metricsUpdater);
       }
@@ -1762,43 +1787,86 @@ public class AmbryRequests implements RequestAPI {
     StoreFileChunk chunkResponse;
     FileCopyGetChunkRequest fileCopyGetChunkRequest = null;
     FileCopyGetChunkResponse response = null;
+    PartitionId partitionId = null;
     try {
-      fileCopyGetChunkRequest = FileCopyGetChunkRequest.readFrom(
-          new DataInputStream(request.getInputStream()), clusterMap);
+      fileCopyGetChunkRequest =
+          FileCopyGetChunkRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+      partitionId = fileCopyGetChunkRequest.getPartitionId();
 
-      ServerErrorCode error = validateRequest(fileCopyGetChunkRequest.getPartitionId(),
-          RequestOrResponseType.FileCopyGetChunkRequest, false);
+      ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.FileCopyGetChunkRequest, false);
       if (error != ServerErrorCode.NoError) {
-        logger.error("Validating FileCopyGetChunkRequest failed with error {} for request {}",
-            error, fileCopyGetChunkRequest);
-        response = new FileCopyGetChunkResponse(
-            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), error);
+        logger.error("Validating FileCopyGetChunkRequest failed with error {} for request {}", error,
+            fileCopyGetChunkRequest);
+        response = new FileCopyGetChunkResponse(fileCopyGetChunkRequest.getCorrelationId(),
+            fileCopyGetChunkRequest.getClientId(), error);
       } else {
-        PartitionFileStore fileStore = storeManager.getFileStore(fileCopyGetChunkRequest.getPartitionId());
-        if (null == fileStore) {
-          logger.error("FileStore is not available for partition {}", fileCopyGetChunkRequest.getPartitionId().getId());
-          throw new StoreException(
-              "FileStore is not available for partition " + fileCopyGetChunkRequest.getPartitionId(),
-              StoreErrorCodes.StoreNotStarted);
+        BootstrapSessionManager bootstrapSessionManager = ((StorageManager) storeManager).getBootstrapSessionManager(partitionId);
+        BootstrapSession existingSession = bootstrapSessionManager.getBootstrapSession(partitionId, fileCopyGetChunkRequest.getHostName());
+
+        // if BootstrapSession doesn't exist for (requested partition, requesting Node) then reject the request with
+        // error code = SessionNotFoundOrExpired
+        if (existingSession == null) {
+          logger.info("FileCopyGetChunkRequest: Session not found for partition {}. Rejecting request", partitionId.getId());
+          response = new FileCopyGetChunkResponse(ServerErrorCode.SnapshotNotFound);
+        } else {
+          Store blobStore = storeManager.getStore(partitionId);
+          if (null == blobStore) {
+            logger.error("BlobStore is not available for partition {}", partitionId.getId());
+            throw new StoreException("BlobStore is not available for partition " + partitionId, StoreErrorCodes.StoreNotStarted);
+          }
+          // Check if compaction is in progress.
+          //  If yes, then reject the request with error code = SnapshotUnavailable.
+          if (blobStore.isCompactionInProgress()) {
+            logger.info("FileCopyGetChunkRequest: Compaction is in progress for partition {}. Rejecting request", partitionId.getId());
+            logger.info("FileCopyGetChunkRequest: Deleting existing session for partition {}", partitionId.getId());
+            bootstrapSessionManager.removeBootstrapSession(partitionId, fileCopyGetChunkRequest.getHostName());
+            response = new FileCopyGetChunkResponse(ServerErrorCode.SnapshotUnavailable);
+          } else {
+            if (storeManager.isCompactionControlBeenSetAndIsEnabledForBlobStore(partitionId)) {
+              logger.info("FileCopyGetChunkRequest: Compaction control has been set for partition {}. Rejecting request", partitionId.getId());
+              logger.info("FileCopyGetChunkRequest: Deleting existing session for partition {}", partitionId.getId());
+              bootstrapSessionManager.removeBootstrapSession(partitionId, fileCopyGetChunkRequest.getHostName());
+              response = new FileCopyGetChunkResponse(ServerErrorCode.SnapshotUnavailable);
+            } else {
+              // Check if the snapshotId in the request matches with the one in the session.
+              //  If no, reject the request with error code = SnapshotMismatch and delete the session.
+              if (!fileCopyGetChunkRequest.getSnapshotId().equals(existingSession.getSnapShotId())) {
+                logger.info("FileCopyGetChunkRequest: Deleting existing session for partition {}", partitionId.getId());
+                bootstrapSessionManager.removeBootstrapSession(partitionId, fileCopyGetChunkRequest.getHostName());
+
+                logger.info("FileCopyGetChunkRequest: SnapshotId mismatch for partition {}. Rejecting request", partitionId.getId());
+                response = new FileCopyGetChunkResponse(ServerErrorCode.SnapshotMismatch);
+              } else {
+                // Extend the deferral timer for the session.
+                logger.info("FileCopyGetChunkRequest: Extending deferral timer for session for partition {}", partitionId.getId());
+                existingSession.extendDeferralTimer();
+
+                PartitionFileStore fileStore = storeManager.getFileStore(partitionId);
+                if (null == fileStore) {
+                  logger.error("FileStore is not available for partition {}", partitionId.getId());
+                  throw new StoreException("FileStore is not available for partition " + partitionId, StoreErrorCodes.StoreNotStarted);
+                }
+                chunkResponse = fileStore.readStoreFileChunkFromDisk(fileCopyGetChunkRequest.getFileName(),
+                    fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes(),
+                    fileCopyGetChunkRequest.isChunked());
+                response = new FileCopyGetChunkResponse(FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
+                    fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
+                    ServerErrorCode.NoError, partitionId, fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
+                    fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
+              }
+            }
+          }
         }
-        chunkResponse = fileStore.readStoreFileChunkFromDisk(fileCopyGetChunkRequest.getFileName(),
-            fileCopyGetChunkRequest.getStartOffset(), fileCopyGetChunkRequest.getChunkLengthInBytes(),
-            fileCopyGetChunkRequest.isChunked());
-        response = new FileCopyGetChunkResponse(FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
-            fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(), ServerErrorCode.NoError,
-            fileCopyGetChunkRequest.getPartitionId(), fileCopyGetChunkRequest.getFileName(), chunkResponse.getStream(),
-            fileCopyGetChunkRequest.getStartOffset(), chunkResponse.getChunkLength(), false);
       }
     } catch (Exception e) {
       if (null == fileCopyGetChunkRequest) {
         logger.error("Error while deserializing FileCopyGetChunkRequest", e);
         response = new FileCopyGetChunkResponse(ServerErrorCode.UnknownError);
       } else {
-        logger.error("Error while getting data chunk for partition {}",
-            fileCopyGetChunkRequest.getPartitionId().getId(), e);
+        logger.error("Error while getting data chunk for partition {}", partitionId.getId(), e);
         response = new FileCopyGetChunkResponse(FileCopyGetChunkResponse.FILE_COPY_CHUNK_RESPONSE_VERSION_V_1,
             fileCopyGetChunkRequest.getCorrelationId(), fileCopyGetChunkRequest.getClientId(),
-            ServerErrorCode.UnknownError, fileCopyGetChunkRequest.getPartitionId(),
+            ServerErrorCode.UnknownError, partitionId,
             fileCopyGetChunkRequest.getFileName(), null, fileCopyGetChunkRequest.getStartOffset(),
             fileCopyGetChunkRequest.sizeInBytes(), false);
       }
@@ -1816,6 +1884,63 @@ public class AmbryRequests implements RequestAPI {
         new ServerNetworkResponseMetrics(metrics.fileCopyGetChunkResponseQueueTimeInMs,
             metrics.fileCopyGetChunkSendTimeInMs, metrics.fileCopyGetChunkTotalTimeInMs,
             null, null, totalTimeSpent));
+  }
+
+  /**
+   * Handler for FileCopyDataVerificationRequest
+   */
+  @Override
+  public void handleFileCopyDataVerificationRequest(NetworkRequest networkRequest) throws InterruptedException, IOException {
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - networkRequest.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+
+    FileCopyDataVerificationRequest request = null;
+    FileCopyDataVerificationResponse response = null;
+
+    try {
+      request = FileCopyDataVerificationRequest.readFrom(new DataInputStream(networkRequest.getInputStream()), clusterMap);
+      PartitionId partitionId = request.getPartitionId();
+
+      ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.FileCopyDataVerificationRequest, false);
+      if (error != ServerErrorCode.NoError) {
+        logger.error("Validating FileCopyDataVerificationRequest failed with error {} for request {}", error, request);
+        response = new FileCopyDataVerificationResponse(request.getCorrelationId(), request.getClientId(), error);
+      } else {
+        PartitionFileStore fileStore = storeManager.getFileStore(partitionId);
+        if (null == fileStore) {
+          logger.error("FileStore is not available for partition {}", partitionId.getId());
+          throw new StoreException("FileStore is not available for partition " + partitionId, StoreErrorCodes.StoreNotStarted);
+        }
+        List<String> checksums = fileStore.getChecksumsForRanges(request.getPartitionId(), request.getFileName(), request.getRanges());
+        response = new FileCopyDataVerificationResponse(FileCopyDataVerificationResponse.FILE_COPY_DATA_VERIFICATION_RESPONSE_VERSION_V_1,
+          request.getCorrelationId(), request.getClientId(),
+          ServerErrorCode.NoError, checksums);
+      }
+    }
+    catch (Exception e) {
+      if (null == request) {
+        logger.error("Error while deserializing FileCopyDataVerificationRequest", e);
+        response = new FileCopyDataVerificationResponse(ServerErrorCode.UnknownError);
+      } else {
+        logger.error("Error while verifying data for partition {}", request.getPartitionId().getId(), e);
+        response = new FileCopyDataVerificationResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.UnknownError);
+      }
+    }
+    finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", request, response, processingTime);
+
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      if (null != request) {
+        request.accept(metricsUpdater);
+      }
+    }
+    requestResponseChannel.sendResponse(response, networkRequest,
+          new ServerNetworkResponseMetrics(metrics.fileCopyGetChunkResponseQueueTimeInMs,
+              metrics.fileCopyGetChunkSendTimeInMs, metrics.fileCopyGetChunkTotalTimeInMs,
+              null, null, totalTimeSpent));
   }
 
   /**
@@ -2219,6 +2344,20 @@ public class AmbryRequests implements RequestAPI {
       requestTotalTimeHistogram = metrics.fileCopyGetChunkTotalTimeInMs;
       if (isRequestDropped) {
         metrics.fileCopyGetChunkDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(FileCopyDataVerificationRequest fileCopyDataVerificationRequest) {
+      metrics.fileCopyDataVerificationRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.fileCopyDataVerificationRequestRate.mark();
+      metrics.fileCopyDataVerificationProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.fileCopyGetChunkResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.fileCopyGetChunkSendTimeInMs;
+      requestTotalTimeHistogram = metrics.fileCopyGetChunkTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.fileCopyDataVerificationDroppedRate.mark();
         metrics.totalRequestDroppedRate.mark();
       }
     }

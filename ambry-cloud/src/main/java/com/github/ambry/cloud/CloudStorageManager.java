@@ -115,6 +115,11 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
+  public Store getInitializedStore(PartitionId id) {
+    return null;
+  }
+
+  @Override
   public boolean scheduleNextForCompaction(PartitionId id) {
     throw new UnsupportedOperationException("Method not supported");
   }
@@ -145,6 +150,11 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean isFilesExistForPattern(PartitionId partitionId, Pattern allLogSegmentFilesPattern) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId partitionId) {
     throw new UnsupportedOperationException("Method not supported");
   }
 

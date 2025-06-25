@@ -237,6 +237,7 @@ class PostBlobHandler {
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
         setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
+        restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
       }, uri, LOGGER, finalCallback);
     }

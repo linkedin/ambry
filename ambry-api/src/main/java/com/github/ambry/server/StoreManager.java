@@ -93,6 +93,13 @@ public interface StoreManager {
   PartitionFileStore getFileStore(PartitionId id) throws Exception;
 
   /**
+   * @param id the {@link PartitionId} to find the store for.
+   * @return the initialized {@link Store} corresponding to given {@link PartitionId}, or {@code null} if no store was found for
+   *         that partition, or that store was not initialized.
+   */
+  Store getInitializedStore(PartitionId id);
+
+  /**
    * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific
    * partition on single node)
    * @param partitionName name of {@link PartitionId}
@@ -159,4 +166,11 @@ public interface StoreManager {
    * @return {@code true} if replica is set up successfully. {@code false} if not.
    */
   boolean setUpReplica(String partitionName);
+
+  /**
+   * Return true if the compaction control has been set.
+   * @param partitionId the {@link PartitionId} to check Compaction control for.
+   * @return {@code true} if the compaction is under control. {@code false} if not.
+   */
+  boolean isCompactionControlBeenSetAndIsEnabledForBlobStore(PartitionId partitionId);
 }

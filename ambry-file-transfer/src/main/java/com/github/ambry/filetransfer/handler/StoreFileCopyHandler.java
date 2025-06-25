@@ -16,13 +16,17 @@ package com.github.ambry.filetransfer.handler;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.filetransfer.FileChunkInfo;
 import com.github.ambry.filetransfer.FileCopyInfo;
+import com.github.ambry.filetransfer.FileCopyMetrics;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetChunkDataWorkflow;
+import com.github.ambry.filetransfer.workflow.GetDataVerificationWorkflow;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.protocol.FileCopyDataVerificationResponse;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.protocol.Response;
@@ -34,10 +38,14 @@ import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileChunk;
 import com.github.ambry.store.StoreFileInfo;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +70,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private final FileCopyBasedReplicationConfig config;
 
+  private final StoreConfig storeConfig;
+
   /**
    * The cluster map to use for getting the {@link PartitionId}.
    */
@@ -71,6 +81,11 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * The operation retry handler to use for retrying operations.
    */
   private OperationRetryHandler operationRetryHandler;
+
+  /**
+   * File copy related metrics
+   */
+  private final FileCopyMetrics fileCopyMetrics;
 
   /**
    * Flag to indicate if the handler is running.
@@ -85,22 +100,26 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    * @param storeManager the {@link StoreManager} to use for getting the {@link PartitionFileStore}.
    * @param clusterMap the {@link ClusterMap} to use for getting the {@link PartitionId}.
    * @param config the configuration for the file copy handler.
+   * @param storeConfig store config
+   * @param fileCopyMetrics file copy related metrics
    */
-  public StoreFileCopyHandler(
-      @Nonnull ConnectionPool connectionPool,
-      @Nonnull StoreManager storeManager,
-      @Nonnull ClusterMap clusterMap,
-      @Nonnull FileCopyBasedReplicationConfig config) {
+  public StoreFileCopyHandler(@Nonnull ConnectionPool connectionPool, @Nonnull StoreManager storeManager,
+      @Nonnull ClusterMap clusterMap, @Nonnull FileCopyBasedReplicationConfig config, @Nonnull StoreConfig storeConfig,
+      @Nonnull FileCopyMetrics fileCopyMetrics) {
     Objects.requireNonNull(connectionPool, "ConnectionPool cannot be null");
     Objects.requireNonNull(storeManager, "StoreManager cannot be null");
     Objects.requireNonNull(clusterMap, "ClusterMap cannot be null");
     Objects.requireNonNull(config, "FileCopyHandlerConfig cannot be null");
+    Objects.requireNonNull(storeConfig, "StoreConfig cannot be null");
+    Objects.requireNonNull(fileCopyMetrics, "FileCopyMetrics cannot be null");
 
     this.connectionPool = connectionPool;
     this.storeManager = storeManager;
     this.clusterMap = clusterMap;
     this.config = config;
+    this.storeConfig = storeConfig;
     this.operationRetryHandler = new OperationRetryHandler(config);
+    this.fileCopyMetrics = fileCopyMetrics;
   }
 
   /**
@@ -156,36 +175,75 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   @Override
   public void copy(@Nonnull FileCopyInfo fileCopyInfo) throws Exception {
+    logger.info("File Copy handler is running for partition: {} on Mount Path: {} hydrating from DataNode: {}",
+        fileCopyInfo.getSourceReplicaId().getPartitionId().getId(), fileCopyInfo.getSourceReplicaId().getMountPath(),
+        fileCopyInfo.getTargetReplicaId().getDataNodeId());
     Objects.requireNonNull(fileCopyInfo, "fileCopyReplicaInfo param cannot be null");
     validateIfStoreFileCopyHandlerIsRunning();
-
+    long startTimeInMs = System.currentTimeMillis();
+    long totalSizeToDownloadInBytes = 0;
+    AtomicLong totalSizeDownloadedInBytes = new AtomicLong();
     final PartitionFileStore fileStore = storeManager.getFileStore(fileCopyInfo.getSourceReplicaId().getPartitionId());
-    final String partitionToMountFilePath = fileCopyInfo.getSourceReplicaId().getMountPath() + File.separator +
-        fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
+    final String partitionToMountFilePath =
+        fileCopyInfo.getSourceReplicaId().getMountPath() + File.separator + fileCopyInfo.getSourceReplicaId()
+            .getPartitionId()
+            .getId();
     FileCopyGetMetaDataResponse metadataResponse = null;
     try {
       metadataResponse = getFileCopyGetMetaDataResponse(fileCopyInfo);
+
+      for (LogInfo logInfo : metadataResponse.getLogInfos()) {
+        totalSizeToDownloadInBytes = totalSizeToDownloadInBytes + logInfo.getLogSegment().getFileSize();
+        for (FileInfo indexSegment : logInfo.getIndexSegments()) {
+          totalSizeToDownloadInBytes = totalSizeToDownloadInBytes + indexSegment.getFileSize();
+        }
+      }
+      fileCopyMetrics.updateFileCopyDataPerPartitionInBytes(totalSizeToDownloadInBytes);
+
       String snapshotId = metadataResponse.getSnapshotId();
 
       metadataResponse.getLogInfos().forEach(logInfo -> {
         // Process the respective files and copy it to the temporary path.
-        final String partitionToMountTempFilePath = partitionToMountFilePath + File.separator + config.fileCopyTemporaryDirectoryName;
-        logInfo.getIndexSegments().forEach(indexFile ->
-          processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore));
+        final String partitionToMountTempFilePath =
+            partitionToMountFilePath + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
+        logInfo.getIndexSegments().forEach(indexFile -> {
+          processIndexFile(indexFile, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
+          totalSizeDownloadedInBytes.addAndGet(indexFile.getFileSize());
+        });
         // Process log segment
-        Long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
+        long storeId = fileCopyInfo.getSourceReplicaId().getPartitionId().getId();
         // allocate the file
-        FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
-            logInfo.getLogSegment().getFileSize());
+        FileInfo logFileInfo =
+            new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log", logInfo.getLogSegment().getFileSize());
         String filePath = partitionToMountTempFilePath + File.separator + logFileInfo.getFileName();
         try {
-          fileStore.allocateFile(filePath, storeId.toString());
+          fileStore.allocateFile(filePath, Long.toString(storeId));
         } catch (IOException e) {
           logMessageAndThrow("ProcessLogSegment", "Failed Disk Space Allocation", e,
               FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerFailedDiskSpaceAllocation);
         }
         processLogSegment(logInfo, partitionToMountTempFilePath, fileCopyInfo, snapshotId, fileStore);
+        totalSizeDownloadedInBytes.addAndGet(logInfo.getLogSegment().getFileSize());
 
+        if (config.fileCopyHandlerDataVerificationIsEnabled) {
+          List<Pair<Integer, Integer>> ranges = getChecksumRanges(logInfo.getLogSegment().getFileSize(),
+              config.fileCopyHandlerDataVerificationRangesCount, config.fileCopyHandlerDataVerificationRangeSizeInMb);
+          try {
+            List<String> checkSums = fileStore.getChecksumsForRanges(fileCopyInfo.getSourceReplicaId().getPartitionId(),
+                logInfo.getLogSegment().getFileName(), ranges);
+            FileCopyDataVerificationResponse checksumsFromServingNode = getFileCopyDataVerificationResponse(fileCopyInfo);
+
+            if (!checkSums.equals(checksumsFromServingNode.getChecksums())) {
+              logger.error("Checksums do not match for log segment: {}", logInfo.getLogSegment().getFileName());
+              throw new FileCopyHandlerException(
+                  "Checksums do not match for log segment: " + logInfo.getLogSegment().getFileName(),
+                  FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerChecksumMismatch);
+            }
+          } catch (StoreException e) {
+            logMessageAndThrow("ProcessLogSegment", "Error getting checksums for log segment", e,
+                FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
+          }
+        }
         // Move all files to actual path.
         try {
           fileStore.moveAllRegularFiles(partitionToMountTempFilePath, partitionToMountFilePath);
@@ -198,7 +256,52 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       if (metadataResponse != null) {
         metadataResponse.release();
       }
+      try {
+        int totalTimeInSec = (int) ((System.currentTimeMillis() - startTimeInMs) / 1000);
+        if (totalTimeInSec != 0) {
+          fileCopyMetrics.updateFileCopyAverageSpeedPerPartition(totalSizeDownloadedInBytes.get() / totalTimeInSec);
+        }
+      } catch (Exception e) {
+        logger.error("Encountered exception while updating metric", e);
+      }
     }
+  }
+
+  /**
+   * Get the file copy data verification response.
+   * @param fileCopyInfo the file copy info of type {@link FileCopyInfo}
+   * @throws FileCopyHandlerException if the handler is not running
+   * @return the data verification response of type {@link FileCopyDataVerificationResponse}
+   */
+  FileCopyDataVerificationResponse getFileCopyDataVerificationResponse(FileCopyInfo fileCopyInfo) {
+    validateIfStoreFileCopyHandlerIsRunning();
+    String operationName = "GetDataVerificationWorkflow" + "[Partition=" + fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
+    FileCopyDataVerificationResponse dataVerificationResponse = null;
+
+    try {
+      dataVerificationResponse = operationRetryHandler.executeWithRetry(
+          () -> new GetDataVerificationWorkflow(connectionPool, fileCopyInfo, config).execute(), operationName);
+    } catch (IOException e) {
+      logMessageAndThrow(operationName, "IO error while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationApiError);
+    } catch (ConnectionPoolTimeoutException e) {
+      logMessageAndThrow(operationName, "Connection pool timeout while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationApiError);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt(); // Preserve interrupt status
+
+      logMessageAndThrow(operationName, "Thread interrupted while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationApiError);
+    } catch (RuntimeException e) {
+      logMessageAndThrow(operationName, "Unexpected runtime error while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+    } catch (Exception e) {
+      logMessageAndThrow(operationName, "Exception while fetching data verification response",
+          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+    }
+    validateResponseOrThrow(dataVerificationResponse, operationName);
+    logger.info(operationName + ": Fetched data verification for partition: " + fileCopyInfo.getSourceReplicaId().getPartitionId().getId());
+    return dataVerificationResponse;
   }
 
   /**
@@ -208,34 +311,37 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   FileCopyGetMetaDataResponse getFileCopyGetMetaDataResponse(FileCopyInfo fileCopyInfo) {
     validateIfStoreFileCopyHandlerIsRunning();
-    String operationName = GetMetadataWorkflow.GET_METADATA_OPERATION_NAME + "[Partition=" +
-        fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
+    String operationName =
+        GetMetadataWorkflow.GET_METADATA_OPERATION_NAME + "[Partition=" + fileCopyInfo.getTargetReplicaId()
+            .getPartitionId()
+            .getId() + "]";
     FileCopyGetMetaDataResponse metadataResponse = null;
 
     try {
       metadataResponse = operationRetryHandler.executeWithRetry(
           () -> new GetMetadataWorkflow(connectionPool, fileCopyInfo, config).execute(), operationName);
     } catch (IOException e) {
-      logMessageAndThrow(operationName, "IO error while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+      logMessageAndThrow(operationName, "IO error while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
     } catch (ConnectionPoolTimeoutException e) {
-      logMessageAndThrow(operationName, "Connection pool timeout while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+      logMessageAndThrow(operationName, "Connection pool timeout while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt(); // Preserve interrupt status
 
-      logMessageAndThrow(operationName, "Thread interrupted while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
+      logMessageAndThrow(operationName, "Thread interrupted while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError);
     } catch (RuntimeException e) {
-      logMessageAndThrow(operationName, "Unexpected runtime error while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+      logMessageAndThrow(operationName, "Unexpected runtime error while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     } catch (Exception e) {
-      logMessageAndThrow(operationName, "Exception while fetching metadata file",
-          e, FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
+      logMessageAndThrow(operationName, "Exception while fetching metadata file", e,
+          FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
-
     validateResponseOrThrow(metadataResponse, operationName);
-    logger.info(operationName + ": Fetched metadata");
+    logger.info(operationName + ": Fetched metadata for partition: " + fileCopyInfo.getSourceReplicaId()
+        .getPartitionId()
+        .getId() + " - " + metadataResponse.toString());
     return metadataResponse;
   }
 
@@ -253,8 +359,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
     String errorSuffix = " while processing the " + (isChunked ? "chunk" : "file");
     try {
       chunkResponse = operationRetryHandler.executeWithRetry(
-          () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, fileChunkInfo, snapshotId, clusterMap, config)
-              .execute(), operationName);
+          () -> new GetChunkDataWorkflow(connectionPool, fileCopyInfo, fileChunkInfo, snapshotId, clusterMap,
+              config).execute(), operationName);
     } catch (IOException e) {
       logMessageAndThrow(operationName, "IO error" + errorSuffix, e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerWriteToDiskError);
@@ -273,9 +379,47 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       logMessageAndThrow(operationName, "Exception" + errorSuffix, e,
           FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError);
     }
-
     validateResponseOrThrow(chunkResponse, operationName);
     return chunkResponse;
+  }
+
+  /**
+   * Create a list of ranges for checksum verification.
+   * @param fileSize the size of the file in bytes
+   * @param rangesCount the number of ranges to create
+   * @param rangeSizeInMb the size of each range in MB
+   */
+  List<Pair<Integer, Integer>> getChecksumRanges(Long fileSize, int rangesCount, int rangeSizeInMb) {
+    if (fileSize <= 0) {
+      throw new FileCopyHandlerException("File size must be greater than 0",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
+    }
+    if (rangesCount <= 0 || rangeSizeInMb <= 0) {
+      throw new FileCopyHandlerException("File copy handler data verification ranges count and size must be greater than 0",
+          FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError);
+    }
+    int rangeSizeInBytes = rangeSizeInMb * 1024 * 1024; // Convert MB to bytes
+    int totalChunks = (int) Math.ceil((double) fileSize / rangeSizeInBytes);
+    int rangeCount = Math.min(totalChunks, rangesCount);
+
+    // Generate all possible chunk indices [0, totalChunks)
+    List<Integer> chunkIndices = new ArrayList<>();
+    for (int i = 0; i < totalChunks; i++) {
+      chunkIndices.add(i);
+    }
+    // Shuffle and pick the first `rangeCount` unique chunks
+    Collections.shuffle(chunkIndices);
+    List<Integer> selectedChunks = chunkIndices.subList(0, rangeCount);
+    // keep them sorted in ascending order for better readability
+    Collections.sort(selectedChunks);
+
+    List<Pair<Integer, Integer>> ranges = new ArrayList<>(rangeCount);
+    for (int chunkIndex : selectedChunks) {
+      int start = chunkIndex * rangeSizeInBytes;
+      int end = (int) Math.min(start + rangeSizeInBytes - 1, fileSize - 1);
+      ranges.add(new Pair<>(start, end));
+    }
+    return ranges;
   }
 
   /**
@@ -287,11 +431,13 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private void processIndexFile(FileInfo indexFile, String partitionToMountFilePath, FileCopyInfo fileCopyInfo,
       String snapshotId, PartitionFileStore fileStore) {
+    validateIfStoreFileCopyHandlerIsRunning();
     final FileChunkInfo fileChunkInfo = new FileChunkInfo(indexFile.getFileName(), 0, indexFile.getFileSize(), false);
     FileCopyGetChunkResponse chunkResponse = null;
     try {
-      chunkResponse = getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_FILE_OPERATION_NAME, fileCopyInfo,
-          fileChunkInfo, snapshotId, false);
+      chunkResponse =
+          getFileCopyGetChunkResponse(GetChunkDataWorkflow.GET_FILE_OPERATION_NAME, fileCopyInfo, fileChunkInfo,
+              snapshotId, false);
       String filePath = partitionToMountFilePath + File.separator + indexFile.getFileName();
       writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
     } finally {
@@ -314,29 +460,32 @@ public class StoreFileCopyHandler implements FileCopyHandler {
       throw new FileCopyHandlerException("Log segment file size is greater than the segment capacity",
           FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerInvalidLogFileSize);
     }
-    FileInfo logFileInfo = new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log",
-        logInfo.getLogSegment().getFileSize());
+    FileInfo logFileInfo =
+        new StoreFileInfo(logInfo.getLogSegment().getFileName() + "_log", logInfo.getLogSegment().getFileSize());
     int chunksInLogSegment = (int) Math.ceil((double) logFileInfo.getFileSize() / config.getFileCopyHandlerChunkSize);
     logger.info("Number of chunks in log segment: {} for filename {}", chunksInLogSegment, logFileInfo.getFileName());
 
     for (int i = 0; i < chunksInLogSegment; i++) {
+      //Throw Exception and come out of the thread a shutdown is called.
+      validateIfStoreFileCopyHandlerIsRunning();
       long startOffset = (long) i * config.getFileCopyHandlerChunkSize;
       long sizeInBytes = Math.min(config.getFileCopyHandlerChunkSize, logFileInfo.getFileSize() - startOffset);
 
-      String operationName = GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME + "[Partition=" +
-          fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + ", FileName=" + logFileInfo.getFileName() +
-          ", Chunk=" + (i + 1) + "]";
+      String operationName =
+          GetChunkDataWorkflow.GET_CHUNK_OPERATION_NAME + "[Partition=" + fileCopyInfo.getTargetReplicaId()
+              .getPartitionId()
+              .getId() + ", FileName=" + logFileInfo.getFileName() + ", Chunk=" + (i + 1) + "]";
       FileChunkInfo fileChunkInfo = new FileChunkInfo(logFileInfo.getFileName(), startOffset, sizeInBytes, true);
 
-       FileCopyGetChunkResponse chunkResponse = null;
-       try {
-         chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, snapshotId,true);
-         String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
-         writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
+      FileCopyGetChunkResponse chunkResponse = null;
+      try {
+        chunkResponse = getFileCopyGetChunkResponse(operationName, fileCopyInfo, fileChunkInfo, snapshotId, true);
+        String filePath = partitionToMountFilePath + File.separator + logFileInfo.getFileName();
+        writeStoreFileChunkToDisk(chunkResponse, filePath, fileStore);
       } finally {
-         if (chunkResponse != null) {
-            chunkResponse.release();
-         }
+        if (chunkResponse != null) {
+          chunkResponse.release();
+        }
       }
     }
   }
@@ -373,7 +522,7 @@ public class StoreFileCopyHandler implements FileCopyHandler {
    */
   private void logMessageAndThrow(String operationName, String message, Exception e,
       FileCopyHandlerException.FileCopyHandlerErrorCode fileCopyHandlerErrorCode) {
-    String s = operationName + ": " +  message;
+    String s = operationName + ": " + message;
     logger.error(s, e);
     throw new FileCopyHandlerException(s, e, fileCopyHandlerErrorCode);
   }

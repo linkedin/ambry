@@ -792,6 +792,8 @@ public class StorageManagerTest {
     PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
     mockHelixParticipant.onPartitionBecomePreBootstrapFromOffline(newPartition.toPathString());
     BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition, true);
+    assertTrue("There should be a bootstrap file indicating store is in BOOTSTRAP state",
+        newAddedStore.isBootstrapInProgress());
     assertNotNull("There should be a initialized store associated with new partition", newAddedStore);
     assertTrue("Store should not be started,but it should be initialized",
         newAddedStore.isInitialized() && !newAddedStore.isStarted());

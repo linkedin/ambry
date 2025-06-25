@@ -16,14 +16,11 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.utils.TestUtils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,12 +28,10 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -149,7 +144,7 @@ public class FileStoreTest {
   @Test
   public void testPutChunkToFile() throws Exception {
     // Test file names
-    String chunkFileName = "output-chunk.txt";
+    String chunkFileName = "15_0_index";
     File outputFile = new File(tempDir, chunkFileName);
     byte[] data = "test data".getBytes();
 
@@ -170,6 +165,8 @@ public class FileStoreTest {
 
     // Verify written data matches original
     byte[] readData = new byte[data.length];
+    // Allow some time for file system operations to complete
+    Thread.sleep(20);
     try (FileInputStream fis = new FileInputStream(outputFile)) {
         assertEquals("Incorrect number of bytes read", data.length, fis.read(readData));
     }
@@ -326,7 +323,7 @@ public class FileStoreTest {
    */
   @Test
   public void testAllocateFileSuccess() throws Exception {
-    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
+    String filePath = tempDir.getAbsolutePath() + File.separator + "13_0_log";
     File file = new File(filePath);
     // Validate if pool has enough files
     assertFalse(file.exists());
@@ -344,7 +341,7 @@ public class FileStoreTest {
    */
   @Test
   public void testAllocateFileAlreadyExists() throws Exception {
-    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
+    String filePath = tempDir.getAbsolutePath() + File.separator + "340_0_log";
     File file = new File(filePath);
     if (file.createNewFile()) {
       assertException(FileStoreException.class, () -> fileStore.allocateFile(filePath, STORE_ID), e -> {
@@ -365,7 +362,7 @@ public class FileStoreTest {
    */
   @Test
   public void testCleanFileSuccess() throws Exception {
-    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
+    String filePath = tempDir.getAbsolutePath() + File.separator + "18_14_log";
     File file = new File(filePath);
     // Validate if pool has enough files
     assertFalse(file.exists());
@@ -373,10 +370,12 @@ public class FileStoreTest {
     // Call allocateFile
     fileStore.allocateFile(filePath, STORE_ID);
     // Validate if file is created
-    assertTrue(file.exists());
+    String targetFilePath = tempDir.getAbsolutePath() + File.separator + "18_0_log";
+    File targetFile = new File(targetFilePath);
+    assertTrue(targetFile.exists());
     assertEquals(SEGMENT_COUNT-1, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
     // Clean File
-    fileStore.cleanFile(filePath, STORE_ID);
+    fileStore.cleanLogFile(targetFilePath, STORE_ID);
     // Validate if file is deleted
     assertFalse(file.exists());
     assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
@@ -388,8 +387,8 @@ public class FileStoreTest {
    */
   @Test
   public void testCleanFileWhichDoesntExist() throws Exception {
-    String filePath = tempDir.getAbsolutePath() + File.separator + "testFile.txt";
-    assertException(FileStoreException.class, () -> fileStore.cleanFile(filePath, STORE_ID), e -> {
+    String filePath = tempDir.getAbsolutePath() + File.separator + "10_14_log";
+    assertException(FileStoreException.class, () -> fileStore.cleanLogFile(filePath, STORE_ID), e -> {
       assertEquals("Unexpected exception thrown",
           new FileStoreException("Error while freeing file in path " + filePath + " for store: " + STORE_ID,
               FileStoreException.FileStoreErrorCode.FileStoreFileFailedCleanUp), e);
@@ -408,4 +407,55 @@ public class FileStoreTest {
     String[] filenameList = fileSizeDir.list();
     return filenameList == null ? 0 : filenameList.length;
   }
+
+  @Test
+  public void testCleanUpStagingDirectoryValid() throws IOException {
+    String targetPath = tempDir.getAbsolutePath();
+    String stagingDirectoryName = "staging";
+    String storeId = "store1";
+
+    // Create a staging directory
+    File stagingDir = new File(targetPath, stagingDirectoryName);
+    assertTrue("Failed to create staging directory", stagingDir.mkdir());
+
+    // Create a file in the staging directory
+    File fileInStaging = new File(stagingDir, "10_0_2000_index");
+    try (FileOutputStream fos = new FileOutputStream(fileInStaging)) {
+      fos.write("test data".getBytes());
+    }
+
+    File fileInTempDir = new File(tempDir, "10_0_18_index");
+
+    // Create a log and index file in the temp directory that should not be deleted
+    File indexFileNotToBeDeleted = new File(tempDir, "0_0_18_index");
+    File logFileNotToBeDeleted = new File(tempDir, "0_0_log");
+
+    try (FileOutputStream fos = new FileOutputStream(logFileNotToBeDeleted)) {
+      fos.write("log file data".getBytes());
+    }
+
+
+
+    fileInTempDir.createNewFile();
+    indexFileNotToBeDeleted.createNewFile();
+    // Call cleanUpStagingDirectory
+    fileStore.cleanUpStagingDirectory(targetPath, stagingDirectoryName, storeId);
+
+    // Verify that the staging directory is deleted
+    assertFalse("Staging directory should be deleted", stagingDir.exists());
+    assertFalse("File should be moved to temp directory", fileInTempDir.exists());
+    assertTrue("Log file should not be deleted", logFileNotToBeDeleted.exists());
+    assertTrue("Index file should not be deleted", indexFileNotToBeDeleted.exists());
+  }
+
+  @Test(expected = IOException.class)
+  public void testCleanUpStagingDirectoryTargetPathDoesNotExist() throws IOException {
+    String targetPath = tempDir.getAbsolutePath() + "/nonExistentTarget";
+    String stagingDirectoryName = "staging";
+    String storeId = "store1";
+
+    // Call cleanUpStagingDirectory
+    fileStore.cleanUpStagingDirectory(targetPath, stagingDirectoryName, storeId);
+  }
+
 }

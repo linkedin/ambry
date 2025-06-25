@@ -263,13 +263,6 @@ public class FrontendConfig {
   public final String accountStatsStoreFactory;
 
   /**
-   * The set of container metrics enabled request type.
-   */
-  @Config(CONTAINER_METRICS_ENABLED_REQUEST_TYPES)
-  @Default(DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES)
-  public final String containerMetricsEnabledRequestTypes;
-
-  /**
    * The set of container metrics enabled get request type.
    */
   @Config(CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES)
@@ -358,8 +351,6 @@ public class FrontendConfig {
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
     enableBlobNameRuleCheck = verifiableProperties.getBoolean("frontend.enable.blob.name.rule.check", false);
     attachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
-    containerMetricsEnabledRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_REQUEST_TYPES,
-        DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES);
     containerMetricsEnabledGetRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES,
         DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES);
     oneHundredContinueEnable = nettyConfig.nettyEnableOneHundredContinue;

@@ -53,6 +53,7 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
   private final ReentrantLock threadQueueLock;
   private boolean isRunning;
   private final CountDownLatch shutdownLatch;
+  private final FileCopyMetrics fileCopyMetrics;
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -60,9 +61,11 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
    * Constructor to initialize the thread pool manager with specified disk IDs and number of threads.
    * @param diskIds List of disk IDs to manage threads for
    * @param numberOfThreads Maximum number of threads allowed per disk
+   * @param fileCopyMetrics file copy related metrics
    */
-  public DiskAwareFileCopyThreadPoolManager(List<DiskId> diskIds, int numberOfThreads) {
+  public DiskAwareFileCopyThreadPoolManager(List<DiskId> diskIds, int numberOfThreads, FileCopyMetrics fileCopyMetrics) {
     this.numberOfThreadsPerDisk = numberOfThreads;
+    this.fileCopyMetrics = fileCopyMetrics;
     this.runningThreads = new HashMap<>();
     this.replicaToFileCopyThread = new HashMap<>();
     diskIds.forEach(diskId -> {
@@ -112,7 +115,7 @@ public class DiskAwareFileCopyThreadPoolManager implements FileCopyBasedReplicat
     try {
       threadQueueLock.lock();
       DiskId diskId = replicaId.getDiskId();
-      FileCopyThread fileCopyThread = new FileCopyThread(fileCopyHandler, fileCopyStatusListener);
+      FileCopyThread fileCopyThread = new FileCopyThread(fileCopyHandler, fileCopyStatusListener, fileCopyMetrics);
       fileCopyThread.start();
       runningThreads.get(diskId).add(fileCopyThread);
       replicaToFileCopyThread.put(replicaId, fileCopyThread);

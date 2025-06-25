@@ -26,7 +26,6 @@ import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -39,6 +38,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
+
 
 /**
  * Handles a request for s3 CreateMultipartUploads according to the
@@ -70,8 +70,7 @@ public class S3MultipartCreateUploadHandler<R> {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<R> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<R> callback) {
     new S3MultipartCreateUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -103,7 +102,10 @@ public class S3MultipartCreateUploadHandler<R> {
     private void start() {
       try {
         accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
-            frontendMetrics.postBlobMetricsGroup);
+            frontendMetrics.s3MultipartCreateMetricsGroup);
+        restRequest.getMetricsTracker()
+            .injectMetrics(
+                frontendMetrics.s3MultipartCreateMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);

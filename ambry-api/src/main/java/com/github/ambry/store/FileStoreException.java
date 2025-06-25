@@ -38,6 +38,10 @@ public class FileStoreException extends RuntimeException {
     this.error = error;
   }
 
+  public FileStoreErrorCode getError() {
+    return error;
+  }
+
   /**
    * Overridden equals method to compare two FileStoreException objects.
    */
@@ -99,6 +103,10 @@ public class FileStoreException extends RuntimeException {
      /**
      * Indicates that the FileStore service encountered an error during delete
      */
-    UnknownError
+    UnknownError,
+    /**
+     * Indicates that the FileStore service encountered an error related to log and index file naming conventions.
+     */
+    FileStoreLogAndIndexFileNamingConventionError
   }
 }

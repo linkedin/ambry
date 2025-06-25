@@ -16,8 +16,6 @@ package com.github.ambry.filetransfer.handler;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.config.FileCopyBasedReplicationConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.ServerErrorCode;
@@ -27,7 +25,6 @@ import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.FileStore;
 import com.github.ambry.store.LogSegmentName;
 import com.github.ambry.store.StorageManagerMetrics;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFileInfo;
 import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -48,7 +45,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
@@ -149,8 +145,8 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
 
     LogSegmentName logSegmentName = getRandomLogSegmentName();
     String logSegmentFileName = logSegmentName + "_log";
-    String indexFileName1 = logSegmentName + "1_index";
-    String indexFileName2 = logSegmentName + "2_index";
+    String indexFileName1 = logSegmentName + "_1_index";
+    String indexFileName2 = logSegmentName + "_2_index";
 
     File logSegment = new File(targetPartitionDir, logSegmentFileName);
     File indexFile1 = new File(targetPartitionDir, indexFileName1);
@@ -191,13 +187,15 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     spyHandler.copy(fileCopyInfo);
     assertTrue(fileCopyTempDirectory.delete());
 
+    String targetIndexFileName1 = fileStore.resetCompactionCycleIndexInFileName(indexFileName1);
+    String targetIndexFileName2 = fileStore.resetCompactionCycleIndexInFileName(indexFileName2);
     // Assert -
     // 1. Check that no sub-directories are created in the source directory
     // 2. Check that the index files are copied correctly to the source directory
     // 3. Check that the number of index files in the source directory is 2
     assertNoSubDirectories(sourcePartitionDir);
-    assertCopiedFileIsValid(indexFile1, new File(sourcePartitionDir, indexFileName1));
-    assertCopiedFileIsValid(indexFile2, new File(sourcePartitionDir, indexFileName2));
+    assertCopiedFileIsValid(indexFile1, new File(sourcePartitionDir, targetIndexFileName1));
+    assertCopiedFileIsValid(indexFile2, new File(sourcePartitionDir, targetIndexFileName2));
     assertEquals(2, getNumberOfFilesMatchingSuffix(sourcePartitionDir, "_index"));
   }
 
@@ -220,7 +218,7 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
 
     File logSegment = new File(targetPartitionDir, logSegmentFileName);
     createSampleFile(logSegment, SEGMENT_CAPACITY); // 25 MB
-
+    String targetLogSegment = fileStore.resetCompactionCycleIndexInFileName(logSegmentFileName);
     StoreLogInfo storeLogInfo = new StoreLogInfo(new StoreFileInfo(logSegmentName.toString(), logSegment.length()),
         new ArrayList<>(), new ArrayList<>());
     FileCopyGetMetaDataResponse fileCopyGetMetaDataResponse = new FileCopyGetMetaDataResponse(
@@ -263,12 +261,12 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     // 2. Check that the log segment file is copied correctly to the source directory
     // 3. Check that the number of log segment files in the source directory is 1
     assertNoSubDirectories(sourcePartitionDir);
-    assertCopiedFileIsValid(logSegment, new File(sourcePartitionDir, logSegmentFileName));
+    assertCopiedFileIsValid(logSegment, new File(sourcePartitionDir, targetLogSegment));
     assertEquals(1, getNumberOfFilesMatchingSuffix(sourcePartitionDir, "_log"));
     assertEquals(SEGMENT_COUNT-1, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
 
     // cleanup the file to give it back to DiskSpaceAllocator
-    fileStore.cleanFile(logSegment.getPath(), STORE_ID);
+    fileStore.cleanLogFile(logSegment.getPath(), STORE_ID);
     assertEquals(SEGMENT_COUNT, getReservePoolRemainingSegmentCount(STORE_ID, SEGMENT_CAPACITY));
   }
 

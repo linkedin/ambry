@@ -280,4 +280,17 @@ public interface Store {
    * @return
    */
   List<LogInfo> getLogSegmentMetadataFiles(boolean includeActiveLogSegment);
+
+  /**
+   * Returns True if compaction is in progress
+   */
+  boolean isCompactionInProgress();
+
+  /**
+   * Returns the snapshot id of the downloadable files in the store. Used by FileCopy protocol to determine if an immutable
+   * snapshot is available for download.
+   * @param logSegments The list of log segments of type {@link LogInfo}
+   * @return The snapshot id of the log segments
+   */
+  String getSnapshotId(List<LogInfo> logSegments);
 }

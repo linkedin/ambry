@@ -13,15 +13,22 @@
  */
 package com.github.ambry.filetransfer.handler;
 
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.FileCopyBasedReplicationConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.filetransfer.FileCopyMetrics;
 import com.github.ambry.filetransfer.utils.OperationRetryHandler;
 import com.github.ambry.filetransfer.workflow.GetMetadataWorkflow;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.utils.Pair;
+import java.util.List;
 import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -66,6 +73,8 @@ public class StoreFileCopyHandlerTest {
   protected final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(
       new VerifiableProperties(new Properties()));
 
+  protected final StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(new Properties()));
+
   protected StoreFileCopyHandler handler;
 
   /**
@@ -76,7 +85,9 @@ public class StoreFileCopyHandlerTest {
    */
   @Before
   public void setUp() throws Exception {
-    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig);
+    FileCopyMetrics fileCopyMetrics = new FileCopyMetrics(new MockClusterMap().getMetricRegistry());
+    handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig, storeConfig,
+        fileCopyMetrics);
     handler.setOperationRetryHandler(retryHandler);
     handler.start();
 
@@ -105,6 +116,8 @@ public class StoreFileCopyHandlerTest {
   @Test
   public void testGetFileCopyGetMetaDataResponseExpectSuccess() throws Exception {
     // Arrange: Mock successful metadata retrieval
+    when(fileCopyInfo.getSourceReplicaId()).thenReturn(mock(ReplicaId.class));
+    when(fileCopyInfo.getSourceReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
     when(handler.getOperationRetryHandler().executeWithRetry(any(), anyString())).thenReturn(metadataResponse);
 
     // Act: Call getFileCopyGetMetaDataResponse
@@ -135,8 +148,7 @@ public class StoreFileCopyHandlerTest {
       handler.getFileCopyGetMetaDataResponse(fileCopyInfo);
       fail("Expected FileCopyHandlerException");
     } catch (FileCopyHandlerException e) {
-      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError,
-          e.getErrorCode());
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError, e.getErrorCode());
       assertTrue(e.getMessage().contains("IO error while fetching metadata file"));
     }
   }
@@ -160,8 +172,7 @@ public class StoreFileCopyHandlerTest {
       handler.getFileCopyGetMetaDataResponse(fileCopyInfo);
       fail("Expected FileCopyHandlerException");
     } catch (FileCopyHandlerException e) {
-      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError,
-          e.getErrorCode());
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerGetMetadataApiError, e.getErrorCode());
       assertTrue(e.getMessage().contains("Connection pool timeout while fetching metadata"));
     }
   }
@@ -213,6 +224,118 @@ public class StoreFileCopyHandlerTest {
     } catch (FileCopyHandlerException e) {
       assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.UnknownError, e.getErrorCode());
       assertTrue(e.getMessage().contains("Unexpected runtime error while fetching metadata"));
+    }
+  }
+
+  /**
+   * Test the {@link StoreFileCopyHandler#getChecksumRanges} method.
+   * The test verifies that the method returns the expected ranges for a valid file size and range parameters.
+   */
+  @Test
+  public void testValidRanges() {
+    long fileSize = 1_600_000_000L; // ~1.6GB
+    int rangeCount = 5;
+    int rangeSizeMb = 100;
+
+    List<Pair<Integer, Integer>> ranges = handler.getChecksumRanges(fileSize, rangeCount, rangeSizeMb);
+
+    assertEquals(rangeCount, ranges.size());
+    for (Pair<Integer, Integer> range : ranges) {
+      int start = range.getFirst();
+      int end = range.getSecond();
+
+      assertTrue(start <= end);
+      assertEquals(100 * 1024 * 1024 - 1, end - start);
+    }
+
+    Set<Integer> starts = ranges.stream().map(Pair::getFirst).collect(Collectors.toSet());
+    assertEquals(ranges.size(), starts.size());
+  }
+
+  /**
+   * Test the {@link StoreFileCopyHandler#getChecksumRanges} method.
+   * The test verifies that the method returns a single range when the file size is smaller than one range.
+   */
+  @Test
+  public void testFileSmallerThanOneRange() {
+    long fileSize = 10_000_000L; // ~10MB
+    int rangeCount = 5;
+    int rangeSizeMb = 100;
+
+    List<Pair<Integer, Integer>> ranges = handler.getChecksumRanges(fileSize, rangeCount, rangeSizeMb);
+
+    assertEquals(1, ranges.size());
+    assertEquals(0, (int)ranges.get(0).getFirst());
+    assertEquals(fileSize - 1, (int)ranges.get(0).getSecond());
+  }
+
+  /**
+   * Test the {@link StoreFileCopyHandler#getChecksumRanges} method.
+   * The test verifies that the method returns the expected number of ranges when the file size is exactly divisible by the range size.
+   */
+  @Test
+  public void testExactFitRanges() {
+    long fileSize = 500 * 1024 * 1024L; // 500MB
+    int rangeCount = 5;
+    int rangeSizeMb = 100;
+
+    List<Pair<Integer, Integer>> ranges = handler.getChecksumRanges(fileSize, rangeCount, rangeSizeMb);
+    assertEquals(5, ranges.size());
+  }
+
+  /**
+   * Test the {@link StoreFileCopyHandler#getChecksumRanges} method.
+   * The test verifies that the method returns fewer ranges than requested when the file size is smaller than the total requested size.
+   */
+  @Test
+  public void testMoreRangesThanPossible() {
+    long fileSize = 200 * 1024 * 1024L; // 200MB
+    int rangeCount = 10;
+    int rangeSizeMb = 100;
+
+    List<Pair<Integer, Integer>> ranges = handler.getChecksumRanges(fileSize, rangeCount, rangeSizeMb);
+    assertEquals(2, ranges.size());
+  }
+
+  /**
+   * Test the {@link StoreFileCopyHandler#getChecksumRanges} method.
+   * The test verifies that the method throws a {@link FileCopyHandlerException} for invalid parameters.
+   */
+  @Test
+  public void testInvalidFileSize() {
+    try {
+      handler.getChecksumRanges(-100L, 5, 100);
+      fail("Expected FileCopyHandlerException for negative file size");
+    } catch (FileCopyHandlerException e) {
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Test the {@link StoreFileCopyHandler#getChecksumRanges} method.
+   * The test verifies that the method throws a {@link FileCopyHandlerException} for invalid range parameters.
+   */
+  @Test
+  public void testInvalidRangeCount() {
+    try {
+      handler.getChecksumRanges(1000L, -5, 100);
+      fail("Expected FileCopyHandlerException for negative range count");
+    } catch (FileCopyHandlerException e) {
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Test the {@link StoreFileCopyHandler#getChecksumRanges} method.
+   * The test verifies that the method throws a {@link FileCopyHandlerException} for invalid range size parameters.
+   */
+  @Test
+  public void testInvalidRangeSize() {
+    try {
+      handler.getChecksumRanges(1000L, 5, -100);
+      fail("Expected FileCopyHandlerException for negative range size");
+    } catch (FileCopyHandlerException e) {
+      assertEquals(FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationError, e.getErrorCode());
     }
   }
 }

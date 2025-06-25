@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.List;
 
@@ -68,10 +70,35 @@ public interface PartitionFileStore {
    * @param storeId    storeId of the store for which file is requested for
    * @throws IOException if an I/O error occurs during the operation
    */
-  void cleanFile(String targetPath, String storeId) throws IOException;
+  void cleanLogFile(String targetPath, String storeId) throws IOException;
 
+  /**
+   * Cleans up the log file by deleting it from the target path.
+   * @param targetPath the path to the directory where the log file is located.
+   * @param stagingDirectoryName the name of the staging directory where the log file is located.
+   * @param storeId the store ID of the store for which the log file is being cleaned up.
+   * @throws IOException
+   */
+  void cleanUpStagingDirectory(String targetPath, String stagingDirectoryName,  String storeId) throws IOException;
+  /**
+   * Resets the compaction cycle index in the file name. It will be used to rename the index and Log Files.
+   * @param fileName the file name to reset the compaction cycle index in.
+   * @return the file name with the compaction cycle index reset to 0.
+   */
+  String resetCompactionCycleIndexInFileName(String fileName);
   /**
    * @return size of allocated segment in bytes
    */
   long getSegmentCapacity();
+
+  /**
+   * Gets the checksums for the specified ranges in the given file.
+   * @param partitionId the partition ID of the file.
+   * @param fileName the name of the file to get checksums for.
+   * @param ranges a list of pairs representing the start and end offsets of the ranges for which checksums are requested.
+   * @return a list of checksums corresponding to each range.
+   * @throws StoreException if there is an error retrieving the checksums.
+   */
+  List<String> getChecksumsForRanges(PartitionId partitionId, String fileName, List<Pair<Integer, Integer>> ranges)
+      throws StoreException;
 }

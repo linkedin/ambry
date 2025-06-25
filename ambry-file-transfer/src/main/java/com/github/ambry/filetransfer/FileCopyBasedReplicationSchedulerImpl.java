@@ -25,7 +25,8 @@ import com.github.ambry.filetransfer.handler.FileCopyHandler;
 import com.github.ambry.filetransfer.handler.FileCopyHandlerFactory;
 import com.github.ambry.replica.prioritization.PrioritizationManager;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.store.FileStoreException;
+import com.github.ambry.store.PartitionFileStore;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -39,15 +40,16 @@ import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.FileStoreException.FileStoreErrorCode.*;
 
-class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler{
+
+class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationScheduler {
   private final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
   private final FileCopyHandlerFactory fileCopyHandlerFactory;
   private final ClusterMap clusterMap;
   private final FileCopyBasedReplicationThreadPoolManager fileCopyBasedReplicationThreadPoolManager;
   private final Thread fileCopyBasedReplicationThreadPoolManagerThread;
   private final Map<ReplicaId, Long> replicaToStartTimeMap;
-
   private final Map<ReplicaId, FileCopyStatusListener> replicaToStatusListenerMap;
   private boolean isRunning;
   private final ReplicaSyncUpManager replicaSyncUpManager;
@@ -55,15 +57,15 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   private final List<ReplicaId> inFlightReplicas;
   private final StoreManager storeManager;
   private final StoreConfig storeConfig;
-
+  private final FileCopyMetrics fileCopyMetrics;
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
 
   public FileCopyBasedReplicationSchedulerImpl(@Nonnull FileCopyHandlerFactory fileCopyHandlerFactory,
-      FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig,
-      ClusterMap clusterMap, @Nonnull PrioritizationManager prioritizationManager,
-      @Nonnull ReplicaSyncUpManager replicaSyncUpManager,
-      StoreManager storeManager, StoreConfig storeConfig, DataNodeId dataNodeId){
+      FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig, ClusterMap clusterMap,
+      @Nonnull PrioritizationManager prioritizationManager, @Nonnull ReplicaSyncUpManager replicaSyncUpManager,
+      @Nonnull StoreManager storeManager, @Nonnull StoreConfig storeConfig, DataNodeId dataNodeId,
+      @Nonnull FileCopyMetrics fileCopyMetrics) {
 
     Objects.requireNonNull(fileCopyHandlerFactory, "fileCopyHandlerFactory param cannot be null");
     Objects.requireNonNull(fileCopyBasedReplicationConfig, "fileCopyBasedReplicationConfig param cannot be null");
@@ -72,12 +74,13 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     Objects.requireNonNull(replicaSyncUpManager, "replicaSyncUpManager param cannot be null");
     Objects.requireNonNull(storeManager, "storeManager param cannot be null");
     Objects.requireNonNull(storeConfig, "storeConfig param cannot be null");
+    Objects.requireNonNull(fileCopyMetrics, "fileCopyMetrics cannot be null");
 
     this.fileCopyHandlerFactory = fileCopyHandlerFactory;
     this.fileCopyBasedReplicationConfig = fileCopyBasedReplicationConfig;
     this.clusterMap = clusterMap;
     this.fileCopyBasedReplicationThreadPoolManager = new DiskAwareFileCopyThreadPoolManager(dataNodeId.getDiskIds(),
-        fileCopyBasedReplicationConfig.fileCopyNumberOfFileCopyThreads);
+        fileCopyBasedReplicationConfig.fileCopyNumberOfFileCopyThreads, fileCopyMetrics);
     this.fileCopyBasedReplicationThreadPoolManagerThread = new Thread(fileCopyBasedReplicationThreadPoolManager);
     this.replicaToStartTimeMap = new ConcurrentHashMap<>();
     this.inFlightReplicas = new LinkedList<>();
@@ -85,10 +88,11 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     this.replicaSyncUpManager = replicaSyncUpManager;
     this.storeManager = storeManager;
     this.storeConfig = storeConfig;
+    this.fileCopyMetrics = fileCopyMetrics;
     this.replicaToStatusListenerMap = new ConcurrentHashMap<>();
   }
 
-  public void run(){
+  public void run() {
     isRunning = true;
     logger.info("FileCopyBasedReplicationSchedulerImpl Started");
     try {
@@ -124,9 +128,14 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
 
   List<ReplicaId> getNextReplicaToHydrate(DiskId diskId, int numberOfReplicasOnDisk) {
     List<ReplicaId> replicaIds = prioritizationManager.getPartitionListForDisk(diskId, numberOfReplicasOnDisk);
-    if(replicaIds == null || replicaIds.isEmpty())
-      return null;
+    if (replicaIds == null) {
+      return new ArrayList<>();
+    }
     return replicaIds;
+  }
+
+  public boolean isRunning() {
+    return isRunning;
   }
 
   @Override
@@ -141,19 +150,20 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
   @Override
   public void scheduleFileCopy() throws InterruptedException {
     logger.info("Starting File Copy Scheduler");
-    while(isRunning){
+    while (isRunning) {
 
-      Thread.sleep(fileCopyBasedReplicationConfig.fileCopySchedulerWaitTimeSecs*1000);
+      Thread.sleep(fileCopyBasedReplicationConfig.fileCopySchedulerWaitTimeSecs * 1000);
 
       List<ReplicaId> replicasToDropForHydration = findStarvedReplicas();
-      if(!replicasToDropForHydration.isEmpty()){
+      if (!replicasToDropForHydration.isEmpty()) {
         logger.info("Found Replicas To Drop From Hydration: " + replicasToDropForHydration.stream()
-            .map(replicaId -> replicaId.getPartitionId().toPathString()).collect(Collectors.toList()));
-      } else{
+            .map(replicaId -> replicaId.getPartitionId().toPathString())
+            .collect(Collectors.toList()));
+      } else {
         logger.info("No Replicas To Drop From Hydration In Current Cycle");
       }
 
-      for(ReplicaId replica: replicasToDropForHydration){
+      for (ReplicaId replica : replicasToDropForHydration) {
         try {
           fileCopyBasedReplicationThreadPoolManager.stopAndRemoveReplicaFromThreadPool(replica);
         } catch (InterruptedException e) {
@@ -171,37 +181,41 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
       }
 
       List<DiskId> disksToHydrate = fileCopyBasedReplicationThreadPoolManager.getDiskIdsToHydrate();
-      for(DiskId diskId: disksToHydrate){
-        List<ReplicaId> replicaIds = getNextReplicaToHydrate(diskId, fileCopyBasedReplicationConfig.fileCopyParallelPartitionHydrationCountPerDisk);
-        logger.info("Starting Hydration For Disk: {} with ReplicaId: {}", diskId, replicaIds.stream().map(replicaId -> replicaId.getPartitionId().toPathString()));
+      for (DiskId diskId : disksToHydrate) {
+        List<ReplicaId> replicaIds = getNextReplicaToHydrate(diskId,
+            fileCopyBasedReplicationConfig.fileCopyParallelPartitionHydrationCountPerDisk);
 
-        if(!replicaIds.isEmpty()){
-          for(ReplicaId replicaId: replicaIds) {
+        if (!replicaIds.isEmpty()) {
+          logger.info("Starting Hydration For Disk: {}", diskId);
+          for (ReplicaId replicaId : replicaIds) {
             if (inFlightReplicas.contains(replicaId)) {
               continue;
             }
-            FileCopyStatusListener fileCopyStatusListener = new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId);
+            FileCopyStatusListener fileCopyStatusListener =
+                new FileCopyStatusListenerImpl(replicaSyncUpManager, replicaId);
             FileCopyHandler fileCopyHandler = fileCopyHandlerFactory.getFileCopyHandler();
-            try{
+            try {
               /**
-               * Adding Persistence of File Copy In Progress File to disk. This will
-               * be used for recovery during restarts and rollback/roll forward scenarios.
+               * Use FileCopyTemporaryDirectoryName to create a temporary directory for file copy.
+               * This will be used to write the files which are not yet written and can be cleaned
+               * up without
                */
-              createFileCopyInProgressFileIfAbsent(replicaId);
-            } catch (IOException e){
-              logger.error("Error Creating File Copy In Progress File For Replica: " + replicaId.getPartitionId().toPathString());
+              createTemporaryDirectoryForFileCopyIfAbsent(replicaId, storeConfig);
+            } catch (IOException e) {
+              logger.error(
+                  "Error Creating Temporary Directory For Replica: " + replicaId.getPartitionId().toPathString());
               fileCopyStatusListener.onFileCopyFailure(e);
               continue;
             }
 
-            fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId,
-                fileCopyStatusListener, fileCopyHandler);
+            fileCopyBasedReplicationThreadPoolManager.submitReplicaForHydration(replicaId, fileCopyStatusListener,
+                fileCopyHandler);
 
             replicaToStatusListenerMap.put(replicaId, fileCopyStatusListener);
             inFlightReplicas.add(replicaId);
-            replicaToStartTimeMap.put(replicaId, System.currentTimeMillis()/1000);
+            replicaToStartTimeMap.put(replicaId, System.currentTimeMillis() / 1000);
           }
-        } else{
+        } else {
           logger.info("No Replicas To Hydrate For Disk: " + diskId);
         }
       }
@@ -210,15 +224,21 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     logger.error("FileCopyBasedReplicationSchedulerImpl Stopped");
   }
 
-  /**
-   * Create a file copy in progress file on the disk for the replica.
-   * @param replica
-   * @throws IOException
-   */
-  void createFileCopyInProgressFileIfAbsent(ReplicaId replica) throws IOException {
-    File fileCopyInProgressFileName = new File(replica.getReplicaPath(), storeConfig.storeFileCopyInProgressFileName);
-    if (!fileCopyInProgressFileName.exists()) {
-      fileCopyInProgressFileName.createNewFile();
+  public List<ReplicaId> getInFlightReplicas() {
+    return inFlightReplicas;
+  }
+
+  public Map<ReplicaId, Long> getReplicaToStartTimeMap() {
+    return replicaToStartTimeMap;
+  }
+
+  void createTemporaryDirectoryForFileCopyIfAbsent(ReplicaId replica, StoreConfig storeConfig) throws IOException {
+    String tempDirPath = replica.getReplicaPath() + File.separator + storeConfig.storeFileCopyTemporaryDirectoryName;
+    logger.info("Creating Temporary Directory For File Copy: " + tempDirPath);
+    File fileCopyTemporaryDirectory =
+        new File(replica.getReplicaPath(), storeConfig.storeFileCopyTemporaryDirectoryName);
+    if (!fileCopyTemporaryDirectory.exists()) {
+      fileCopyTemporaryDirectory.mkdirs();
     }
   }
 
@@ -251,27 +271,35 @@ class FileCopyBasedReplicationSchedulerImpl implements FileCopyBasedReplicationS
     public void onFileCopyFailure(Exception e) {
       logger.error("Error Copying File For Replica: " + replicaId.getPartitionId().toPathString());
       logger.error("[Error]: ", e);
-      removeReplicaFromFileCopy(replicaId);
+      try {
+        removeReplicaFromFileCopy(replicaId);
+      } catch (Exception ex) {
+        logger.error("Error Removing Replica From File Copy: " + replicaId.getPartitionId().toPathString(), ex);
+      }
       //TODO: update Metrics For File Copy Failure.
       replicaSyncUpManager.onFileCopyError(replicaId);
     }
 
-    void removeReplicaFromFileCopy(ReplicaId replicaId){
+    void removeReplicaFromFileCopy(ReplicaId replicaId) {
       inFlightReplicas.remove(replicaId);
       replicaToStartTimeMap.remove(replicaId);
       prioritizationManager.removeInProgressReplica(replicaId.getDiskId(), replicaId);
-      deleteFileCopyInProgressFile(replicaId);
+      cleanUpStagingDirectory(replicaId);
     }
 
-    void deleteFileCopyInProgressFile(ReplicaId replicaId){
-      File fileCopyInProgressFile = new File(replicaId.getReplicaPath(),
-          storeConfig.storeFileCopyInProgressFileName);
+    void cleanUpStagingDirectory(ReplicaId replicaId) {
       try {
-        Utils.deleteFileOrDirectory(fileCopyInProgressFile);
+        PartitionFileStore fileStore = storeManager.getFileStore(replicaId.getPartitionId());
+        fileStore.cleanUpStagingDirectory(replicaId.getReplicaPath(), storeConfig.storeFileCopyTemporaryDirectoryName,
+            Long.toString(replicaId.getPartitionId().getId()));
       } catch (IOException e) {
         // if deletion fails, we log here without throwing exception. Next time when server restarts,
         // the store should complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
-        logger.error("Failed to delete {}", fileCopyInProgressFile.getName(), e);
+        logger.error("Failed to delete {}", storeConfig.storeFileCopyTemporaryDirectoryName, e);
+      } catch (Exception e) {
+        // if store is not found, we log here without throwing exception. Next time when server restarts,
+        // the store should attempt to delete this again and complete BOOTSTRAP -> STANDBY quickly again.
+        logger.error("Failed to get File Store {}", replicaId.getPartitionId().toPathString(), e);
       }
     }
   }

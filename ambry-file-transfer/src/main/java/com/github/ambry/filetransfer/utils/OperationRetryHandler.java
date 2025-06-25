@@ -63,7 +63,7 @@ public class OperationRetryHandler {
   public <T> T executeWithRetry(@Nonnull RetryableOperation<T> operation,
       @Nonnull String operationName) throws Exception {
     Objects.requireNonNull(operation, "operation cannot be null");
-    int attempts = 0;
+    int attempts = 1;
     T result;
 
     while (true) {
@@ -80,6 +80,7 @@ public class OperationRetryHandler {
       }
 
       try {
+        logger.info("{} failed. Retrying in {} ms. re-attempt {}/{}", operationName, retryDelayInMS, attempts - 1, maxRetries);
         TimeUnit.MILLISECONDS.sleep(retryDelayInMS);
       } catch (InterruptedException sleepInterrupted) {
         Thread.currentThread().interrupt();
@@ -97,9 +98,9 @@ public class OperationRetryHandler {
    * @param e the exception to throw
    */
   private void logMessageAndThrow(String operationName, int attempts, int maxRetries, Exception e) throws Exception {
-    logger.warn("{} failed with an exception. Attempt {}/{}", operationName, attempts, maxRetries, e);
-    if (attempts >= maxRetries) {
-      logger.error("{} failed due to an exception after {} attempts", operationName, attempts, e);
+    logger.warn("{} failed with an exception. re-attempt {}/{}", operationName, attempts - 1, maxRetries, e);
+    if (attempts - 1 >= maxRetries) {
+      logger.error("{} failed due to an exception after {} re-attempts", operationName, attempts - 1, e);
       throw e;
     }
   }

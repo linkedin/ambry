@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 public class FileCopyThread extends Thread {
   private final FileCopyStatusListener fileCopyStatusListener;
   private final FileCopyHandler fileCopyHandler;
+  private final FileCopyMetrics fileCopyMetrics;
 
   private boolean isRunning;
 
@@ -45,37 +46,47 @@ public class FileCopyThread extends Thread {
    * The logger for this class.
    */
   protected final Logger logger = LoggerFactory.getLogger(getClass());
+
   /**
    * Constructor for FileCopyThread
    * @param fileCopyHandler the file copy handler
    * @param fileCopyStatusListener the file copy status listener
+   * @param fileCopyMetrics file copy related metrics
    */
-  FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener) {
+  FileCopyThread(@Nonnull FileCopyHandler fileCopyHandler, @Nonnull FileCopyStatusListener fileCopyStatusListener,
+      @Nonnull FileCopyMetrics fileCopyMetrics) {
     Objects.requireNonNull(fileCopyHandler, "fileCopyHandler must not be null");
     Objects.requireNonNull(fileCopyStatusListener, "fileCopyStatusListener must not be null");
+    Objects.requireNonNull(fileCopyMetrics, "fileCopyMetrics must not be null");
 
     this.fileCopyStatusListener = fileCopyStatusListener;
     this.fileCopyHandler = fileCopyHandler;
+    this.fileCopyMetrics = fileCopyMetrics;
     this.threadName = "FileCopyThread-" + fileCopyStatusListener.getReplicaId().getPartitionId().toPathString();
     this.isRunning = true;
     this.shutDownLatch = new CountDownLatch(1);
+    super.setName(threadName);
   }
 
   @Override
   public void run() {
     logger.info("Starting FileCopyThread: {} for replicaId: {}", threadName, fileCopyStatusListener.getReplicaId());
-
+    long startTime = System.currentTimeMillis();
     try {
+      fileCopyMetrics.incrementFileCopyRunningThreadCount();
       ReplicaId replicaId = fileCopyStatusListener.getReplicaId();
       if (replicaId == null) {
         throw new IllegalStateException("ReplicaId cannot be null");
       }
 
       //TODO add logic to get the source and target replica id
-      ReplicaId targetReplicaId = FileCopyUtils.getPeerForFileCopy(replicaId.getPartitionId(), replicaId.getDataNodeId().getDatacenterName());
+      ReplicaId targetReplicaId =
+          FileCopyUtils.getPeerForFileCopy(replicaId.getPartitionId(), replicaId.getDataNodeId().getDatacenterName());
 
-      if(targetReplicaId == null) {
-        throw new IllegalStateException("Target ReplicaId cannot be null");
+      if (targetReplicaId == null) {
+        logger.warn("No peer replica found for file copy for replicaId: {}", replicaId);
+        fileCopyStatusListener.onFileCopyFailure(new IOException("No peer replica found for file copy"));
+        return;
       }
 
       FileCopyInfo fileCopyInfo = new FileCopyInfo(START_CORRELATION_ID, CLIENT_ID, replicaId, targetReplicaId);
@@ -83,11 +94,16 @@ public class FileCopyThread extends Thread {
       // Start the file copy process
 
       fileCopyHandler.copy(fileCopyInfo);
-
+      logger.info("File copy completed for partition: {} in {} seconds", replicaId.getPartitionId().getId(),
+          (System.currentTimeMillis() - startTime) / 1000);
       fileCopyStatusListener.onFileCopySuccess();
+      fileCopyMetrics.incrementPartitionFileCopySuccess();
     } catch (Exception e) {
       fileCopyStatusListener.onFileCopyFailure(e);
+      fileCopyMetrics.incrementPartitionFileCopyFailure();
     } finally {
+      fileCopyMetrics.updateFileCopyPerPartitionTimeMs(System.currentTimeMillis() - startTime);
+      fileCopyMetrics.decrementFileCopyRunningThreadCount();
       shutDownLatch.countDown();
     }
   }
