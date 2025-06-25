@@ -951,7 +951,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * Build the version for Named Blob row based on timestamp and uuid postfix.
    * @return a long number whose rightmost 5 digits are uuid postfix, and the remaining digits are current timestamp
    */
-  static long buildVersion(Time time) {
+  public static long buildVersion(Time time) {
     long currentTime = time.milliseconds();
     UUID uuid = UUID.randomUUID();
     return currentTime * VERSION_BASE + Long.parseLong(uuid.toString().split("-")[0], 16) % VERSION_BASE;
