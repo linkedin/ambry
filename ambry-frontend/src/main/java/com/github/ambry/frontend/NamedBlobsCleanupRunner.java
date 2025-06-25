@@ -86,6 +86,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
           Set<String> cleanedBlobIds =
               batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
           logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
+          blobName = staleBlobsWithLatestBlobName.getLatestBlob();
         } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
       }
     } catch (ExecutionException e) {
