@@ -498,7 +498,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           return staleBlobsWithLatestBlobName;
         } else if (status == Container.ContainerStatus.INACTIVE) {
           staleNamedBlobResults = potentialStaleNamedBlobResults;
-          return new StaleBlobsWithLatestBlobName(staleNamedBlobResults, "\0");
+          return new StaleBlobsWithLatestBlobName(staleNamedBlobResults, staleNamedBlobResults.get(staleNamedBlobResults.size() -1).getBlobName());
         }
       } else if (resultSize < config.queryStaleDataMaxResults) {
         if (status == Container.ContainerStatus.ACTIVE) {
@@ -512,7 +512,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleBlobsWithLatestBlobName;
     }, transactionStateTracker);
-    //TODO IN LATER PR: local hard delete
   }
 
   @Override
@@ -520,6 +519,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
       batchSoftDelete(staleRecords, connection);
+      //TODO IN LATER PR: local hard delete
       metricsRecoder.namedBlobCleanupTimeInMs.update(this.time.milliseconds() - startTime);
       return staleRecords.size();
     }, null);
@@ -977,9 +977,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.READY) {
         staleBlobs.add(currentBlob);
       } else if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.IN_PROGRESS) {
-          if (keepBlobModifiedTS.before(cutoffTimestamp)) {
-            staleBlobs.add(keepBlob);
-            keepBlob = currentBlob;
+        if (keepBlobModifiedTS.after(cutoffTimestamp)) {
+          staleBlobs.add(currentBlob);
+        } else if (keepBlobModifiedTS.before(cutoffTimestamp)) {
+          staleBlobs.add(keepBlob);
+          keepBlob = currentBlob;
         }
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.IN_PROGRESS) {
         staleBlobs.add(currentBlob);
