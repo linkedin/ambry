@@ -665,6 +665,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     assertTrue("Good blob case 6 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
+  // fix f
   @Test
   public void testRemovesOneOlderStaleInProgressBlob() throws Exception {
     // Arrange: create an IN_PROGRESS blob and mark it stale by updating modified_ts

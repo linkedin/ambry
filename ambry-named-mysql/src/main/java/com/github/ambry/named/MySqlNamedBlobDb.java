@@ -175,7 +175,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String GET_BLOBS_FOR_ACTIVE_CONTAINER = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
           "FROM %s " +
-          "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND (deleted_ts IS NULL or deleted_ts > NOW()) " +
+          "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND (deleted_ts IS NULL) " +
           "ORDER BY %s ASC, %s DESC " +
           "LIMIT ?",
       ACCOUNT_ID,
