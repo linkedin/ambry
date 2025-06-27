@@ -164,7 +164,7 @@ public class FileCopyDisruptionBasedPrioritizationManager extends Thread impleme
     List<ReplicaId> newQueueList = new ArrayList<>(newQueue);
 
     for (int i = 0; i < previousQueueList.size(); i++) {
-      if (previousQueueList.get(i).equals(newQueueList.get(i))) {
+      if (!previousQueueList.get(i).equals(newQueueList.get(i))) {
         logger.info("For disk {} queue has changed from {} to {}", diskId, previousQueue, newQueue);
         break;
       }
