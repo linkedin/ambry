@@ -2021,7 +2021,7 @@ public class DatasetDao {
       }
     } catch (Exception e) {
       throw new IllegalArgumentException(
-          "Version does not match the semantic version format MAJOR.MINOR.PATCH, version: " + version);
+          "Version does not match the semantic long version format MAJOR.MINOR.PATCH.REVISION, version: " + version);
     }
     return majorVersion * 1000000000 + minorVersion * 1000000 + patchVersion * 1000 + revisionVersion;
   }
