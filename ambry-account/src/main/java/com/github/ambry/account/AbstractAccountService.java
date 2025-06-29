@@ -151,6 +151,11 @@ public abstract class AbstractAccountService implements AccountService {
       throw new AccountServiceException("Account " + accountName + " is not found", AccountServiceErrorCode.NotFound);
     }
 
+    if (containers.size() > Short.MAX_VALUE) {
+      accountServiceMetrics.maxContainersReachedForAccount.inc();
+      throw new AccountServiceException("Too many containers in request: " + containers.size(), AccountServiceErrorCode.BadRequest);
+    }
+
     List<Container> resolvedContainers = new ArrayList<>();
     List<Container> existingUnchangedContainers = new ArrayList<>();
     // create a hashmap to map the name to existing containers in account
@@ -158,12 +163,12 @@ public abstract class AbstractAccountService implements AccountService {
     account.getAllContainers().forEach(c -> existingContainersInAccount.put(c.getName(), c));
 
     // Generate container ids for new containers
-    short nextContainerId = account.getAllContainers()
+    int nextContainerId = account.getAllContainers()
         .stream()
         .map(Container::getId)
         .max(Short::compareTo)
-        .map(maxId -> (short) (maxId + 1))
-        .orElse(config.containerIdStartNumber);
+        .map(maxId -> maxId + 1)
+        .orElse((int) config.containerIdStartNumber);
 
     for (Container container : containers) {
       if (container.getId() == Container.UNKNOWN_CONTAINER_ID) {
@@ -204,8 +209,12 @@ public abstract class AbstractAccountService implements AccountService {
               }
           }
         } else {
+          if (nextContainerId > Short.MAX_VALUE) {
+            accountServiceMetrics.maxContainersReachedForAccount.inc();
+            throw new AccountServiceException("Account reached max containers", AccountServiceErrorCode.InternalError);
+          }
           resolvedContainers.add(
-              new ContainerBuilder(container).setId(nextContainerId).setParentAccountId(account.getId()).build());
+              new ContainerBuilder(container).setId((short) nextContainerId).setParentAccountId(account.getId()).build());
           ++nextContainerId;
         }
       } else {
