@@ -34,6 +34,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -141,8 +142,25 @@ public class MySqlNamedBlobDbTest {
   public void testPullAndCleanStaleNamedBlobs() throws Exception {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
     dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
-    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
     namedBlobDb.cleanupStaleData(staleNamedBlobs);
+  }
+
+
+  /**
+   * Helper method to obtain stale blobs
+   */
+  private List<StaleNamedBlob> getStaleBlobList() throws ExecutionException, InterruptedException {
+    List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
+    NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
+
+    Set<Container> containers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+    for (Container container : containers) {
+
+      staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, "\0").get();
+      staleNamedBlobsList.addAll(staleBlobsWithLatestBlobName.getStaleBlobs());
+    }
+    return staleNamedBlobsList;
   }
 
   @Test

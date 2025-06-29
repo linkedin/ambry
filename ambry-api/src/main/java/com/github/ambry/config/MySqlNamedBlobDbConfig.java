@@ -93,7 +93,7 @@ public class MySqlNamedBlobDbConfig {
    * The maximum number of days for a stale blob to say uncleaned.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
-  @Default("20")
+  @Default("5")
   public final int staleDataRetentionDays;
 
   /**
@@ -145,7 +145,7 @@ public class MySqlNamedBlobDbConfig {
     this.queryStaleDataMaxResults =
         verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays =
-        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);
