@@ -65,7 +65,7 @@ public class RetryExecutor {
         int currAttempts = attempts + 1;
         if (currAttempts < policy.maxAttempts() && isRetriable.test(exception)) {
           int waitTimeMs = policy.waitTimeMs(currAttempts);
-          logger.info("{} of {} attempts failed, will keep retrying after a {} ms backoff. exception='{}'",
+          logger.trace("{} of {} attempts failed, will keep retrying after a {} ms backoff. exception='{}'",
               currAttempts, policy.maxAttempts(), waitTimeMs, exception);
           //Don't need the scheduler if no need to wait for retry and show warn message if scheduler is null but wait time larger than 0;
           if (scheduler == null) {
@@ -78,7 +78,7 @@ public class RetryExecutor {
                 waitTimeMs, TimeUnit.MILLISECONDS);
           }
         } else {
-          logger.info("{} of {} attempts failed, completing operation. See exception below:", currAttempts,
+          logger.trace("{} of {} attempts failed, completing operation. See exception below:", currAttempts,
               policy.maxAttempts(), exception);
           userCallback.onCompletion(null, exception);
         }
