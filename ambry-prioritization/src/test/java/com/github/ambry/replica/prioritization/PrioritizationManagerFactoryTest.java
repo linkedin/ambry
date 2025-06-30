@@ -14,8 +14,11 @@
 
 package com.github.ambry.replica.prioritization;
 
+import com.github.ambry.clustermap.ClusterManagerQueryHelper;
 import com.github.ambry.config.ReplicaPrioritizationStrategy;
+import com.github.ambry.replica.prioritization.disruption.DefaultDisruptionService;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -23,14 +26,17 @@ import static org.junit.Assert.*;
 public class PrioritizationManagerFactoryTest {
 
   @Test
-  public void testGetPrioritizationManagerFactory(){
-    PrioritizationManagerFactory prioritizationManagerFactory = new FileBasedReplicationPrioritizationManagerFactory();
-    PrioritizationManager prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(
-        ReplicaPrioritizationStrategy.FirstComeFirstServe);
+  public void testGetPrioritizationManagerFactory() {
+    ClusterManagerQueryHelper clusterManagerQueryHelper = Mockito.mock(ClusterManagerQueryHelper.class);
+    PrioritizationManagerFactory prioritizationManagerFactory =
+        new FileBasedReplicationPrioritizationManagerFactory(new DefaultDisruptionService(), clusterManagerQueryHelper,
+            "");
+    PrioritizationManager prioritizationManager =
+        prioritizationManagerFactory.getPrioritizationManager(ReplicaPrioritizationStrategy.FirstComeFirstServe);
 
     assertTrue(prioritizationManager instanceof FCFSPrioritizationManager);
     PrioritizationManager prioritizationManager1 = prioritizationManagerFactory.getPrioritizationManager(
         ReplicaPrioritizationStrategy.ACMAdvanceNotificationsBased);
-    assertNull(prioritizationManager1);
+    assertTrue(prioritizationManager1 instanceof FileCopyDisruptionBasedPrioritizationManager);
   }
 }

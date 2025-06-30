@@ -423,7 +423,13 @@ public class AmbryServer {
                 skipPredicate);
         replicationManager.start();
 
-        if (serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)) {
+        DisruptionService disruptionService = null;
+        if (serverConfig.serverReplicationProtocolForHydration.equals(ServerReplicationMode.FILE_BASED)
+            && clusterMap instanceof HelixClusterManager) {
+          DisruptionServiceFactory disruptionServiceFactory =
+              Utils.getObj(replicationConfig.disruptionServiceFactory, properties, nodeId.getDatacenterName());
+          disruptionService = disruptionServiceFactory.getDisruptionService();
+
           FileCopyMetrics fileCopyMetrics =
               new FileCopyMetrics(registry, fileCopyBasedReplicationConfig.fileCopyMetricsReservoirTimeWindowMs);
           FileCopyHandlerFactory fileCopyHandlerFactory =
@@ -431,7 +437,8 @@ public class AmbryServer {
                   fileCopyBasedReplicationConfig, storeConfig, fileCopyMetrics);
 
           PrioritizationManagerFactory prioritizationManagerFactory =
-              new FileBasedReplicationPrioritizationManagerFactory();
+              new FileBasedReplicationPrioritizationManagerFactory(disruptionService,
+                  ((HelixClusterManager) clusterMap).getManagerQueryHelper(), nodeId.getDatacenterName());
           prioritizationManager = prioritizationManagerFactory.getPrioritizationManager(
               replicaPrioritizationConfig.replicaPrioritizationStrategy);
           prioritizationManager.start();
@@ -523,11 +530,16 @@ public class AmbryServer {
 
         if (replicationConfig.enableReplicationPrioritization && clusterMap instanceof HelixClusterManager) {
           HelixClusterManager helixClusterManager = (HelixClusterManager) clusterMap;
-          DisruptionServiceFactory disruptionServiceFactory = Utils.getObj(replicationConfig.disruptionServiceFactory, properties, nodeId.getDatacenterName());
-          DisruptionService disruptionService = disruptionServiceFactory.getDisruptionService();
+          if (disruptionService == null) {
+            DisruptionServiceFactory disruptionServiceFactory =
+                Utils.getObj(replicationConfig.disruptionServiceFactory, properties, nodeId.getDatacenterName());
+            disruptionService = disruptionServiceFactory.getDisruptionService();
+          }
           ScheduledExecutorService scheduledExecutorService = Utils.newScheduler(1, "ambry-prioritization", false);
-          replicationPrioritizationManager = new ReplicationPrioritizationManager(replicationManager, clusterMap, nodeId, scheduledExecutorService, storageManager, replicationConfig,
-          helixClusterManager.getManagerQueryHelper(), disruptionService, registry);
+          replicationPrioritizationManager =
+              new ReplicationPrioritizationManager(replicationManager, clusterMap, nodeId, scheduledExecutorService,
+                  storageManager, replicationConfig, helixClusterManager.getManagerQueryHelper(), disruptionService,
+                  registry);
         }
 
       } else {

@@ -568,6 +568,10 @@ public class DiskManager {
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
         diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
 
+        // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
+        // BOOTSTRAP -> STANDBY transition)
+        createBootstrapFileIfAbsent(replica);
+
         // add new created store into in-memory data structures.
         stores.put(replica.getPartitionId(), store);
 
@@ -599,9 +603,6 @@ public class DiskManager {
         // add store into CompactionManager
         compactionManager.addBlobStore(store);
 
-        // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
-        // BOOTSTRAP -> STANDBY transition)
-        createBootstrapFileIfAbsent(replica);
         logger.info("New store is successfully added into DiskManager for partitionId {}.", replica.getPartitionId());
         succeed = true;
       }
