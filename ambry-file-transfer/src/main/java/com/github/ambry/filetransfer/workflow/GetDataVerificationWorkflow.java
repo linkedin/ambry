@@ -22,7 +22,9 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.FileCopyDataVerificationRequest;
 import com.github.ambry.protocol.FileCopyDataVerificationResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
+import com.github.ambry.utils.Pair;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 import org.slf4j.Logger;
@@ -37,8 +39,16 @@ public class GetDataVerificationWorkflow extends BaseWorkFlow implements Operati
    * The {@link FileCopyInfo} that contains the information required to send the request.
    */
   private final FileCopyInfo fileCopyInfo;
+  /**
+   * The file name for which the data verification is requested.
+   */
+  private final String fileName;
+  /**
+   * The ranges for which the data verification is requested.
+   */
+  private final List<Pair<Integer, Integer>> ranges;
 
-  public static String GET_DATA_VERIFICATION_OPERATION_NAME = "   * GetDataVerificationWorkflow";
+  public static String GET_DATA_VERIFICATION_OPERATION_NAME = "GetDataVerificationWorkflow";
 
   private static final Logger logger = LoggerFactory.getLogger(GetDataVerificationWorkflow.class);
 
@@ -48,14 +58,15 @@ public class GetDataVerificationWorkflow extends BaseWorkFlow implements Operati
    * @param config The {@link FileCopyBasedReplicationConfig} that contains the configuration required to send the request.
    */
   public GetDataVerificationWorkflow(@Nonnull ConnectionPool connectionPool, @Nonnull FileCopyInfo fileCopyInfo,
-      @Nonnull FileCopyBasedReplicationConfig config) {
+      @Nonnull FileCopyBasedReplicationConfig config, String fileName, @Nonnull List<Pair<Integer, Integer>> ranges) {
     super(connectionPool, config);
 
     Objects.requireNonNull(connectionPool, "connectionPool param cannot be null");
-    Objects.requireNonNull(fileCopyInfo, "fileCopyInfo param cannot be null");
     Objects.requireNonNull(config, "config param cannot be null");
 
-    this.fileCopyInfo = fileCopyInfo;
+    this.fileName = Objects.requireNonNull(fileName, "fileName param cannot be null");
+    this.ranges = Objects.requireNonNull(ranges, "ranges param cannot be null");
+    this.fileCopyInfo = Objects.requireNonNull(fileCopyInfo, "fileCopyInfo param cannot be null");;
   }
 
   /**
@@ -67,8 +78,7 @@ public class GetDataVerificationWorkflow extends BaseWorkFlow implements Operati
   public FileCopyDataVerificationResponse execute() throws Exception {
     final FileCopyDataVerificationRequest request = new FileCopyDataVerificationRequest(
         FileCopyDataVerificationRequest.FILE_COPY_DATA_VERIFICATION_REQUEST_VERSION_V_1, fileCopyInfo.getCorrelationId(),
-        fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(),
-        "", new ArrayList<>());
+        fileCopyInfo.getClientId(), fileCopyInfo.getSourceReplicaId().getPartitionId(), fileName, ranges);
 
     ConnectedChannel connectedChannel = getChannel(fileCopyInfo.getTargetReplicaId().getDataNodeId());
 
