@@ -229,9 +229,16 @@ public class StoreFileCopyHandler implements FileCopyHandler {
           List<Pair<Integer, Integer>> ranges = getChecksumRanges(logInfo.getLogSegment().getFileSize(),
               config.fileCopyHandlerDataVerificationRangesCount, config.fileCopyHandlerDataVerificationRangeSizeInMb);
           try {
+            String logSegmentFileName = logInfo.getLogSegment().getFileName() + "_log";
+            logger.info("Checksum ranges for log segment {}: {}", logSegmentFileName, ranges);
+
             List<String> checkSums = fileStore.getChecksumsForRanges(fileCopyInfo.getSourceReplicaId().getPartitionId(),
-                logInfo.getLogSegment().getFileName(), ranges);
-            FileCopyDataVerificationResponse checksumsFromServingNode = getFileCopyDataVerificationResponse(fileCopyInfo);
+                logSegmentFileName, ranges);
+            logger.info("Checksums for log segment {}: {}", logSegmentFileName, checkSums);
+
+            FileCopyDataVerificationResponse checksumsFromServingNode = getFileCopyDataVerificationResponse(
+                fileCopyInfo, logSegmentFileName, ranges);
+            logger.info("Checksums from serving node for log segment {}: {}", logSegmentFileName, checksumsFromServingNode);
 
             if (!checkSums.equals(checksumsFromServingNode.getChecksums())) {
               logger.error("Checksums do not match for log segment: {}", logInfo.getLogSegment().getFileName());
@@ -269,18 +276,23 @@ public class StoreFileCopyHandler implements FileCopyHandler {
 
   /**
    * Get the file copy data verification response.
+   *
    * @param fileCopyInfo the file copy info of type {@link FileCopyInfo}
-   * @throws FileCopyHandlerException if the handler is not running
+   * @param fileName the name of the file to verify
+   * @param ranges the list of ranges to verify checksums for
    * @return the data verification response of type {@link FileCopyDataVerificationResponse}
+   * @throws FileCopyHandlerException if the handler is not running
    */
-  FileCopyDataVerificationResponse getFileCopyDataVerificationResponse(FileCopyInfo fileCopyInfo) {
+  FileCopyDataVerificationResponse getFileCopyDataVerificationResponse(FileCopyInfo fileCopyInfo,
+      String fileName, List<Pair<Integer, Integer>> ranges) {
     validateIfStoreFileCopyHandlerIsRunning();
-    String operationName = "GetDataVerificationWorkflow" + "[Partition=" + fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
+    String operationName = GetDataVerificationWorkflow.GET_DATA_VERIFICATION_OPERATION_NAME + "[Partition=" +
+        fileCopyInfo.getTargetReplicaId().getPartitionId().getId() + "]";
     FileCopyDataVerificationResponse dataVerificationResponse = null;
 
     try {
       dataVerificationResponse = operationRetryHandler.executeWithRetry(
-          () -> new GetDataVerificationWorkflow(connectionPool, fileCopyInfo, config).execute(), operationName);
+          () -> new GetDataVerificationWorkflow(connectionPool, fileCopyInfo, config, fileName, ranges).execute(), operationName);
     } catch (IOException e) {
       logMessageAndThrow(operationName, "IO error while fetching data verification response",
           e, FileCopyHandlerException.FileCopyHandlerErrorCode.FileCopyHandlerDataVerificationApiError);
