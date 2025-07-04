@@ -559,17 +559,16 @@ public class FileStore implements PartitionFileStore {
 
   /**
    * Calculates checksums for specified byte ranges in a file.
-   * @param partitionId The partition ID for which the file belongs
-   * @param fileName The name of the file to read
+   * @param filePathInPartition The path of the file within the partition
    * @param ranges List of byte ranges for which checksums are to be calculated
    * @return List of checksums for each specified range
    * @throws StoreException if there are issues reading the file or calculating checksums
    */
-  public List<String> getChecksumsForRanges(@Nonnull PartitionId partitionId, String fileName, @Nonnull List<Pair<Integer, Integer>> ranges) throws StoreException {
+  public List<String> getChecksumsForRanges(@Nonnull String filePathInPartition, @Nonnull List<Pair<Integer, Integer>> ranges) throws StoreException {
     validateIfFileStoreIsRunning();
 
     List<String> checksums = new ArrayList<>();
-    File file = validateAndGetFile(fileName);
+    File file = validateAndGetFileFromPath(filePathInPartition);
     try {
       for (Pair<Integer, Integer> range : ranges) {
         if (range.getFirst() < 0 || range.getSecond() < 0 || range.getFirst() > range.getSecond()) {
@@ -588,14 +587,14 @@ public class FileStore implements PartitionFileStore {
         }
       }
     } catch (FileNotFoundException e) {
-      logger.error("File not found: {}", fileName, e);
-      throw new FileStoreException("File not found: " + fileName, FileStoreReadError);
+      logger.error("File not found: {}", filePathInPartition, e);
+      throw new FileStoreException("File not found: " + filePathInPartition, FileStoreReadError);
     } catch (IOException e) {
-      logger.error("IO error while reading file: {}", fileName, e);
-      throw new FileStoreException("IO error while reading file: " + fileName, FileStoreReadError);
+      logger.error("IO error while reading file: {}", filePathInPartition, e);
+      throw new FileStoreException("IO error while reading file: " + filePathInPartition, FileStoreReadError);
     } catch (Exception e) {
-      logger.error("Unexpected error while calculating checksums for ranges in file: {}", fileName, e);
-      throw new FileStoreException("Unexpected error while calculating checksums for ranges in file: " + fileName, e,
+      logger.error("Unexpected error while calculating checksums for ranges in file: {}", filePathInPartition, e);
+      throw new FileStoreException("Unexpected error while calculating checksums for ranges in file: " + filePathInPartition, e,
           FileStoreErrorCode.UnknownError);
     }
     return checksums;
@@ -617,16 +616,25 @@ public class FileStore implements PartitionFileStore {
    */
   private File validateAndGetFile(String fileName) throws StoreException {
     String filePath = partitionToMountPath + File.separator + fileName;
-    File file = new File(filePath);
+    return validateAndGetFileFromPath(filePath);
+  }
+
+  private File validateAndGetFileFromPath(String filePathInPartition) throws StoreException {
+    File file = new File(filePathInPartition);
     if (!file.exists()) {
-      logger.error("File doesn't exist: {}", filePath);
-      throw new StoreException("File doesn't exist: " + filePath, StoreErrorCodes.FileNotFound);
+      logger.error("File doesn't exist: {}", filePathInPartition);
+      throw new StoreException("File doesn't exist: " + filePathInPartition, StoreErrorCodes.FileNotFound);
     }
     if (!file.canRead()) {
-      logger.error("File is not readable: {}", filePath);
-      throw new StoreException("File is not readable: " + filePath, StoreErrorCodes.AuthorizationFailure);
+      logger.error("File is not readable: {}", filePathInPartition);
+      throw new StoreException("File is not readable: " + filePathInPartition, StoreErrorCodes.AuthorizationFailure);
     }
     return file;
+  }
+
+  public String getPartitionToMountPath() {
+    // Return the partition path where the FileStore is mounted
+    return partitionToMountPath;
   }
 
   /**

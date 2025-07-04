@@ -16,6 +16,7 @@ package com.github.ambry.filetransfer.handler;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.protocol.FileCopyDataVerificationResponse;
 import com.github.ambry.protocol.FileCopyGetChunkResponse;
 import com.github.ambry.protocol.FileCopyGetMetaDataResponse;
 import com.github.ambry.server.ServerErrorCode;
@@ -24,10 +25,12 @@ import com.github.ambry.store.DiskSpaceRequirements;
 import com.github.ambry.store.FileInfo;
 import com.github.ambry.store.FileStore;
 import com.github.ambry.store.LogSegmentName;
+import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StorageManagerMetrics;
 import com.github.ambry.store.StoreFileInfo;
 import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -45,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
@@ -72,14 +76,16 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   private static final int SEGMENT_COUNT = 2;
   private static final String STORE_ID = "0";
   private static final String STORE_DIR_PREFIX = "reserve_store_";
+  private PartitionFileStore spyFileStore;
 
-  public StoreFileCopyHandlerIntegTest() throws IOException {
-    tempDir = Files.createTempDirectory("StoreFileCopyHandlerIntegTest-" +
-        new Random().nextInt(1000)).toFile().toPath();
+  public StoreFileCopyHandlerIntegTest() throws Exception {
+    tempDir = Files.createTempDirectory("StoreFileCopyHandlerIntegTest-" + new Random().nextInt(1000)).toFile().toPath();
     File tempDirFile = tempDir.toFile();
     reserveFileDir = new File(tempDirFile, "reserve-files");
+
     storeManagerMetrics = new StorageManagerMetrics(new MetricRegistry());
     diskSpaceAllocator = new DiskSpaceAllocator(true, reserveFileDir, 0, storeManagerMetrics);
+
     fileStore = new FileStore( "", diskSpaceAllocator);
   }
 
@@ -106,7 +112,6 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     super.setUp();
     diskSpaceAllocator.initializePool(Arrays.asList(new DiskSpaceRequirements(STORE_ID, SEGMENT_CAPACITY, SEGMENT_COUNT, 0)));
     fileStore.start(SEGMENT_CAPACITY);
-    when(handler.getStoreManager().getFileStore(any())).thenReturn(fileStore);
 
     File sourceDir = tempDir.resolve("source").toFile();
     File targetDir = tempDir.resolve("target").toFile();
@@ -114,6 +119,9 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     when(fileCopyInfo.getSourceReplicaId()).thenReturn(mock(ReplicaId.class));
     when(fileCopyInfo.getSourceReplicaId().getPartitionId()).thenReturn(mock(PartitionId.class));
     when(fileCopyInfo.getSourceReplicaId().getMountPath()).thenReturn(sourceDir.getAbsolutePath());
+
+    spyFileStore = spy(fileStore);
+    doReturn(spyFileStore).when(handler.getStoreManager()).getFileStore(any(PartitionId.class));
 
     sourcePartitionDir = tempDir.resolve(sourceDir.toPath() + File.separator +
         fileCopyInfo.getSourceReplicaId().getPartitionId().getId()).toFile();
@@ -153,7 +161,8 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     File indexFile2 = new File(targetPartitionDir, indexFileName2);
 
     createSampleFile(indexFile1, 1024); // 1 KB
-    createSampleFile(indexFile2, 50 * 1024); // 50KB
+    createSampleFile(indexFile2, 50 * 1024); // 50 KB
+    createSampleFile(logSegment, 1024 * 1024); // 1 MB
 
     List<FileInfo> indexInfos = Arrays.asList(new StoreFileInfo[] {
         new StoreFileInfo(indexFileName1, indexFile1.length()),
@@ -173,11 +182,29 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
 
     final FileCopyGetChunkResponse fileCopyGetChunkResponseForIndexFile = getFileCopyGetChunkResponse(indexFile1);
     final FileCopyGetChunkResponse fileCopyGetChunkResponseForIndexFile2 = getFileCopyGetChunkResponse(indexFile2);
+    final FileCopyGetChunkResponse fileCopyGetChunkResponseForLogSegment1 = getFileCopyGetChunkResponse(logSegment);
 
     doReturn(fileCopyGetChunkResponseForIndexFile).
-    doReturn(fileCopyGetChunkResponseForIndexFile2)
+    doReturn(fileCopyGetChunkResponseForIndexFile2).
+    doReturn(fileCopyGetChunkResponseForLogSegment1)
         .when(spyHandler)
         .getFileCopyGetChunkResponse(any(), any(), any(), any(), anyBoolean());
+
+    List<Pair<Integer, Integer>> ranges = handler.getChecksumRanges(logSegment.length(),
+        fileCopyBasedReplicationConfig.fileCopyHandlerDataVerificationRangesCount, fileCopyBasedReplicationConfig.fileCopyHandlerDataVerificationRangeSizeInMb);
+
+    List<String> checkSums = Arrays.asList(new String[]{"checksum1"});
+    doReturn(checkSums)
+        .when(spyFileStore)
+        .getChecksumsForRanges(any(), any());
+
+    final FileCopyDataVerificationResponse fileCopyDataVerificationResponse =
+        new FileCopyDataVerificationResponse(FileCopyDataVerificationResponse.FILE_COPY_DATA_VERIFICATION_RESPONSE_VERSION_V_1,
+            0, "clientId", ServerErrorCode.NoError, checkSums);
+
+    doReturn(fileCopyDataVerificationResponse)
+        .when(spyHandler)
+        .getFileCopyDataVerificationResponse(any(), any(), any());
 
     // Act - Run FCHandler.copy using Spy handler
     // TODO: Temporary directory should have been created before FileCopyHandler.copy() is called.
@@ -246,6 +273,19 @@ public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
     doReturn(chunkResponses.get(2))
         .when(spyHandler)
         .getFileCopyGetChunkResponse(any(), any(), any(), any(), anyBoolean());
+
+    List<String> checkSums = Arrays.asList(new String[]{"checksum1"});
+    doReturn(checkSums)
+        .when(spyFileStore)
+        .getChecksumsForRanges(any(), any());
+
+    final FileCopyDataVerificationResponse fileCopyDataVerificationResponse =
+        new FileCopyDataVerificationResponse(FileCopyDataVerificationResponse.FILE_COPY_DATA_VERIFICATION_RESPONSE_VERSION_V_1,
+            0, "clientId", ServerErrorCode.NoError, checkSums);
+
+    doReturn(fileCopyDataVerificationResponse)
+        .when(spyHandler)
+        .getFileCopyDataVerificationResponse(any(), any(), any());
 
     // Act - Run FCHandler.copy using Spy handler
     // TODO: Temporary directory should have been created before FileCopyHandler.copy() is called.

@@ -232,8 +232,8 @@ public class StoreFileCopyHandler implements FileCopyHandler {
             String logSegmentFileName = logInfo.getLogSegment().getFileName() + "_log";
             logger.info("Checksum ranges for log segment {}: {}", logSegmentFileName, ranges);
 
-            List<String> checkSums = fileStore.getChecksumsForRanges(fileCopyInfo.getSourceReplicaId().getPartitionId(),
-                logSegmentFileName, ranges);
+            String partitionToMountTempFilePathForChecksums = partitionToMountTempFilePath + File.separator + logSegmentFileName;
+            List<String> checkSums = fileStore.getChecksumsForRanges(partitionToMountTempFilePathForChecksums, ranges);
             logger.info("Checksums for log segment {}: {}", logSegmentFileName, checkSums);
 
             FileCopyDataVerificationResponse checksumsFromServingNode = getFileCopyDataVerificationResponse(
