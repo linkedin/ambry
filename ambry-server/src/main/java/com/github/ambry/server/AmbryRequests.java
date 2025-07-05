@@ -95,6 +95,7 @@ import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
+import com.github.ambry.store.FileStore;
 import com.github.ambry.store.PartitionFileStore;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreFileChunk;
@@ -122,6 +123,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -1912,7 +1914,8 @@ public class AmbryRequests implements RequestAPI {
           logger.error("FileStore is not available for partition {}", partitionId.getId());
           throw new StoreException("FileStore is not available for partition " + partitionId, StoreErrorCodes.StoreNotStarted);
         }
-        List<String> checksums = fileStore.getChecksumsForRanges(request.getPartitionId(), request.getFileName(), request.getRanges());
+        String partitionToMountFilePathForChecksums = ((FileStore)fileStore).getPartitionToMountPath() + File.separator + request.getFileName();
+        List<String> checksums = fileStore.getChecksumsForRanges(partitionToMountFilePathForChecksums, request.getRanges());
         response = new FileCopyDataVerificationResponse(FileCopyDataVerificationResponse.FILE_COPY_DATA_VERIFICATION_RESPONSE_VERSION_V_1,
           request.getCorrelationId(), request.getClientId(),
           ServerErrorCode.NoError, checksums);

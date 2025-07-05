@@ -70,8 +70,7 @@ public class StoreFileCopyHandlerTest {
   @Mock
   private final FileCopyGetMetaDataResponse metadataResponse = new FileCopyGetMetaDataResponse(ServerErrorCode.NoError);
 
-  protected final FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(
-      new VerifiableProperties(new Properties()));
+  protected FileCopyBasedReplicationConfig fileCopyBasedReplicationConfig;
 
   protected final StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(new Properties()));
 
@@ -85,6 +84,10 @@ public class StoreFileCopyHandlerTest {
    */
   @Before
   public void setUp() throws Exception {
+    Properties props = new Properties();
+    props.setProperty("filecopyhandler.data.verification.is.enabled", "true");
+    fileCopyBasedReplicationConfig = new FileCopyBasedReplicationConfig(new VerifiableProperties(props));
+
     FileCopyMetrics fileCopyMetrics = new FileCopyMetrics(new MockClusterMap().getMetricRegistry());
     handler = new StoreFileCopyHandler(connectionPool, storeManager, clusterMap, fileCopyBasedReplicationConfig, storeConfig,
         fileCopyMetrics);
