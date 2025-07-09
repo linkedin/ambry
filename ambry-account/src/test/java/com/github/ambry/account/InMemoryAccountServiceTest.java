@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.InMemoryAccountConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
@@ -124,6 +125,44 @@ public class InMemoryAccountServiceTest {
     AccountService accountService = accountServiceFactory.getAccountService();
     accountService.updateAccounts(accountsToUpdate);
   }
+
+  @Test(expected = AccountServiceException.class)
+  public void addAccountWithTooManyContainers() throws AccountServiceException {
+    ArrayList<Account> accountsToUpdate = new ArrayList<>();
+    accountsToUpdate.add(new Account((short) 3000, "toomany", Account.AccountStatus.ACTIVE, true, 0,
+        Collections.emptyList(),
+        Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
+
+    AccountService accountService = accountServiceFactory.getAccountService();
+    accountService.updateAccounts(accountsToUpdate);
+    ArrayList<Container> containers = new ArrayList<>();
+    // add Short.MAX_VALUE + 1 containers
+    for (int i = 0; i <= Short.MAX_VALUE; i++) {
+      containers.add(new ContainerBuilder((short) i, "container" + i, Container.ContainerStatus.ACTIVE, "test", (short) 3000).build());
+    }
+    accountService.updateContainers(accountsToUpdate.get(0).getName(), containers);
+  }
+
+  @Test(expected = AccountServiceException.class)
+  public void addAccountWithIncrementalContainerAdd() throws AccountServiceException {
+    ArrayList<Container> containers = new ArrayList<>();
+    // add Short.MAX_VALUE -1 containers
+    for (int i = 0; i < Short.MAX_VALUE; i++) {
+      containers.add(new ContainerBuilder((short) i, "container" + i, Container.ContainerStatus.ACTIVE, "test", (short) 3000).build());
+    }
+    ArrayList<Account> accountsToUpdate = new ArrayList<>();
+    accountsToUpdate.add(new Account((short) 3000, "toomany", Account.AccountStatus.ACTIVE, true, 0, containers,
+        Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE));
+
+    AccountService accountService = accountServiceFactory.getAccountService();
+    accountService.updateAccounts(accountsToUpdate);
+    // add two new containers to trigger overflow
+    containers = new ArrayList<>();
+    containers.add(new ContainerBuilder((short)-1, "container-large-id-1", Container.ContainerStatus.ACTIVE, "test", (short) 3000).build());
+    containers.add(new ContainerBuilder((short)-1, "container-large-id-2", Container.ContainerStatus.ACTIVE, "test", (short) 3000).build());
+    accountService.updateContainers(accountsToUpdate.get(0).getName(), containers);
+  }
+
 
   @Test(expected = AccountServiceException.class)
   public void addContainerConflictAlreadyExists() throws AccountServiceException {

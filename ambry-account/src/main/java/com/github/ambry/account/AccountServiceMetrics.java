@@ -38,6 +38,7 @@ public class AccountServiceMetrics {
   public static final String NOTIFY_ACCOUNT_DATA_CHANGE_ERROR_COUNT = "NotifyAccountDataChangeErrorCount";
   public static final String UPDATE_ACCOUNT_ERROR_COUNT = "UpdateAccountErrorCount";
   public static final String UPDATE_CONTAINERS_ERROR_COUNT = "UpdateContainersErrorCount";
+  public static final String MAX_CONTAINER_FOR_ACCOUNT_REACHED = "MaxContainersForAccount";
   public static final String UPDATE_ACCOUNTS_ERROR_COUNT = "UpdateAccountsErrorCount";
   public static final String FETCH_AND_UPDATE_CACHE_ERROR_COUNT = "FetchAndUpdateCacheErrorCount";
   public static final String CONFLICT_RETRY_COUNT = "ConflictRetryCount";
@@ -87,6 +88,7 @@ public class AccountServiceMetrics {
   public final Counter updateContainersErrorCount;
   public final Counter fetchAndUpdateCacheErrorCount;
   public final Counter updateAccountsErrorCount;
+  public final Counter maxContainersReachedForAccount;
 
   // Gauge
   Gauge<Integer> accountDataInconsistencyCount;
@@ -130,6 +132,8 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, FETCH_AND_UPDATE_CACHE_ERROR_COUNT));
     updateAccountsErrorCount =
         metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, UPDATE_ACCOUNTS_ERROR_COUNT));
+    maxContainersReachedForAccount =
+        metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, MAX_CONTAINER_FOR_ACCOUNT_REACHED));
     conflictRetryCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, CONFLICT_RETRY_COUNT));
     accountUpdatesToStoreErrorCount =
         metricRegistry.counter(MetricRegistry.name(AbstractAccountService.class, ACCOUNT_UPDATES_TO_STORE_ERROR_COUNT));
