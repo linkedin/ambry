@@ -424,6 +424,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
     // Confirm pullStaleBlobs return empty list after cleanupStaleData is called
     Integer cleanedUpStaleCount = namedBlobDb.cleanupStaleData(staleNamedBlobs).get();
+    Thread.sleep(1000);
     List<StaleNamedBlob> staleNamedBlobsNew = getStaleBlobList();
 
     assertEquals("Cleaned Stale records count does not match!", needCleanupCount, cleanedUpStaleCount.intValue());

@@ -173,25 +173,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
 
   private static final String GET_BLOBS_FOR_ACTIVE_CONTAINER = String.format(
-      "SELECT %s, %s, %s, %s, %s, %s, %s, %s " +
-          "FROM %s " +
-          "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND (deleted_ts IS NULL) " +
-          "ORDER BY %s ASC, %s DESC " +
-          "LIMIT ?",
-      ACCOUNT_ID,
-      CONTAINER_ID,
-      BLOB_NAME,
-      BLOB_ID,
-      VERSION,
-      BLOB_STATE,
-      MODIFIED_TS,
-      DELETED_TS,
-      NAMED_BLOBS_V2,
-      BLOB_NAME,
-      VERSION
-  );
-
-
+      "SELECT %s, %s, %s, %s, %s, %s, %s, %s " + "FROM %s "
+          + "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND ( deleted_ts IS NULL or deleted_ts > UTC_TIMESTAMP()) "
+          + "ORDER BY %s ASC, %s DESC " + "LIMIT ?", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, VERSION, BLOB_STATE,
+      MODIFIED_TS, DELETED_TS, NAMED_BLOBS_V2, BLOB_NAME, VERSION);
 
   private final AccountService accountService;
   private final String localDatacenter;
@@ -407,15 +392,18 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
       if (resultSize == config.queryStaleDataMaxResults) {
         if (status == Container.ContainerStatus.ACTIVE) {
-          staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+          staleBlobsWithLatestBlobName =
+              getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
           return staleBlobsWithLatestBlobName;
         } else if (status == Container.ContainerStatus.INACTIVE) {
           staleNamedBlobResults = potentialStaleNamedBlobResults;
-          return new StaleBlobsWithLatestBlobName(staleNamedBlobResults, staleNamedBlobResults.get(staleNamedBlobResults.size() -1).getBlobName());
+          return new StaleBlobsWithLatestBlobName(staleNamedBlobResults,
+              staleNamedBlobResults.get(staleNamedBlobResults.size() - 1).getBlobName());
         }
       } else if (resultSize < config.queryStaleDataMaxResults) {
         if (status == Container.ContainerStatus.ACTIVE) {
-          staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+          staleBlobsWithLatestBlobName =
+              getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
           return new StaleBlobsWithLatestBlobName(staleBlobsWithLatestBlobName.getStaleBlobs(), null);
         } else if (status == Container.ContainerStatus.INACTIVE) {
           return new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults, null);
@@ -861,7 +849,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    *
    * @param blobList      The list of StaleNamedBlob objects to process. Should be sorted by blob name and timestamp.
    * @param cutoffDays    The number of days used to calculate the cutoff timestamp for staleness.
-   * @return              A StaleBlobsWithLatestBlobName object containing the list of stale blobs
+   * @return A StaleBlobsWithLatestBlobName object containing the list of stale blobs
    *                      and the name of the latest blob considered.
    */
   public StaleBlobsWithLatestBlobName getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutoffDays) {
@@ -894,24 +882,16 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         if (keepBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(keepBlob);
         }
-          keepBlob = currentBlob;
+        keepBlob = currentBlob;
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.READY) {
         staleBlobs.add(currentBlob);
       } else if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.IN_PROGRESS) {
         if (keepBlobModifiedTS.after(cutoffTimestamp) && currentBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(currentBlob);
-        }  else if (keepBlobModifiedTS.before(cutoffTimestamp) && currentBlobModifiedTS.before(cutoffTimestamp)) {
+        } else if (keepBlobModifiedTS.before(cutoffTimestamp) && currentBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(keepBlob);
           keepBlob = currentBlob;
         }
-
-//        if (keepBlobModifiedTS.after(cutoffTimestamp)) {
-//          staleBlobs.add(currentBlob);
-//        }
-//        else if (keepBlobModifiedTS.before(cutoffTimestamp)) {
-//          staleBlobs.add(keepBlob);
-//          keepBlob = currentBlob;
-//        }
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.IN_PROGRESS) {
         staleBlobs.add(currentBlob);
       }
@@ -922,7 +902,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     }
 
     logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
-    StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = new StaleBlobsWithLatestBlobName(staleBlobs, keepBlob.getBlobName());
+    StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName =
+        new StaleBlobsWithLatestBlobName(staleBlobs, keepBlob.getBlobName());
     return staleBlobsWithLatestBlobName;
   }
 
@@ -945,7 +926,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * @return A list of StaleNamedBlob objects representing the result set.
    * @throws SQLException If a database access error occurs or the query fails.
    */
-  private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container, String latestBlobName) throws SQLException {
+  private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container,
+      String latestBlobName) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
 
     try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_ACTIVE_CONTAINER)) {
@@ -967,7 +949,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp modifiedTime = resultSet.getTimestamp(7);
           Timestamp deletedTime = resultSet.getTimestamp(8);
 
-          StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, deletedTime, blobState, modifiedTime);
+          StaleNamedBlob result =
+              new StaleNamedBlob(accountId, containerId, blobName, blobId, version, deletedTime, blobState,
+                  modifiedTime);
           resultList.add(result);
         }
       }
@@ -994,9 +978,11 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private void batchSoftDelete(List<StaleNamedBlob> staleNamedBlobs, Connection connection) throws Exception {
     String query = SOFT_DELETE_WITH_VERSION_QUERY;
+
     try (PreparedStatement statement = connection.prepareStatement(query)) {
       for (StaleNamedBlob blob : staleNamedBlobs) {
-        statement.setTimestamp(1,  new Timestamp(System.currentTimeMillis()));  // Or use new Timestamp(System.currentTimeMillis()) if needed
+        statement.setTimestamp(1,
+            new Timestamp(System.currentTimeMillis()));  // Or use new Timestamp(System.currentTimeMillis()) if needed
         statement.setInt(2, blob.getAccountId());
         statement.setInt(3, blob.getContainerId());
         statement.setString(4, blob.getBlobName());
