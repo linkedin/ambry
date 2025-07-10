@@ -124,6 +124,7 @@ public interface NamedBlobDb extends Closeable {
   public static class StaleBlobsWithLatestBlobName {
     private final List<StaleNamedBlob> staleBlobs;
     private final String latestBlob;
+    //private final long version;
 
     public StaleBlobsWithLatestBlobName(List<StaleNamedBlob> staleBlobs, String latestBlob) {
       this.staleBlobs = staleBlobs;

@@ -172,7 +172,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String TTL_UPDATE_QUERY =
       String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
 
-  private static final String GET_BLOBS_FOR_ACTIVE_CONTAINER = String.format(
+  private static final String GET_BLOBS_FOR_CONTAINER = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " + "FROM %s "
           + "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND ( deleted_ts IS NULL or deleted_ts > UTC_TIMESTAMP()) "
           + "ORDER BY %s ASC, %s DESC " + "LIMIT ?", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, VERSION, BLOB_STATE,
@@ -930,7 +930,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       String latestBlobName) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
 
-    try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_ACTIVE_CONTAINER)) {
+    try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CONTAINER)) {
       statement.setInt(1, container.getId());
       statement.setInt(2, container.getParentAccountId());
       statement.setString(3, latestBlobName);

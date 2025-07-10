@@ -25,6 +25,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -766,6 +767,128 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   }
 
   /**
+   * Tests behavior with 3 different blobNames with 2 blob-ids each, one WIP and one READY
+   */
+  @Test
+  public void testMultiBlobNamesCase1NoPagination() throws Exception {
+    String[] trackedBlobIds = new String[3];
+    for (int i = 0; i < 6; i++) {
+      String blobId = "blob-id" + (i + 1);
+      NamedBlobState state = (i % 2 == 0) ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
+      String cleaner = "new_cleaner" + ((i / 2) + 1);
+
+      NamedBlobRecord record = createAndPutNamedBlob(blobId, state, cleaner);
+      if (i % 2 == 0) {
+        trackedBlobIds[i / 2] = blobId;
+      }
+
+      time.sleep(5);
+    }
+
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
+
+    assertEquals("Should remove both, total 3 stale blobs", 3, staleNamedBlobs.size());
+    assertEquals("Blob-id from record1 should be removed", staleNamedBlobs.get(0).getBlobId(), trackedBlobIds[0]);
+    assertEquals("Blob-id from record3 should be removed", staleNamedBlobs.get(1).getBlobId(), trackedBlobIds[1]);
+    assertEquals("Blob-id from record5 should be removed", staleNamedBlobs.get(2).getBlobId(), trackedBlobIds[2]);
+  }
+
+  /**
+   * Tests behavior with 1243 different blobNames with 2 blob-ids each, one WIP and one READY
+   */
+  @Test
+  public void testMultiBlobNamesCase1PaginationEven() throws Exception {
+    for (int i = 0; i < 2486; i++) {
+      String blobId = "blob-id" + (i + 1);
+      NamedBlobState state = (i % 2 == 0) ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
+      String cleaner = "new_cleaner" + ((i / 2) + 1);
+
+      NamedBlobRecord record = createAndPutNamedBlob(blobId, state, cleaner);
+      time.sleep(5);
+    }
+
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
+
+    assertEquals("Should remove both, total 552 stale blobs", 1243, staleNamedBlobs.size());
+  }
+
+  /**
+   * Tests behavior with 1244 different blobNames with 2 blob-ids each, one WIP and one READY
+   */
+  @Test
+  public void testMultiBlobNamesCase1PaginationOdd() throws Exception {
+    for (int i = 0; i < 2487; i++) {
+      String blobId = "blob-id" + (i + 1);
+      NamedBlobState state = (i % 2 == 0) ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
+      String cleaner = "new_cleaner" + ((i / 2) + 1);
+
+      NamedBlobRecord record = createAndPutNamedBlob(blobId, state, cleaner);
+      time.sleep(5);
+    }
+
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
+
+    assertEquals("Should remove both, total 552 stale blobs", 1243, staleNamedBlobs.size());
+  }
+
+  /**
+   * Tests behavior with 6 different blobNames with 1 blob-id, all of READY status
+   */
+  @Test
+  public void testMultiBlobNamesCase2NoPagination() throws Exception {
+    for (int i = 0; i < 6; i++) {
+      String blobId = "blob-id" + (i + 1);
+      String cleaner = "new_cleaner" + i;
+
+      NamedBlobRecord record = createAndPutNamedBlob(blobId, NamedBlobState.READY, cleaner);
+      time.sleep(5);
+    }
+
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
+
+    assertEquals("Should remove 0, total 0 stale blobs", 0, staleNamedBlobs.size());
+  }
+
+  /**
+   * Tests behavior with 2344 different blobNames with 1 blob-id, all of READY status
+   */
+  @Test
+  public void testMultiBlobNamesCase2Pagination() throws Exception {
+    for (int i = 0; i < 2344; i++) {
+      String blobId = "blob-id" + (i + 1);
+      String cleaner = "new_cleaner" + i;
+
+      NamedBlobRecord record = createAndPutNamedBlob(blobId, NamedBlobState.READY, cleaner);
+
+      time.sleep(5);
+    }
+
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
+
+    assertEquals("Should remove 0, total 0 stale blobs", 0, staleNamedBlobs.size());
+  }
+
+  /**
+   * Tests behavior with 1004 different blobNames with 1 blob-id, all of WIP status with modified_ts within last 5 days
+   */
+  @Test
+  public void testMultiBlobNamesCase3() throws Exception {
+    String[] trackedBlobIds = new String[3];
+    for (int i = 0; i < 1004; i++) {
+      String blobId = "blob-id" + (i + 1);
+      String cleaner = "new_cleaner" + i;
+
+      NamedBlobRecord record = createAndPutNamedBlob(blobId, NamedBlobState.IN_PROGRESS, cleaner);
+
+      time.sleep(5);
+    }
+
+    List<StaleNamedBlob> staleNamedBlobs = getStaleBlobList();
+
+    assertEquals("Should remove 0, total 0 stale blobs", 0, staleNamedBlobs.size());
+  }
+
+  /**
    * Helper method to create and put a NamedBlobRecord with given blobId and state.
    */
   private NamedBlobRecord createAndPutNamedBlob(String blobId, NamedBlobState state, String blobName) throws Exception {
@@ -815,6 +938,34 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   }
 
   /**
+   * Helper method to update modified_ts column for a blob_id (hex string) to UTC_TIMESTAMP() - interval days.
+   */
+  private void batchMarkDeleted(List<StaleNamedBlob> staleBlobs) throws Exception {
+    if (staleBlobs == null || staleBlobs.isEmpty()) {
+      return;
+    }
+    StringBuilder sb = new StringBuilder();
+    sb.append("UPDATE named_blobs_v2 SET deleted_ts = UTC_TIMESTAMP() WHERE (blob_id, blob_name) IN (");
+
+    for (int i = 0; i < staleBlobs.size(); i++) {
+      String hexBlobId = base64BlobIdToHex(staleBlobs.get(i).getBlobId());
+      String blobName = staleBlobs.get(i).getBlobName();
+
+      sb.append("(X'").append(hexBlobId).append("', '").append(blobName).append("')");
+      if (i < staleBlobs.size() - 1) {
+        sb.append(", ");
+      }
+    }
+    sb.append(");");
+
+    String sql = sb.toString();
+
+    try (Statement statement = getStatement()) {
+      statement.executeUpdate(sql);
+    }
+  }
+
+  /**
    * Helper method to update modified_ts column for all blobs with the given blob_name to NOW() - interval days.
    */
   private void updateModifiedTimestampByBlobName(String blobName, int daysAgo) throws Exception {
@@ -849,15 +1000,25 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
   /**
    * Helper method to run the for loop across containers to retrieve stale blobs
    */
-  public List<StaleNamedBlob> getStaleBlobList() throws ExecutionException, InterruptedException {
+  public List<StaleNamedBlob> getStaleBlobList() throws Exception {
     List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
-    List<StaleNamedBlob> staleNamedBlobs;
 
     Set<Container> containers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+
     for (Container container : containers) {
-      staleNamedBlobs =  namedBlobDb.pullStaleBlobs(container,"\0").get().getStaleBlobs();
-      staleNamedBlobsList.addAll(staleNamedBlobs);
+      String blobName = "\0";  // Smallest ASCII value
+      NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
+      List<StaleNamedBlob> staleNamedBlobs;
+
+      do {
+        staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, blobName).get();
+        staleNamedBlobs = staleBlobsWithLatestBlobName.getStaleBlobs();
+        staleNamedBlobsList.addAll(staleNamedBlobs);
+        blobName = staleBlobsWithLatestBlobName.getLatestBlob();
+        batchMarkDeleted(staleNamedBlobs);
+      } while (blobName != null);
     }
+
     return staleNamedBlobsList;
   }
 }
