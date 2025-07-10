@@ -244,8 +244,7 @@ public class S3BatchDeleteHandlerTest {
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
     InMemoryRouter router = new InMemoryRouter(verifiableProperties, new MockClusterMap(), ambryIdConverterFactory);
     namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, ambryIdConverterFactory.getIdConverter(),
-            idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
+        new NamedBlobPutHandler(securityService, idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
             QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     DeleteBlobHandler deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, ambryIdConverterFactory.getIdConverter(), injector, metrics,

@@ -27,8 +27,6 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.named.NamedBlobDb;
-import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
@@ -91,8 +89,6 @@ public class NamedBlobPutHandler {
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
   private final SecurityService securityService;
-  private final NamedBlobDb namedBlobDb;
-  private final IdConverter idConverter;
   private final IdSigningService idSigningService;
   private final AccountService accountService;
   private final Router router;
@@ -109,26 +105,22 @@ public class NamedBlobPutHandler {
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
-   * @param securityService the {@link SecurityService} to use.
-   * @param namedBlobDb the {@link NamedBlobDb} to use.
-   * @param idConverter the {@link IdConverter} to use.
-   * @param idSigningService the {@link IdSigningService} to use.
-   * @param router the {@link Router} to use.
+   *
+   * @param securityService             the {@link SecurityService} to use.
+   * @param idSigningService            the {@link IdSigningService} to use.
+   * @param router                      the {@link Router} to use.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
-   * @param frontendConfig the {@link FrontendConfig} to use.
-   * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
-   * @param clusterName the name of the storage cluster that the router communicates with
-   * @param quotaManager The {@link QuotaManager} class to account for quota usage in serving requests.
-   * @param accountService The {@link AccountService} to get the account and container id based on names.
+   * @param frontendConfig              the {@link FrontendConfig} to use.
+   * @param frontendMetrics             {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param clusterName                 the name of the storage cluster that the router communicates with
+   * @param quotaManager                The {@link QuotaManager} class to account for quota usage in serving requests.
+   * @param accountService              The {@link AccountService} to get the account and container id based on names.
    * @param deleteBlobHandler
    */
-  NamedBlobPutHandler(SecurityService securityService, NamedBlobDb namedBlobDb, IdConverter idConverter,
-      IdSigningService idSigningService, Router router, AccountAndContainerInjector accountAndContainerInjector,
+  NamedBlobPutHandler(SecurityService securityService, IdSigningService idSigningService, Router router, AccountAndContainerInjector accountAndContainerInjector,
       FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager,
       AccountService accountService, DeleteBlobHandler deleteBlobHandler) {
     this.securityService = securityService;
-    this.namedBlobDb = namedBlobDb;
-    this.idConverter = idConverter;
     this.idSigningService = idSigningService;
     this.router = router;
     this.accountAndContainerInjector = accountAndContainerInjector;
@@ -284,7 +276,7 @@ public class NamedBlobPutHandler {
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics, bytesRead -> {
         BlobProperties propertiesForRouterUpload = getPropertiesForRouterUpload(blobInfo);
-        router.stitchBlob(propertiesForRouterUpload, blobInfo.getUserMetadata(),
+        router.stitchBlob(restRequest, propertiesForRouterUpload, blobInfo.getUserMetadata(),
             getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
             routerStitchBlobCallback(blobInfo, propertiesForRouterUpload),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
@@ -295,36 +287,23 @@ public class NamedBlobPutHandler {
      * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
      * that will be returned in the "Location" header.
      * @param blobInfo                       the {@link BlobInfo} to use for security checks.
-     * @param propertiesPassedInRouterUpload the {@link BlobProperties} instance that is passed to Router during upload
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
-    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo,
-        BlobProperties propertiesPassedInRouterUpload) {
-      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
+    private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo, BlobProperties propertiesForRouterUpload) {
+      return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, convertedBlobId -> {
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
-        blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
-        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo, blobId));
-      }, uri, LOGGER, deleteDatasetCallback);
-    }
-
-    /**
-     * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
-     * request time security checks that rely on the request being fully parsed and any additional arguments set.
-     * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
-     */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
-      return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
+        blobInfo.getBlobProperties().setBlobSize(propertiesForRouterUpload.getBlobSize());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        String blobIdClean = stripPrefixAndExtension(convertedBlobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback -> router.updateBlobTtl(null, blobId, serviceId, Utils.Infinite_Time, callback,
+              callback -> router.updateBlobTtl(restRequest, blobIdClean, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-              routerTtlUpdateCallbackForStitch(blobInfo, blobId));
+              routerTtlUpdateCallbackForStitch(blobInfo));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
@@ -371,22 +350,10 @@ public class NamedBlobPutHandler {
      * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @param blobId the {@link String} to use for blob id.
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
-    private Callback<Void> routerTtlUpdateCallbackForStitch(BlobInfo blobInfo, String blobId) {
+    private Callback<Void> routerTtlUpdateCallbackForStitch(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
-        // Set the named blob state to be 'READY' after the Ttl update succeed
-        if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
-          throw new RestServiceException("Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION
-              + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
-        }
-        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        NamedBlobRecord record =
-            NamedBlobRecord.forUpdate(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                namedBlobPath.getBlobName(), namedBlobVersion);
-        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(

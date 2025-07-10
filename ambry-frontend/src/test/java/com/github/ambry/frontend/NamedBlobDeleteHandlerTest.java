@@ -133,7 +133,7 @@ public class NamedBlobDeleteHandlerTest {
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + BLOBNAME;
     SecurityService securityService = securityServiceFactory.getSecurityService();
     namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverterFactory.getIdConverter(), idSigningService,
+        new NamedBlobPutHandler(securityService, idSigningService,
             router, injector, frontendConfig, metrics, CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(),
             ACCOUNT_SERVICE, null);
     deleteBlobHandler =

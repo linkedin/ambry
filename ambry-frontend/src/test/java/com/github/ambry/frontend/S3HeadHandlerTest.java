@@ -160,8 +160,7 @@ public class S3HeadHandlerTest {
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
     InMemoryRouter router = new InMemoryRouter(verifiableProperties, new MockClusterMap(), ambryIdConverterFactory);
-    namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb,
-        ambryIdConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics,
+    namedBlobPutHandler = new NamedBlobPutHandler(securityService, idSigningService, router, injector, frontendConfig, metrics,
         CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     HeadBlobHandler headBlobHandler = new HeadBlobHandler(frontendConfig, router,
         securityService, ambryIdConverterFactory.getIdConverter(), injector,
