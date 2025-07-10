@@ -873,7 +873,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase3() throws Exception {
-    String[] trackedBlobIds = new String[3];
     for (int i = 0; i < 1004; i++) {
       String blobId = "blob-id" + (i + 1);
       String cleaner = "new_cleaner" + i;
@@ -909,7 +908,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
       assertEquals("Unexpected error code for get after delete", errorCode, rse.getErrorCode());
     });
   }
-
 
   /**
    * Helper method to get blobId from account and container.

@@ -390,24 +390,14 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       int resultSize = potentialStaleNamedBlobResults.size();
       Container.ContainerStatus status = container.getStatus();
 
-      if (resultSize == config.queryStaleDataMaxResults) {
-        if (status == Container.ContainerStatus.ACTIVE) {
-          staleBlobsWithLatestBlobName =
-              getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
-          return staleBlobsWithLatestBlobName;
-        } else if (status == Container.ContainerStatus.INACTIVE) {
-          staleNamedBlobResults = potentialStaleNamedBlobResults;
-          return new StaleBlobsWithLatestBlobName(staleNamedBlobResults,
-              staleNamedBlobResults.get(staleNamedBlobResults.size() - 1).getBlobName());
-        }
-      } else if (resultSize < config.queryStaleDataMaxResults) {
-        if (status == Container.ContainerStatus.ACTIVE) {
-          staleBlobsWithLatestBlobName =
-              getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
-          return new StaleBlobsWithLatestBlobName(staleBlobsWithLatestBlobName.getStaleBlobs(), null);
-        } else if (status == Container.ContainerStatus.INACTIVE) {
-          return new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults, null);
-        }
+      if (status == Container.ContainerStatus.ACTIVE) {
+        staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+      } else {
+        staleBlobsWithLatestBlobName = new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults,
+            potentialStaleNamedBlobResults.get(potentialStaleNamedBlobResults.size() - 1).getBlobName());
+      }
+      if (resultSize < config.queryStaleDataMaxResults) {
+        staleBlobsWithLatestBlobName  = new StaleBlobsWithLatestBlobName(staleBlobsWithLatestBlobName.getStaleBlobs(), null);
       }
 
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
