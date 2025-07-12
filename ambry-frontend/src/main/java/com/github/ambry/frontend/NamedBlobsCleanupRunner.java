@@ -13,13 +13,18 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,36 +37,62 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final Router router;
   private final NamedBlobDb namedBlobDb;
   private static final Logger logger = LoggerFactory.getLogger(NamedBlobsCleanupRunner.class);
+  private final AccountService accountService;
+  private final String smallestASCII = "\0";
 
-  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb) {
+  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService) {
     this.router = router;
     this.namedBlobDb = namedBlobDb;
+    this.accountService = accountService;
   }
 
   @Override
   public void run() {
     logger.info("Named Blobs Cleanup Runner is initiated");
     try {
-      List<StaleNamedBlob> staleResultList = namedBlobDb.pullStaleBlobs().get();
-      List<StaleNamedBlob> failedResults = new ArrayList<>();
-      for (StaleNamedBlob staleResult : staleResultList) {
-        try {
-          router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
-        } catch (Exception e) {
-          if (!e.getMessage().contains(RouterErrorCode.BlobDoesNotExist.name())) {
-            logger.error("Failed to cleanup named stale blob {}", staleResult, e);
-            failedResults.add(staleResult);
-          }
+      Set<Container> activeContainers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
+      Set<Container> inactiveContainers = accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE);
+      Set<Container> combinedContainers = new HashSet<>(activeContainers);
+      combinedContainers.addAll(inactiveContainers);
+      List<StaleNamedBlob> batchStaleBlobs = Collections.emptyList();
+      NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
+      for (Container container : combinedContainers) {
+        if (container.getNamedBlobMode() == Container.NamedBlobMode.DISABLED) {
+          continue;
         }
+        // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
+        String blobName = smallestASCII;
+        do {
+          staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, blobName).get();
+          batchStaleBlobs = staleBlobsWithLatestBlobName.getStaleBlobs();
+          List<StaleNamedBlob> failedResults = new ArrayList<>();
+          for (StaleNamedBlob staleBlob : staleBlobsWithLatestBlobName.getStaleBlobs()) {
+            try {
+              router.deleteBlob(staleBlob.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
+            } catch (Exception e) {
+              if (!e.getMessage().contains(RouterErrorCode.BlobDoesNotExist.name())) {
+                logger.error("Failed to cleanup named stale blob {}", staleBlob, e);
+                failedResults.add(staleBlob);
+              }
+            }
+          }
+
+          batchStaleBlobs.removeAll(failedResults);
+          namedBlobDb.cleanupStaleData(batchStaleBlobs);
+
+          logger.info("Named Blobs Cleanup Runner processed {} stale blobs ({} failed deletions)",
+              batchStaleBlobs.size(), failedResults.size());
+
+          Set<String> cleanedBlobIds =
+              batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
+          logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
+          blobName = staleBlobsWithLatestBlobName.getLatestBlob();
+        } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
       }
-      staleResultList.removeAll(failedResults);
-      namedBlobDb.cleanupStaleData(staleResultList);
-      logger.info("Named Blobs Cleanup Runner is completed for {} stale cases (there are {} failed cases)",
-          staleResultList.size(), failedResults.size());
-      Set<String> cleanedBlobIds = staleResultList.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
-      logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
-    } catch (Throwable t) {
-      logger.error("Exception occurs when running Named Blobs Cleanup Runner", t);
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
     }
   }
 }

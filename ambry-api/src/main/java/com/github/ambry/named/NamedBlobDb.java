@@ -14,6 +14,7 @@
  */
 package com.github.ambry.named;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
@@ -110,10 +111,32 @@ public interface NamedBlobDb extends Closeable {
   /**
    * Pull the stale blobs that need to be cleaned up
    */
-  CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs();
+  CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName);
 
   /**
    * Cleanup the stale blobs records
    */
   CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords);
+
+  /**
+   * A data container for a list of stale blobs and a latest blob identifier.
+   */
+  public static class StaleBlobsWithLatestBlobName {
+    private final List<StaleNamedBlob> staleBlobs;
+    private final String latestBlob;
+    //private final long version;
+
+    public StaleBlobsWithLatestBlobName(List<StaleNamedBlob> staleBlobs, String latestBlob) {
+      this.staleBlobs = staleBlobs;
+      this.latestBlob = latestBlob;
+    }
+
+    public List<StaleNamedBlob> getStaleBlobs() {
+      return staleBlobs;
+    }
+
+    public String getLatestBlob() {
+      return latestBlob;
+    }
+  }
 }
