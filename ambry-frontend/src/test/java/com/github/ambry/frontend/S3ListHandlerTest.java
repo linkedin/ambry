@@ -614,8 +614,7 @@ public class S3ListHandlerTest {
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
     InMemoryRouter router = new InMemoryRouter(verifiableProperties, new MockClusterMap(), ambryIdConverterFactory);
-    namedBlobPutHandler = new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb,
-        ambryIdConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics,
+    namedBlobPutHandler = new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), idSigningService, router, injector, frontendConfig, metrics,
         CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     NamedBlobListHandler namedBlobListHandler =
         new NamedBlobListHandler(securityServiceFactory.getSecurityService(), namedBlobDb, injector, metrics,
