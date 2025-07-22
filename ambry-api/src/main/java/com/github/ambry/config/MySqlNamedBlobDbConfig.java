@@ -93,7 +93,7 @@ public class MySqlNamedBlobDbConfig {
    * The maximum number of days for a stale blob to say uncleaned.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
-  @Default("5")
+  @Default("20")
   public final int staleDataRetentionDays;
 
   /**
@@ -125,6 +125,12 @@ public class MySqlNamedBlobDbConfig {
   @Config(ENABLE_CERTIFICATE_BASED_AUTHENTICATION)
   public final boolean enableCertificateBasedAuthentication;
 
+  /**
+   * SSL Mode when certificate based authentication is enabled.
+   */
+  @Config(SSL_MODE)
+  public final SSLMode sslMode;
+
   public final SSLConfig sslConfig;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
@@ -139,7 +145,7 @@ public class MySqlNamedBlobDbConfig {
     this.queryStaleDataMaxResults =
         verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays =
-        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);
@@ -147,6 +153,8 @@ public class MySqlNamedBlobDbConfig {
     this.enableCertificateBasedAuthentication =
         verifiableProperties.getBoolean(ENABLE_CERTIFICATE_BASED_AUTHENTICATION, false);
     this.sslConfig = this.enableCertificateBasedAuthentication ? new SSLConfig(verifiableProperties) : null;
+    this.sslMode = this.enableCertificateBasedAuthentication ? verifiableProperties.getEnum(SSL_MODE, SSLMode.class,
+        SSLMode.VERIFY_CA) : null;
     if (this.enableCertificateBasedAuthentication) {
       // validate the sslConfig is valid
       validateFilePath(this.sslConfig.sslKeystorePath, "ssl.keystore.path");
