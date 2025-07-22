@@ -125,12 +125,6 @@ public class MySqlNamedBlobDbConfig {
   @Config(ENABLE_CERTIFICATE_BASED_AUTHENTICATION)
   public final boolean enableCertificateBasedAuthentication;
 
-  /**
-   * SSL Mode when certificate based authentication is enabled.
-   */
-  @Config(SSL_MODE)
-  public final SSLMode sslMode;
-
   public final SSLConfig sslConfig;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
@@ -153,8 +147,6 @@ public class MySqlNamedBlobDbConfig {
     this.enableCertificateBasedAuthentication =
         verifiableProperties.getBoolean(ENABLE_CERTIFICATE_BASED_AUTHENTICATION, false);
     this.sslConfig = this.enableCertificateBasedAuthentication ? new SSLConfig(verifiableProperties) : null;
-    this.sslMode = this.enableCertificateBasedAuthentication ? verifiableProperties.getEnum(SSL_MODE, SSLMode.class,
-        SSLMode.VERIFY_CA) : null;
     if (this.enableCertificateBasedAuthentication) {
       // validate the sslConfig is valid
       validateFilePath(this.sslConfig.sslKeystorePath, "ssl.keystore.path");
