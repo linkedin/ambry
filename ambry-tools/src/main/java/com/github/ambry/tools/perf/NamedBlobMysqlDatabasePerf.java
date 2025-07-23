@@ -219,7 +219,7 @@ public class NamedBlobMysqlDatabasePerf {
         "jdbc:mysql://" + props.getProperty(DB_HOST) + "/" + props.getProperty(DB_NAME) + "?serverTimezone=UTC";
     MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint(dbUrl, props.getProperty(DB_DATACENTER), true, props.getProperty(DB_USERNAME),
-            props.getProperty(DB_PASSWORD));
+            props.getProperty(DB_PASSWORD), "VERIFY_IDENTITY");
     JSONArray jsonArray = new JSONArray();
     jsonArray.put(dbEndpoint.toJson());
     System.out.println("DB_INFO: " + jsonArray);
