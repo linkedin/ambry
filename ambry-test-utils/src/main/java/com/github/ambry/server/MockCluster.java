@@ -271,7 +271,7 @@ public class MockCluster {
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("server.repair.requests.db.factory", "com.github.ambry.repair.MysqlRepairRequestsDbFactory");
     props.setProperty("mysql.repair.requests.db.info",
-        "[{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"}]");
+        "[{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslmode\":\"VERIFY_IDENTITY\"}]");
     props.setProperty("mysql.repair.requests.list.max.results", "7");
     props.putAll(sslProperties);
     return new VerifiableProperties(props);
