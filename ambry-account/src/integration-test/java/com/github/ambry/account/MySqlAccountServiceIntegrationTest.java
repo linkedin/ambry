@@ -108,7 +108,7 @@ public class MySqlAccountServiceIntegrationTest {
   @Test
   public void testBadCredentials() throws Exception {
     DbEndpoint endpoint =
-        new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
+        new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword", "VERIFY_IDENTITY");
     try {
       new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(),
           new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()), accountServiceConfig);
@@ -217,9 +217,10 @@ public class MySqlAccountServiceIntegrationTest {
     String localDc = "local", remoteDc = "remote";
     String badUrl = "jdbc:mysql://badhost/AccountMetadata";
     DbEndpoint localGoodEndpoint =
-        new DbEndpoint(origEndpoint.getUrl(), localDc, false, origEndpoint.getUsername(), origEndpoint.getPassword());
+        new DbEndpoint(origEndpoint.getUrl(), localDc, false, origEndpoint.getUsername(), origEndpoint.getPassword(),
+            origEndpoint.getSslMode());
     DbEndpoint remoteBadEndpoint =
-        new DbEndpoint(badUrl, remoteDc, true, origEndpoint.getUsername(), origEndpoint.getPassword());
+        new DbEndpoint(badUrl, remoteDc, true, origEndpoint.getUsername(), origEndpoint.getPassword(), origEndpoint.getSslMode());
     JSONArray endpointsJson = new JSONArray().put(localGoodEndpoint.toJson()).put(remoteBadEndpoint.toJson());
     mySqlConfigProps.setProperty(DB_INFO, endpointsJson.toString());
     mySqlConfigProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, localDc);
