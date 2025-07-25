@@ -317,4 +317,8 @@ public class MySqlAccountService extends AbstractAccountService {
       return new AccountServiceException(e.getMessage(), AccountServiceErrorCode.InternalError);
     }
   }
+
+  public static AccountServiceException translateIllegalArgumentException(IllegalArgumentException e) {
+    return new AccountServiceException(e.getMessage(), AccountServiceErrorCode.BadRequest);
+  }
 }

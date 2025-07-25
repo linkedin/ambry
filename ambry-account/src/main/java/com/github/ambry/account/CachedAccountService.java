@@ -511,6 +511,8 @@ public class CachedAccountService extends AbstractAccountService {
           dataset);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -526,6 +528,8 @@ public class CachedAccountService extends AbstractAccountService {
           dataset);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -541,6 +545,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountName, containerName, datasetName);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -556,6 +562,8 @@ public class CachedAccountService extends AbstractAccountService {
           datasetName);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -573,6 +581,8 @@ public class CachedAccountService extends AbstractAccountService {
           creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -588,6 +598,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version, datasetVersionState);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -603,6 +615,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -618,6 +632,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), datasetName, version);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -633,6 +649,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, sourceVersion, targetVersion);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -648,6 +666,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), datasetName, version);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -663,6 +683,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -678,6 +700,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -693,6 +717,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), datasetName);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -707,6 +733,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), pageToken);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
@@ -722,6 +750,8 @@ public class CachedAccountService extends AbstractAccountService {
           accountAndContainerIdPair.getSecond(), datasetName, pageToken);
     } catch (SQLException e) {
       throw translateSQLException(e);
+    } catch (IllegalArgumentException e) {
+      throw translateIllegalArgumentException(e);
     }
   }
 
