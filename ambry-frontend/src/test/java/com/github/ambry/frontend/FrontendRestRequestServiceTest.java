@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
@@ -50,12 +51,12 @@ import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.QuotaMetrics;
-import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -131,7 +132,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
-import com.fasterxml.jackson.core.type.TypeReference;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
@@ -328,15 +328,14 @@ public class FrontendRestRequestServiceTest {
 
   /**
    * Test blob name validation logic.
-    * @throws Exception
+   * @throws Exception
    */
   @Test
   public void testNamedBlobPutWithViolatedBlobName() throws Exception {
     Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
     Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
 
-    List<String> invalidBlobNames = Arrays.asList(
-        "file  name.txt",         // consecutive spaces
+    List<String> invalidBlobNames = Arrays.asList("file  name.txt",         // consecutive spaces
         "  startsWithSpaces",     // leading spaces
         "endsWithSpaces  ",       // trailing spaces
         "file\u0000name.txt",     // null byte
@@ -354,10 +353,7 @@ public class FrontendRestRequestServiceTest {
         "tilde~name.txt",         // ~
         "hash#name.txt",          // #
         "../secret.txt",          // path traversal
-        "./relative.txt",
-        "foo/../bar.txt",
-        "foo/./bar.txt"
-    );
+        "./relative.txt", "foo/../bar.txt", "foo/./bar.txt");
 
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
     List<ByteBuffer> body = new LinkedList<>();
@@ -367,15 +363,14 @@ public class FrontendRestRequestServiceTest {
     for (String blobName : invalidBlobNames) {
       String encodedBlobName = URLEncoder.encode(blobName, StandardCharsets.UTF_8.toString()).replace("+", "%20");
 
-      String namedBlobPathUri = NAMED_BLOB_PREFIX + SLASH + testAccount.getName() +
-          SLASH + testContainer.getName() + SLASH + encodedBlobName;
+      String namedBlobPathUri =
+          NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + encodedBlobName;
 
-      JSONObject headers = new JSONObject()
-          .put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+      JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
           .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
 
-      setAmbryHeadersForPut(headers, -1, testContainer.isCacheable(),
-          "test", "application/octet-stream", "owner", null, null, null);
+      setAmbryHeadersForPut(headers, -1, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+          null, null);
 
       RestRequest restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
       verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
@@ -414,8 +409,8 @@ public class FrontendRestRequestServiceTest {
             Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecordWithClusterPrefix)));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName,
-        GetOption.None, false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobName, GetOption.None,
+        false)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
     when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
@@ -2630,9 +2625,20 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS,
         frontendConfig.optionsAllowMethods,
         restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS));
+    assertEquals("Unexpected value for " + ACCESS_CONTROL_ALLOW_HEADERS, "",
+        restResponseChannel.getHeader(ACCESS_CONTROL_ALLOW_HEADERS));
     assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_MAX_AGE,
         frontendConfig.optionsValiditySeconds,
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_MAX_AGE)));
+
+    JSONObject headers = new JSONObject();
+    headers.put(ACCESS_CONTROL_REQUEST_HEADERS, "Content-Type");
+    restRequest = createRestRequest(RestMethod.OPTIONS, "/", headers, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("Unexpected value for " + ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type",
+        restResponseChannel.getHeader(ACCESS_CONTROL_ALLOW_HEADERS));
   }
 
   /**
@@ -4668,8 +4674,9 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<String> stitchBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.StitchBlob);
   }
 

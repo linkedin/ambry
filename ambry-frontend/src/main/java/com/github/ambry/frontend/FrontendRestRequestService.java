@@ -51,13 +51,13 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.GregorianCalendar;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.Set;
 
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
@@ -478,6 +478,11 @@ class FrontendRestRequestService implements RestRequestService {
       restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
       restResponseChannel.setHeader(Headers.ACCESS_CONTROL_ALLOW_METHODS, frontendConfig.optionsAllowMethods);
       restResponseChannel.setHeader(Headers.ACCESS_CONTROL_MAX_AGE, frontendConfig.optionsValiditySeconds);
+      String allowHeaders = RestUtils.getHeader(restRequest.getArgs(), ACCESS_CONTROL_REQUEST_HEADERS, false);
+      if (allowHeaders == null) {
+        allowHeaders = "";
+      }
+      restResponseChannel.setHeader(ACCESS_CONTROL_ALLOW_HEADERS, allowHeaders);
       securityService.processResponse(restRequest, restResponseChannel, null).get();
       long securityResponseProcessingEndTime = System.currentTimeMillis();
       frontendMetrics.optionsSecurityResponseTimeInMs.update(
