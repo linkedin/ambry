@@ -150,10 +150,6 @@ public class RestUtils {
      */
     public final static String COOKIE = "Cookie";
     /**
-     * Access-Control-Allow-Origin.
-     */
-    public static final String ACCESS_CONTROL_ALLOW_ORIGIN = "Access-Control-Allow-Origin";
-    /**
      * Header to be set by the clients during a Get blob call to denote, that blob should be served only if the blob
      * has been modified after the value set for this header.
      */
@@ -164,9 +160,22 @@ public class RestUtils {
      */
     public static final String NAMED_UPSERT = "x-ambry-named-upsert";
     /**
+     * Access-Control-Allow-Origin.
+     */
+    public static final String ACCESS_CONTROL_ALLOW_ORIGIN = "Access-Control-Allow-Origin";
+
+    /**
      * Header that is set in the response of OPTIONS request that specifies the allowed methods.
      */
     public static final String ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
+    /**
+     * Header in the OPTIONS request that specifies the expected allowed headers
+     */
+    public static final String ACCESS_CONTROL_REQUEST_HEADERS = "Access-Control-Request-Headers";
+    /**
+     * Header that is set in the response of OPTIONS request that specifies the allowed headers
+     */
+    public static final String ACCESS_CONTROL_ALLOW_HEADERS = "Access-Control-Allow-Headers";
     /**
      * Header that is set in the response of OPTIONS request that specifies the validity of the options returned.
      */
