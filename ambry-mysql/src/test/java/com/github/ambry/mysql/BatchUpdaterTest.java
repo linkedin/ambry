@@ -14,6 +14,7 @@
 package com.github.ambry.mysql;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -81,7 +82,7 @@ public class BatchUpdaterTest {
       return null;
     }).when(connection).rollback();
 
-    DbEndpoint localEndpoint = new DbEndpoint("jdbc:mysql://localhost/testdb", "localDC", true, "user", "password", "VERIFY_IDENTITY");
+    DbEndpoint localEndpoint = new DbEndpoint("jdbc:mysql://localhost/testdb", "localDC", true, "user", "password", MySqlNamedBlobDbConfig.SSLMode.NONE);
 
     // Test BatchUpdater when there is no exception
     MySqlMetrics metrics = new MySqlMetrics(BatchUpdater.class, new MetricRegistry());

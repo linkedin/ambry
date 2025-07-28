@@ -51,7 +51,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
    *       "isWriteable": "true",
    *       "username":"root",
    * 	     "password":"password",
-   * 	     "sslmode":"VERIFY_IDENTITY"
+   * 	     "sslMode":"VERIFY_IDENTITY"
    *     },
    *     {
    *       "url":"mysql-host2"
@@ -59,7 +59,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
    *       "isWriteable": "false",
    *       "username":"root",
    * 	     "password":"password"
-   * 	     "sslmode":"VERIFY_IDENTITY"
+   * 	     "sslMode":"VERIFY_IDENTITY"
    *     },
    *     {
    *       "url":"mysql-host3"
@@ -67,7 +67,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
    *       "isWriteable": "false",
    *       "username":"root",
    * 	     "password":"password"
-   * 	     "sslmode":"VERIFY_IDENTITY"
+   * 	     "sslMode":"VERIFY_IDENTITY"
    *     }
    *   ]
    * </pre>

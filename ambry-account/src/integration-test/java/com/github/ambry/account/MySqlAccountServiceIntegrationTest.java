@@ -21,6 +21,7 @@ import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
@@ -108,7 +109,8 @@ public class MySqlAccountServiceIntegrationTest {
   @Test
   public void testBadCredentials() throws Exception {
     DbEndpoint endpoint =
-        new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword", "VERIFY_IDENTITY");
+        new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword",
+            MySqlNamedBlobDbConfig.SSLMode.NONE);
     try {
       new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(),
           new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()), accountServiceConfig);

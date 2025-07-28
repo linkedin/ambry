@@ -21,6 +21,7 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
@@ -125,7 +126,7 @@ public class AccountDaoTest {
     Driver mockDriver = mock(Driver.class);
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
     MySqlUtils.DbEndpoint dbEndpoint =
-        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry", "VERIFY_IDENTITY");
+        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry", MySqlNamedBlobDbConfig.SSLMode.NONE);
     return new MySqlDataAccessor(Collections.singletonList(dbEndpoint), mockDriver, metrics);
   }
 

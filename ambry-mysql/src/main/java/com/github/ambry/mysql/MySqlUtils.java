@@ -35,7 +35,7 @@ public class MySqlUtils {
   static final String ISWRITEABLE_STR = "isWriteable";
   static final String USERNAME_STR = "username";
   static final String PASSWORD_STR = "password";
-  static final String SSL_MODE_STR = "sslmode";
+  static final String SSL_MODE_STR = "sslMode";
 
   // SSL connection static values
   static final String SSL_SETTING_USE_SSL = "useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2";
@@ -115,9 +115,9 @@ public class MySqlUtils {
     private final boolean isWriteable;
     private final String username;
     private final String password;
-    private final String sslMode;
+    private final MySqlNamedBlobDbConfig.SSLMode sslMode;
 
-    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password, String sslMode) {
+    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password, MySqlNamedBlobDbConfig.SSLMode sslMode) {
       this.url = url;
       this.datacenter = datacenter;
       this.isWriteable = isWriteable;
@@ -132,7 +132,8 @@ public class MySqlUtils {
       boolean isWriteable = entry.getBoolean(ISWRITEABLE_STR);
       String username = entry.getString(USERNAME_STR);
       String password = entry.getString(PASSWORD_STR);
-      String sslMode = entry.getString(SSL_MODE_STR);
+      String sslModeStr = entry.getString(SSL_MODE_STR);
+      MySqlNamedBlobDbConfig.SSLMode sslMode = MySqlNamedBlobDbConfig.SSLMode.valueOf(sslModeStr.toUpperCase());
       return new DbEndpoint(url, datacenter, isWriteable, username, password, sslMode);
     }
 
@@ -143,7 +144,7 @@ public class MySqlUtils {
       entry.put(ISWRITEABLE_STR, isWriteable);
       entry.put(USERNAME_STR, username);
       entry.put(PASSWORD_STR, password);
-      entry.put(SSL_MODE_STR, sslMode);
+      entry.put(SSL_MODE_STR, sslMode.name());
       return entry;
     }
 
@@ -186,7 +187,7 @@ public class MySqlUtils {
     /**
      * @return SSLMode for the db
      */
-    public String getSslMode() {
+    public MySqlNamedBlobDbConfig.SSLMode getSslMode() {
       return sslMode;
     }
 

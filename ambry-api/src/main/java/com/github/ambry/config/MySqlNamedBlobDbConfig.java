@@ -27,7 +27,7 @@ public class MySqlNamedBlobDbConfig {
    * SSLMode when it's enabled
    */
   public enum SSLMode {
-    VERIFY_CA, VERIFY_IDENTITY
+    NONE, VERIFY_CA, VERIFY_IDENTITY
   }
 
   private static final String PREFIX = "mysql.named.blob.";

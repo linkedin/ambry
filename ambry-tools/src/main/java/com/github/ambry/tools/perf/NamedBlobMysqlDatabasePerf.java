@@ -217,9 +217,10 @@ public class NamedBlobMysqlDatabasePerf {
     Properties newProperties = new Properties();
     String dbUrl =
         "jdbc:mysql://" + props.getProperty(DB_HOST) + "/" + props.getProperty(DB_NAME) + "?serverTimezone=UTC";
+    // TODO: update to not require verify_identity
     MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint(dbUrl, props.getProperty(DB_DATACENTER), true, props.getProperty(DB_USERNAME),
-            props.getProperty(DB_PASSWORD), "VERIFY_IDENTITY");
+            props.getProperty(DB_PASSWORD), MySqlNamedBlobDbConfig.SSLMode.NONE);
     JSONArray jsonArray = new JSONArray();
     jsonArray.put(dbEndpoint.toJson());
     System.out.println("DB_INFO: " + jsonArray);

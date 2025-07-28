@@ -15,6 +15,7 @@ package com.github.ambry.mysql;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
@@ -62,8 +63,8 @@ public class MySqlDataAccessorTest {
   @Test
   public void testGetConnection() throws Exception {
     // Two writable endpoints, one local one remote
-    DbEndpoint localEndpoint = new DbEndpoint(localUrl, localDc, true, username, password, "VERIFY_IDENTITY");
-    DbEndpoint remoteEndpoint = new DbEndpoint(remoteUrl, remoteDc, true, username, password, "VERIFY_IDENTITY");
+    DbEndpoint localEndpoint = new DbEndpoint(localUrl, localDc, true, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
+    DbEndpoint remoteEndpoint = new DbEndpoint(remoteUrl, remoteDc, true, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
     Connection localConnection = mock(Connection.class);
     Connection remoteConnection = mock(Connection.class);
     bringEndpointUp(localEndpoint, localConnection);
@@ -76,7 +77,7 @@ public class MySqlDataAccessorTest {
     assertEquals(remoteConnection, dataAccessor.getDatabaseConnection(true));
 
     // Single read-only endpoint
-    DbEndpoint readOnlyEndpoint = new DbEndpoint(readonlyUrl, remoteDc, false, username, password, "VERIFY_IDENTITY");
+    DbEndpoint readOnlyEndpoint = new DbEndpoint(readonlyUrl, remoteDc, false, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
     Connection readOnlyConnection = mock(Connection.class);
     bringEndpointUp(readOnlyEndpoint, readOnlyConnection);
     dataAccessor = new MySqlDataAccessor(Collections.singletonList(readOnlyEndpoint), mockDriver, metrics);
@@ -87,7 +88,7 @@ public class MySqlDataAccessorTest {
         e -> e instanceof SQLException);
 
     // Two endpoints, one writable one readonly
-    DbEndpoint writableEndpoint = new DbEndpoint(writableUrl, remoteDc, true, username, password, "VERIFY_IDENTITY");
+    DbEndpoint writableEndpoint = new DbEndpoint(writableUrl, remoteDc, true, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
     Connection writableConnection = mock(Connection.class);
     bringEndpointUp(writableEndpoint, writableConnection);
     dataAccessor = new MySqlDataAccessor(Arrays.asList(readOnlyEndpoint, writableEndpoint), mockDriver, metrics);

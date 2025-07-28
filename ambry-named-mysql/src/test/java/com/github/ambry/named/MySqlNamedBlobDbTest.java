@@ -83,7 +83,7 @@ public class MySqlNamedBlobDbTest {
           .put("isWriteable", true)
           .put("username", "test")
           .put("password", "password")
-          .put("sslmode", "VERIFY_IDENTITY"));
+          .put("sslMode", MySqlNamedBlobDbConfig.SSLMode.NONE));
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),

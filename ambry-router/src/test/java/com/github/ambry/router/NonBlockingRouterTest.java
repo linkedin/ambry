@@ -190,9 +190,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       properties.setProperty("router.repair.requests.db.factory",
           "com.github.ambry.repair.MysqlRepairRequestsDbFactory");
       String dbInfo = "["
-          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslmode\":\"VERIFY_IDENTITY\"},"
-          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC2\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslmode\":\"VERIFY_IDENTITY\"},"
-          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC3\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslmode\":\"VERIFY_IDENTITY\"}"
+          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslMode\":\"NONE\"},"
+          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC2\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslMode\":\"NONE\"},"
+          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC3\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslMode\":\"NONE\"}"
           + "]";
       properties.setProperty("mysql.repair.requests.db.info", dbInfo);
       // enable offline repair for delete and ttlupdate
@@ -4333,9 +4333,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   static MysqlRepairRequestsDb createRepairRequestsConnection(String localDc, Time time) throws Exception {
     Properties properties = new Properties();
     String dbInfo = "["
-        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslmode\":\"VERIFY_IDENTITY\"},"
-        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC2\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslmode\":\"VERIFY_IDENTITY\"},"
-        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC3\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslmode\":\"VERIFY_IDENTITY\"}"
+        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslMode\":\"NONE\"},"
+        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC2\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslMode\":\"NONE\"},"
+        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC3\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslMode\":\"NONE\"}"
         + "]";
     properties.setProperty(MysqlRepairRequestsDbConfig.DB_INFO, dbInfo);
     properties.setProperty(MysqlRepairRequestsDbConfig.LIST_MAX_RESULTS, Integer.toString(100));
