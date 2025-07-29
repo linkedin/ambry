@@ -80,18 +80,17 @@ public class NamedBlobsCleanupRunner implements Runnable {
           batchStaleBlobs.removeAll(failedResults);
           namedBlobDb.cleanupStaleData(batchStaleBlobs);
 
-          logger.info("Named Blobs Cleanup Runner processed {} stale blobs ({} failed deletions)",
-              batchStaleBlobs.size(), failedResults.size());
-
-          Set<String> cleanedBlobIds =
-              batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
-          logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
+          if (batchStaleBlobs.size() > 0) {
+            logger.info("Named Blobs Cleanup Runner processed {} stale blobs ({} failed deletions)",
+                batchStaleBlobs.size(), failedResults.size());
+            Set<String> cleanedBlobIds =
+                batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
+            logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
+          }
           blobName = staleBlobsWithLatestBlobName.getLatestBlob();
         } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
       }
-    } catch (ExecutionException e) {
-      throw new RuntimeException(e);
-    } catch (InterruptedException e) {
+    } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
