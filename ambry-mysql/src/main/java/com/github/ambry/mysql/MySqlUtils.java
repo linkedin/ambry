@@ -132,7 +132,10 @@ public class MySqlUtils {
       boolean isWriteable = entry.getBoolean(ISWRITEABLE_STR);
       String username = entry.getString(USERNAME_STR);
       String password = entry.getString(PASSWORD_STR);
-      String sslModeStr = entry.getString(SSL_MODE_STR);
+      String sslModeStr = entry.optString(SSL_MODE_STR);
+      if (sslModeStr.equals("")) {
+        sslModeStr = "NONE";
+      }
       MySqlNamedBlobDbConfig.SSLMode sslMode = MySqlNamedBlobDbConfig.SSLMode.valueOf(sslModeStr.toUpperCase());
       return new DbEndpoint(url, datacenter, isWriteable, username, password, sslMode);
     }
