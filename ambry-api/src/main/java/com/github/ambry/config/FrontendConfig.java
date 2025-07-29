@@ -92,7 +92,7 @@ public class FrontendConfig {
    * The time interval in seconds for named blob stale data cleanup process
    */
   @Config("frontend.named.blob.cleanup.seconds")
-  @Default("60 * 60 * 6")
+  @Default("60 * 60 * 24 * 7")
   public final int namedBlobCleanupSeconds;
 
 
