@@ -57,6 +57,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
       List<StaleNamedBlob> batchStaleBlobs = Collections.emptyList();
       NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
       for (Container container : combinedContainers) {
+        logger.info("Started the cleaner for container: {}", container.getId());
         if (container.getNamedBlobMode() == Container.NamedBlobMode.DISABLED) {
           continue;
         }
@@ -80,18 +81,24 @@ public class NamedBlobsCleanupRunner implements Runnable {
           batchStaleBlobs.removeAll(failedResults);
           namedBlobDb.cleanupStaleData(batchStaleBlobs);
 
-          if (batchStaleBlobs.size() > 0) {
+          if (!batchStaleBlobs.isEmpty()) {
             logger.info("Named Blobs Cleanup Runner processed {} stale blobs ({} failed deletions)",
                 batchStaleBlobs.size(), failedResults.size());
+
             Set<String> cleanedBlobIds =
                 batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
             logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
           }
+
           blobName = staleBlobsWithLatestBlobName.getLatestBlob();
         } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
       }
-    } catch (Exception e) {
+    } catch (ExecutionException e) {
       throw new RuntimeException(e);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    } catch (Exception e) {
+      logger.error("Unexpected error occurred while cleaning up named blobs", e);
     }
   }
 }
