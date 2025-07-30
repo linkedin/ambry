@@ -383,13 +383,14 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      List<StaleNamedBlob> staleNamedBlobResults;
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
       List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, blobName);
-
       int resultSize = potentialStaleNamedBlobResults.size();
-      Container.ContainerStatus status = container.getStatus();
+      if (resultSize == 0) {
+        return new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults, null);
+      }
 
+      Container.ContainerStatus status = container.getStatus();
       if (status == Container.ContainerStatus.ACTIVE) {
         staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
       } else {
@@ -891,7 +892,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       staleBlobs.add(keepBlob);
     }
 
-    logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
+    if (!staleBlobs.isEmpty()) {
+      logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
+    }
+
     StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName =
         new StaleBlobsWithLatestBlobName(staleBlobs, keepBlob.getBlobName());
     return staleBlobsWithLatestBlobName;
@@ -926,7 +930,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setString(3, latestBlobName);
       statement.setInt(4, config.queryStaleDataMaxResults);
 
-      logger.debug("Pulling potential stale blobs from MySql. Query {}", statement.toString());
+      logger.info("Pulling potential stale blobs from MySql. Query {}", statement.toString());
 
       try (ResultSet resultSet = statement.executeQuery()) {
         while (resultSet.next()) {

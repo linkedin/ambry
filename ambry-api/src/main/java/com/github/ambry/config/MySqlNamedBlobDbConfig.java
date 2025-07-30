@@ -93,7 +93,7 @@ public class MySqlNamedBlobDbConfig {
    * The maximum number of days for a stale blob to say uncleaned.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
-  @Default("20")
+  @Default("5")
   public final int staleDataRetentionDays;
 
   /**

@@ -60,6 +60,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
         if (container.getNamedBlobMode() == Container.NamedBlobMode.DISABLED) {
           continue;
         }
+        logger.info("Started the cleaner for container: {}", container.getId());
         // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
         String blobName = smallestASCII;
         do {
@@ -80,12 +81,15 @@ public class NamedBlobsCleanupRunner implements Runnable {
           batchStaleBlobs.removeAll(failedResults);
           namedBlobDb.cleanupStaleData(batchStaleBlobs);
 
-          logger.info("Named Blobs Cleanup Runner processed {} stale blobs ({} failed deletions)",
-              batchStaleBlobs.size(), failedResults.size());
+          if (!batchStaleBlobs.isEmpty()) {
+            logger.info("Named Blobs Cleanup Runner processed {} stale blobs ({} failed deletions)",
+                batchStaleBlobs.size(), failedResults.size());
 
-          Set<String> cleanedBlobIds =
-              batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
-          logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
+            Set<String> cleanedBlobIds =
+                batchStaleBlobs.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
+            logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
+          }
+
           blobName = staleBlobsWithLatestBlobName.getLatestBlob();
         } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
       }
@@ -93,6 +97,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
       throw new RuntimeException(e);
     } catch (InterruptedException e) {
       throw new RuntimeException(e);
+    } catch (Exception e) {
+      logger.error("Unexpected error occurred while cleaning up named blobs", e);
     }
   }
 }
