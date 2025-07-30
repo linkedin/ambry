@@ -63,8 +63,8 @@ public class MySqlDataAccessorTest {
   @Test
   public void testGetConnection() throws Exception {
     // Two writable endpoints, one local one remote
-    DbEndpoint localEndpoint = new DbEndpoint(localUrl, localDc, true, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
-    DbEndpoint remoteEndpoint = new DbEndpoint(remoteUrl, remoteDc, true, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
+    DbEndpoint localEndpoint = new DbEndpoint(localUrl, localDc, true, username, password);
+    DbEndpoint remoteEndpoint = new DbEndpoint(remoteUrl, remoteDc, true, username, password);
     Connection localConnection = mock(Connection.class);
     Connection remoteConnection = mock(Connection.class);
     bringEndpointUp(localEndpoint, localConnection);
@@ -77,7 +77,7 @@ public class MySqlDataAccessorTest {
     assertEquals(remoteConnection, dataAccessor.getDatabaseConnection(true));
 
     // Single read-only endpoint
-    DbEndpoint readOnlyEndpoint = new DbEndpoint(readonlyUrl, remoteDc, false, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
+    DbEndpoint readOnlyEndpoint = new DbEndpoint(readonlyUrl, remoteDc, false, username, password);
     Connection readOnlyConnection = mock(Connection.class);
     bringEndpointUp(readOnlyEndpoint, readOnlyConnection);
     dataAccessor = new MySqlDataAccessor(Collections.singletonList(readOnlyEndpoint), mockDriver, metrics);
@@ -88,7 +88,7 @@ public class MySqlDataAccessorTest {
         e -> e instanceof SQLException);
 
     // Two endpoints, one writable one readonly
-    DbEndpoint writableEndpoint = new DbEndpoint(writableUrl, remoteDc, true, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
+    DbEndpoint writableEndpoint = new DbEndpoint(writableUrl, remoteDc, true, username, password);
     Connection writableConnection = mock(Connection.class);
     bringEndpointUp(writableEndpoint, writableConnection);
     dataAccessor = new MySqlDataAccessor(Arrays.asList(readOnlyEndpoint, writableEndpoint), mockDriver, metrics);

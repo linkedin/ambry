@@ -220,7 +220,7 @@ public class NamedBlobMysqlDatabasePerf {
     // TODO: update to not require verify_identity
     MySqlUtils.DbEndpoint dbEndpoint =
         new MySqlUtils.DbEndpoint(dbUrl, props.getProperty(DB_DATACENTER), true, props.getProperty(DB_USERNAME),
-            props.getProperty(DB_PASSWORD), MySqlNamedBlobDbConfig.SSLMode.NONE);
+            props.getProperty(DB_PASSWORD));
     JSONArray jsonArray = new JSONArray();
     jsonArray.put(dbEndpoint.toJson());
     System.out.println("DB_INFO: " + jsonArray);

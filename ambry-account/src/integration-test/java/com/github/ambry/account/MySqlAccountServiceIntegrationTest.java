@@ -219,10 +219,9 @@ public class MySqlAccountServiceIntegrationTest {
     String localDc = "local", remoteDc = "remote";
     String badUrl = "jdbc:mysql://badhost/AccountMetadata";
     DbEndpoint localGoodEndpoint =
-        new DbEndpoint(origEndpoint.getUrl(), localDc, false, origEndpoint.getUsername(), origEndpoint.getPassword(),
-            origEndpoint.getSslMode());
+        new DbEndpoint(origEndpoint.getUrl(), localDc, false, origEndpoint.getUsername(), origEndpoint.getPassword());
     DbEndpoint remoteBadEndpoint =
-        new DbEndpoint(badUrl, remoteDc, true, origEndpoint.getUsername(), origEndpoint.getPassword(), origEndpoint.getSslMode());
+        new DbEndpoint(badUrl, remoteDc, true, origEndpoint.getUsername(), origEndpoint.getPassword());
     JSONArray endpointsJson = new JSONArray().put(localGoodEndpoint.toJson()).put(remoteBadEndpoint.toJson());
     mySqlConfigProps.setProperty(DB_INFO, endpointsJson.toString());
     mySqlConfigProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, localDc);

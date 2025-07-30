@@ -82,7 +82,7 @@ public class BatchUpdaterTest {
       return null;
     }).when(connection).rollback();
 
-    DbEndpoint localEndpoint = new DbEndpoint("jdbc:mysql://localhost/testdb", "localDC", true, "user", "password", MySqlNamedBlobDbConfig.SSLMode.NONE);
+    DbEndpoint localEndpoint = new DbEndpoint("jdbc:mysql://localhost/testdb", "localDC", true, "user", "password");
 
     // Test BatchUpdater when there is no exception
     MySqlMetrics metrics = new MySqlMetrics(BatchUpdater.class, new MetricRegistry());

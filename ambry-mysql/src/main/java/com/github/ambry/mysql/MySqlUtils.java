@@ -117,6 +117,10 @@ public class MySqlUtils {
     private final String password;
     private final MySqlNamedBlobDbConfig.SSLMode sslMode;
 
+    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password) {
+        this(url, datacenter, isWriteable, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
+    }
+
     public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password, MySqlNamedBlobDbConfig.SSLMode sslMode) {
       this.url = url;
       this.datacenter = datacenter;

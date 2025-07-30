@@ -126,7 +126,7 @@ public class AccountDaoTest {
     Driver mockDriver = mock(Driver.class);
     when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
     MySqlUtils.DbEndpoint dbEndpoint =
-        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry", MySqlNamedBlobDbConfig.SSLMode.NONE);
+        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "ambry", "ambry");
     return new MySqlDataAccessor(Collections.singletonList(dbEndpoint), mockDriver, metrics);
   }
 
