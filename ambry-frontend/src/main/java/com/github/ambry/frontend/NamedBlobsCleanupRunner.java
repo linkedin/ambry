@@ -57,10 +57,10 @@ public class NamedBlobsCleanupRunner implements Runnable {
       List<StaleNamedBlob> batchStaleBlobs = Collections.emptyList();
       NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
       for (Container container : combinedContainers) {
-        logger.info("Started the cleaner for container: {}", container.getId());
         if (container.getNamedBlobMode() == Container.NamedBlobMode.DISABLED) {
           continue;
         }
+        logger.info("Started the cleaner for container: {}", container.getId());
         // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
         String blobName = smallestASCII;
         do {
