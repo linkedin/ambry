@@ -23,13 +23,6 @@ import static com.github.ambry.rest.RestUtils.*;
 
 
 public class MySqlNamedBlobDbConfig {
-//  /**
-//   * SSLMode when it's enabled
-//   */
-//  public enum SSLMode {
-//    NONE, VERIFY_CA, VERIFY_IDENTITY
-//  }
-
   private static final String PREFIX = "mysql.named.blob.";
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
@@ -124,12 +117,6 @@ public class MySqlNamedBlobDbConfig {
    */
   @Config(ENABLE_CERTIFICATE_BASED_AUTHENTICATION)
   public final boolean enableCertificateBasedAuthentication;
-
-//  /**
-//   * SSL Mode when certificate based authentication is enabled.
-//   */
-//  @Config(SSL_MODE)
-//  public final SSLMode sslMode;
 
   public final SSLConfig sslConfig;
 
