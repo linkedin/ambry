@@ -13,7 +13,6 @@
  */
 package com.github.ambry.mysql;
 
-import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.SSLConfig;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -91,7 +90,7 @@ public class MySqlUtils {
    * @param sslConfig The {@link SSLConfig} that contains the ssl settings.
    * @return The new url with ssl settings
    */
-  public static String addSslSettingsToUrl(String url, SSLConfig sslConfig, MySqlNamedBlobDbConfig.SSLMode sslMode) {
+  public static String addSslSettingsToUrl(String url, SSLConfig sslConfig, DbEndpoint.SSLMode sslMode) {
     //@formatter:off
     String delimiter = url.contains("?") ? "&" : "?";
     String sslSuffix = delimiter + SSL_SETTING_USE_SSL
@@ -115,13 +114,17 @@ public class MySqlUtils {
     private final boolean isWriteable;
     private final String username;
     private final String password;
-    private final MySqlNamedBlobDbConfig.SSLMode sslMode;
+    private final SSLMode sslMode;
 
-    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password) {
-        this(url, datacenter, isWriteable, username, password, MySqlNamedBlobDbConfig.SSLMode.NONE);
+    public enum SSLMode {
+      NONE, VERIFY_CA, VERIFY_IDENTITY
     }
 
-    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password, MySqlNamedBlobDbConfig.SSLMode sslMode) {
+    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password) {
+        this(url, datacenter, isWriteable, username, password, SSLMode.NONE);
+    }
+
+    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password, SSLMode sslMode) {
       this.url = url;
       this.datacenter = datacenter;
       this.isWriteable = isWriteable;
@@ -140,7 +143,7 @@ public class MySqlUtils {
       if (sslModeStr.equals("")) {
         sslModeStr = "NONE";
       }
-      MySqlNamedBlobDbConfig.SSLMode sslMode = MySqlNamedBlobDbConfig.SSLMode.valueOf(sslModeStr.toUpperCase());
+      SSLMode sslMode = SSLMode.valueOf(sslModeStr.toUpperCase());
       return new DbEndpoint(url, datacenter, isWriteable, username, password, sslMode);
     }
 
@@ -194,7 +197,7 @@ public class MySqlUtils {
     /**
      * @return SSLMode for the db
      */
-    public MySqlNamedBlobDbConfig.SSLMode getSslMode() {
+    public SSLMode getSslMode() {
       return sslMode;
     }
 

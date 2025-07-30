@@ -18,6 +18,7 @@ package com.github.ambry.named;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.mysql.MySqlUtils.DbEndpoint.SSLMode;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -83,7 +84,7 @@ public class MySqlNamedBlobDbTest {
           .put("isWriteable", true)
           .put("username", "test")
           .put("password", "password")
-          .put("sslMode", MySqlNamedBlobDbConfig.SSLMode.NONE));
+          .put("sslMode", SSLMode.NONE));
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
