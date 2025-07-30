@@ -15,6 +15,7 @@ package com.github.ambry.mysql;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;

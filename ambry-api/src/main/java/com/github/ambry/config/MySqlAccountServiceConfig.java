@@ -50,7 +50,8 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
    *       "datacenter":"dc1",
    *       "isWriteable": "true",
    *       "username":"root",
-   * 	     "password":"password"
+   * 	     "password":"password",
+   * 	     "sslMode":"VERIFY_IDENTITY"
    *     },
    *     {
    *       "url":"mysql-host2"
@@ -58,6 +59,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
    *       "isWriteable": "false",
    *       "username":"root",
    * 	     "password":"password"
+   * 	     "sslMode":"VERIFY_IDENTITY"
    *     },
    *     {
    *       "url":"mysql-host3"
@@ -65,6 +67,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
    *       "isWriteable": "false",
    *       "username":"root",
    * 	     "password":"password"
+   * 	     "sslMode":"VERIFY_IDENTITY"
    *     }
    *   ]
    * </pre>
