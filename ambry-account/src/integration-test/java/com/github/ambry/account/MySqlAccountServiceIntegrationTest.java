@@ -109,8 +109,7 @@ public class MySqlAccountServiceIntegrationTest {
   @Test
   public void testBadCredentials() throws Exception {
     DbEndpoint endpoint =
-        new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword",
-            MySqlNamedBlobDbConfig.SSLMode.NONE);
+        new DbEndpoint("jdbc:mysql://localhost/AccountMetadata", "dc1", true, "baduser", "badpassword");
     try {
       new MySqlAccountStore(Collections.singletonList(endpoint), endpoint.getDatacenter(),
           new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry()), accountServiceConfig);
