@@ -366,15 +366,8 @@ public class PutOperationTest {
   @Test
   public void testCRCSucceeds() throws Exception {
     final int successTarget = 2;
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(true));
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     int numChunks = 1;
     BlobProperties blobProperties =
@@ -427,15 +420,8 @@ public class PutOperationTest {
   @Test
   public void testCRCFailures() throws Exception {
     final int successTarget = 2;
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(true));
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     int numChunks = 1;
     BlobProperties blobProperties =
@@ -495,15 +481,10 @@ public class PutOperationTest {
    */
   @Test
   public void testSlippedPutsWithServerErrors() throws Exception {
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    Properties properties = createBasicRouterProperties();
     // Expect at least two successes so that you can create slipped puts.
     properties.setProperty("router.put.success.target", Integer.toString(2));
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     int numChunks = 1;
     BlobProperties blobProperties =
@@ -890,15 +871,8 @@ public class PutOperationTest {
 
   @Test
   public void testCRCWithEmptyContent() throws Exception {
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.verify.crc.for.put.requests", "true");
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
@@ -930,15 +904,8 @@ public class PutOperationTest {
 
   @Test
   public void testCRCDisabledInConfig() throws Exception {
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.verify.crc.for.put.requests", "false");
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCRCTestProperties(successTarget, false);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
@@ -983,15 +950,8 @@ public class PutOperationTest {
 
   @Test
   public void testCRCLargeContent() throws Exception {
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.verify.crc.for.put.requests", "true");
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     int numChunks = 10;
     byte[] content = new byte[chunkSize * numChunks];
@@ -1022,16 +982,8 @@ public class PutOperationTest {
 
   @Test
   public void testCRCWithCompressedChunk() throws Exception {
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.compression.enabled", "true");
-    properties.setProperty("router.verify.crc.for.put.requests", "true");
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCompressionTestProperties(true, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     // Setup buffer and chunk
     byte[] sourceBuffer = ("This is a compressible message. " + "This is a compressible message. "
@@ -1071,16 +1023,62 @@ public class PutOperationTest {
    * @return RouterConfig object.
    */
   private RouterConfig createRouterConfig(boolean isReservedMetadataEnabled) {
+    Properties properties = createBasicRouterProperties();
+    properties.setProperty("router.compression.enabled", "true");
+    properties.setProperty("router.compression.minimal.ratio", "1.0");
+    properties.setProperty("router.compression.minimal.content.size", "1");
+    properties.setProperty("router.reserved.metadata.enabled", Boolean.toString(isReservedMetadataEnabled));
+    return createRouterConfigFromProperties(properties);
+  }
+
+  /**
+   * Creates basic Properties configuration used by most test methods.
+   * @return Properties with common router configuration
+   */
+  private Properties createBasicRouterProperties() {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.compression.enabled", "true");
-    properties.setProperty("router.compression.minimal.ratio", "1.0");
-    properties.setProperty("router.compression.minimal.content.size", "1");
-    properties.setProperty("router.reserved.metadata.enabled", Boolean.toString(isReservedMetadataEnabled));
+    return properties;
+  }
+
+  /**
+   * Creates Properties configuration for CRC-related tests.
+   * @param successTarget the success target to use
+   * @param crcEnabled whether CRC verification should be enabled
+   * @return Properties with CRC configuration
+   */
+  private Properties createCRCTestProperties(int successTarget, boolean crcEnabled) {
+    Properties properties = createBasicRouterProperties();
+    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(crcEnabled));
+    return properties;
+  }
+
+  /**
+   * Creates Properties configuration for compression-related tests.
+   * @param enableCompression whether compression should be enabled
+   * @param enableCRC whether CRC verification should be enabled
+   * @return Properties with compression configuration
+   */
+  private Properties createCompressionTestProperties(boolean enableCompression, boolean enableCRC) {
+    Properties properties = createBasicRouterProperties();
+    properties.setProperty("router.compression.enabled", Boolean.toString(enableCompression));
+    if (enableCRC) {
+      properties.setProperty("router.verify.crc.for.put.requests", "true");
+    }
+    return properties;
+  }
+
+  /**
+   * Creates RouterConfig from Properties for convenience.
+   * @param properties the Properties to convert
+   * @return RouterConfig instance
+   */
+  private RouterConfig createRouterConfigFromProperties(Properties properties) {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     return new RouterConfig(vProps);
   }
@@ -1110,13 +1108,8 @@ public class PutOperationTest {
   public void compressChunk()
       throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
     // Setup router config.
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
+    Properties properties = createBasicRouterProperties();
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     // Create the blob properties for testing.
     BlobProperties blobProperties = new BlobProperties(-1, "serviceId", "memberId",
