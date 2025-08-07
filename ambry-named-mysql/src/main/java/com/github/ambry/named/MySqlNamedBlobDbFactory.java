@@ -67,10 +67,12 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   public HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
     String url = dbEndpoint.getUrl();
     SSLMode sslMode = dbEndpoint.getSslMode();
-    if (sslMode == SSLMode.NONE) {
+    if (sslMode.equals(SSLMode.NONE)) {
       sslMode = SSLMode.VERIFY_CA;
     }
-    url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, sslMode);
+    if (config.enableCertificateBasedAuthentication) {
+      url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, sslMode);
+    }
     HikariConfig hikariConfig = new HikariConfig();
     hikariConfig.setJdbcUrl(url);
     hikariConfig.setUsername(dbEndpoint.getUsername());
