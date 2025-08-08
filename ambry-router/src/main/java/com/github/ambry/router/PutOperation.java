@@ -1545,6 +1545,13 @@ class PutOperation {
         buf.release();
         buf = newBuffer;
         isChunkCompressed = true;
+        // Recalculate CRC on compressed buffer if CRC verification is enabled
+        if (routerConfig.routerVerifyCrcForPutRequests) {
+          chunkCrc32.reset();
+          for (ByteBuffer byteBuffer : buf.nioBuffers()) {
+            chunkCrc32.update(byteBuffer);
+          }
+        }
       }
     }
 

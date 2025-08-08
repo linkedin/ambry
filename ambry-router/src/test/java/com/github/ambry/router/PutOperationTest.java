@@ -42,6 +42,8 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.buffer.UnpooledHeapByteBuf;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -364,15 +366,8 @@ public class PutOperationTest {
   @Test
   public void testCRCSucceeds() throws Exception {
     final int successTarget = 2;
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(true));
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     int numChunks = 1;
     BlobProperties blobProperties =
@@ -425,15 +420,8 @@ public class PutOperationTest {
   @Test
   public void testCRCFailures() throws Exception {
     final int successTarget = 2;
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(true));
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     int numChunks = 1;
     BlobProperties blobProperties =
@@ -493,15 +481,10 @@ public class PutOperationTest {
    */
   @Test
   public void testSlippedPutsWithServerErrors() throws Exception {
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    Properties properties = createBasicRouterProperties();
     // Expect at least two successes so that you can create slipped puts.
     properties.setProperty("router.put.success.target", Integer.toString(2));
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    RouterConfig routerConfig = new RouterConfig(vProps);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     int numChunks = 1;
     BlobProperties blobProperties =
@@ -886,22 +869,216 @@ public class PutOperationTest {
     }
   }
 
+  @Test
+  public void testCRCWithEmptyContent() throws Exception {
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
+
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[0];
+    ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(0);
+    ByteBufReadableStreamChannel byteBufReadableStreamChannel = new ByteBufReadableStreamChannel(byteBuf);
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, byteBufReadableStreamChannel, PutBlobOptions.DEFAULT,
+            new FutureResult<>(), null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null,
+            null, time, blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback,
+            compressionService);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    op.fillChunks();
+    op.poll(requestRegistrationCallback);
+    // CRC on empty content should always succeed (typically CRC32(0 bytes) == 0)
+    PutOperation.PutChunk putChunk = op.getPutChunks().get(0);
+    Assert.assertTrue("CRC should match for empty content", putChunk.verifyCRC());
+    for (RequestInfo requestInfo : requestInfos) {
+      requestInfo.getRequest().release();
+    }
+    byteBuf.release();
+  }
+
+  @Test
+  public void testCRCDisabledInConfig() throws Exception {
+    Properties properties = createCRCTestProperties(successTarget, false);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
+
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize];
+    random.nextBytes(content);
+    ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(chunkSize);
+    byteBuf.writeBytes(content);
+    ByteBufReadableStreamChannel byteBufReadableStreamChannel = new ByteBufReadableStreamChannel(byteBuf);
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, byteBufReadableStreamChannel, PutBlobOptions.DEFAULT,
+            new FutureResult<>(), null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null,
+            null, time, blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback,
+            compressionService);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    op.fillChunks();
+    op.poll(requestRegistrationCallback);
+
+    // Mutate buffer (should not cause CRC error as CRC check is off)
+    PutOperation.PutChunk putChunk = op.getPutChunks().get(0);
+    putChunk.buf.clear();
+    byte[] corrupted = new byte[chunkSize];
+    random.nextBytes(corrupted);
+    putChunk.buf.writeBytes(corrupted);
+
+    // Even with corruption, operation should complete successfully
+    for (RequestInfo requestInfo : requestInfos) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfo);
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      op.handleResponse(responseInfo, putResponse);
+      requestInfo.getRequest().release();
+      responseInfo.release();
+    }
+    Assert.assertNull("No operation exception expected if CRC check is disabled", op.getOperationException());
+  }
+
+  @Test
+  public void testCRCLargeContent() throws Exception {
+    Properties properties = createCRCTestProperties(successTarget, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
+
+    int numChunks = 10;
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+            null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    op.fillChunks();
+    op.poll(requestRegistrationCallback);
+
+    for (PutOperation.PutChunk putChunk : op.getPutChunks()) {
+      Assert.assertTrue("CRC should match for each chunk", putChunk.verifyCRC());
+    }
+  }
+
+  @Test
+  public void testCRCWithCompressedChunk() throws Exception {
+    Properties properties = createCompressionTestProperties(true, true);
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
+
+    // Setup buffer and chunk
+    byte[] sourceBuffer = ("This is a compressible message. " + "This is a compressible message. "
+        + "This is a compressible message. ").getBytes();
+    ByteBuf sourceByteBuf = Unpooled.wrappedBuffer(sourceBuffer);
+
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "text/plain", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), new byte[10], new ByteBufReadableStreamChannel(sourceByteBuf),
+            PutBlobOptions.DEFAULT, new FutureResult<>(), null,
+            new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+
+    // Simulate compression
+    PutOperation.PutChunk putChunk = op.new PutChunk();
+    putChunk.buf = sourceByteBuf;
+    MethodUtils.invokeMethod(putChunk, true, "compressChunk", false);
+
+    // CRC should work for compressed chunk
+    Assert.assertTrue("CRC should match for compressed chunk", putChunk.verifyCRC());
+
+    // Verify the chunk is compressed.
+    Assert.assertTrue((boolean) FieldUtils.readField(putChunk, "isChunkCompressed", true));
+
+    // Release the buf field.
+    ByteBuf buf = (ByteBuf) FieldUtils.readField(putChunk, "buf", true);
+    buf.release();
+  }
+
   /**
    * Create {@link RouterConfig} with the specified isReservedMetadataEnabled.
    * @param isReservedMetadataEnabled {@code true} if reserved metadata is enabled. {@code false} otherwise.
    * @return RouterConfig object.
    */
   private RouterConfig createRouterConfig(boolean isReservedMetadataEnabled) {
+    Properties properties = createBasicRouterProperties();
+    properties.setProperty("router.compression.enabled", "true");
+    properties.setProperty("router.compression.minimal.ratio", "1.0");
+    properties.setProperty("router.compression.minimal.content.size", "1");
+    properties.setProperty("router.reserved.metadata.enabled", Boolean.toString(isReservedMetadataEnabled));
+    return createRouterConfigFromProperties(properties);
+  }
+
+  /**
+   * Creates basic Properties configuration used by most test methods.
+   * @return Properties with common router configuration
+   */
+  private Properties createBasicRouterProperties() {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.compression.enabled", "true");
-    properties.setProperty("router.compression.minimal.ratio", "1.0");
-    properties.setProperty("router.compression.minimal.content.size", "1");
-    properties.setProperty("router.reserved.metadata.enabled", Boolean.toString(isReservedMetadataEnabled));
+    return properties;
+  }
+
+  /**
+   * Creates Properties configuration for CRC-related tests.
+   * @param successTarget the success target to use
+   * @param crcEnabled whether CRC verification should be enabled
+   * @return Properties with CRC configuration
+   */
+  private Properties createCRCTestProperties(int successTarget, boolean crcEnabled) {
+    Properties properties = createBasicRouterProperties();
+    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.verify.crc.for.put.requests", Boolean.toString(crcEnabled));
+    return properties;
+  }
+
+  /**
+   * Creates Properties configuration for compression-related tests.
+   * @param enableCompression whether compression should be enabled
+   * @param enableCRC whether CRC verification should be enabled
+   * @return Properties with compression configuration
+   */
+  private Properties createCompressionTestProperties(boolean enableCompression, boolean enableCRC) {
+    Properties properties = createBasicRouterProperties();
+    properties.setProperty("router.compression.enabled", Boolean.toString(enableCompression));
+    if (enableCRC) {
+      properties.setProperty("router.verify.crc.for.put.requests", "true");
+    }
+    return properties;
+  }
+
+  /**
+   * Creates RouterConfig from Properties for convenience.
+   * @param properties the Properties to convert
+   * @return RouterConfig instance
+   */
+  private RouterConfig createRouterConfigFromProperties(Properties properties) {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     return new RouterConfig(vProps);
   }
@@ -931,13 +1108,8 @@ public class PutOperationTest {
   public void compressChunk()
       throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
     // Setup router config.
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
+    Properties properties = createBasicRouterProperties();
+    RouterConfig routerConfig = createRouterConfigFromProperties(properties);
 
     // Create the blob properties for testing.
     BlobProperties blobProperties = new BlobProperties(-1, "serviceId", "memberId",
