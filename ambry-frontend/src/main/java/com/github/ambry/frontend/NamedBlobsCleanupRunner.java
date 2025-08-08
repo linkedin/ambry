@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +65,9 @@ public class NamedBlobsCleanupRunner implements Runnable {
         // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
         String blobName = smallestASCII;
         do {
-          staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, blobName).get();
+          logger.info("Before pullStaleBlobs.get() for container={}, blobName={}", container.getId(), blobName);
+          staleBlobsWithLatestBlobName = namedBlobDb.pullStaleBlobs(container, blobName).get(2, TimeUnit.MINUTES);
+          logger.info("After pullStaleBlobs.get() for container={}, blobName={}", container.getId(), blobName);
           batchStaleBlobs = staleBlobsWithLatestBlobName.getStaleBlobs();
           List<StaleNamedBlob> failedResults = new ArrayList<>();
           for (StaleNamedBlob staleBlob : staleBlobsWithLatestBlobName.getStaleBlobs()) {
