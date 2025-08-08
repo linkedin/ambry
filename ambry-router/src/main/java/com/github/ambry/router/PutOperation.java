@@ -1549,7 +1549,7 @@ class PutOperation {
         if (routerConfig.routerVerifyCrcForPutRequests) {
           chunkCrc32.reset();
           for (ByteBuffer byteBuffer : buf.nioBuffers()) {
-            chunkCrc32.update(byteBuffer.duplicate());
+            chunkCrc32.update(byteBuffer);
           }
         }
       }
