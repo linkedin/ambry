@@ -14,6 +14,7 @@
 package com.github.ambry.mysql;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
