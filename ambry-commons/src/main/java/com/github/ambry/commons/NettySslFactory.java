@@ -143,7 +143,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  static KeyManagerFactory getKeyManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
+  public static KeyManagerFactory getKeyManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
     KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslKeystorePath, config.sslKeystoreType, config.sslKeystorePassword);
     String keyPassword = config.sslKeyPassword.isEmpty() ? config.sslKeystorePassword : config.sslKeyPassword;
@@ -157,7 +157,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  static TrustManagerFactory getTrustManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
+  public static TrustManagerFactory getTrustManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
     TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslTruststorePath, config.sslTruststoreType, config.sslTruststorePassword);
     tmf.init(ks);
