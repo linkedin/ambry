@@ -21,6 +21,7 @@ import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;

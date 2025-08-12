@@ -13,7 +13,6 @@
  */
 package com.github.ambry.mysql;
 
-import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.SSLConfig;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,6 +34,7 @@ public class MySqlUtils {
   static final String ISWRITEABLE_STR = "isWriteable";
   static final String USERNAME_STR = "username";
   static final String PASSWORD_STR = "password";
+  static final String SSL_MODE_STR = "sslMode";
 
   // SSL connection static values
   static final String SSL_SETTING_USE_SSL = "useSSL=true&requireSSL=true&enabledTLSProtocols=TLSv1.2";
@@ -90,7 +90,7 @@ public class MySqlUtils {
    * @param sslConfig The {@link SSLConfig} that contains the ssl settings.
    * @return The new url with ssl settings
    */
-  public static String addSslSettingsToUrl(String url, SSLConfig sslConfig, MySqlNamedBlobDbConfig.SSLMode sslMode) {
+  public static String addSslSettingsToUrl(String url, SSLConfig sslConfig, DbEndpoint.SSLMode sslMode) {
     //@formatter:off
     String delimiter = url.contains("?") ? "&" : "?";
     String sslSuffix = delimiter + SSL_SETTING_USE_SSL
@@ -114,13 +114,23 @@ public class MySqlUtils {
     private final boolean isWriteable;
     private final String username;
     private final String password;
+    private final SSLMode sslMode;
+
+    public enum SSLMode {
+      NONE, VERIFY_CA, VERIFY_IDENTITY
+    }
 
     public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password) {
+        this(url, datacenter, isWriteable, username, password, SSLMode.NONE);
+    }
+
+    public DbEndpoint(String url, String datacenter, boolean isWriteable, String username, String password, SSLMode sslMode) {
       this.url = url;
       this.datacenter = datacenter;
       this.isWriteable = isWriteable;
       this.username = username;
       this.password = password;
+      this.sslMode = sslMode;
     }
 
     public static DbEndpoint fromJson(JSONObject entry) throws JSONException {
@@ -129,7 +139,8 @@ public class MySqlUtils {
       boolean isWriteable = entry.getBoolean(ISWRITEABLE_STR);
       String username = entry.getString(USERNAME_STR);
       String password = entry.getString(PASSWORD_STR);
-      return new DbEndpoint(url, datacenter, isWriteable, username, password);
+      SSLMode sslMode = entry.optEnum(SSLMode.class, SSL_MODE_STR, SSLMode.NONE);
+      return new DbEndpoint(url, datacenter, isWriteable, username, password, sslMode);
     }
 
     public JSONObject toJson() throws JSONException {
@@ -139,6 +150,7 @@ public class MySqlUtils {
       entry.put(ISWRITEABLE_STR, isWriteable);
       entry.put(USERNAME_STR, username);
       entry.put(PASSWORD_STR, password);
+      entry.put(SSL_MODE_STR, sslMode.name());
       return entry;
     }
 
@@ -178,6 +190,13 @@ public class MySqlUtils {
       return password;
     }
 
+    /**
+     * @return SSLMode for the db
+     */
+    public SSLMode getSslMode() {
+      return sslMode;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -188,7 +207,7 @@ public class MySqlUtils {
       }
       DbEndpoint other = (DbEndpoint) o;
       return this.url.equals(other.url) && this.datacenter.equals(other.datacenter) && isWriteable == other.isWriteable
-          && this.username.equals(other.username) && this.password.equals(other.password);
+          && this.username.equals(other.username) && this.password.equals(other.password) && this.sslMode.equals(other.sslMode);
     }
   }
 }
