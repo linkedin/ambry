@@ -66,10 +66,12 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   //TODO: Build a util method to reuse HikariDataSource creation logic across Ambry modules.
   public HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
     String url = dbEndpoint.getUrl();
+    // todo check if its empty then set to None
     SSLMode sslMode = dbEndpoint.getSslMode();
     if (sslMode.equals(SSLMode.NONE)) {
       sslMode = SSLMode.VERIFY_CA;
     }
+    // todo find out why
     if (config.enableCertificateBasedAuthentication) {
       url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, sslMode);
     }
