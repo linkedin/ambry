@@ -226,14 +226,16 @@ public class AccountUtils {
     private final boolean isUpdated;
     private final List<Container> addedContainers;
     private final List<Container> updatedContainers;
+    private final List<Container> deletedContainers;
 
     public AccountUpdateInfo(Account account, boolean isAdded, boolean isUpdated, List<Container> addedContainers,
-        List<Container> updatedContainers) {
+        List<Container> updatedContainers, List<Container> deletedContainers) {
       this.account = account;
       this.isAdded = isAdded;
       this.isUpdated = isUpdated;
       this.addedContainers = addedContainers;
       this.updatedContainers = updatedContainers;
+      this.deletedContainers = deletedContainers;
     }
 
     /**
@@ -270,6 +272,13 @@ public class AccountUtils {
      */
     public List<Container> getUpdatedContainers() {
       return updatedContainers;
+    }
+
+    /**
+     * @return list of deleted {@link Container}s
+     */
+    public List<Container> getDeletedContainers() {
+      return deletedContainers;
     }
   }
 }
