@@ -34,6 +34,8 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
@@ -43,6 +45,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -140,6 +143,78 @@ public class S3HeadHandlerTest {
         Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH).toString()));
     assertEquals("Mismatch in content range", String.format("bytes %d-%d/%d", BEG, END, BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+  }
+
+  @Test
+  public void headBucketNotFoundTest() throws Exception {
+    // Test HeadBucket with non-existent container - should return 404
+    String uri = String.format("/s3/%s/%s/", account.getName(), "non-existent-container");
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> futureResult = new FutureResult<>();
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+
+    s3HeadHandler.handle(request, restResponseChannel, futureResult::done);
+
+    // Should complete with exception (not hang)
+    try {
+      futureResult.get();
+      fail("Expected ExecutionException due to container not found");
+    } catch (ExecutionException e) {
+      // Expected - should get RestServiceException with NotFound error
+      assertTrue("Should contain RestServiceException", e.getCause() instanceof RestServiceException);
+      RestServiceException rse = (RestServiceException) e.getCause();
+      assertEquals("Should be NotFound", RestServiceErrorCode.NotFound, rse.getErrorCode());
+    }
+  }
+
+  @Test
+  public void headBucketNonExistentAccountTest() throws Exception {
+    // Test HeadBucket with non-existent account - should return 404
+    String uri = String.format("/s3/%s/%s/", "non-existent-account", container.getName());
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> futureResult = new FutureResult<>();
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+
+    s3HeadHandler.handle(request, restResponseChannel, futureResult::done);
+
+    // Should complete with exception (not hang)
+    try {
+      futureResult.get();
+      fail("Expected ExecutionException due to account not found");
+    } catch (ExecutionException e) {
+      // Expected - should get RestServiceException
+      assertTrue("Should contain RestServiceException", e.getCause() instanceof RestServiceException);
+    }
+  }
+
+  @Test
+  public void headBucketResponseHeadersTest() throws Exception {
+    // Test that successful HeadBucket sets proper response headers
+    String uri = String.format("/s3/%s/%s/", account.getName(), container.getName());
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> futureResult = new FutureResult<>();
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+
+    s3HeadHandler.handle(request, restResponseChannel, futureResult::done);
+
+    // Verify results
+    assertNull(futureResult.get());
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+
+    // Verify response headers are set correctly
+    assertEquals("Content-Length should be 0 for HeadBucket", "0",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertNotNull("Date header should be set",
+        restResponseChannel.getHeader(RestUtils.Headers.DATE));
   }
 
   private void setup() throws Exception {
