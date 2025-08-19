@@ -1233,6 +1233,10 @@ class PutOperation {
     synchronized void releaseBlobContent() {
       if (buf != null) {
         logger.trace("{}: releasing the chunk data for chunk {}", loggingContext, chunkIndex);
+        if (routerConfig.routerVerifyCrcForPutRequests) {
+          logger.info("{}: Releasing chunk {} data - current CRC: {}, size: {}, state: {}", loggingContext, chunkIndex,
+              chunkCrc32.getValue(), buf.readableBytes(), state);
+        }
         ReferenceCountUtil.safeRelease(buf);
         buf = null;
         chunkCrc32.reset();
@@ -1456,6 +1460,12 @@ class PutOperation {
     private void encryptionCallback(EncryptJob.EncryptJobResult result, Exception exception) {
       logger.trace("{}: Processing encrypt job callback for chunk at index {}", loggingContext, chunkIndex);
 
+      if (routerConfig.routerVerifyCrcForPutRequests) {
+        long preCrc = chunkCrc32.getValue();
+        logger.info("{}: Chunk {} pre-encryption CRC: {}, size: {}", loggingContext, chunkIndex, preCrc,
+            buf != null ? buf.readableBytes() : 0);
+      }
+
       if (exception == null && !verifyCRC()) {
         // Original content is corruption. Complete the operation
         logger.error("CRC of the chunk {} is different before and after encryption", chunkBlobId);
@@ -1485,6 +1495,8 @@ class PutOperation {
             for (ByteBuffer byteBuffer : buf.nioBuffers()) {
               chunkCrc32.update(byteBuffer);
             }
+            logger.info("{}: Chunk {} post-encryption CRC: {}, size: {}", loggingContext, chunkIndex,
+                chunkCrc32.getValue(), buf != null ? buf.readableBytes() : 0);
           }
         }
         encryptedPerBlobKey = result.getEncryptedKey();
@@ -1538,6 +1550,8 @@ class PutOperation {
         return;
       }
 
+      long preCrc = routerConfig.routerVerifyCrcForPutRequests ? chunkCrc32.getValue() : 0;
+
       // Note: compress() returns null if it failed.
       boolean isFullChunk = (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes);
       ByteBuf newBuffer = compressionService.compressChunk(buf, isFullChunk, outputDirectMemory);
@@ -1551,6 +1565,8 @@ class PutOperation {
           for (ByteBuffer byteBuffer : buf.nioBuffers()) {
             chunkCrc32.update(byteBuffer);
           }
+          logger.info("{}: Chunk {} CRC update after compression - before: {}, after: {}, compressed size: {}",
+              loggingContext, chunkIndex, preCrc, chunkCrc32.getValue(), buf.readableBytes());
         }
       }
     }
@@ -1588,6 +1604,11 @@ class PutOperation {
       chunkFillCompleteAtMs = time.milliseconds();
       if (updateMetric) {
         routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
+      }
+
+      if (routerConfig.routerVerifyCrcForPutRequests) {
+        logger.info("{}: Chunk {} fill complete - final size: {}, CRC: {}", loggingContext, chunkIndex,
+            buf.readableBytes(), chunkCrc32.getValue());
       }
 
       // Attempt to apply compression on data chunk.
@@ -1973,14 +1994,22 @@ class PutOperation {
       if (!routerConfig.routerVerifyCrcForPutRequests || isMetadataChunk() || isCrcVerified) {
         return true;
       }
-      Crc32 crc32 = new Crc32();
+
+      long storedCrc = chunkCrc32.getValue();
+      Crc32 computedCrc32 = new Crc32();
       for (ByteBuffer byteBuffer : buf.nioBuffers()) {
-        crc32.update(byteBuffer);
+        computedCrc32.update(byteBuffer);
+      }
+      long computedCrc = computedCrc32.getValue();
+      boolean matches = storedCrc == computedCrc;
+      if (!matches) {
+        logger.error(
+            "{}: CRC mismatch for chunk {} - Chunk details: state: {}, size: {}, compressed: {}, encrypted: {}",
+            loggingContext, chunkIndex, state, buf.readableBytes(), isChunkCompressed,
+            passedInBlobProperties.isEncrypted());
       }
       isCrcVerified = true;
-      logger.trace("Chunk Id {}, state {}, Original CRC {}, current CRC {}", chunkBlobId, state.name(),
-          this.chunkCrc32.getValue(), crc32.getValue());
-      return this.chunkCrc32.getValue() == crc32.getValue();
+      return matches;
     }
 
     /**
