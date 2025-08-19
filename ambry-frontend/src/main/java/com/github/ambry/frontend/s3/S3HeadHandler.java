@@ -28,6 +28,8 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.ResponseStatus;
+import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -115,7 +117,7 @@ public class S3HeadHandler extends S3BaseHandler<Void> {
       private Callback<Void> securityProcessRequestCallback() {
         return buildCallback(metrics.headBlobSecurityProcessRequestMetrics,
             result -> securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback()),
-            restRequest.getUri(), LOGGER, null);
+            restRequest.getUri(), LOGGER, finalCallback);
       }
 
       private Callback<Void> securityPostProcessRequestCallback() {
@@ -138,6 +140,10 @@ public class S3HeadHandler extends S3BaseHandler<Void> {
                 String.format("Failed to get container %s from account %s", containerName, accountName),
                 RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
           }
+          // Set successful response status and headers for HeadBucket operation
+          restResponseChannel.setStatus(ResponseStatus.Ok);
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
           finalCallback.onCompletion(null, null);
         }, restRequest.getUri(), LOGGER, finalCallback);
       }
