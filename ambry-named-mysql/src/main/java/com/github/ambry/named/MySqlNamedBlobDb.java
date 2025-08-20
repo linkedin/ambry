@@ -994,7 +994,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       throw e;
     }
 
-    return minStaleCount > 0;
+    return minStaleCount >= 0;
   }
 
   /**
