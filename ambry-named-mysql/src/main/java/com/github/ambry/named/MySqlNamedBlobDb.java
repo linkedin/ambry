@@ -400,7 +400,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
       Boolean res = checkIfValidContainerForCleaning(connection, container);
       if (!(res)) {
-        return new StaleBlobsWithLatestBlobName(null, null);
+        return new StaleBlobsWithLatestBlobName(new ArrayList<>(), null);
       }
       List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, blobName);
       int resultSize = potentialStaleNamedBlobResults.size();
