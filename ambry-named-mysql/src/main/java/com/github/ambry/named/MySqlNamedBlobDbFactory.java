@@ -26,6 +26,8 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import com.github.ambry.mysql.MySqlUtils.DbEndpoint.SSLMode;
+
 
 
 public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
@@ -65,7 +67,11 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   public HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
     String url = dbEndpoint.getUrl();
     if (config.enableCertificateBasedAuthentication) {
-      url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, config.sslMode);
+      SSLMode sslMode = dbEndpoint.getSslMode();
+      if (sslMode != null && sslMode.equals(SSLMode.NONE)) {
+        sslMode = SSLMode.VERIFY_CA;
+      }
+      url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, sslMode);
     }
     HikariConfig hikariConfig = new HikariConfig();
     hikariConfig.setJdbcUrl(url);

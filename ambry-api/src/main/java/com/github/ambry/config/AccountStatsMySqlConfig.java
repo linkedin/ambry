@@ -40,7 +40,7 @@ public class AccountStatsMySqlConfig {
    *       "datacenter":"dc2",
    *       "isWriteable": "false",
    *       "username":"root",
-   * 	     "password":"password"
+   * 	     "password":"password",
    *     },
    *     {
    *       "url":"mysql-host3"
