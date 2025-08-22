@@ -70,6 +70,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
   private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
   private static final int VERSION_BASE = 100000;
+  private static final int MIN_STALE_BLOBS_TO_ACTIVATE_CLEANER = 10000;
 
   private final Time time;
   private static final String MULTI_VERSION_PLACE_HOLDER = "MULTI_VERSION_PLACE_HOLDER";
@@ -975,7 +976,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     return resultList;
   }
 
-  private boolean checkIfValidContainerForCleaning(Connection connection, Container container) throws SQLException {
+  public boolean checkIfValidContainerForCleaning(Connection connection, Container container) throws SQLException {
     int minStaleCount = 0;
     try (PreparedStatement statement = connection.prepareStatement(GET_MINIMUM_STALE_BLOB_COUNT)) {
       statement.setInt(1, container.getId());
@@ -994,7 +995,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       throw e;
     }
 
-    return minStaleCount >= 0;
+    return minStaleCount >= MIN_STALE_BLOBS_TO_ACTIVATE_CLEANER;
   }
 
   /**

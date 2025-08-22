@@ -49,6 +49,8 @@ import org.apache.commons.codec.binary.Hex;
 
 import static java.lang.Thread.*;
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.powermock.api.mockito.PowerMockito.*;
 
 
 /**
@@ -281,9 +283,9 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
         namedBlobDb.get(account.getName(), container.getName(), blobName).get());
   }
 
-  // fails
   @Test
   public void testDeleteWithMultipleVersions() throws Exception {
+    setupMockForMinStaleCount();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobName = "testDeleteWithMultipleVersions-" + TestUtils.getRandomKey(10);
@@ -368,6 +370,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobsPipeline() throws Exception {
+    setupMockForMinStaleCount();
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
     long staleCutoffTime = calendar.getTimeInMillis();
@@ -449,7 +452,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobStaleCase1() throws Exception {
-
+    setupMockForMinStaleCount();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -474,6 +477,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobStaleCase2() throws Exception {
+    setupMockForMinStaleCount();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -504,6 +508,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobGoodCase1() throws Exception {
+    setupMockForMinStaleCount();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -522,6 +527,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobGoodCase2() throws Exception {
+    setupMockForMinStaleCount();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -546,7 +552,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobGoodCase3() throws Exception {
-
+    setupMockForMinStaleCount();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -567,6 +573,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobGoodCase4() throws Exception {
+    setupMockForMinStaleCount();
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -594,6 +601,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobGoodCase5() throws Exception {
+    setupMockForMinStaleCount();
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
     long staleCutoffTime = calendar.getTimeInMillis();
@@ -624,6 +632,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testCleanupBlobGoodCase6() throws Exception {
+    setupMockForMinStaleCount();
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
     long staleCutoffTime = calendar.getTimeInMillis();
@@ -670,6 +679,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testRemovesOneOlderStaleInProgressBlob() throws Exception {
+    setupMockForMinStaleCount();
     // Arrange: create an IN_PROGRESS blob and mark it stale by updating modified_ts
     NamedBlobRecord record1 = createAndPutNamedBlob(getBlobIdFromService(), NamedBlobState.IN_PROGRESS, "new_cleaner");
     updateModifiedTimestampByBlobName("new_cleaner", 20);
@@ -686,6 +696,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testRemovesTwoStaleInProgressBlobs() throws Exception {
+    setupMockForMinStaleCount();
     // Arrange: create two IN_PROGRESS blob records with different blob IDs
     NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS, "new_cleaner");
     time.sleep(5);
@@ -702,6 +713,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testRemovesStaleInProgressBlobsAddedBeforeAndAfter() throws Exception {
+    setupMockForMinStaleCount();
     // Arrange: put one IN_PROGRESS record, then update its timestamp to stale (20 days ago)
     NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS, "new_cleaner");
     updateModifiedTimestampByBlobName("new_cleaner", 20);
@@ -720,6 +732,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testIgnoresReadyBlobsWhenRemovingStale() throws Exception {
+    setupMockForMinStaleCount();
     NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.IN_PROGRESS, "new_cleaner");
     updateModifiedTimestampByBlobName("new_cleaner", 20);
     time.sleep(5);
@@ -737,6 +750,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testRemovesOneStaleBlobWithSameBlobIdDifferentStates() throws Exception {
+    setupMockForMinStaleCount();
     String blobId = getBlobIdFromService();
     NamedBlobRecord record1 = createAndPutNamedBlob(blobId, NamedBlobState.IN_PROGRESS, "new_cleaner");
     time.sleep(5);
@@ -752,6 +766,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testRemovesReadyAndInProgressStaleBlobs() throws Exception {
+    setupMockForMinStaleCount();
     // Arrange: three blobs with mixed states (READY and IN_PROGRESS)
     NamedBlobRecord record1 = createAndPutNamedBlob("blob-id1", NamedBlobState.READY, "new_cleaner");
     time.sleep(5);
@@ -771,6 +786,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase1NoPagination() throws Exception {
+    setupMockForMinStaleCount();
     String[] trackedBlobIds = new String[3];
     for (int i = 0; i < 6; i++) {
       String blobId = "blob-id" + (i + 1);
@@ -798,6 +814,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase1PaginationEven() throws Exception {
+    setupMockForMinStaleCount();
     for (int i = 0; i < 2486; i++) {
       String blobId = "blob-id" + (i + 1);
       NamedBlobState state = (i % 2 == 0) ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
@@ -817,6 +834,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase1PaginationOdd() throws Exception {
+    setupMockForMinStaleCount();
     for (int i = 0; i < 2487; i++) {
       String blobId = "blob-id" + (i + 1);
       NamedBlobState state = (i % 2 == 0) ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
@@ -836,6 +854,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase2NoPagination() throws Exception {
+    setupMockForMinStaleCount();
     for (int i = 0; i < 6; i++) {
       String blobId = "blob-id" + (i + 1);
       String cleaner = "new_cleaner" + i;
@@ -854,6 +873,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase2Pagination() throws Exception {
+    setupMockForMinStaleCount();
     for (int i = 0; i < 2344; i++) {
       String blobId = "blob-id" + (i + 1);
       String cleaner = "new_cleaner" + i;
@@ -873,6 +893,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase3() throws Exception {
+    setupMockForMinStaleCount();
     for (int i = 0; i < 1004; i++) {
       String blobId = "blob-id" + (i + 1);
       String cleaner = "new_cleaner" + i;
@@ -999,6 +1020,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    * Helper method to run the for loop across containers to retrieve stale blobs
    */
   public List<StaleNamedBlob> getStaleBlobList() throws Exception {
+    setupMockForMinStaleCount();
     List<StaleNamedBlob> staleNamedBlobsList = new ArrayList<>();
 
     Set<Container> containers = accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE);
@@ -1018,5 +1040,11 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     }
 
     return staleNamedBlobsList;
+  }
+
+  private void setupMockForMinStaleCount() throws SQLException {
+    MySqlNamedBlobDb mockDb = mock(MySqlNamedBlobDb.class);
+    when(mockDb.checkIfValidContainerForCleaning(any(Connection.class), any(Container.class)))
+        .thenReturn(false);
   }
 }
