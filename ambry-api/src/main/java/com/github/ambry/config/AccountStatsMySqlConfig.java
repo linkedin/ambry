@@ -25,7 +25,6 @@ public class AccountStatsMySqlConfig {
   public static final String LOCAL_BACKUP_FILE_PATH = PREFIX + "local.backup.file.path";
   public final SSLConfig sslConfig;
 
-
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
    * <pre>
