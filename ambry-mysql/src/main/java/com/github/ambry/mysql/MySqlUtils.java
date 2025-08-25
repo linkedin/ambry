@@ -161,6 +161,16 @@ public class MySqlUtils {
       return url;
     }
 
+    public String getUrlWithSSL(SSLConfig sslConfig) {
+      if (sslConfig == null) {
+        return url;
+      }
+      if (sslMode != null && sslMode != SSLMode.NONE) {
+        return addSslSettingsToUrl(url, sslConfig, sslMode);
+      }
+      return url;
+    }
+
     /**
      * @return Data center of the db
      */

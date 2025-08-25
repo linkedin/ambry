@@ -23,6 +23,8 @@ public class AccountStatsMySqlConfig {
   public static final String ENABLE_REWRITE_BATCHED_STATEMENT = PREFIX + "enable.rewrite.batched.statements";
   public static final String CONNECTION_IDLE_TIMEOUT = PREFIX + "connection.idle.timeout.ms";
   public static final String LOCAL_BACKUP_FILE_PATH = PREFIX + "local.backup.file.path";
+  public final SSLConfig sslConfig;
+
 
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
@@ -108,5 +110,6 @@ public class AccountStatsMySqlConfig {
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
     connectionIdleTimeoutMs = verifiableProperties.getLong(CONNECTION_IDLE_TIMEOUT, 60 * 1000);
     localBackupFilePath = verifiableProperties.getString(LOCAL_BACKUP_FILE_PATH, "");
+    sslConfig = new SSLConfig(verifiableProperties);
   }
 }
