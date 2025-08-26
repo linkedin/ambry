@@ -48,5 +48,10 @@ public enum AccountServiceErrorCode {
   /**
    * Entity has been deleted in underlying metadata store.
    */
-  Deleted
+  Deleted,
+
+  /**
+   * The operation of the identity is not allowed.
+   */
+  Unauthorized
 }
