@@ -583,6 +583,30 @@ public class MySqlAccountServiceTest {
     }
   }
 
+
+  /**
+   * Tests case-insensitive behavior for container names in {@link MySqlAccountService}.
+   */
+  @Test
+  public void testCaseInsensitiveContainerNames() throws Exception {
+    Container testContainer =
+        new ContainerBuilder((short) 1, "TestContainer", Container.ContainerStatus.ACTIVE, "testContainer", (short) 1)
+            .build();
+    Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE)
+        .containers(Collections.singleton(testContainer))
+        .build();
+
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
+
+    // Verify container retrieval is case-insensitive
+    assertNotNull("Container should be retrievable with original case",
+        mySqlAccountService.getContainerByName(testAccount.getName(), "TestContainer"));
+    assertNotNull("Container should be retrievable with lowercase",
+        mySqlAccountService.getContainerByName(testAccount.getName(), "testcontainer"));
+    assertNotNull("Container should be retrievable with uppercase",
+        mySqlAccountService.getContainerByName(testAccount.getName(), "TESTCONTAINER"));
+  }
+
   /**
    * Asserts that sync time was updated and container count is expected.
    * @param accountServiceMetrics the metrics to check
