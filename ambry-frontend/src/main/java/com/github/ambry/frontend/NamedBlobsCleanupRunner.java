@@ -96,6 +96,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
           blobName = staleBlobsWithLatestBlobName.getLatestBlob();
         } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
       }
+      logger.info("Named Blobs Cleanup Runner is completed");
     } catch (ExecutionException e) {
       throw new RuntimeException(e);
     } catch (InterruptedException e) {
