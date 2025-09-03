@@ -605,6 +605,48 @@ public class MySqlAccountServiceTest {
         mySqlAccountService.getContainerByName(testAccount.getName(), "testcontainer"));
     assertNotNull("Container should be retrievable with uppercase",
         mySqlAccountService.getContainerByName(testAccount.getName(), "TESTCONTAINER"));
+    assertEquals("container is not case in sensitive",
+        mySqlAccountService.getContainerByName(testAccount.getName(), "TESTCONTAINER").getId(),
+        mySqlAccountService.getContainerByName(testAccount.getName(), "testcontainer").getId());
+  }
+
+
+  /**
+   * Test conflict when creating containers with the same name in different cases.
+   */
+  @Test
+  public void testContainerNameConflictWithDifferentCases() throws Exception {
+    // Create an account
+    String accountName = "testAccount";
+    Account testAccount = new AccountBuilder((short) 1, accountName, Account.AccountStatus.ACTIVE).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
+
+    // Create a container with the name "TestContainer"
+    String containerName1 = "TestContainer";
+    Container container1 = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, containerName1,
+        Container.ContainerStatus.ACTIVE, "Test container description", testAccount.getId()).build();
+    mySqlAccountService.updateContainers(accountName, Collections.singletonList(container1));
+
+    // Attempt to create another container with the name "testcontainer" with same settings
+    String containerName2 = "testcontainer";
+    Container container2 = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, containerName2,
+        Container.ContainerStatus.ACTIVE, "Another test container description", testAccount.getId()).build();
+
+    //should succeed as all the fields are same.
+    mySqlAccountService.updateContainers(accountName, Collections.singletonList(container2));
+
+    // Attempt to create another container with the name "testcontainer" with diff settings
+    String containerName3 = "testcontainer";
+    Container container3 =
+        new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, containerName3, Container.ContainerStatus.ACTIVE,
+            "Another test container description with diff settings", testAccount.getId()).setEncrypted(true).build();
+
+    try {
+      mySqlAccountService.updateContainers(accountName, Collections.singletonList(container3));
+      fail("Expected a conflict when creating a container with the same name in a different case");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
+    }
   }
 
   /**
