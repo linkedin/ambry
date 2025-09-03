@@ -17,6 +17,7 @@ import com.github.ambry.router.OperationTrackerScope;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 
@@ -158,6 +159,16 @@ public class RouterConfig {
 
   // Whether or not to use paranoid durability
   public static final String ROUTER_PARANOID_DURABILITY_ENABLED = "router.paranoid.durability.enabled";
+
+  /**
+   * A comma-separated list of accountId:containerId pairs for which CRC verification is enabled for PUT operations.
+   * Example: "1001:1,1002:2" enables CRC verification for account 1001/container 1 and account 1002/container 2 only.
+   * To enable CRC verification for all accounts/containers, use the wildcard "*" (e.g., "*").
+   * Whitespace is ignored. An empty string disables allowlist-based CRC verification.
+   * TODO: Remove this after CRC verification is fully rolled out and stable.
+   */
+  public static final String ROUTER_CRC_VERIFICATION_ACCOUNT_CONTAINER_ALLOWLIST =
+      "router.crc.verification.account.container.allowlist";
 
   /**
    * Number of independent scaling units for the router.
@@ -766,6 +777,10 @@ public class RouterConfig {
   @Default("false")
   public final boolean routerParanoidDurabilityEnabled;
 
+  @Config(ROUTER_CRC_VERIFICATION_ACCOUNT_CONTAINER_ALLOWLIST)
+  @Default("")
+  public final Set<String> routerCrcVerificationAccountContainerAllowlist;
+
   /**
    * This is set in frontendConfig until id converter been fully migrate to router.
    */
@@ -952,6 +967,22 @@ public class RouterConfig {
             DEFAULT_ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL);
     routerParanoidDurabilityEnabled = verifiableProperties.getBoolean(ROUTER_PARANOID_DURABILITY_ENABLED, false);
     routerVerifyCrcForPutRequests = verifiableProperties.getBoolean(ROUTER_VERIFY_CRC_FOR_PUT_REQUESTS, false);
+
+    String allowlistStr = verifiableProperties.getString(ROUTER_CRC_VERIFICATION_ACCOUNT_CONTAINER_ALLOWLIST, "");
+    Set<String> allowlist;
+    if (!allowlistStr.isEmpty()) {
+      allowlist = java.util.Arrays.stream(allowlistStr.split(","))
+          .map(String::trim)
+          .filter(s -> !s.isEmpty())
+          .collect(java.util.stream.Collectors.toSet());
+      // If wildcard '*' is present, treat as allow all
+      if (allowlist.contains("*")) {
+        allowlist = java.util.Collections.singleton("*");
+      }
+    } else {
+      allowlist = java.util.Collections.emptySet();
+    }
+    routerCrcVerificationAccountContainerAllowlist = allowlist;
   }
 
   /**
