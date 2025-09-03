@@ -187,6 +187,8 @@ class PutOperation {
   private final ReservedMetadataIdMetrics reservedMetadataIdMetrics;
   private boolean isSimpleBlob;
 
+  private final boolean isCrcVerificationAllowedForBlob;
+
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
   /**
@@ -369,6 +371,9 @@ class PutOperation {
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
+    Set<String> allowlist = routerConfig.routerCrcVerificationAccountContainerAllowlist;
+    String accountContainerKey = passedInBlobProperties.getAccountId() + ":" + passedInBlobProperties.getContainerId();
+    isCrcVerificationAllowedForBlob = allowlist.contains("*") || allowlist.contains(accountContainerKey);
     if (chunksToStitch != null && chunksToStitch.isEmpty()) {
       // chunksToStitch is null for non stitch requests.
       // For stitch requests, the current metadata format does not support empty chunk lists
@@ -1234,7 +1239,7 @@ class PutOperation {
       if (buf != null) {
         logger.trace("{}: releasing the chunk data for chunk {}", loggingContext, chunkIndex);
         if (routerConfig.routerVerifyCrcForPutRequests) {
-          logger.info("{}: Releasing chunk {} data - current CRC: {}, size: {}, state: {}", loggingContext, chunkIndex,
+          logger.debug("{}: Releasing chunk {} data - current CRC: {}, size: {}, state: {}", loggingContext, chunkIndex,
               chunkCrc32.getValue(), buf.readableBytes(), state);
         }
         ReferenceCountUtil.safeRelease(buf);
@@ -1462,7 +1467,7 @@ class PutOperation {
 
       if (routerConfig.routerVerifyCrcForPutRequests) {
         long preCrc = chunkCrc32.getValue();
-        logger.info("{}: Chunk {} pre-encryption CRC: {}, size: {}", loggingContext, chunkIndex, preCrc,
+        logger.debug("{}: Chunk {} pre-encryption CRC: {}, size: {}", loggingContext, chunkIndex, preCrc,
             buf != null ? buf.readableBytes() : 0);
       }
 
@@ -1495,7 +1500,7 @@ class PutOperation {
             for (ByteBuffer byteBuffer : buf.nioBuffers()) {
               chunkCrc32.update(byteBuffer);
             }
-            logger.info("{}: Chunk {} post-encryption CRC: {}, size: {}", loggingContext, chunkIndex,
+            logger.debug("{}: Chunk {} post-encryption CRC: {}, size: {}", loggingContext, chunkIndex,
                 chunkCrc32.getValue(), buf != null ? buf.readableBytes() : 0);
           }
         }
@@ -1565,7 +1570,7 @@ class PutOperation {
           for (ByteBuffer byteBuffer : buf.nioBuffers()) {
             chunkCrc32.update(byteBuffer);
           }
-          logger.info("{}: Chunk {} CRC update after compression - before: {}, after: {}, compressed size: {}",
+          logger.debug("{}: Chunk {} CRC update after compression - before: {}, after: {}, compressed size: {}",
               loggingContext, chunkIndex, preCrc, chunkCrc32.getValue(), buf.readableBytes());
         }
       }
@@ -1607,7 +1612,7 @@ class PutOperation {
       }
 
       if (routerConfig.routerVerifyCrcForPutRequests) {
-        logger.info("{}: Chunk {} fill complete - final size: {}, CRC: {}", loggingContext, chunkIndex,
+        logger.debug("{}: Chunk {} fill complete - final size: {}, CRC: {}", loggingContext, chunkIndex,
             buf.readableBytes(), chunkCrc32.getValue());
       }
 
@@ -1991,7 +1996,8 @@ class PutOperation {
      * @return {@code true} if CRC of the chunk buffer is same as one calculated in chunk filler thread
      */
     boolean verifyCRC() {
-      if (!routerConfig.routerVerifyCrcForPutRequests || isMetadataChunk() || isCrcVerified) {
+      if (!routerConfig.routerVerifyCrcForPutRequests || !isCrcVerificationAllowedForChunk() || isMetadataChunk()
+          || isCrcVerified) {
         return true;
       }
 
@@ -2084,6 +2090,15 @@ class PutOperation {
       operationQuotaCharger.setBlobId(chunkBlobId);
       operationQuotaCharger.setChunkSize(chunkBlobSize);
       return operationQuotaCharger;
+    }
+
+    /**
+     * Check if CRC verification is allowed for the current Account/Container.
+     * @return {@code true} if CRC verification is allowed, {@code false} otherwise.
+     */
+    private boolean isCrcVerificationAllowedForChunk() {
+      // Use the precomputed value from PutOperation
+      return isCrcVerificationAllowedForBlob;
     }
   }
 
