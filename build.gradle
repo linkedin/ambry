@@ -47,6 +47,14 @@ allprojects {
             // Force protobuf-parent to version 3.15.0. Currently, a vulnerable version 3.11.4 is being picked up
             // transitively.
             force 'com.google.protobuf:protobuf-parent:3.15.0'
+            // Keep ALL Jackson modules aligned; prevents transitive bumps (e.g., to 2.13.5)
+            force "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion",
+                    "com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
+                    "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
+                    "com.fasterxml.jackson.dataformat:jackson-dataformat-xml:$jacksonVersion",
+                    "com.fasterxml.jackson.datatype:jackson-datatype-jdk8:$jacksonVersion",
+                    "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion",
+                    "com.fasterxml.jackson.module:jackson-module-afterburner:$jacksonVersion"
         }
     }
 }
