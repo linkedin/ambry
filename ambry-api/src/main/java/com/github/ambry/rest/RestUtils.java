@@ -546,6 +546,11 @@ public class RestUtils {
      * Is the request a list request
      */
     public static final String LIST_REQUEST = KEY_PREFIX + "is-list-request";
+
+    /**
+     * Is the request a head bucket request
+     */
+    public static final String HEAD_BUCKET_REQUEST = KEY_PREFIX + "is-head-bucket-request";
   }
 
   /**

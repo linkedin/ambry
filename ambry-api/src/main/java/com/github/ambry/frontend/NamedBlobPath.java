@@ -97,14 +97,15 @@ public class NamedBlobPath {
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
     boolean isBatchDelete = args.containsKey(BATCH_DELETE_QUERY_PARAM);
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
-    // For s3 request, if splitPath.length = 3 && Method = GET, the expected segments = 3
-    // All other requests require segments = 4
+    // For S3 container-level operations, expected segments = 3
+    // For S3 blob operations, expected segments = 4
     boolean isListObjectRequest = args.containsKey(LIST_REQUEST);
-    int expectedSegments = (isListObjectRequest || isGetObjectLockRequest) ? 3 : 4;
+    boolean isHeadBucketRequest = args.containsKey(HEAD_BUCKET_REQUEST);
+    int expectedSegments = (isListObjectRequest || isGetObjectLockRequest || isHeadBucketRequest) ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
       throw new RestServiceException(String.format(
           "Path must have format '/named/<account_name>/<container_name>%s.  Received path='%s', arg='%s'",
-          isListObjectRequest || isGetObjectLockRequest ? "" : "/<blob_name>'", path, args), RestServiceErrorCode.BadRequest);
+          (isListObjectRequest || isGetObjectLockRequest || isHeadBucketRequest) ? "" : "/<blob_name>'", path, args), RestServiceErrorCode.BadRequest);
     }
     String accountName = splitPath[1];
     String containerName = splitPath[2];
@@ -116,7 +117,7 @@ public class NamedBlobPath {
       pageToken = RestUtils.getHeader(args, tokenKey, false);
       return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
     }
-    if (isGetObjectLockRequest || isBatchDelete) {
+    if (isGetObjectLockRequest || isBatchDelete || isHeadBucketRequest) {
       return new NamedBlobPath(accountName, containerName, null, null, null);
     } else {
       String blobName = splitPath[3];

@@ -166,7 +166,7 @@ public class S3HeadHandlerTest {
       // Expected - should get RestServiceException with NotFound error
       assertTrue("Should contain RestServiceException", e.getCause() instanceof RestServiceException);
       RestServiceException rse = (RestServiceException) e.getCause();
-      assertEquals("Should be NotFound", RestServiceErrorCode.NotFound, rse.getErrorCode());
+      assertEquals("Should be InvalidContainer", RestServiceErrorCode.InvalidContainer, rse.getErrorCode());
     }
   }
 
@@ -240,7 +240,7 @@ public class S3HeadHandlerTest {
     HeadBlobHandler headBlobHandler = new HeadBlobHandler(frontendConfig, router,
         securityService, ambryIdConverterFactory.getIdConverter(), injector,
         metrics, new MockClusterMap(), QuotaTestUtils.createDummyQuotaManager());
-    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, metrics, ACCOUNT_SERVICE);
+    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, metrics, ACCOUNT_SERVICE, injector);
   }
 
   private void putABlob() throws Exception {
