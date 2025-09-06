@@ -146,8 +146,8 @@ public class S3HeadHandlerTest {
   }
 
   @Test
-  public void headBucketNotFoundTest() throws Exception {
-    // Test HeadBucket with non-existent container - should return 404
+  public void headBucketNonExistentContainerTest() throws Exception {
+    // Test HeadBucket with non-existent container - should return 400 InvalidContainer
     String uri = String.format("/s3/%s/%s/", account.getName(), "non-existent-container");
     RestRequest request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
@@ -163,7 +163,7 @@ public class S3HeadHandlerTest {
       futureResult.get();
       fail("Expected ExecutionException due to container not found");
     } catch (ExecutionException e) {
-      // Expected - should get RestServiceException with NotFound error
+      // Expected - should get RestServiceException with InvalidContainer error
       assertTrue("Should contain RestServiceException", e.getCause() instanceof RestServiceException);
       RestServiceException rse = (RestServiceException) e.getCause();
       assertEquals("Should be InvalidContainer", RestServiceErrorCode.InvalidContainer, rse.getErrorCode());
