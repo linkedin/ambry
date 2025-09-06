@@ -15,17 +15,14 @@
 package com.github.ambry.frontend.s3;
 
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.AccountServiceException;
-import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.HeadBlobHandler;
-import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.ResponseStatus;
@@ -51,10 +48,12 @@ public class S3HeadHandler extends S3BaseHandler<Void> {
    * @param securityService the {@link SecurityService} to use.
    * @param metrics the {@link FrontendMetrics} to use.
    * @param accountService the {@link AccountService} to use.
+   * @param accountAndContainerInjector helper to resolve account and container for a given request.
    */
   public S3HeadHandler(HeadBlobHandler headBlobHandler, SecurityService securityService,
-      FrontendMetrics metrics, AccountService accountService) {
-    this.bucketHandler = new S3HeadBucketHandler(securityService, metrics, accountService);
+      FrontendMetrics metrics, AccountService accountService,
+      AccountAndContainerInjector accountAndContainerInjector) {
+    this.bucketHandler = new S3HeadBucketHandler(securityService, metrics, accountService, accountAndContainerInjector);
     this.objectHandler = new S3HeadObjectHandler(headBlobHandler);
   }
 
@@ -84,12 +83,14 @@ public class S3HeadHandler extends S3BaseHandler<Void> {
     private final SecurityService securityService;
     private final FrontendMetrics metrics;
     private final AccountService accountService;
+    private final AccountAndContainerInjector accountAndContainerInjector;
 
     private S3HeadBucketHandler(SecurityService securityService, FrontendMetrics metrics,
-        AccountService accountService) {
+        AccountService accountService, AccountAndContainerInjector accountAndContainerInjector) {
       this.securityService = securityService;
       this.metrics = metrics;
       this.accountService = accountService;
+      this.accountAndContainerInjector = accountAndContainerInjector;
     }
 
     private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
@@ -110,8 +111,14 @@ public class S3HeadHandler extends S3BaseHandler<Void> {
       }
 
       private void start() {
-        restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
-        securityService.processRequest(restRequest, securityProcessRequestCallback());
+        try {
+          restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
+          restRequest.setArg(HEAD_BUCKET_REQUEST, "true");
+          accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.headBlobMetricsGroup);
+          securityService.processRequest(restRequest, securityProcessRequestCallback());
+        } catch (Exception e) {
+          finalCallback.onCompletion(null, e);
+        }
       }
 
       private Callback<Void> securityProcessRequestCallback() {
@@ -122,24 +129,6 @@ public class S3HeadHandler extends S3BaseHandler<Void> {
 
       private Callback<Void> securityPostProcessRequestCallback() {
         return buildCallback(metrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
-          RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
-          // Build a dummy blob path to get the account and container name
-          String dummyBlobPath = requestPath.getOperationOrBlobId(true) + "/dummy";
-          NamedBlobPath namedBlobPath = NamedBlobPath.parse(dummyBlobPath, restRequest.getArgs());
-          String accountName = namedBlobPath.getAccountName();
-          String containerName = namedBlobPath.getContainerName();
-          try {
-            Container container = accountService.getContainerByName(accountName, containerName);
-            if (container == null) {
-              throw new RestServiceException(
-                  String.format("Container %s in account %s not found", containerName, accountName),
-                  RestServiceErrorCode.NotFound);
-            }
-          } catch (AccountServiceException e) {
-            throw new RestServiceException(
-                String.format("Failed to get container %s from account %s", containerName, accountName),
-                RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
-          }
           // Set successful response status and headers for HeadBucket operation
           restResponseChannel.setStatus(ResponseStatus.Ok);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);

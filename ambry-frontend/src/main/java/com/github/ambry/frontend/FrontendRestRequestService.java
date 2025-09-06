@@ -242,7 +242,7 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
-    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
+    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService, accountAndContainerInjector);
     s3MultipartUploadHandler =
         new S3MultipartUploadHandler(securityService, frontendMetrics, accountAndContainerInjector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
