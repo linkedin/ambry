@@ -174,7 +174,7 @@ public class S3MultipartUploadPartHandler<R> {
           finalCallback.onCompletion(null, null);
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+          router.putBlob(restRequest, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, logger, finalCallback);
