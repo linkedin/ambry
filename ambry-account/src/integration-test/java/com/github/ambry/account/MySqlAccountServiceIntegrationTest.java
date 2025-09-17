@@ -60,7 +60,6 @@ import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
-
 /**
  * Integration tests for {@link MySqlAccountService}.
  */
@@ -1948,5 +1947,65 @@ public class MySqlAccountServiceIntegrationTest {
     statement.executeUpdate("DELETE FROM " + AccountDao.CONTAINER_TABLE);
     statement.executeUpdate("DELETE FROM " + DatasetDao.DATASET_TABLE);
     statement.executeUpdate("DELETE FROM " + DatasetDao.DATASET_VERSION_TABLE);
+  }
+
+  /**
+   * Integration test for validating ramp control functionality.
+   */
+  @Test
+  public void testRampControlIntegration() throws Exception {
+    // 1. Create an account with rampControl set to secondaryEnabled = true
+    RampControl rampControl = new RampControl(true);
+    Account accountWithRamp = new AccountBuilder((short) 124, "rampAccount", Account.AccountStatus.ACTIVE)
+        .rampControl(rampControl)
+        .build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountWithRamp));
+
+    // 2. Fetch and verify rampControl is persisted and retrieved correctly
+    Account fetched = mySqlAccountService.getAccountById(accountWithRamp.getId());
+    assertNotNull("Account should exist", fetched);
+    assertNotNull("RampControl should not be null", fetched.getRampControl());
+    assertTrue("RampControl.secondaryEnabled should be true", fetched.getRampControl().isSecondaryEnabled());
+    assertTrue("isSecondaryEnabled() should be true", fetched.isSecondaryEnabled());
+
+    // 3. Update rampControl to secondaryEnabled = false
+    RampControl rampControl2 = new RampControl(false);
+    Account updated = new AccountBuilder(fetched).rampControl(rampControl2).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(updated));
+
+    // 4. Fetch and verify the update
+    Account fetched2 = mySqlAccountService.getAccountById(updated.getId());
+    assertNotNull("Account should exist after update", fetched2);
+    assertNotNull("RampControl should not be null after update", fetched2.getRampControl());
+    assertFalse("RampControl.secondaryEnabled should be false after update", fetched2.getRampControl().isSecondaryEnabled());
+    assertFalse("isSecondaryEnabled() should be false after update", fetched2.isSecondaryEnabled());
+
+    // 5. Remove rampControl (set to null)
+    Account removed = new AccountBuilder(fetched2).rampControl(null).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(removed));
+
+    // 6. Fetch and verify rampControl is null
+    Account fetched3 = mySqlAccountService.getAccountById(removed.getId());
+    assertNotNull("Account should exist after removing rampControl", fetched3);
+    assertNull("RampControl should be null after removal", fetched3.getRampControl());
+    assertFalse("isSecondaryEnabled() should be false when rampControl is null", fetched3.isSecondaryEnabled());
+  }
+
+  /**
+   * Integration test for account with ramp control set to null initially.
+   */
+  @Test
+  public void testRampControlInitiallyNull() throws Exception {
+    // 1. Create an account with rampControl set to null
+    Account accountWithoutRamp = new AccountBuilder((short) 124, "noRampAccount", Account.AccountStatus.ACTIVE)
+        .rampControl(null)
+        .build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountWithoutRamp));
+
+    // 2. Fetch and verify rampControl is null and isSecondaryEnabled() is false
+    Account fetched = mySqlAccountService.getAccountById(accountWithoutRamp.getId());
+    assertNotNull("Account should exist", fetched);
+    assertNull("RampControl should be null", fetched.getRampControl());
+    assertFalse("isSecondaryEnabled() should be false when rampControl is null", fetched.isSecondaryEnabled());
   }
 }

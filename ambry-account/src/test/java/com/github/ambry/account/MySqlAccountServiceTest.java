@@ -21,6 +21,7 @@ import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -581,6 +582,63 @@ public class MySqlAccountServiceTest {
     } catch (AccountServiceException ase) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
     }
+  }
+
+  /**
+   * E2E test for secondaryEnabled persistence in MySqlAccountService.
+   */
+  @Test
+  public void testSecondaryEnabledPersistence() throws Exception {
+    // Account with secondaryEnabled true
+    Account accountWithDual = new AccountBuilder((short) 10, "e2eAccount", Account.AccountStatus.ACTIVE)
+        .rampControl(new RampControl(true))
+        .build();
+    // Simulate MySQL store returns this account
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountWithDual));
+    mySqlAccountService = getAccountService();
+    Account loaded = mySqlAccountService.getAccountById(accountWithDual.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    assertTrue("secondaryEnabled should be true", loaded.isSecondaryEnabled());
+
+    // Account with secondaryEnabled false
+    Account accountWithoutDual = new AccountBuilder((short) 11, "e2eAccount2", Account.AccountStatus.INACTIVE)
+        .rampControl(new RampControl(false))
+        .build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountWithoutDual));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(accountWithoutDual.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    assertFalse("secondaryEnabled should be false", loaded.isSecondaryEnabled());
+
+    // Account with secondaryEnabled not set (should default to false)
+    Account accountDefault = new AccountBuilder((short) 12, "e2eAccount3", Account.AccountStatus.INACTIVE)
+        .build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountDefault));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(accountDefault.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    assertFalse("secondaryEnabled should default to false", loaded.isSecondaryEnabled());
+  }
+
+  /**
+   * Test deserialization of legacy account JSON (without rampControl/secondaryEnabled).
+   */
+  @Test
+  public void testLegacyAccountJsonDeserialization() throws Exception {
+    String legacyJson = "{" +
+        "\"accountId\":101," +
+        "\"accountName\":\"legacyAccount\"," +
+        "\"status\":\"ACTIVE\"," +
+        "\"version\":1," +
+        "\"quotaResourceType\":\"CONTAINER\"}";
+    ObjectMapper mapper = new ObjectMapper();
+    Account legacyAccount = mapper.readValue(legacyJson, Account.class);
+    assertNotNull("Legacy account should be deserialized", legacyAccount);
+    assertEquals(101, legacyAccount.getId());
+    assertEquals("legacyAccount", legacyAccount.getName());
+    assertEquals(Account.AccountStatus.ACTIVE, legacyAccount.getStatus());
+    // Since no rampControl/secondaryEnabled, should default to false
+    assertFalse("secondaryEnabled should default to false", legacyAccount.isSecondaryEnabled());
   }
 
   /**
