@@ -22,8 +22,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-
 
 /**
  * <p>
@@ -64,6 +64,9 @@ import java.util.Set;
  *   "version": 1,
  *   "status": "ACTIVE"
  *   "quotaResourceType": "CONTAINER"
+ *   "rampControl": {
+ *     "secondaryEnabled": false
+ *   }
  * }
  * </code></pre>
  * <p>
@@ -93,6 +96,10 @@ public class Account {
   static final String CONTAINERS_KEY = "containers";
   static final String DATASET_KEY = "datasets";
 
+  // when there are two sources (PrimaryAccountService and SecondaryAccountService) this flag controls dual write of data
+  static final String RAMP_CONTROL_KEY = "rampControl";
+  public static final boolean DEFAULT_RAMP_CONTROL_SECONDARY_ENABLED = false;
+
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
@@ -113,6 +120,8 @@ public class Account {
   private final Set<Container> containers = new HashSet<>();
   @JsonProperty(JSON_VERSION_KEY)
   private final int version = CURRENT_JSON_VERSION;
+  @JsonProperty(RAMP_CONTROL_KEY)
+  private final RampControl rampControl;
   // internal data structure
   @JsonIgnore
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
@@ -128,11 +137,28 @@ public class Account {
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
    * @param quotaResourceType {@link QuotaResourceType} on which quota will be enforced for this account.
+   * @param rampControl {@link RampControl} object.
+   */
+  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
+      Collection<Container> containers, QuotaResourceType quotaResourceType, RampControl rampControl) {
+    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
+        quotaResourceType, rampControl);
+  }
+
+  /**
+   * Constructor that takes individual arguments for tests.
+   * @param id The id of the account. Cannot be null.
+   * @param name The name of the account. Cannot be null.
+   * @param status The status of the account. Cannot be null.
+   * @param aclInheritedByContainer Whether account's acl is inherited by container.
+   * @param snapshotVersion the expected snapshot version for the account record.
+   * @param containers A collection of {@link Container}s to be part of this account.
+   * @param quotaResourceType {@link QuotaResourceType} on which quota will be enforced for this account.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
       Collection<Container> containers, QuotaResourceType quotaResourceType) {
     this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-        quotaResourceType);
+        quotaResourceType, null);
   }
 
   /**
@@ -145,9 +171,10 @@ public class Account {
    * @param containers A collection of {@link Container}s to be part of this account.
    * @param lastModifiedTime created/modified time of this Account
    * @param quotaResourceType {@link QuotaResourceType} object.
+   * @param rampControl {@link RampControl} object.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType) {
+      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType, RampControl rampControl) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -159,6 +186,7 @@ public class Account {
       updateContainerMap(containers);
     }
     this.quotaResourceType = quotaResourceType;
+    this.rampControl = rampControl;
   }
 
   /**
@@ -252,6 +280,20 @@ public class Account {
   }
 
   /**
+   * @return RampControl settings. Can be null if not set.
+   */
+  public RampControl getRampControl() {
+    return rampControl;
+  }
+
+  /**
+   * @return Whether secondary is enabled for this account.
+   */
+  public boolean isSecondaryEnabled() {
+    return rampControl != null && rampControl.isSecondaryEnabled();
+  }
+
+  /**
    * Generates a String representation that uniquely identifies this account. The string is in the format of
    * {@code Account[id]}.
    * @return The String representation of this account.
@@ -288,7 +330,8 @@ public class Account {
     }
     // We don't compare snapshot version and lastModifiedTime
     return id == account.id && name.equals(account.name) && status == account.status
-        && aclInheritedByContainer == account.aclInheritedByContainer && quotaResourceType == account.quotaResourceType;
+        && aclInheritedByContainer == account.aclInheritedByContainer && quotaResourceType == account.quotaResourceType
+        && Objects.equals(rampControl, account.rampControl);
   }
 
   @Override

@@ -788,6 +788,42 @@ public class AccountContainerTest {
     }
   }
 
+  @Test
+  public void testSecondaryEnabledSerialization() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    // Account with secondaryEnabled true
+    Account accountWithSecondary = new AccountBuilder()
+        .id((short) 1)
+        .name("testAccount")
+        .status(AccountStatus.ACTIVE)
+        .rampControl(new RampControl(true))
+        .build();
+    String jsonWithSecondary = mapper.writeValueAsString(accountWithSecondary);
+    Account deserializedWithSecondary = mapper.readValue(jsonWithSecondary, Account.class);
+    assertTrue(deserializedWithSecondary.isSecondaryEnabled());
+
+    // Account with secondaryEnabled false
+    Account accountWithoutSecondary = new AccountBuilder()
+        .id((short) 2)
+        .name("testAccount2")
+        .status(AccountStatus.INACTIVE)
+        .rampControl(new RampControl(false))
+        .build();
+    String jsonWithoutSecondary = mapper.writeValueAsString(accountWithoutSecondary);
+    Account deserializedWithoutSecondary = mapper.readValue(jsonWithoutSecondary, Account.class);
+    assertFalse(deserializedWithoutSecondary.isSecondaryEnabled());
+
+    // Account with secondaryEnabled not set (should default to false)
+    Account accountDefault = new AccountBuilder()
+        .id((short) 3)
+        .name("testAccount3")
+        .status(AccountStatus.INACTIVE)
+        .build();
+    String jsonDefault = mapper.writeValueAsString(accountDefault);
+    Account deserializedDefault = mapper.readValue(jsonDefault, Account.class);
+    assertFalse(deserializedDefault.isSecondaryEnabled());
+  }
+
   /**
    * Asserts an {@link Account} against the reference account.
    * @param account The {@link Account} to assert.

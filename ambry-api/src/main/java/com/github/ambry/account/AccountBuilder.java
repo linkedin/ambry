@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.account.RampControl;
 import com.github.ambry.quota.QuotaResourceType;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -22,7 +23,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.github.ambry.account.Account.*;
-
 
 /**
  * A builder class for {@link Account}. Since {@link Account} is immutable, modifying an {@link Account} needs to
@@ -40,6 +40,7 @@ public class AccountBuilder {
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
   private boolean aclInheritedByContainer = ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE;
+  private RampControl rampControl = null;
   private final Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
 
   /**
@@ -61,6 +62,7 @@ public class AccountBuilder {
       idToContainerMetadataMap.put(container.getId(), container);
     }
     quotaResourceType = origin.getQuotaResourceType();
+    rampControl = origin.getRampControl();
   }
 
   /**
@@ -172,6 +174,33 @@ public class AccountBuilder {
   }
 
   /**
+   * Sets ramp control config for the account.
+   * @param rampControl ramp control object
+   * @return This builder.
+   */
+  public AccountBuilder rampControl(RampControl rampControl) {
+    this.rampControl = rampControl;
+    return this;
+  }
+
+  /**
+   * Sets ramp control from JSON.
+   */
+  @JsonProperty("rampControl")
+  public AccountBuilder rampControlFromJson(RampControl rampControl) {
+    this.rampControl = rampControl;
+    return this;
+  }
+
+  /**
+   * Gets whether secondary is enabled for the account.
+   * @return whether secondary is enabled for the account.
+   */
+  public boolean isSecondaryEnabled() {
+    return rampControl != null && rampControl.isSecondaryEnabled();
+  }
+
+  /**
    * Clear the set of containers for the {@link Account} to build and add the provided ones.
    * @param containers A collection of {@link Container}s to use. Can be {@code null} to just remove all containers.
    * @return This builder.
@@ -235,6 +264,6 @@ public class AccountBuilder {
       }
     }
     return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(),
-        lastModifiedTime, quotaResourceType);
+        lastModifiedTime, quotaResourceType, rampControl);
   }
 }
