@@ -37,7 +37,7 @@ public class ContainerMetrics extends EntityOperationMetrics {
    * @param accountMetrics the {@link AccountMetrics} for this account. If it's null, then there will no account
    *                       metrics
    */
-  ContainerMetrics(String accountName, String containerName, String operationType, MetricRegistry metricRegistry,
+  public ContainerMetrics(String accountName, String containerName, String operationType, MetricRegistry metricRegistry,
       boolean isGetRequest, AccountMetrics accountMetrics) {
     super(accountName + EntityOperationMetrics.SEPARATOR + containerName, ContainerMetrics.class, operationType,
         metricRegistry, isGetRequest);
