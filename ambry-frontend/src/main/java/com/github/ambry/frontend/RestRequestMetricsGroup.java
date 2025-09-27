@@ -97,7 +97,7 @@ public class RestRequestMetricsGroup {
    * @return the {@link ContainerMetrics} instance, or {@code null} if container metrics are disabled for this type of
    * operation.
    */
-  ContainerMetrics getContainerMetrics(String accountName, String containerName, boolean shouldIncludeAccountMetrics) {
+  public ContainerMetrics getContainerMetrics(String accountName, String containerName, boolean shouldIncludeAccountMetrics) {
     return instantiatedContainerMetrics.computeIfAbsent(
         new Pair<>(accountName, containerName), k -> {
           boolean isGetRequest = containerMetricsEnabledGetRequestTypes.contains(requestType);

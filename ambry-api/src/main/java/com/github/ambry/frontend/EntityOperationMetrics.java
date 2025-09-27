@@ -62,7 +62,7 @@ public class EntityOperationMetrics {
    * @param metricRegistry the {@link MetricRegistry}.
    * @param isGetRequest   the request operationType is get.
    */
-  EntityOperationMetrics(String entityName, Class<?> ownerClass, String operationType, MetricRegistry metricRegistry,
+  public EntityOperationMetrics(String entityName, Class<?> ownerClass, String operationType, MetricRegistry metricRegistry,
       boolean isGetRequest) {
     String metricPrefix = entityName + SEPARATOR + operationType;
     if (ownerClass == null) {
