@@ -277,6 +277,7 @@ class AccountInfoMap {
             .lastModifiedTime(account.getLastModifiedTime())
             .aclInheritedByContainer(account.isAclInheritedByContainer())
             .rampControl(account.getRampControl())
+            .migrationConfig(account.getMigrationConfig())
             .quotaResourceType(account.getQuotaResourceType());
         account.getAllContainers().forEach(accountBuilder::addOrUpdateContainer);
         accountToUpdate = accountBuilder.build();

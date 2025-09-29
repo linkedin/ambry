@@ -1,3 +1,16 @@
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.account;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -39,8 +52,8 @@ public class MigrationConfig {
     @JsonProperty("dualWriteAndDeleteSyncPctStrict")
     private double dualWriteAndDeleteSyncPctStrict;
 
-    @JsonProperty("writeAndDeleteOnlyToCaspian")
-    private boolean writeAndDeleteOnlyToCaspian;
+    @JsonProperty("writeAndDeleteOnlyToSecondary")
+    private boolean writeAndDeleteOnlyToSecondary;
 
     @JsonCreator
     public WriteRamp(
@@ -48,19 +61,19 @@ public class MigrationConfig {
         @JsonProperty("dualWriteAndDeleteAsyncPct") double dualWriteAndDeleteAsyncPct,
         @JsonProperty("dualWriteAndDeleteSyncPctNonStrict") double dualWriteAndDeleteSyncPctNonStrict,
         @JsonProperty("dualWriteAndDeleteSyncPctStrict") double dualWriteAndDeleteSyncPctStrict,
-        @JsonProperty("writeAndDeleteOnlyToCaspian") boolean writeAndDeleteOnlyToCaspian) {
+        @JsonProperty("writeAndDeleteOnlyToSecondary") boolean writeAndDeleteOnlyToSecondary) {
       this.forceDisableDualWriteAndDelete = forceDisableDualWriteAndDelete;
       this.dualWriteAndDeleteAsyncPct = dualWriteAndDeleteAsyncPct;
       this.dualWriteAndDeleteSyncPctNonStrict = dualWriteAndDeleteSyncPctNonStrict;
       this.dualWriteAndDeleteSyncPctStrict = dualWriteAndDeleteSyncPctStrict;
-      this.writeAndDeleteOnlyToCaspian = writeAndDeleteOnlyToCaspian;
+      this.writeAndDeleteOnlyToSecondary = writeAndDeleteOnlyToSecondary;
     }
   }
 
   // Read ramp config
   public static class ReadRamp {
-    @JsonProperty("forceDisableReadFromCaspian")
-    private boolean forceDisableReadFromCaspian;
+    @JsonProperty("forceDisableReadFromSecondary")
+    private boolean forceDisableReadFromSecondary;
 
     @JsonProperty("shadowReadMetadataPct")
     private double shadowReadMetadataPct;
@@ -71,53 +84,53 @@ public class MigrationConfig {
     @JsonProperty("shadowReadContentPct")
     private double shadowReadContentPct;
 
-    @JsonProperty("ambryReadFromCaspianPct")
-    private double ambryReadFromCaspianPct;
+    @JsonProperty("serveReadFromSecondaryPct")
+    private double serveReadFromSecondaryPct;
 
-    @JsonProperty("disableFallbackReadFromAmbry")
-    private boolean disableFallbackReadFromAmbry;
+    @JsonProperty("disableFallbackToPrimary")
+    private boolean disableFallbackToPrimary;
 
     @JsonCreator
     public ReadRamp(
-        @JsonProperty("forceDisableReadFromCaspian") boolean forceDisableReadFromCaspian,
+        @JsonProperty("forceDisableReadFromSecondary") boolean forceDisableReadFromSecondary,
         @JsonProperty("shadowReadMetadataPct") double shadowReadMetadataPct,
         @JsonProperty("shadowReadMd5Pct") double shadowReadMd5Pct,
         @JsonProperty("shadowReadContentPct") double shadowReadContentPct,
-        @JsonProperty("ambryReadFromCaspianPct") double ambryReadFromCaspianPct,
-        @JsonProperty("disableFallbackReadFromAmbry") boolean disableFallbackReadFromAmbry) {
-      this.forceDisableReadFromCaspian = forceDisableReadFromCaspian;
+        @JsonProperty("serveReadFromSecondaryPct") double serveReadFromSecondaryPct,
+        @JsonProperty("disableFallbackToPrimary") boolean disableFallbackToPrimary) {
+      this.forceDisableReadFromSecondary = forceDisableReadFromSecondary;
       this.shadowReadMetadataPct = shadowReadMetadataPct;
       this.shadowReadMd5Pct = shadowReadMd5Pct;
       this.shadowReadContentPct = shadowReadContentPct;
-      this.ambryReadFromCaspianPct = ambryReadFromCaspianPct;
-      this.disableFallbackReadFromAmbry = disableFallbackReadFromAmbry;
+      this.serveReadFromSecondaryPct = serveReadFromSecondaryPct;
+      this.disableFallbackToPrimary = disableFallbackToPrimary;
     }
   }
 
   // List ramp config.
   public static class ListRamp {
-    @JsonProperty("forceDisableListFromCaspian")
-    private boolean forceDisableListFromCaspian;
+    @JsonProperty("forceDisableListFromSecondary")
+    private boolean forceDisableListFromSecondary;
 
     @JsonProperty("shadowListPct")
     private double shadowListPct;
 
-    @JsonProperty("ambryListFromCaspianPct")
-    private double ambryListFromCaspianPct;
+    @JsonProperty("serveListFromSecondaryPct")
+    private double serveListFromSecondaryPct;
 
-    @JsonProperty("disableFallbackListFromAmbry")
-    private boolean disableFallbackListFromAmbry;
+    @JsonProperty("disableFallbackToPrimary")
+    private boolean disableFallbackToPrimary;
 
     @JsonCreator
     public ListRamp(
-        @JsonProperty("forceDisableListFromCaspian") boolean forceDisableListFromCaspian,
+        @JsonProperty("forceDisableListFromSecondary") boolean forceDisableListFromSecondary,
         @JsonProperty("shadowListPct") double shadowListPct,
-        @JsonProperty("ambryListFromCaspianPct") double ambryListFromCaspianPct,
-        @JsonProperty("disableFallbackListFromAmbry") boolean disableFallbackListFromAmbry) {
-      this.forceDisableListFromCaspian = forceDisableListFromCaspian;
+        @JsonProperty("serveListFromSecondaryPct") double serveListFromSecondaryPct,
+        @JsonProperty("disableFallbackToPrimary") boolean disableFallbackToPrimary) {
+      this.forceDisableListFromSecondary = forceDisableListFromSecondary;
       this.shadowListPct = shadowListPct;
-      this.ambryListFromCaspianPct = ambryListFromCaspianPct;
-      this.disableFallbackListFromAmbry = disableFallbackListFromAmbry;
+      this.serveListFromSecondaryPct = serveListFromSecondaryPct;
+      this.disableFallbackToPrimary = disableFallbackToPrimary;
     }
   }
 
