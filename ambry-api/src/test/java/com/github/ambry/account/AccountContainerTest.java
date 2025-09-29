@@ -796,7 +796,7 @@ public class AccountContainerTest {
         .id((short) 1)
         .name("testAccount")
         .status(AccountStatus.ACTIVE)
-        .rampControl(new RampControl(true))
+        .rampControl(new RampControl(true, null, null, null))
         .build();
     String jsonWithSecondary = mapper.writeValueAsString(accountWithSecondary);
     Account deserializedWithSecondary = mapper.readValue(jsonWithSecondary, Account.class);
@@ -807,7 +807,7 @@ public class AccountContainerTest {
         .id((short) 2)
         .name("testAccount2")
         .status(AccountStatus.INACTIVE)
-        .rampControl(new RampControl(false))
+        .rampControl(new RampControl(false, null, null, null))
         .build();
     String jsonWithoutSecondary = mapper.writeValueAsString(accountWithoutSecondary);
     Account deserializedWithoutSecondary = mapper.readValue(jsonWithoutSecondary, Account.class);

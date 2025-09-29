@@ -591,7 +591,7 @@ public class MySqlAccountServiceTest {
   public void testSecondaryEnabledPersistence() throws Exception {
     // Account with secondaryEnabled true
     Account accountWithDual = new AccountBuilder((short) 10, "e2eAccount", Account.AccountStatus.ACTIVE)
-        .rampControl(new RampControl(true))
+        .rampControl(new RampControl(true, null, null, null))
         .build();
     // Simulate MySQL store returns this account
     when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountWithDual));
@@ -602,7 +602,7 @@ public class MySqlAccountServiceTest {
 
     // Account with secondaryEnabled false
     Account accountWithoutDual = new AccountBuilder((short) 11, "e2eAccount2", Account.AccountStatus.INACTIVE)
-        .rampControl(new RampControl(false))
+        .rampControl(new RampControl(false, null, null, null))
         .build();
     when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountWithoutDual));
     mySqlAccountService = getAccountService();
