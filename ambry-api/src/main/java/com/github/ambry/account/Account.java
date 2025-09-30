@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.deser.std.StringArrayDeserializer;
 import com.github.ambry.quota.QuotaResourceType;
 import java.util.Collection;
 import java.util.Collections;
@@ -67,6 +68,30 @@ import java.util.Set;
  *   "rampControl": {
  *     "secondaryEnabled": false
  *   }
+ *   "migrationConfig": {
+ *     "overrideAccountMigrationConfig": false,
+ *     "writeRamp": {
+ *       "forceDisableDualWriteAndDelete": false,
+ *       "dualWriteAndDeleteAsyncPct": 0.0,
+ *       "dualWriteAndDeleteSyncPctNonStrict": 0.0,
+ *       "dualWriteAndDeleteSyncPctStrict": 0.0,
+ *       "writeAndDeleteOnlyToSecondary": false
+ *     },
+ *     "readRamp": {
+ *       "forceDisableReadFromSecondary": false,
+ *       "shadowReadMetadataPct": 0.0,
+ *       "shadowReadMd5Pct": 0.0,
+ *       "shadowReadContentPct": 0.0,
+ *       "serveReadFromSecondaryPct": 0.0,
+ *       "disableFallbackToPrimary": false
+ *     },
+ *     "listRamp": {
+ *       "forceDisableListFromSecondary": false,
+ *       "shadowListPct": 0.0,
+ *       "serveListFromSecondaryPct": 0.0,
+ *       "disableFallbackToPrimary": 0.0
+ *      }
+ *    }
  * }
  * </code></pre>
  * <p>
@@ -100,6 +125,9 @@ public class Account {
   static final String RAMP_CONTROL_KEY = "rampControl";
   public static final boolean DEFAULT_RAMP_CONTROL_SECONDARY_ENABLED = false;
 
+  // Migration config used to control and ramp up migration from one storage backend to another.
+  static final String MIGRATION_CONFIG_KEY = "migrationConfig";
+
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
@@ -122,6 +150,9 @@ public class Account {
   private final int version = CURRENT_JSON_VERSION;
   @JsonProperty(RAMP_CONTROL_KEY)
   private final RampControl rampControl;
+  @JsonProperty(MIGRATION_CONFIG_KEY)
+  private final MigrationConfig migrationConfig;
+
   // internal data structure
   @JsonIgnore
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
@@ -140,9 +171,9 @@ public class Account {
    * @param rampControl {@link RampControl} object.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, QuotaResourceType quotaResourceType, RampControl rampControl) {
+      Collection<Container> containers, QuotaResourceType quotaResourceType, RampControl rampControl, MigrationConfig migrationConfig) {
     this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-        quotaResourceType, rampControl);
+        quotaResourceType, rampControl, migrationConfig);
   }
 
   /**
@@ -158,7 +189,7 @@ public class Account {
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
       Collection<Container> containers, QuotaResourceType quotaResourceType) {
     this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-        quotaResourceType, null);
+        quotaResourceType, null, null);
   }
 
   /**
@@ -174,7 +205,7 @@ public class Account {
    * @param rampControl {@link RampControl} object.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType, RampControl rampControl) {
+      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType, RampControl rampControl, MigrationConfig migrationConfig) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -187,6 +218,7 @@ public class Account {
     }
     this.quotaResourceType = quotaResourceType;
     this.rampControl = rampControl;
+    this.migrationConfig = migrationConfig;
   }
 
   /**
@@ -284,6 +316,13 @@ public class Account {
    */
   public RampControl getRampControl() {
     return rampControl;
+  }
+
+  /**
+   * @return MigrationConfig. Can be null if not set.
+   */
+  public MigrationConfig getMigrationConfig() {
+    return migrationConfig;
   }
 
   /**

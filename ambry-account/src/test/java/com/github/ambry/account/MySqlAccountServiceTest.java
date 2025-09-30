@@ -621,6 +621,44 @@ public class MySqlAccountServiceTest {
   }
 
   /**
+   * E3E test for migrationConfig persistence in MySqlAccountService.
+   */
+  @Test
+  public void testMigrationConfigPersistence() throws Exception {
+    // Account with default migrationConfig.
+    Account accountWithMigration = new AccountBuilder((short) 20, "e2eAccount", Account.AccountStatus.ACTIVE)
+        .migrationConfig(new MigrationConfig(false, new MigrationConfig.WriteRamp(), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()))
+        .build();
+    // Simulate MySQL store returns this account
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountWithMigration));
+    mySqlAccountService = getAccountService();
+    Account loaded = mySqlAccountService.getAccountById(accountWithMigration.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    assertNotNull("migrationConfig should be present", loaded.getMigrationConfig());
+
+    //  Account with dual async write enabled in migrationConfig.
+    Account accountWithDualAsyncWrite = new AccountBuilder((short) 22, "e2eAccount1", Account.AccountStatus.ACTIVE)
+        .migrationConfig(new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 50.0, 0.0, 0.0, false), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()))
+        .build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountWithDualAsyncWrite));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(accountWithDualAsyncWrite.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    assertNotNull("migrationConfig should be present", loaded.getMigrationConfig());
+    assertEquals("Dual async write should be set to 50%", 50.0,
+        loaded.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.01);
+
+    // Account with migrationConfig not set (should be null)
+    Account accountWithoutMigration = new AccountBuilder((short) 21, "e2eAccount2", Account.AccountStatus.INACTIVE)
+        .build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountWithoutMigration));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(accountWithoutMigration.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    assertNull("migrationConfig should be null", loaded.getMigrationConfig());
+  }
+
+  /**
    * Test deserialization of legacy account JSON (without rampControl/secondaryEnabled).
    */
   @Test
@@ -639,6 +677,8 @@ public class MySqlAccountServiceTest {
     assertEquals(Account.AccountStatus.ACTIVE, legacyAccount.getStatus());
     // Since no rampControl/secondaryEnabled, should default to false
     assertFalse("secondaryEnabled should default to false", legacyAccount.isSecondaryEnabled());
+    // Migration config should be null.
+    assertNull("migrationConfig should be null", legacyAccount.getMigrationConfig());
   }
 
   /**

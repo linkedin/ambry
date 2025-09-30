@@ -2008,4 +2008,52 @@ public class MySqlAccountServiceIntegrationTest {
     assertNull("RampControl should be null", fetched.getRampControl());
     assertFalse("isSecondaryEnabled() should be false when rampControl is null", fetched.isSecondaryEnabled());
   }
+
+  /**
+   * Integration test for validating migration config.
+   */
+  @Test
+  public void testMigrationConfigIntegration() throws Exception {
+    // 1. Create an account with migration config set
+    MigrationConfig migrationConfig =
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 50.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
+    Account accountWithMigrationConfig =
+        new AccountBuilder((short) 125, "migrationAccount", Account.AccountStatus.ACTIVE).migrationConfig(
+            migrationConfig).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountWithMigrationConfig));
+
+    // 2. Fetch and verify migration config is persisted and retrieved correctly
+    Account fetched = mySqlAccountService.getAccountById(accountWithMigrationConfig.getId());
+    assertNotNull("Account should exist", fetched);
+    assertNotNull("MigrationConfig should not be null", fetched.getMigrationConfig());
+    assertEquals("Async dual write percentage mismatch", migrationConfig.getWriteRamp().getDualWriteAndDeleteAsyncPct(),
+        fetched.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // 3. Update migration config to switch dual async writes to 100% and enable shadow read metadata for 10%.
+    MigrationConfig migrationConfig2 =
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 100.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp());
+    Account updated = new AccountBuilder(fetched).migrationConfig(migrationConfig2).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(updated));
+
+    // 4. Fetch and verify the update
+    Account fetched2 = mySqlAccountService.getAccountById(updated.getId());
+    assertNotNull("Account should exist after update", fetched2);
+    assertNotNull("MigrationConfig should not be null after update", fetched2.getMigrationConfig());
+    assertEquals("Async dual write percentage mismatch",
+        migrationConfig2.getWriteRamp().getDualWriteAndDeleteAsyncPct(),
+        fetched2.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+    assertEquals("Shadow read percentage mismatch", migrationConfig2.getReadRamp().getShadowReadMetadataPct(),
+        fetched2.getMigrationConfig().getReadRamp().getShadowReadMetadataPct(), 0.001);
+
+    // 5. Remove migration config (set to null)
+    Account removed = new AccountBuilder(fetched2).migrationConfig(null).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(removed));
+
+    // 6. Fetch and verify migration config is null
+    Account fetched3 = mySqlAccountService.getAccountById(removed.getId());
+    assertNotNull("Account should exist after removing MigrationConfig", fetched3);
+    assertNull("MigrationConfig should be null after removal", fetched3.getMigrationConfig());
+  }
 }
