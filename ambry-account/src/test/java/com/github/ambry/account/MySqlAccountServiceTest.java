@@ -677,6 +677,8 @@ public class MySqlAccountServiceTest {
     assertEquals(Account.AccountStatus.ACTIVE, legacyAccount.getStatus());
     // Since no rampControl/secondaryEnabled, should default to false
     assertFalse("secondaryEnabled should default to false", legacyAccount.isSecondaryEnabled());
+    // Migration config should be null.
+    assertNull("migrationConfig should be null", legacyAccount.getMigrationConfig());
   }
 
   /**
