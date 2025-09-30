@@ -68,6 +68,47 @@ public class MigrationConfig {
       this.dualWriteAndDeleteSyncPctStrict = dualWriteAndDeleteSyncPctStrict;
       this.writeAndDeleteOnlyToSecondary = writeAndDeleteOnlyToSecondary;
     }
+
+    // Default constructor for WriteRamp
+    public WriteRamp() {
+      this.forceDisableDualWriteAndDelete = false;
+      this.dualWriteAndDeleteAsyncPct = 0.0;
+      this.dualWriteAndDeleteSyncPctNonStrict = 0.0;
+      this.dualWriteAndDeleteSyncPctStrict = 0.0;
+      this.writeAndDeleteOnlyToSecondary = false;
+    }
+
+    // Getters
+    public boolean isForceDisableDualWriteAndDelete() {
+      return forceDisableDualWriteAndDelete;
+    }
+
+    public double getDualWriteAndDeleteAsyncPct() {
+      return dualWriteAndDeleteAsyncPct;
+    }
+
+    public double getDualWriteAndDeleteSyncPctNonStrict() {
+      return dualWriteAndDeleteSyncPctNonStrict;
+    }
+
+    public double getDualWriteAndDeleteSyncPctStrict() {
+      return dualWriteAndDeleteSyncPctStrict;
+    }
+
+    public boolean isWriteAndDeleteOnlyToSecondary() {
+      return writeAndDeleteOnlyToSecondary;
+    }
+
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      WriteRamp that = (WriteRamp) o;
+      return forceDisableDualWriteAndDelete == that.forceDisableDualWriteAndDelete &&
+          Double.compare(that.dualWriteAndDeleteAsyncPct, dualWriteAndDeleteAsyncPct) == 0 &&
+          Double.compare(that.dualWriteAndDeleteSyncPctNonStrict, dualWriteAndDeleteSyncPctNonStrict) == 0 &&
+          Double.compare(that.dualWriteAndDeleteSyncPctStrict, dualWriteAndDeleteSyncPctStrict) == 0 &&
+          writeAndDeleteOnlyToSecondary == that.writeAndDeleteOnlyToSecondary;
+    }
   }
 
   // Read ramp config
@@ -105,6 +146,48 @@ public class MigrationConfig {
       this.serveReadFromSecondaryPct = serveReadFromSecondaryPct;
       this.disableFallbackToPrimary = disableFallbackToPrimary;
     }
+
+    // Default constructor for ReadRamp
+    public ReadRamp() {
+      this.forceDisableReadFromSecondary = false;
+      this.shadowReadMetadataPct = 0.0;
+      this.shadowReadMd5Pct = 0.0;
+      this.shadowReadContentPct = 0.0;
+      this.serveReadFromSecondaryPct = 0.0;
+      this.disableFallbackToPrimary = false;
+    }
+
+    // Getters
+    public boolean isForceDisableReadFromSecondary() {
+      return forceDisableReadFromSecondary;
+    }
+    public double getShadowReadMetadataPct() {
+      return shadowReadMetadataPct;
+    }
+    public double getShadowReadMd5Pct() {
+      return shadowReadMd5Pct;
+    }
+    public double getShadowReadContentPct() {
+      return shadowReadContentPct;
+    }
+    public double getServeReadFromSecondaryPct() {
+      return serveReadFromSecondaryPct;
+    }
+    public boolean isDisableFallbackToPrimary() {
+      return disableFallbackToPrimary;
+    }
+
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      ReadRamp that = (ReadRamp) o;
+      return forceDisableReadFromSecondary == that.forceDisableReadFromSecondary &&
+          Double.compare(that.shadowReadMetadataPct, shadowReadMetadataPct) == 0 &&
+          Double.compare(that.shadowReadMd5Pct, shadowReadMd5Pct) == 0 &&
+          Double.compare(that.shadowReadContentPct, shadowReadContentPct) == 0 &&
+          Double.compare(that.serveReadFromSecondaryPct, serveReadFromSecondaryPct) == 0 &&
+          disableFallbackToPrimary == that.disableFallbackToPrimary;
+    }
   }
 
   // List ramp config.
@@ -131,6 +214,38 @@ public class MigrationConfig {
       this.shadowListPct = shadowListPct;
       this.serveListFromSecondaryPct = serveListFromSecondaryPct;
       this.disableFallbackToPrimary = disableFallbackToPrimary;
+    }
+
+    // Default constructor for ListRamp
+    public ListRamp() {
+      this.forceDisableListFromSecondary = false;
+      this.shadowListPct = 0.0;
+      this.serveListFromSecondaryPct = 0.0;
+      this.disableFallbackToPrimary = false;
+    }
+
+    // Getters
+    public boolean isForceDisableListFromSecondary() {
+      return forceDisableListFromSecondary;
+    }
+    public double getShadowListPct() {
+      return shadowListPct;
+    }
+    public double getServeListFromSecondaryPct() {
+      return serveListFromSecondaryPct;
+    }
+    public boolean isDisableFallbackToPrimary() {
+      return disableFallbackToPrimary;
+    }
+
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      ListRamp that = (ListRamp) o;
+      return forceDisableListFromSecondary == that.forceDisableListFromSecondary &&
+          Double.compare(that.shadowListPct, shadowListPct) == 0 &&
+          Double.compare(that.serveListFromSecondaryPct, serveListFromSecondaryPct) == 0 &&
+          disableFallbackToPrimary == that.disableFallbackToPrimary;
     }
   }
 

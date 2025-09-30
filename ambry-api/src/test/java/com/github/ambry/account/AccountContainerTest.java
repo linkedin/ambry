@@ -825,6 +825,27 @@ public class AccountContainerTest {
   }
 
   /**
+   * Test serialization with migration config.
+   */
+  @Test
+  public void testAccountWithMigrationConfigSerDe() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    // Account with dual async write percentage set.
+    MigrationConfig migrationConfig = new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
+    Account accountWithMigrationConfig = new AccountBuilder(refAccount).migrationConfig(migrationConfig).build();
+    String serializedAccountStr = mapper.writeValueAsString(accountWithMigrationConfig);
+    Account deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
+    assertEquals("Async dual write percentage should match", migrationConfig.getWriteRamp().getDualWriteAndDeleteAsyncPct(),
+        deserializedAccount.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // Account with migration config not set.
+    Account accountWithoutMigrationConfig = new AccountBuilder(refAccount).migrationConfig(null).build();
+    serializedAccountStr = mapper.writeValueAsString(accountWithoutMigrationConfig);
+    deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
+    assertNull("Migration config should be null", deserializedAccount.getMigrationConfig());
+  }
+
+  /**
    * Asserts an {@link Account} against the reference account.
    * @param account The {@link Account} to assert.
    * @param compareContainer {@code true} to compare each individual {@link Container}. {@code false} to skip this test.
