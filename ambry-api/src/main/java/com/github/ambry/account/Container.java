@@ -457,7 +457,7 @@ public class Container {
         this.accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
         this.cacheTtlInSecond = CACHE_TTL_IN_SECOND_DEFAULT_VALUE;
         this.userMetadataKeysToNotPrefixInResponse = USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE;
-        this.migrationConfig = new MigrationConfig();
+        this.migrationConfig = migrationConfig;
         break;
       case JSON_VERSION_2:
         this.backupEnabled = backupEnabled;

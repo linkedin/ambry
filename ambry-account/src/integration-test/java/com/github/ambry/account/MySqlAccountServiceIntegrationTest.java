@@ -2010,10 +2010,10 @@ public class MySqlAccountServiceIntegrationTest {
   }
 
   /**
-   * Integration test for validating migration config.
+   * Integration test for validating account migration config.
    */
   @Test
-  public void testMigrationConfigIntegration() throws Exception {
+  public void testAccountMigrationConfigIntegration() throws Exception {
     // 1. Create an account with migration config set
     MigrationConfig migrationConfig =
         new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 50.0, 0.0, 0.0, false),
@@ -2055,5 +2055,65 @@ public class MySqlAccountServiceIntegrationTest {
     Account fetched3 = mySqlAccountService.getAccountById(removed.getId());
     assertNotNull("Account should exist after removing MigrationConfig", fetched3);
     assertNull("MigrationConfig should be null after removal", fetched3.getMigrationConfig());
+  }
+
+  /**
+   * Integration test for validating container migration config.
+   * The overrideAccountMigrationConfig field does not impact the persisted migration config fetched from mysql db.
+   */
+  @Test
+  public void testContainerMigrationConfigIntegration() throws Exception {
+    // 1. Create an account with a container with migration config set
+    MigrationConfig migrationConfig =
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 50.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
+    Container containerWithMigrationConfig =
+        new ContainerBuilder((short) 2, "migrationContainer", Container.ContainerStatus.ACTIVE, "migrationContainer",
+            (short) 126).migrationConfig(migrationConfig).build();
+    Account account =
+        new AccountBuilder((short) 126, "containerMigrationAccount", Account.AccountStatus.ACTIVE).containers(
+            Collections.singleton(containerWithMigrationConfig)).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(account));
+
+    // 2. Fetch and verify migration config is persisted and retrieved correctly
+    Account fetched = mySqlAccountService.getAccountById(account.getId());
+    assertNotNull("Account should exist", fetched);
+    Container fetchedContainer = fetched.getContainerByName(containerWithMigrationConfig.getName());
+    assertNotNull("Container should exist", fetchedContainer);
+    assertNotNull("MigrationConfig should not be null", fetchedContainer.getMigrationConfig());
+    assertEquals("Async dual write percentage mismatch", migrationConfig.getWriteRamp().getDualWriteAndDeleteAsyncPct(),
+        fetchedContainer.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // 3. Update migration config to switch dual async writes to 100% and enable shadow read metadata for 10%.
+    MigrationConfig migrationConfig2 =
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 100.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp());
+    Container updatedContainer = new ContainerBuilder(fetchedContainer).migrationConfig(migrationConfig2).build();
+    Account updatedAccount = new AccountBuilder(fetched).containers(Collections.singleton(updatedContainer)).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(updatedAccount));
+
+    // 4. Fetch and verify the update
+    Account fetched2 = mySqlAccountService.getAccountById(updatedAccount.getId());
+    assertNotNull("Account should exist after update", fetched2);
+    Container fetchedContainer2 = fetched2.getContainerByName(updatedContainer.getName());
+    assertNotNull("Container should exist after update", fetchedContainer2);
+    assertNotNull("MigrationConfig should not be null after update", fetchedContainer2.getMigrationConfig());
+    assertEquals("Async dual write percentage mismatch",
+        migrationConfig2.getWriteRamp().getDualWriteAndDeleteAsyncPct(),
+        fetchedContainer2.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+    assertEquals("Shadow read percentage mismatch", migrationConfig2.getReadRamp().getShadowReadMetadataPct(),
+        fetchedContainer2.getMigrationConfig().getReadRamp().getShadowReadMetadataPct(), 0.001);
+
+    // 5. Remove migration config (set to null)
+    Container removedContainer = new ContainerBuilder(fetchedContainer2).migrationConfig(null).build();
+    Account removedAccount = new AccountBuilder(fetched2).containers(Collections.singleton(removedContainer)).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(removedAccount));
+
+    // 6. Fetch and verify migration config is null
+    Account fetched3 = mySqlAccountService.getAccountById(removedAccount.getId());
+    assertNotNull("Account should exist after removing MigrationConfig", fetched3);
+    Container fetchedContainer3 = fetched3.getContainerByName(removedContainer.getName());
+    assertNotNull("Container should exist after removing MigrationConfig", fetchedContainer3);
+    assertNull("MigrationConfig should be null after removal", fetchedContainer3.getMigrationConfig());
   }
 }

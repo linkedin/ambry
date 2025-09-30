@@ -151,7 +151,7 @@ public class RecoveryNetworkClientTest {
             false, false, null, false, false, false, Collections.emptySet(),
             false, false, Container.NamedBlobMode.DISABLED, ACCOUNT_ID, 0,
             0, 0, "",
-            null, Collections.emptySet());
+            null, Collections.emptySet(), null);
   }
 
   ////////////////////////////////////////////// HELPERS ///////////////////////////////////////////////////////////

@@ -828,7 +828,7 @@ public class AccountContainerTest {
   }
 
   /**
-   * Test serialization with migration config.
+   * Test account metadata serialization with migration config.
    */
   @Test
   public void testAccountWithMigrationConfigSerDe() throws IOException {
@@ -846,6 +846,34 @@ public class AccountContainerTest {
     serializedAccountStr = mapper.writeValueAsString(accountWithoutMigrationConfig);
     deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
     assertNull("Migration config should be null", deserializedAccount.getMigrationConfig());
+  }
+
+  /**
+   * Test container metadata serialization with migration config.
+   */
+  @Test
+  public void testContainerWithMigrationConfigSerDe() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Container with dual async write percentage set.
+    MigrationConfig migrationConfig = new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
+    Container containerWithMigrationConfig = new ContainerBuilder(refContainers.get(0))
+        .setParentAccountId(refAccountId)
+        .setMigrationConfig(migrationConfig)
+        .build();
+    String serializedContainerStr = mapper.writeValueAsString(containerWithMigrationConfig);
+    Container deserializedContainer = mapper.readValue(serializedContainerStr, Container.class);
+    assertEquals("Async dual write percentage should match", migrationConfig.getWriteRamp().getDualWriteAndDeleteAsyncPct(),
+        deserializedContainer.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // Container with migration config not set.
+    Container containerWithoutMigrationConfig = new ContainerBuilder(refContainers.get(0))
+        .setParentAccountId(refAccountId)
+        .setMigrationConfig(null)
+        .build();
+    serializedContainerStr = mapper.writeValueAsString(containerWithoutMigrationConfig);
+    deserializedContainer = mapper.readValue(serializedContainerStr, Container.class);
+    assertNull("Migration config should be null", deserializedContainer.getMigrationConfig());
   }
 
   /**

@@ -376,7 +376,7 @@ public class ContainerBuilder {
    */
   @JsonProperty(MIGRATION_CONFIG_KEY)
   public ContainerBuilder setMigrationConfigFromJson(MigrationConfig migrationConfig) {
-    setMigrationConfig(migrationConfig);
+    this.migrationConfig = migrationConfig;
     return this;
   }
 
