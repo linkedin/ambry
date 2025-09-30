@@ -59,6 +59,7 @@ public class ContainerBuilder {
   private Long cacheTtlInSecond = CACHE_TTL_IN_SECOND_DEFAULT_VALUE;
   private Set<String> userMetadataKeysToNotPrefixInResponse =
       USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE;
+  private MigrationConfig migrationConfig = null;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -94,6 +95,7 @@ public class ContainerBuilder {
     snapshotVersion = origin.getSnapshotVersion();
     cacheTtlInSecond = origin.getCacheTtlInSecond();
     userMetadataKeysToNotPrefixInResponse = origin.getUserMetadataKeysToNotPrefixInResponse();
+    migrationConfig = origin.getMigrationConfig();
   }
 
   /**
@@ -362,6 +364,23 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the migration config for the container.
+   */
+  public ContainerBuilder setMigrationConfig(MigrationConfig migrationConfig) {
+    this.migrationConfig = migrationConfig;
+    return this;
+  }
+
+  /**
+   * Set the migration config from Json.
+   */
+  @JsonProperty(MIGRATION_CONFIG_KEY)
+  public ContainerBuilder setMigrationConfigFromJson(MigrationConfig migrationConfig) {
+    setMigrationConfig(migrationConfig);
+    return this;
+  }
+
+  /**
    * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
    * @return A {@link Container} object.
@@ -376,6 +395,6 @@ public class ContainerBuilder {
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
         parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime,
         lastModifiedTime, snapshotVersion, accessControlAllowOrigin, cacheTtlInSecond,
-        userMetadataKeysToNotPrefixInResponse);
+        userMetadataKeysToNotPrefixInResponse, migrationConfig);
   }
 }
