@@ -58,6 +58,8 @@ public class Container {
   static final String CONTAINER_ID_KEY = "containerId";
   static final String PREVIOUSLY_ENCRYPTED_KEY = "previouslyEncrypted";
   static final String OVERRIDE_ACCOUNT_ACL_KEY = "overrideAccountAcl";
+  // Migration config used to control and ramp up migration from one storage backend to another.
+  static final String MIGRATION_CONFIG_KEY = "migrationConfig";
 
   static final boolean BACKUP_ENABLED_DEFAULT_VALUE = false;
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
@@ -77,6 +79,7 @@ public class Container {
   static final String ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE = "";
   static final Long CACHE_TTL_IN_SECOND_DEFAULT_VALUE = null;
   static final Set<String> USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE = Collections.emptySet();
+  static final MigrationConfig MIGRATION_CONFIG_DEFAULT_VALUE = null;
 
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -320,7 +323,7 @@ public class Container {
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID,
           UNKNOWN_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE,
           ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
-          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE, MIGRATION_CONFIG_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -339,7 +342,7 @@ public class Container {
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID,
           DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
           SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
-          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE, MIGRATION_CONFIG_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -358,7 +361,7 @@ public class Container {
           OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME,
           LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE,
-          CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
+          CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE, MIGRATION_CONFIG_DEFAULT_VALUE);
 
   // container field variables
   @JsonProperty(CONTAINER_ID_KEY)
@@ -391,6 +394,8 @@ public class Container {
   private final Set<String> userMetadataKeysToNotPrefixInResponse;
   @JsonProperty(JSON_VERSION_KEY)
   private final int version = JSON_VERSION_2; // the default version is 2
+  @JsonProperty(MIGRATION_CONFIG_KEY)
+  private final MigrationConfig migrationConfig;
 
   /**
    * Constructor that takes individual arguments. Cannot be null.
@@ -424,7 +429,7 @@ public class Container {
                    Set<String> contentTypeWhitelistForFilenamesOnDownload, boolean backupEnabled, boolean overrideAccountAcl,
                    NamedBlobMode namedBlobMode, short parentAccountId, long deleteTriggerTime, long lastModifiedTime,
                    int snapshotVersion, String accessControlAllowOrigin, Long cacheTtlInSecond,
-                   Set<String> userMetadataKeysToNotPrefixInResponse) {
+                   Set<String> userMetadataKeysToNotPrefixInResponse, MigrationConfig migrationConfig) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -453,6 +458,7 @@ public class Container {
         this.accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
         this.cacheTtlInSecond = CACHE_TTL_IN_SECOND_DEFAULT_VALUE;
         this.userMetadataKeysToNotPrefixInResponse = USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE;
+        this.migrationConfig = migrationConfig;
         break;
       case JSON_VERSION_2:
         this.backupEnabled = backupEnabled;
@@ -475,6 +481,7 @@ public class Container {
         this.userMetadataKeysToNotPrefixInResponse =
             userMetadataKeysToNotPrefixInResponse == null ? Collections.emptySet()
                 : userMetadataKeysToNotPrefixInResponse;
+        this.migrationConfig = migrationConfig;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -699,6 +706,13 @@ public class Container {
    */
   public int getSnapshotVersion() {
     return snapshotVersion;
+  }
+
+  /**
+   * Return migration config.
+   */
+  public MigrationConfig getMigrationConfig() {
+    return migrationConfig;
   }
 
   /**

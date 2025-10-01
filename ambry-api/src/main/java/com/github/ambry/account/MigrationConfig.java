@@ -249,6 +249,11 @@ public class MigrationConfig {
     }
   }
 
+  // Default migration config.
+  public MigrationConfig() {
+    this(false, new WriteRamp(), new ReadRamp(), new ListRamp());
+  }
+
   @JsonCreator
   public MigrationConfig(
       @JsonProperty(OVERRIDE_ACCOUNT_MIGRATION_CONFIG) boolean overrideAccountMigrationConfig,

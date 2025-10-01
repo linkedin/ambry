@@ -104,6 +104,9 @@ public class AccountContainerTest {
   private List<Long> refContainerCacheTtlInSeconds;
   private List<Set<String>> refContainerUserMetadataKeysToNotPrefixInResponses;
 
+  // Migration config.
+  private List<MigrationConfig> refContainerMigrationConfigs;
+
   private List<String> newContainerFieldNames =
       Arrays.asList("cacheTtlInSecond", "userMetadataKeysToNotPrefixInResponse");
 
@@ -825,7 +828,7 @@ public class AccountContainerTest {
   }
 
   /**
-   * Test serialization with migration config.
+   * Test account metadata serialization with migration config.
    */
   @Test
   public void testAccountWithMigrationConfigSerDe() throws IOException {
@@ -843,6 +846,34 @@ public class AccountContainerTest {
     serializedAccountStr = mapper.writeValueAsString(accountWithoutMigrationConfig);
     deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
     assertNull("Migration config should be null", deserializedAccount.getMigrationConfig());
+  }
+
+  /**
+   * Test container metadata serialization with migration config.
+   */
+  @Test
+  public void testContainerWithMigrationConfigSerDe() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Container with dual async write percentage set.
+    MigrationConfig migrationConfig = new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
+    Container containerWithMigrationConfig = new ContainerBuilder(refContainers.get(0))
+        .setParentAccountId(refAccountId)
+        .setMigrationConfig(migrationConfig)
+        .build();
+    String serializedContainerStr = mapper.writeValueAsString(containerWithMigrationConfig);
+    Container deserializedContainer = mapper.readValue(serializedContainerStr, Container.class);
+    assertEquals("Async dual write percentage should match", migrationConfig.getWriteRamp().getDualWriteAndDeleteAsyncPct(),
+        deserializedContainer.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // Container with migration config not set.
+    Container containerWithoutMigrationConfig = new ContainerBuilder(refContainers.get(0))
+        .setParentAccountId(refAccountId)
+        .setMigrationConfig(null)
+        .build();
+    serializedContainerStr = mapper.writeValueAsString(containerWithoutMigrationConfig);
+    deserializedContainer = mapper.readValue(serializedContainerStr, Container.class);
+    assertNull("Migration config should be null", deserializedContainer.getMigrationConfig());
   }
 
   /**
@@ -1058,7 +1089,7 @@ public class AccountContainerTest {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, false, null, false,
           false, false, Collections.emptySet(), false, false, getRandomNamedBlobMode(), (short) 0, System.currentTimeMillis(),
-          System.currentTimeMillis(), 0, null, null, null);
+          System.currentTimeMillis(), 0, null, null, null, null);
     }, null);
   }
 
@@ -1105,6 +1136,7 @@ public class AccountContainerTest {
     refAccessControlAllowOriginValues = new ArrayList<>();
     refContainerCacheTtlInSeconds = new ArrayList<>();
     refContainerUserMetadataKeysToNotPrefixInResponses = new ArrayList<>();
+    refContainerMigrationConfigs = new ArrayList<>();
     Set<Short> containerIdSet = new HashSet<>();
     Set<String> containerNameSet = new HashSet<>();
     for (int i = 0; i < CONTAINER_COUNT; i++) {
@@ -1137,6 +1169,7 @@ public class AccountContainerTest {
       refContainerOverrideAccountAcls.add(random.nextBoolean());
       refContainerNamedBlobModes.add(getRandomNamedBlobMode());
       refContainerDeleteTriggerTime.add((long) 0);
+      refContainerMigrationConfigs.add(null);
       if (i == 0) {
         refContainerContentTypeAllowListForFilenamesOnDownloadValues.add(null);
         refContainerUserMetadataKeysToNotPrefixInResponses.add(null);
@@ -1168,7 +1201,7 @@ public class AccountContainerTest {
           refContainerOverrideAccountAcls.get(i), refContainerNamedBlobModes.get(i), refAccountId,
           refContainerDeleteTriggerTime.get(i), refContainerLastModifiedTimes.get(i),
           refContainerSnapshotVersions.get(i), refAccessControlAllowOriginValues.get(i),
-          refContainerCacheTtlInSeconds.get(i), refContainerUserMetadataKeysToNotPrefixInResponses.get(i)));
+          refContainerCacheTtlInSeconds.get(i), refContainerUserMetadataKeysToNotPrefixInResponses.get(i), refContainerMigrationConfigs.get(i)));
     }
   }
 

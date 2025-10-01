@@ -621,10 +621,10 @@ public class MySqlAccountServiceTest {
   }
 
   /**
-   * E3E test for migrationConfig persistence in MySqlAccountService.
+   * E2E test for account migrationConfig persistence in MySqlAccountService.
    */
   @Test
-  public void testMigrationConfigPersistence() throws Exception {
+  public void testAccountMigrationConfigPersistence() throws Exception {
     // Account with default migrationConfig.
     Account accountWithMigration = new AccountBuilder((short) 20, "e2eAccount", Account.AccountStatus.ACTIVE)
         .migrationConfig(new MigrationConfig(false, new MigrationConfig.WriteRamp(), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()))
@@ -659,6 +659,64 @@ public class MySqlAccountServiceTest {
   }
 
   /**
+   * E2E test for container migrationConfig persistence in MySqlAccountService.
+   */
+  @Test
+  public void testContainerMigrationConfigPersistence() throws Exception {
+    short parentAccountId = 30;
+    // Container with default migration config.
+    Container containerWithMigration = new ContainerBuilder((short) 1, "c1", Container.ContainerStatus.ACTIVE, "c1", (short) 1)
+        .setParentAccountId(parentAccountId)
+        .setMigrationConfig(new MigrationConfig())
+        .build();
+    Account accountToUpdate = new AccountBuilder(parentAccountId, "e2eAccount", Account.AccountStatus.ACTIVE)
+        .addOrUpdateContainer(containerWithMigration)
+        .build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountToUpdate));
+    when(mockMySqlAccountStore.getNewContainers(0)).thenReturn(Collections.singletonList(containerWithMigration));
+    mySqlAccountService = getAccountService();
+    Account loaded = mySqlAccountService.getAccountById(accountToUpdate.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    Container loadedContainer = loaded.getContainerById(containerWithMigration.getId());
+    assertNotNull("Container should be present", loadedContainer);
+    assertNotNull("migrationConfig should be present", loadedContainer.getMigrationConfig());
+
+    // Container with dual async write enabled in migrationConfig.
+    Container containerWithDualAsyncWrite = new ContainerBuilder((short) 2, "c2", Container.ContainerStatus.ACTIVE, "c2", (short) 1)
+        .setParentAccountId(parentAccountId)
+        .setMigrationConfig(new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 50.0, 0.0, 0.0, false), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()))
+        .build();
+    accountToUpdate = new AccountBuilder(parentAccountId, "e2eAccount1", Account.AccountStatus.ACTIVE)
+        .addOrUpdateContainer(containerWithDualAsyncWrite)
+        .build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountToUpdate));
+    when(mockMySqlAccountStore.getNewContainers(0)).thenReturn(Collections.singletonList(containerWithDualAsyncWrite));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(accountToUpdate.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    loadedContainer = loaded.getContainerById(containerWithDualAsyncWrite.getId());
+    assertNotNull("Container should be present", loadedContainer);
+    assertNotNull("migrationConfig should be present", loadedContainer.getMigrationConfig());
+    assertEquals("Dual async write should be set to 50%", 50.0,
+        loadedContainer.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.01);
+
+    // Container with migrationConfig not set (should be null)
+    Container containerWithoutMigration = new ContainerBuilder((short) 3, "c3", Container.ContainerStatus.ACTIVE, "c3", (short) 1)
+        .setParentAccountId(parentAccountId).build();
+    accountToUpdate = new AccountBuilder(parentAccountId, "e2eAccount2", Account.AccountStatus.ACTIVE)
+        .addOrUpdateContainer(containerWithoutMigration)
+        .build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(accountToUpdate));
+    when(mockMySqlAccountStore.getNewContainers(0)).thenReturn(Collections.singletonList(containerWithoutMigration));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(accountToUpdate.getId());
+    assertNotNull("Account should be loaded from MySQL", loaded);
+    loadedContainer = loaded.getContainerById(containerWithoutMigration.getId());
+    assertNotNull("Container should be present", loadedContainer);
+    assertNull("migrationConfig should be null", loadedContainer.getMigrationConfig());
+  }
+
+  /**
    * Test deserialization of legacy account JSON (without rampControl/secondaryEnabled).
    */
   @Test
@@ -679,6 +737,35 @@ public class MySqlAccountServiceTest {
     assertFalse("secondaryEnabled should default to false", legacyAccount.isSecondaryEnabled());
     // Migration config should be null.
     assertNull("migrationConfig should be null", legacyAccount.getMigrationConfig());
+  }
+
+  /**
+   * Test deserialization of legacy container JSON.
+   */
+  @Test
+  public void testLegacyContainerJsonDeserialization() throws Exception {
+    String legacyJson = "{" +
+        "\"containerId\":201," +
+        "\"containerName\":\"legacyContainer\"," +
+        "\"status\":\"ACTIVE\"," +
+        "\"parentAccountId\":101," +
+        "\"version\":1," +
+        "\"isCacheable\":false," +
+        "\"isMediaScanDisabled\":false," +
+        "\"replicationPolicy\":1," +
+        "\"replicationPeerType\":\"NONE\"," +
+        "\"replicationPeerName\":\"\"," +
+        "\"quotaInBytes\":-1," +
+        "\"deleted\":false}";
+    ObjectMapper mapper = new ObjectMapper();
+    Container legacyContainer = mapper.readValue(legacyJson, Container.class);
+    assertNotNull("Legacy container should be deserialized", legacyContainer);
+    assertEquals(201, legacyContainer.getId());
+    assertEquals("legacyContainer", legacyContainer.getName());
+    assertEquals(Container.ContainerStatus.ACTIVE, legacyContainer.getStatus());
+    assertEquals(101, legacyContainer.getParentAccountId());
+    // Migration config should be null.
+    assertNull("migrationConfig should be null", legacyContainer.getMigrationConfig());
   }
 
   /**
