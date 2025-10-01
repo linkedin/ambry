@@ -52,6 +52,7 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+import static com.github.ambry.rest.RestUtils.SubResource.*;
 
 
 /**
@@ -112,6 +113,7 @@ public class GetBlobHandler {
     private final RequestPath requestPath;
     private final SubResource subResource;
     private final GetBlobOptions options;
+    private String blobIdStr;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -144,7 +146,6 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.getBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr;
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           try {
             metrics.getDatasetVersionRate.mark();
@@ -157,7 +158,15 @@ public class GetBlobHandler {
         } else {
           blobIdStr = requestPath.getOperationOrBlobId(false);
         }
-        idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+        if (restRequest.getArgs().get(TARGET_ACCOUNT_KEY) == null && RequestPath.matchesOperation(blobIdStr,
+            Operations.NAMED_BLOB) && !Replicas.equals(subResource)) {
+          accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metricsGroup);
+          securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(null));
+        } else {
+          //we still need to keep the id converter as when subResource == Replica we have to go through id converter
+          //TODO: and since for regular blob id it does not go through the db, we will keep id converter logic as well
+          idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+        }
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
@@ -185,24 +194,30 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.getSecurityPostProcessRequestMetrics, result -> {
-        // inject encryption metrics if need be
-        if (BlobId.isEncrypted(blobId.getID())) {
-          RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
-          restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
-        }
         if (subResource == null) {
-          router.getBlob(blobId.getID(), options, routerCallback(),
-              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          if (blobId == null) {
+            router.getBlob(restRequest, blobIdStr, options, routerCallback(),
+                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          } else {
+            router.getBlob(null, blobId.getID(), options, routerCallback(),
+                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          }
         } else {
           switch (subResource) {
             case BlobInfo:
             case UserMetadata:
             case BlobChunkIds:
             case Segment:
-              router.getBlob(blobId.getID(), options, routerCallback(),
-                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              if (blobId == null) {
+                router.getBlob(restRequest, blobIdStr, options, routerCallback(),
+                    QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              } else {
+                router.getBlob(null, blobId.getID(), options, routerCallback(),
+                    QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              }
               break;
             case Replicas:
+              // when subresource is Replicas, the blobId won't be null.
               finalCallback.onCompletion(getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel), null);
               break;
             default:
@@ -222,6 +237,10 @@ public class GetBlobHandler {
             resultRef.set(result);
             accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
                 result.getBlobInfo().getBlobProperties(), metricsGroup);
+            if (result.getBlobInfo().getBlobProperties().isEncrypted()) {
+              RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
+              restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
+            }
             securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
                 securityProcessResponseCallback(result));
           }, restRequest.getUri(), LOGGER,

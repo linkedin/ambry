@@ -125,7 +125,7 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // Get Data Chunk List
-    GetBlobResult getChunkResult = router.getBlob(blobID,
+    GetBlobResult getChunkResult = router.getBlob(null, blobID,
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build(), null, null).get();
     List<StoreKey> chunkIds = getChunkResult.getBlobChunkIds();
 
@@ -134,7 +134,7 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
     for (int i = 0; i < chunkIds.size(); i++) {
       BlobId chunkId = (BlobId) chunkIds.get(i);
       GetBlobResult chunkResult =
-          router.getBlob(chunkId.getID(), new GetBlobOptionsBuilder().build(), null, null).get();
+          router.getBlob(null, chunkId.getID(), new GetBlobOptionsBuilder().build(), null, null).get();
       // last chunk
       if (i == chunkNumber - 1) {
         chunkSize = PUT_CONTENT_SIZE - maxPutChunkSize * i;
@@ -203,7 +203,7 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
       for (int i = 0; i < chunkNumber; i++) {
         Pair<String, Long> chunk = chunks.get(i);
         GetBlobResult chunkResult =
-            router.getBlob(chunk.getFirst(), new GetBlobOptionsBuilder().build(), null, null).get();
+            router.getBlob(null, chunk.getFirst(), new GetBlobOptionsBuilder().build(), null, null).get();
         // last chunk
         if (i == chunkNumber - 1) {
           chunkSize = PUT_CONTENT_SIZE - maxPutChunkSize * i;

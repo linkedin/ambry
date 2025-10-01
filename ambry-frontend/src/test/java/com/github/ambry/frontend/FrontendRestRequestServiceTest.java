@@ -4645,7 +4645,7 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+  public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
       QuotaChargeCallback quotaChargeCallback) {
     GetBlobResult result;
     switch (options.getOperationType()) {

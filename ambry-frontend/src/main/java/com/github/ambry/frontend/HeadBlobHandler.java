@@ -20,6 +20,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
@@ -78,6 +79,7 @@ public class HeadBlobHandler {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
+    private String blobIdStr;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -106,8 +108,13 @@ public class HeadBlobHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.headBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
-        idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+        blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
+        if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
+          securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(null));
+        } else {
+          //TODO remove it later for regular upload
+          idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+        }
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
@@ -137,16 +144,17 @@ public class HeadBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.headBlobSecurityPostProcessRequestMetrics, result -> {
         GetOption getOption = getGetOption(restRequest, frontendConfig.defaultRouterGetOption);
-        // inject encryption metrics if need be
-        if (BlobId.isEncrypted(blobId.getID())) {
-          RestRequestMetrics requestMetrics =
-              metrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
-          restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+        if (blobId == null) {
+          router.getBlob(restRequest, blobIdStr, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
+              .getOption(getOption)
+              .restRequest(restRequest)
+              .build(), routerCallback(), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
+        } else {
+          router.getBlob(null, blobId.getID(), new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
+              .getOption(getOption)
+              .restRequest(restRequest)
+              .build(), routerCallback(), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
         }
-        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
-            .getOption(getOption)
-            .restRequest(restRequest)
-            .build(), routerCallback(), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
@@ -159,6 +167,11 @@ public class HeadBlobHandler {
         LOGGER.debug("Head {}", getRequestPath(restRequest).getOperationOrBlobId(false));
         accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
             result.getBlobInfo().getBlobProperties(), metrics.headBlobMetricsGroup);
+        if (result.getBlobInfo().getBlobProperties().isEncrypted()) {
+          RestRequestMetrics restRequestMetrics =
+              metrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
+          restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
+        }
         securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
             securityProcessResponseCallback());
       }, restRequest.getUri(), LOGGER, (r, e) -> {

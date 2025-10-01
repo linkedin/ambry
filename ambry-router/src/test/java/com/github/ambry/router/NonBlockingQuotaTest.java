@@ -185,7 +185,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       expectedChargeCallbackCount += blobSize;
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+      router.getBlob(null, compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
           .get()
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
@@ -209,29 +209,29 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       setOperationParams();
 
       for (String blobId : blobIds) {
-        router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
+        router.getBlob(null, blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
         router.updateBlobTtl(null, blobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
-        router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
+        router.getBlob(null, blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
-        router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
+        router.getBlob(null, blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
             null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         router.deleteBlob(null, blobId, null, null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         try {
-          router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
+          router.getBlob(null, blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
           fail("Get blob should fail");
         } catch (ExecutionException e) {
           RouterException r = (RouterException) e.getCause();
           Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
           assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
         }
-        router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), null,
+        router.getBlob(null, blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), null,
             quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
-        router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), null,
+        router.getBlob(null, blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), null,
             quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
       }
@@ -254,7 +254,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 
       retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-      router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+      router.getBlob(null, stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
           .get()
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
@@ -341,7 +341,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       expectedChargeCallbackCount += blobSize;
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+      router.getBlob(null, compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
           .get()
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
@@ -396,7 +396,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
               quotaChargeCallback).get();
       assertEquals(0, listenerCalledCount.get());
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+      router.getBlob(null, compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
           .get()
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
@@ -458,7 +458,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       restRequest =
           createRestRequest(RestMethod.GET.name(), null, account, account.getAllContainers().iterator().next());
       quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
-      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+      router.getBlob(null, compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
           .get()
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
@@ -472,7 +472,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       Assert.assertEquals(8, quotaUsage.getRcu());
       retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       try {
-        router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
+        router.getBlob(null, compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
         if (quotaMode == QuotaMode.THROTTLING) {
           fail("getBlob should throw exception if request is be rejected by an enforcer and quota mode is throttling.");
         }

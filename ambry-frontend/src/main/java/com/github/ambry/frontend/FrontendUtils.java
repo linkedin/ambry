@@ -160,6 +160,19 @@ public class FrontendUtils {
     return group;
   }
 
+  static void checkIdVersion(String blobId) throws RestServiceException {
+    try {
+      if (BlobId.getVersion(blobId) < BlobId.BLOB_ID_V3) {
+        throw new RestServiceException("Blob IDs below V3 are no longer supported: " + blobId,
+            RestServiceErrorCode.BadRequest);
+      }
+    } catch (IOException | IllegalArgumentException e) {
+      // if the incoming id is media id
+      throw new RestServiceException("Input ID is not a valid blob ID (may be a media-server ID): " + blobId,
+          RestServiceErrorCode.BadRequest);
+    }
+  }
+
   /**
    * Refresh the OperationOrBlobId in request path with the specific latest version info.
    * @param restRequest the {@link RestRequest}

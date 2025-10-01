@@ -157,7 +157,7 @@ public class TtlUpdateHandlerTest {
    * @throws Exception
    */
   private void assertTtl(long expectedTtlSecs) throws Exception {
-    GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null,
+    GetBlobResult result = router.getBlob(null, blobId, new GetBlobOptionsBuilder().build(), null,
         QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);
     assertEquals("TTL not as expected", expectedTtlSecs,
         result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());

@@ -32,7 +32,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -229,12 +228,31 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+  public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
       QuotaChargeCallback quotaChargeCallback) {
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
+    if (restRequest != null) {
+      idConverter.convert(restRequest, blobId)
+          .whenComplete((convertedId, exception) -> {
+            if (exception != null) {
+              completeOperation(futureResult, callback, null, (Exception) exception);
+            } else {
+              // Continue with the normal getBlob flow using convertedId
+              doGetBlob(convertedId, options, callback, quotaChargeCallback, futureResult);
+            }
+          });
+      return futureResult;
+    }
+    // Direct path when blobIdStr is already provided
+    doGetBlob(blobId, options, callback, quotaChargeCallback, futureResult);
+    return futureResult;
+  }
+
+  private void doGetBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback, FutureResult<GetBlobResult> futureResult) {
     ReadableStreamChannel blobDataChannel = null;
     BlobInfo blobInfo = null;
     List<StoreKey> blobChunkIds = new ArrayList<>();
@@ -280,7 +298,6 @@ public class InMemoryRouter implements Router {
           exception == null ? new GetBlobResult(blobInfo, blobDataChannel, blobChunkIds) : null;
       completeOperation(futureResult, callback, operationResult, exception);
     }
-    return futureResult;
   }
 
   @Override

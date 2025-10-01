@@ -108,7 +108,7 @@ public class MockRestRequestService implements RestRequestService {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
       MockGetCallback callback = new MockGetCallback(this, restRequest, restResponseChannel);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
+      router.getBlob(null, blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
           callback, null);
     }
   }
@@ -178,7 +178,7 @@ public class MockRestRequestService implements RestRequestService {
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
+      router.getBlob(null, blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
           new MockHeadCallback(this, restRequest, restResponseChannel), null);
     }
   }

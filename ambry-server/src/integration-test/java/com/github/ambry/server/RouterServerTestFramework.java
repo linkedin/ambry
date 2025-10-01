@@ -317,7 +317,7 @@ class RouterServerTestFramework {
    */
   private void startGetBlobInfo(GetOption options, final boolean checkDeleted, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
-    Future<GetBlobResult> future = router.getBlob(opChain.blobId,
+    Future<GetBlobResult> future = router.getBlob(null, opChain.blobId,
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).getOption(options).build(),
         callback, quotaChargeCallback);
     TestFuture<GetBlobResult> testFuture =
@@ -342,7 +342,7 @@ class RouterServerTestFramework {
    */
   private void startGetBlob(GetOption options, final boolean checkDeleted, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
-    Future<GetBlobResult> future = router.getBlob(opChain.blobId,
+    Future<GetBlobResult> future = router.getBlob(null, opChain.blobId,
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).getOption(options).build(),
         callback, quotaChargeCallback);
     TestFuture<GetBlobResult> testFuture =
@@ -388,7 +388,7 @@ class RouterServerTestFramework {
       return;
     }
     // If everything good:
-    Future<GetBlobResult> future = router.getBlob(fraudId.getID(),
+    Future<GetBlobResult> future = router.getBlob(null, fraudId.getID(),
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
             .getOption(GetOption.Include_All)
             .build(), callback, quotaChargeCallback);

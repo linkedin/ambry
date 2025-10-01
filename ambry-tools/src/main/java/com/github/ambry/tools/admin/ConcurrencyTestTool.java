@@ -700,7 +700,7 @@ public class ConcurrencyTestTool {
       final FutureResult futureResult = new FutureResult();
       try {
         final Long startTimeGetBlobMs = SystemTime.getInstance().milliseconds();
-        router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), new Callback<GetBlobResult>() {
+        router.getBlob(null, blobIdStr, new GetBlobOptionsBuilder().build(), new Callback<GetBlobResult>() {
           @Override
           public void onCompletion(GetBlobResult getBlobResult, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeGetBlobMs;
