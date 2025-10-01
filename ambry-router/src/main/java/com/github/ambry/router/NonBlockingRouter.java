@@ -311,7 +311,6 @@ public class NonBlockingRouter implements Router {
       final Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
     // If blobIdStr is missing, resolve it first via idConverter
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    currentOperationsCount.incrementAndGet();
     if (restRequest != null) {
       idConverter.convert(restRequest, blobIdStr)
           .whenComplete((convertedId, exception) -> {
@@ -894,6 +893,7 @@ public class NonBlockingRouter implements Router {
     if (blobIdStr == null || options == null) {
       throw new IllegalArgumentException("blobId or options must not be null");
     }
+    currentOperationsCount.incrementAndGet();
     GetBlobOptionsInternal internalOptions =
         new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
             routerMetrics.ageAtGet);

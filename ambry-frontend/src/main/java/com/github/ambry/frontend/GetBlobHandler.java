@@ -158,9 +158,7 @@ public class GetBlobHandler {
         } else {
           blobIdStr = requestPath.getOperationOrBlobId(false);
         }
-        if (restRequest.getArgs().get(TARGET_ACCOUNT_KEY) == null && RequestPath.matchesOperation(blobIdStr,
-            Operations.NAMED_BLOB) && !Replicas.equals(subResource)) {
-          accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metricsGroup);
+        if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB) && !Replicas.equals(subResource)) {
           securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(null));
         } else {
           //we still need to keep the id converter as when subResource == Replica we have to go through id converter
