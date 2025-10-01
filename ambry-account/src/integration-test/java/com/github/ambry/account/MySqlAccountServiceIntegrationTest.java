@@ -2069,7 +2069,7 @@ public class MySqlAccountServiceIntegrationTest {
             new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
     Container containerWithMigrationConfig =
         new ContainerBuilder((short) 2, "migrationContainer", Container.ContainerStatus.ACTIVE, "migrationContainer",
-            (short) 126).migrationConfig(migrationConfig).build();
+            (short) 126).setMigrationConfig(migrationConfig).build();
     Account account =
         new AccountBuilder((short) 126, "containerMigrationAccount", Account.AccountStatus.ACTIVE).containers(
             Collections.singleton(containerWithMigrationConfig)).build();
@@ -2088,7 +2088,7 @@ public class MySqlAccountServiceIntegrationTest {
     MigrationConfig migrationConfig2 =
         new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 100.0, 0.0, 0.0, false),
             new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp());
-    Container updatedContainer = new ContainerBuilder(fetchedContainer).migrationConfig(migrationConfig2).build();
+    Container updatedContainer = new ContainerBuilder(fetchedContainer).setMigrationConfig(migrationConfig2).build();
     Account updatedAccount = new AccountBuilder(fetched).containers(Collections.singleton(updatedContainer)).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(updatedAccount));
 
@@ -2105,7 +2105,7 @@ public class MySqlAccountServiceIntegrationTest {
         fetchedContainer2.getMigrationConfig().getReadRamp().getShadowReadMetadataPct(), 0.001);
 
     // 5. Remove migration config (set to null)
-    Container removedContainer = new ContainerBuilder(fetchedContainer2).migrationConfig(null).build();
+    Container removedContainer = new ContainerBuilder(fetchedContainer2).setMigrationConfig(null).build();
     Account removedAccount = new AccountBuilder(fetched2).containers(Collections.singleton(removedContainer)).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(removedAccount));
 
