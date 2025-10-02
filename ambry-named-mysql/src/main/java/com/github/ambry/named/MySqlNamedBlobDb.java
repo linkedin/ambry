@@ -893,7 +893,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     }
 
     if (!staleBlobs.isEmpty()) {
-      logger.info("These are the stale blobs that will be marked for deletion: {} ", staleBlobs);
+      logger.info("These are the number of stale blobs that will be marked for deletion:  ", staleBlobs.size());
     }
 
     StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName =
@@ -984,7 +984,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         statement.addBatch();
       }
       int[] results = statement.executeBatch();
-      logger.debug("Batch soft delete completed. Number of blobs deleted: {}", results.length);
+      logger.info("Batch soft delete completed. Number of blobs deleted: {}", results.length);
     } catch (SQLException e) {
       logger.error("Failed to execute batch soft delete. Error: {}", e.getMessage());
       throw e;
