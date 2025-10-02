@@ -20,6 +20,7 @@ public class MysqlRepairRequestsDbConfig {
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
+  public final SSLConfig sslConfig;
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -44,5 +45,6 @@ public class MysqlRepairRequestsDbConfig {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
+    this.sslConfig = new SSLConfig(verifiableProperties);
   }
 }
