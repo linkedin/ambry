@@ -160,7 +160,7 @@ public abstract class AbstractAccountService implements AccountService {
     List<Container> existingUnchangedContainers = new ArrayList<>();
     // create a hashmap to map the name to existing containers in account
     Map<String, Container> existingContainersInAccount = new HashMap<>();
-    account.getAllContainers().forEach(c -> existingContainersInAccount.put(c.getName(), c));
+    account.getAllContainers().forEach(c -> existingContainersInAccount.put(c.getName().toLowerCase(), c));
 
     // Generate container ids for new containers
     int nextContainerId = account.getAllContainers()
@@ -173,7 +173,7 @@ public abstract class AbstractAccountService implements AccountService {
     for (Container container : containers) {
       if (container.getId() == Container.UNKNOWN_CONTAINER_ID) {
         // new container
-        Container existingContainer = existingContainersInAccount.get(container.getName());
+        Container existingContainer = existingContainersInAccount.get(container.getName().toLowerCase());
         if (existingContainer != null) {
           switch (existingContainer.getStatus()) {
             case INACTIVE:
@@ -219,7 +219,7 @@ public abstract class AbstractAccountService implements AccountService {
         }
       } else {
         // existing container
-        Container existingContainer = existingContainersInAccount.get(container.getName());
+        Container existingContainer = existingContainersInAccount.get(container.getName().toLowerCase());
         if (existingContainer == null) {
           throw new AccountServiceException(
               "In account " + accountName + ", container " + container.getName() + " does not exist (containerId "
