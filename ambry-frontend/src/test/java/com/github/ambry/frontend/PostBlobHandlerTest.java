@@ -26,6 +26,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
@@ -40,6 +41,7 @@ import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -48,8 +50,10 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.PutBlobOptionsBuilder;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.MockTime;
@@ -80,6 +84,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.frontend.FrontendRestRequestServiceTest.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
 
 
@@ -139,6 +145,8 @@ public class PostBlobHandlerTest {
   private final IdSigningService idSigningService;
   private FrontendConfig frontendConfig;
   private PostBlobHandler postBlobHandler;
+  private GetBlobHandler getBlobHandler;
+
   private String reservedMetadataId;
 
   public PostBlobHandlerTest(boolean isReservedMetadataEnabled) {
@@ -161,6 +169,7 @@ public class PostBlobHandlerTest {
       reservedMetadataId = null;
     }
     initPostBlobHandler(props);
+    initGetBlobHandler(props);
   }
 
   /**
@@ -207,6 +216,65 @@ public class PostBlobHandlerTest {
     doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired);
     doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1);
   }
+
+  @Test
+  public void postAndGetBlobTest() throws Exception {
+    int contentLength = 1024;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, -1, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+        CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName(), null);
+
+    byte[] content = TestUtils.getRandomBytes(contentLength);
+    RestRequest request = getRestRequest(headers, "/", content);
+    long creationTimeMs = System.currentTimeMillis();
+    time.setCurrentMilliseconds(creationTimeMs);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> future = new FutureResult<>();
+    idConverterFactory.lastInput = null;
+
+    // Post the blob
+    postBlobHandler.handle(request, restResponseChannel, future::done);
+    future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+    String blobIdFromPut = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+
+    // Retrieve the blob from the router
+    InMemoryRouter.InMemoryBlob blob = ((InMemoryRouter) router).getActiveBlobs().get(idConverterFactory.lastInput);
+    assertNotNull("Blob should not be null", blob);
+
+    // Validate the blob content
+    assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
+    assertEquals("Unexpected ttl stored", -1, blob.getBlobProperties().getTimeToLiveInSeconds());
+    assertEquals("Invalid blob size", contentLength, blob.getBlobProperties().getBlobSize());
+
+    // Get the blob
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.BLOB_ID, blobIdFromPut);
+    RestRequest getRequest = createRestRequest(RestMethod.GET, blobIdFromPut, headers, null);
+    restResponseChannel = new MockRestResponseChannel();
+    RequestPath requestPath = RequestPath.parse(getRequest, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME);
+
+    // Create a callback to handle the result or exception
+    FutureResult<ReadableStreamChannel> getFuture = new FutureResult<>();
+
+    Callback<ReadableStreamChannel> callback = (result, exception) -> {
+      if (exception != null) {
+        getFuture.done(null, exception); // Complete the future with the exception
+      } else {
+        getFuture.done(result, null); // Complete the future with the result
+      }
+    };
+
+    // Call the handle method with the proper callback
+    getBlobHandler.handle(requestPath, getRequest, restResponseChannel, callback);
+
+    // Wait for the future to complete
+    getFuture.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+    InMemoryRouter.InMemoryBlob blobFromGet = router.getActiveBlobs().get(blobIdFromPut);
+    assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
+    // Validate the response
+    assertEquals("Invalid response", ResponseStatus.Ok, restResponseChannel.getStatus());
+  }
+
 
   /**
    * Test flows related to chunk uploads (for stitched uploads)
@@ -322,6 +390,13 @@ public class PostBlobHandlerTest {
     postBlobHandler =
         new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
             idSigningService, router, injector, time, frontendConfig, metrics, CLUSTER_NAME, QUOTA_MANAGER);
+  }
+
+  private void initGetBlobHandler(Properties properties) {
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    frontendConfig = new FrontendConfig(verifiableProperties);
+    getBlobHandler = new GetBlobHandler(frontendConfig, router, securityServiceFactory.getSecurityService(),
+        idConverterFactory.getIdConverter(), injector, metrics, CLUSTER_MAP, QUOTA_MANAGER, ACCOUNT_SERVICE);
   }
 
   // ttlRequiredEnforcementTest() helpers
@@ -602,7 +677,7 @@ public class PostBlobHandlerTest {
    */
   private RestRequest getRestRequest(JSONObject headers, String path, byte[] requestBody)
       throws UnsupportedEncodingException, URISyntaxException, RestServiceException {
-    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, path, headers,
+    RestRequest request = createRestRequest(RestMethod.POST, path, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(requestBody), null)));
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));

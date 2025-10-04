@@ -76,7 +76,7 @@ class PerfRouter implements Router {
   }
 
   @Override
-  public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
       QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received getBlob call");
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();

@@ -307,6 +307,58 @@ public class NonBlockingRouter implements Router {
    * {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
   @Override
+  public Future<GetBlobResult> getBlob(String blobIdStr, GetBlobOptions options, final Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    if (blobIdStr == null || options == null) {
+      throw new IllegalArgumentException("blobId or options must not be null");
+    }
+    currentOperationsCount.incrementAndGet();
+    final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
+    GetBlobOptionsInternal internalOptions =
+        new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
+            routerMetrics.ageAtGet);
+    routerMetrics.operationQueuingRate.mark();
+    try {
+      if (isOpen.get()) {
+        if (notFoundCache.getIfPresent(blobIdStr) != null) {
+          // If we know that blob doesn't exist, complete the operation.
+          logger.info("Blob {} is known to be missing in servers", blobIdStr);
+          RouterException routerException;
+          if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+            routerException = new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
+                RouterErrorCode.BlobDoesNotExist);
+          } else {
+            routerException = new RouterException("GetBlobOperation failed because of BlobNotFound",
+                RouterErrorCode.BlobDoesNotExist);
+          }
+          completeOperation(futureResult, callback, null, routerException);
+        } else {
+          getOperationController().getBlob(blobIdStr, internalOptions,
+              new BlobOperationCallbackWrapper<>(blobIdStr, (getBlobResult, exception) -> {
+                futureResult.done(getBlobResult, exception);
+                if (callback != null) {
+                  callback.onCompletion(getBlobResult, exception);
+                }
+              }), quotaChargeCallback);
+        }
+      } else {
+        boolean isEncrypted = false;
+        try {
+          isEncrypted = BlobId.isEncrypted(blobIdStr);
+        } catch (IOException e) {
+          logger.warn("Blob ID string is not valid", e);
+        }
+        RouterException routerException =
+            new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+        completeGetBlobOperation(routerException, internalOptions, futureResult, callback, isEncrypted);
+      }
+    } catch (RouterException e) {
+      completeGetBlobOperation(e, internalOptions, futureResult, callback, false);
+    }
+    return futureResult;
+  }
+
+  @Override
   public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobIdStr, GetBlobOptions options,
       final Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
     // If blobIdStr is missing, resolve it first via idConverter
@@ -318,14 +370,13 @@ public class NonBlockingRouter implements Router {
               completeOperation(futureResult, callback, null, (Exception) exception);
             } else {
               // Continue with the normal getBlob flow using convertedId
-              doGetBlob(convertedId, options, callback, quotaChargeCallback, futureResult);
+              getBlob(convertedId, options, callback, quotaChargeCallback);
             }
           });
       return futureResult;
     }
     // Direct path when blobIdStr is already provided
-    doGetBlob(blobIdStr, options, callback, quotaChargeCallback, futureResult);
-    return futureResult;
+    return getBlob(blobIdStr, options, callback, quotaChargeCallback);
   }
 
   /**

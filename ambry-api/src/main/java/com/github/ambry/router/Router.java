@@ -38,7 +38,6 @@ public interface Router extends Closeable {
    * Requests for the blob (info, data, or both) asynchronously and invokes the {@link Callback} when the request
    * completes.
    *
-   * @param restRequest
    * @param blobId              The ID of the blob for which blob data is requested.
    * @param options             The options associated with the request. This cannot be null.
    * @param callback            The callback which will be invoked on the completion of the request.
@@ -46,7 +45,7 @@ public interface Router extends Closeable {
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either the
    * {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
-  Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+  Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
       QuotaChargeCallback quotaChargeCallback);
 
   /**
@@ -149,8 +148,13 @@ public interface Router extends Closeable {
    */
   default CompletableFuture<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
     CompletableFuture<GetBlobResult> future = new CompletableFuture<>();
-    getBlob(null, blobId, options, CallbackUtils.fromCompletableFuture(future), null);
+    getBlob(blobId, options, CallbackUtils.fromCompletableFuture(future), null);
     return future;
+  }
+
+  default Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    return getBlob(blobId, options, callback, quotaChargeCallback);
   }
 
   /**

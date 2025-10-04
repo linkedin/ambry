@@ -390,14 +390,14 @@ public class GetManagerTest {
     GetBlobOptions dataOptions = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build();
     for (int i = 0; i < 5; i++) {
       if (i == 1) {
-        getBlobInfoFutures.add(router.getBlob(null, blobId, infoOptions, new Callback<GetBlobResult>() {
+        getBlobInfoFutures.add(router.getBlob(blobId, infoOptions, new Callback<GetBlobResult>() {
           @Override
           public void onCompletion(GetBlobResult result, Exception exception) {
             getBlobInfoCallbackCalled.countDown();
             throw new RuntimeException("Throwing an exception in the user callback");
           }
         }, quotaChargeCallback));
-        getBlobDataFutures.add(router.getBlob(null, blobId, dataOptions, getBlobCallback, quotaChargeCallback));
+        getBlobDataFutures.add(router.getBlob(blobId, dataOptions, getBlobCallback, quotaChargeCallback));
       } else {
         getBlobInfoFutures.add(router.getBlob(blobId, infoOptions));
         getBlobDataFutures.add(router.getBlob(blobId, dataOptions));
