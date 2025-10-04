@@ -228,77 +228,77 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
       QuotaChargeCallback quotaChargeCallback) {
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    if (!handlePrechecks(futureResult, callback)) {
-      return futureResult;
-    }
-    if (restRequest != null) {
-      idConverter.convert(restRequest, blobId)
-          .whenComplete((convertedId, exception) -> {
-            if (exception != null) {
-              completeOperation(futureResult, callback, null, (Exception) exception);
-            } else {
-              // Continue with the normal getBlob flow using convertedId
-              doGetBlob(convertedId, options, callback, quotaChargeCallback, futureResult);
+    {
+      ReadableStreamChannel blobDataChannel = null;
+      BlobInfo blobInfo = null;
+      List<StoreKey> blobChunkIds = new ArrayList<>();
+      Exception exception = null;
+      try {
+        checkBlobId(blobId);
+        if (deletedBlobs.contains(blobId) && !ALLOW_DELETED_BLOB_GET.contains(options.getGetOption())) {
+          exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
+        } else if (!blobs.containsKey(blobId)) {
+          exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+        } else {
+          InMemoryBlob blob = blobs.get(blobId);
+          long expiresAtMs = Utils.addSecondsToEpochTime(blob.getBlobProperties().getCreationTimeInMs(),
+              blob.getBlobProperties().getTimeToLiveInSeconds());
+          if (expiresAtMs == Utils.Infinite_Time || expiresAtMs > SystemTime.getInstance().milliseconds()
+              || ALLOW_EXPIRED_BLOB_GET.contains(options.getGetOption())) {
+            switch (options.getOperationType()) {
+              case Data:
+                blobDataChannel = new ByteBufferRSC(blob.getBlob(options));
+                break;
+              case BlobInfo:
+                blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+                break;
+              case BlobChunkIds:
+                blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+                blobChunkIds = new ArrayList<>(mockedBlobChunkIds);
+                break;
+              case All:
+                blobDataChannel = new ByteBufferRSC(blob.getBlob(options));
+                blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+                break;
             }
-          });
-      return futureResult;
+          } else {
+            exception = new RouterException("Blob expired", RouterErrorCode.BlobExpired);
+          }
+        }
+      } catch (RouterException e) {
+        exception = e;
+      } catch (Exception e) {
+        exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+      } finally {
+        GetBlobResult operationResult =
+            exception == null ? new GetBlobResult(blobInfo, blobDataChannel, blobChunkIds) : null;
+        completeOperation(futureResult, callback, operationResult, exception);
+      }
     }
-    // Direct path when blobIdStr is already provided
-    doGetBlob(blobId, options, callback, quotaChargeCallback, futureResult);
     return futureResult;
   }
 
-  private void doGetBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
-      QuotaChargeCallback quotaChargeCallback, FutureResult<GetBlobResult> futureResult) {
-    ReadableStreamChannel blobDataChannel = null;
-    BlobInfo blobInfo = null;
-    List<StoreKey> blobChunkIds = new ArrayList<>();
-    Exception exception = null;
-    try {
-      checkBlobId(blobId);
-      if (deletedBlobs.contains(blobId) && !ALLOW_DELETED_BLOB_GET.contains(options.getGetOption())) {
-        exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
-      } else if (!blobs.containsKey(blobId)) {
-        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
-      } else {
-        InMemoryBlob blob = blobs.get(blobId);
-        long expiresAtMs = Utils.addSecondsToEpochTime(blob.getBlobProperties().getCreationTimeInMs(),
-            blob.getBlobProperties().getTimeToLiveInSeconds());
-        if (expiresAtMs == Utils.Infinite_Time || expiresAtMs > SystemTime.getInstance().milliseconds()
-            || ALLOW_EXPIRED_BLOB_GET.contains(options.getGetOption())) {
-          switch (options.getOperationType()) {
-            case Data:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob(options));
-              break;
-            case BlobInfo:
-              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
-              break;
-            case BlobChunkIds:
-              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
-              blobChunkIds = new ArrayList<>(mockedBlobChunkIds);
-              break;
-            case All:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob(options));
-              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
-              break;
-          }
+  @Override
+  public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options,
+      Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
+    final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
+    if (restRequest != null) {
+      idConverter.convert(restRequest, blobId).whenComplete((convertedId, exception) -> {
+        if (exception != null) {
+          completeOperation(futureResult, callback, null, (Exception) exception);
         } else {
-          exception = new RouterException("Blob expired", RouterErrorCode.BlobExpired);
+          // Continue with the normal getBlob flow using convertedId
+          getBlob(convertedId, options, callback, quotaChargeCallback);
         }
-      }
-    } catch (RouterException e) {
-      exception = e;
-    } catch (Exception e) {
-      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-    } finally {
-      GetBlobResult operationResult =
-          exception == null ? new GetBlobResult(blobInfo, blobDataChannel, blobChunkIds) : null;
-      completeOperation(futureResult, callback, operationResult, exception);
+      });
     }
+    // Direct path when blobIdStr is already provided
+    return getBlob(blobId, options, callback, quotaChargeCallback);
   }
+
 
   @Override
   public Future<String> putBlob(RestRequest restRequest, BlobProperties blobProperties, byte[] usermetadata,

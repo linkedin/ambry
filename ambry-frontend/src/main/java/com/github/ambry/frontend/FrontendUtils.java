@@ -160,7 +160,6 @@ public class FrontendUtils {
     return group;
   }
 
-
   /**
    * Refresh the OperationOrBlobId in request path with the specific latest version info.
    * @param restRequest the {@link RestRequest}

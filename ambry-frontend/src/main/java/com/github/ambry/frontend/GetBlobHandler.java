@@ -197,7 +197,7 @@ public class GetBlobHandler {
             router.getBlob(restRequest, blobIdStr, options, routerCallback(),
                 QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
           } else {
-            router.getBlob(null, blobId.getID(), options, routerCallback(),
+            router.getBlob(blobId.getID(), options, routerCallback(),
                 QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
           }
         } else {
@@ -210,7 +210,7 @@ public class GetBlobHandler {
                 router.getBlob(restRequest, blobIdStr, options, routerCallback(),
                     QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
               } else {
-                router.getBlob(null, blobId.getID(), options, routerCallback(),
+                router.getBlob(blobId.getID(), options, routerCallback(),
                     QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
               }
               break;
