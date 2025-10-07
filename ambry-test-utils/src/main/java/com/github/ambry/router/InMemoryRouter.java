@@ -234,6 +234,32 @@ public class InMemoryRouter implements Router {
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
+    getBlobHelper(blobId, options, callback, quotaChargeCallback, futureResult);
+    return futureResult;
+  }
+
+  @Override
+  public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options,
+      Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
+    final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
+    if (!handlePrechecks(futureResult, callback)) {
+      return futureResult;
+    }
+    if (restRequest != null) {
+      idConverter.convert(restRequest, blobId).whenComplete((convertedId, exception) -> {
+        if (exception != null) {
+          completeOperation(futureResult, callback, null, (Exception) exception);
+        } else {
+          // Continue with the normal getBlob flow using convertedId
+          getBlobHelper(convertedId, options, callback, quotaChargeCallback, futureResult);
+        }
+      });
+    }
+    return futureResult;
+  }
+
+  private void getBlobHelper(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback, FutureResult<GetBlobResult> futureResult) {
     ReadableStreamChannel blobDataChannel = null;
     BlobInfo blobInfo = null;
     List<StoreKey> blobChunkIds = new ArrayList<>();
@@ -279,27 +305,6 @@ public class InMemoryRouter implements Router {
           exception == null ? new GetBlobResult(blobInfo, blobDataChannel, blobChunkIds) : null;
       completeOperation(futureResult, callback, operationResult, exception);
     }
-
-    return futureResult;
-  }
-
-  @Override
-  public Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options,
-      Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
-    final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    if (restRequest != null) {
-      idConverter.convert(restRequest, blobId).whenComplete((convertedId, exception) -> {
-        if (exception != null) {
-          completeOperation(futureResult, callback, null, (Exception) exception);
-        } else {
-          // Continue with the normal getBlob flow using convertedId
-          getBlob(convertedId, options, futureResult::done, quotaChargeCallback);
-        }
-      });
-      return futureResult;
-    }
-    // Direct path when blobIdStr is already provided
-    return getBlob(blobId, options, callback, quotaChargeCallback);
   }
 
 
