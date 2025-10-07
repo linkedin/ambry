@@ -293,7 +293,7 @@ public class InMemoryRouter implements Router {
           completeOperation(futureResult, callback, null, (Exception) exception);
         } else {
           // Continue with the normal getBlob flow using convertedId
-          getBlob(convertedId, options, callback, quotaChargeCallback);
+          getBlob(convertedId, options, futureResult::done, quotaChargeCallback);
         }
       });
       return futureResult;

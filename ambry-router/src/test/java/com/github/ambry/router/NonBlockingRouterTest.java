@@ -1195,7 +1195,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, false,
               false);
       String blobId = router.putBlob(putRequest, putBlobProperties, putUserMetadata, putChannel,
-          new PutBlobOptionsBuilder().build(), null, null).get();
+          new PutBlobOptionsBuilder().build(), null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // Wait for PUT to complete
       putCompletedLatch.await();
@@ -1218,7 +1218,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
               true);
       GetBlobResult getBlobResult =
           router.getBlob(getRequest, (String) getRequest.getArgs().get(BLOB_ID), new GetBlobOptionsBuilder().build(),
-              null, null).get();
+              null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // Validate the result
       Assert.assertEquals("Blob size should match", PUT_CONTENT_SIZE,
