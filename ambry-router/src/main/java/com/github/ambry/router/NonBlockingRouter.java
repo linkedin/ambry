@@ -939,56 +939,6 @@ public class NonBlockingRouter implements Router {
     }
   }
 
-  private void doGetBlob(String blobIdStr, GetBlobOptions options, Callback<GetBlobResult> callback,
-      QuotaChargeCallback quotaChargeCallback, FutureResult<GetBlobResult> futureResult) {
-    if (blobIdStr == null || options == null) {
-      throw new IllegalArgumentException("blobId or options must not be null");
-    }
-    currentOperationsCount.incrementAndGet();
-    GetBlobOptionsInternal internalOptions =
-        new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
-            routerMetrics.ageAtGet);
-    routerMetrics.operationQueuingRate.mark();
-
-    try {
-      if (isOpen.get()) {
-        if (notFoundCache.getIfPresent(blobIdStr) != null) {
-          logger.info("Blob {} is known to be missing in servers", blobIdStr);
-          RouterException routerException;
-          if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-            routerException = new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
-                RouterErrorCode.BlobDoesNotExist);
-          } else {
-            routerException = new RouterException("GetBlobOperation failed because of BlobNotFound",
-                RouterErrorCode.BlobDoesNotExist);
-          }
-          completeOperation(futureResult, callback, null, routerException);
-        } else {
-          getOperationController().getBlob(blobIdStr, internalOptions,
-              new BlobOperationCallbackWrapper<>(blobIdStr, (getBlobResult, exception) -> {
-                futureResult.done(getBlobResult, exception);
-                if (callback != null) {
-                  callback.onCompletion(getBlobResult, exception);
-                }
-              }), quotaChargeCallback);
-        }
-      } else {
-        boolean isEncrypted = false;
-        try {
-          isEncrypted = BlobId.isEncrypted(blobIdStr);
-        } catch (IOException e) {
-          logger.warn("Blob ID string is not valid", e);
-        }
-        RouterException routerException =
-            new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-        completeGetBlobOperation(routerException, internalOptions, futureResult, callback, isEncrypted);
-      }
-    } catch (RouterException e) {
-      completeGetBlobOperation(e, internalOptions, futureResult, callback, false);
-    }
-  }
-
-
   /**
    * Initiate the shutdown of all the OperationControllers. This method can get executed in the context of
    * both the calling thread of the {@link #close()} method, and the RequestResponseHandler thread of any of the
