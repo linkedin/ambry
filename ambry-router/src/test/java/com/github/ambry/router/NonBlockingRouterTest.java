@@ -37,6 +37,7 @@ import com.github.ambry.frontend.IdConverterFactory;
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.NetworkClientFactory;
@@ -82,6 +83,7 @@ import java.util.PrimitiveIterator;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -124,6 +126,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   protected static MysqlRepairRequestsDb repairDb = null;
   protected static MockTime staticMockTime = new MockTime();
+
   /**
    * Initialize parameters common to all tests.
    * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
@@ -148,8 +151,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2, false}, {false, MessageFormatRecord.Metadata_Content_Version_V3, false}, {true, MessageFormatRecord.Metadata_Content_Version_V2, false}, {true, MessageFormatRecord.Metadata_Content_Version_V3, false}});
+    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2, false},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3, false},
+        {true, MessageFormatRecord.Metadata_Content_Version_V2, false},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3, false}});
   }
 
   /**
@@ -1138,6 +1143,97 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
   }
 
+  @Test
+  public void testPutAndGetNamedBlob() throws Exception {
+    CountDownLatch putCompletedLatch = new CountDownLatch(1);
+    final AtomicInteger putInitiated = new AtomicInteger();
+    final AtomicReference<String> storedBlobId = new AtomicReference<>();
+    final AtomicReference<Long> storedBlobSize = new AtomicReference<>();
+
+    Properties props = getNonBlockingRouterProperties(localDcName);
+    LoggingNotificationSystem putTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
+          NotificationBlobType notificationBlobType) {
+        putInitiated.incrementAndGet();
+      }
+    };
+
+    // Setup mock IdConverterFactory
+    IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
+
+    // Mock IdConverter for PUT operation
+    IdConverter mockIdConverter = mock(IdConverter.class);
+    when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
+      FutureResult<String> futureResult = new FutureResult<>();
+      String blobId = invocation.getArgument(1);
+      BlobProperties blobProperties = invocation.getArgument(2);
+      Callback<String> callback = invocation.getArgument(3);
+      storedBlobId.set(blobId); // Store the blobId from the PUT operation
+      storedBlobSize.set(blobProperties.getBlobSize());
+      if (callback != null) {
+        callback.onCompletion(blobId, null);
+      }
+      futureResult.done(blobId, null);
+      putCompletedLatch.countDown(); // Signal that PUT is complete
+      return futureResult;
+    });
+
+    // Configure the factory to return the appropriate mock
+    when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
+
+    setRouterWithIdConverterFactory(props, new MockServerLayout(mockClusterMap), putTrackingNotificationSystem,
+        mockIdConverterFactory);
+
+    try {
+      // Create a named blob (PUT operation)
+      final String ACCOUNT_NAME = "accountName";
+      final String CONTAINER_NAME = "containerName";
+      final String BLOB_NAME = "blobName";
+      setOperationParams();
+      RestRequest putRequest =
+          createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, false,
+              false);
+      String blobId = router.putBlob(putRequest, putBlobProperties, putUserMetadata, putChannel,
+          new PutBlobOptionsBuilder().build(), null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // Wait for PUT to complete
+      putCompletedLatch.await();
+
+      // Mock IdConverter for GET operation
+      when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
+        CompletableFuture<String> completableFuture = new CompletableFuture<>();
+        String blobIdFromPut = storedBlobId.get(); // Return the stored blobId for the GET operation
+        if (blobIdFromPut != null) {
+          completableFuture.complete(blobIdFromPut); // Complete the CompletableFuture with the blobId
+        } else {
+          completableFuture.completeExceptionally(new IllegalStateException("Blob ID is not set"));
+        }
+        return completableFuture;
+      });
+
+      // Perform the getBlob operation
+      RestRequest getRequest =
+          createNamedBlobRestRequest(RestMethod.GET, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, false,
+              true);
+      GetBlobResult getBlobResult =
+          router.getBlob(getRequest, (String) getRequest.getArgs().get(BLOB_ID), new GetBlobOptionsBuilder().build(),
+              null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // Validate the result
+      Assert.assertEquals("Blob size should match", PUT_CONTENT_SIZE,
+          getBlobResult.getBlobInfo().getBlobProperties().getBlobSize());
+      Assert.assertNotNull("Blob properties should not be null", getBlobResult.getBlobInfo().getBlobProperties());
+      Assert.assertNotNull("User metadata should not be null", getBlobResult.getBlobInfo().getUserMetadata());
+
+    } finally {
+      if (router != null) {
+        router.close();
+        assertClosed();
+      }
+    }
+  }
+
   /**
    * Test named blob stitch after we move id converter into router.
    */
@@ -1145,6 +1241,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testStitchedNamedBlob() throws Exception {
     try {
       final AtomicInteger stitchInitiated = new AtomicInteger();
+      CountDownLatch stitchCompletedLatch = new CountDownLatch(1);
       Properties props = getNonBlockingRouterProperties(localDcName);
       LoggingNotificationSystem updateTtlTrackingNotificationSystem = new LoggingNotificationSystem() {
         @Override
@@ -1165,6 +1262,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           callback.onCompletion(blobId, null);
         }
         futureResult.done(blobId, null);
+        stitchCompletedLatch.countDown();
         return futureResult;
       });
 
@@ -1184,14 +1282,30 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       final String BLOB_NAME = "blobName";
       setOperationParams();
       RestRequest request =
-          createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, true);
+          createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, true, false);
 
       String stitchedBlobId = router.stitchBlob(request, putBlobProperties, putUserMetadata, blobIds.stream()
           .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
           .collect(Collectors.toList()), null, null, null).get();
 
+
+      // Wait for stitch to complete
+      stitchCompletedLatch.await();
+
+      // Mock IdConverter for GET operation
+      when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
+        CompletableFuture<String> completableFuture = new CompletableFuture<>();
+        String blobIdFromStitch = stitchedBlobId; // Return the stored blobId for the GET operation
+        if (blobIdFromStitch != null) {
+          completableFuture.complete(blobIdFromStitch); // Complete the CompletableFuture with the blobId
+        } else {
+          completableFuture.completeExceptionally(new IllegalStateException("Blob ID is not set"));
+        }
+        return completableFuture;
+      });
+
       GetBlobResult getBlobResult =
-          router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
+          router.getBlob(request, stitchedBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
 
       Assert.assertEquals("Blob Size should match", PUT_CONTENT_SIZE * 2,
           getBlobResult.getBlobInfo().getBlobProperties().getBlobSize());
@@ -1209,7 +1323,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       });
 
       request =
-          createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, false);
+          createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, false, false,
+              false);
       router.deleteBlob(request, null, "deleteServiceId", null, null).get();
     } finally {
       if (router != null) {
@@ -1265,10 +1380,24 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       //put blob
       setOperationParams();
       RestRequest request =
-          createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, true, false);
+          createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false, true, false, false);
       String blobIdFromRouter =
           router.putBlob(request, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
               null, null).get();
+
+      //get blob
+      // Mock IdConverter for GET operation
+      when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
+        CompletableFuture<String> completableFuture = new CompletableFuture<>();
+        String blobIdFromStitch = blobIdFromRouter; // Return the stored blobId for the GET operation
+        if (blobIdFromStitch != null) {
+          completableFuture.complete(blobIdFromStitch); // Complete the CompletableFuture with the blobId
+        } else {
+          completableFuture.completeExceptionally(new IllegalStateException("Blob ID is not set"));
+        }
+        return completableFuture;
+      });
+
       GetBlobResult getBlobResult =
           router.getBlob(blobIdFromRouter, new GetBlobOptionsBuilder().build(), null, null).get();
       Assert.assertEquals(getBlobResult.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds(), TTL_SECS);
@@ -1285,14 +1414,16 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         return futureResult;
       });
       // ttl update
-      request = createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, true, false, false);
+      request = createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, true, false, false,
+          false);
       router.updateBlobTtl(request, RestUtils.getHeader(request.getArgs(), RestUtils.Headers.BLOB_ID, true),
           updateTtlServiceId, -1, null, null).get();
+
       getBlobResult = router.getBlob(blobIdFromRouter, new GetBlobOptionsBuilder().build(), null, null).get();
       Assert.assertEquals(getBlobResult.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds(),
           Utils.Infinite_Time);
       request = createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME,
-          false, false, false);
+          false, false, false, false);
       router.deleteBlob(request, null, "deleteServiceId", null, null).get();
       long waitStart = SystemTime.getInstance().milliseconds();
       while (router.getBackgroundOperationsCount() != 0
@@ -1368,14 +1499,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       for (int i = 0; i < NUM_VERSIONS; i++) {
         setOperationParams();
         RestRequest request = createNamedBlobRestRequest(RestMethod.PUT, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, false,
-            true, false);
+            true, false, false);
         String blobId =
             router.putBlob(request, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
                 null, null).get();
         blobIds.add(blobId);
       }
       RestRequest request = createNamedBlobRestRequest(RestMethod.DELETE, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME,
-          false, false, false);
+          false, false, false, false);
       router.deleteBlob(request, null, deleteServiceId, null, null).get();
       long waitStart = SystemTime.getInstance().milliseconds();
       while (router.getBackgroundOperationsCount() != 0
@@ -1388,6 +1519,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       Assert.assertEquals("The delete service ID should match the expected value", deleteServiceId,
           receivedDeleteServiceId.get());
       Assert.assertEquals("Get should have been skipped", NUM_VERSIONS, routerMetrics.skippedGetBlobCount.getCount());
+
       // Now try to get the blob ids, expected not found
       for (String blobId : blobIds) {
         try {
@@ -2818,7 +2950,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   private RestRequest createNamedBlobRestRequest(RestMethod method, String accountName, String containerName,
-      String blobName, boolean isTtlUpdate, boolean isTemporary, boolean isStitchRequest) throws Exception {
+      String blobName, boolean isTtlUpdate, boolean isTemporary, boolean isStitchRequest, boolean isGetRequest) throws Exception {
     JSONObject headers = new JSONObject();
     JSONObject request = new JSONObject();
     request.put(MockRestRequest.REST_METHOD_KEY, method.name());
@@ -2830,6 +2962,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       headers.put(BLOB_ID,
           String.format("/%s/%s/%s/%s", Operations.NAMED_BLOB, accountName, containerName, blobName));
       request.put(MockRestRequest.URI_KEY, Operations.STITCH);
+    } else if (isGetRequest) {
+      headers.put(BLOB_ID,
+          String.format("/%s/%s/%s/%s", Operations.NAMED_BLOB, accountName, containerName, blobName));
+      request.put(MockRestRequest.URI_KEY, Operations.NAMED_BLOB);
     } else {
       if (isTemporary) {
         headers.put(RestUtils.Headers.TTL, TTL_SECS);
