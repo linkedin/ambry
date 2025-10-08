@@ -771,7 +771,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase1NoPagination() throws Exception {
-
     String[] trackedBlobIds = new String[3];
     for (int i = 0; i < 6; i++) {
       String blobId = "blob-id" + (i + 1);
@@ -781,7 +780,6 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
       if (i % 2 == 0) {
         trackedBlobIds[i / 2] = blobId;
       }
-
       time.sleep(5);
     }
 
