@@ -776,10 +776,12 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
       String blobId = "blob-id" + (i + 1);
       NamedBlobState state = (i % 2 == 0) ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
       String cleaner = "new_cleaner" + ((i / 2) + 1);
+
       NamedBlobRecord record = createAndPutNamedBlob(blobId, state, cleaner);
       if (i % 2 == 0) {
         trackedBlobIds[i / 2] = blobId;
       }
+
       time.sleep(5);
     }
 
