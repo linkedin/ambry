@@ -771,12 +771,12 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    */
   @Test
   public void testMultiBlobNamesCase1NoPagination() throws Exception {
+
     String[] trackedBlobIds = new String[3];
     for (int i = 0; i < 6; i++) {
       String blobId = "blob-id" + (i + 1);
       NamedBlobState state = (i % 2 == 0) ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
       String cleaner = "new_cleaner" + ((i / 2) + 1);
-
       NamedBlobRecord record = createAndPutNamedBlob(blobId, state, cleaner);
       if (i % 2 == 0) {
         trackedBlobIds[i / 2] = blobId;
