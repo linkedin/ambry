@@ -22,7 +22,6 @@ import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -35,7 +34,10 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Router;
+import com.github.ambry.utils.Pair;
+import java.io.IOException;
 import java.util.GregorianCalendar;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,10 +62,11 @@ public class DeleteBlobHandler {
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
   private final AccountService accountService;
+  private final IdSigningService idSigningService;
 
   DeleteBlobHandler(Router router, SecurityService securityService, IdConverter idConverter,
       AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      QuotaManager quotaManager, AccountService accountService) {
+      QuotaManager quotaManager, AccountService accountService, IdSigningService idSigningService) {
     this.router = router;
     this.securityService = securityService;
     this.idConverter = idConverter;
@@ -72,6 +75,7 @@ public class DeleteBlobHandler {
     this.clusterMap = clusterMap;
     this.quotaManager = quotaManager;
     this.accountService = accountService;
+    this.idSigningService = idSigningService;
   }
 
   public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
@@ -122,7 +126,9 @@ public class DeleteBlobHandler {
         String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
         if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) == null)  {
           // Inject account and container when they are missing from the rest request.
-          blobIdStr = RestUtils.stripSlashAndExtensionFromId(blobIdStr);
+          String decryptedInput =
+              parseSignedIdIfRequired(blobIdStr.startsWith("/") ? blobIdStr.substring(1) : blobIdStr);
+          blobIdStr = RestUtils.stripSlashAndExtensionFromId(decryptedInput);
           BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(blobIdStr, clusterMap);
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(convertedBlobId, restRequest,
               metrics.deleteBlobMetricsGroup);
@@ -241,6 +247,19 @@ public class DeleteBlobHandler {
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
+    }
+
+    private String parseSignedIdIfRequired(String incomingId) throws RestServiceException {
+      String blobId;
+      String sanitizedIncomingId = stripSlashAndExtensionFromId(incomingId);
+      if (idSigningService.isIdSigned(sanitizedIncomingId)) {
+        Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(sanitizedIncomingId);
+        restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, idAndMetadata.getSecond());
+        blobId = conditionalCopySlashAndExtension(incomingId, idAndMetadata.getFirst());
+      } else {
+        blobId = incomingId;
+      }
+      return blobId;
     }
   }
 }

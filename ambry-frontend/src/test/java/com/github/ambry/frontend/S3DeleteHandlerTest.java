@@ -134,7 +134,7 @@ public class S3DeleteHandlerTest {
             QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     DeleteBlobHandler deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, ambryIdConverterFactory.getIdConverter(), injector, metrics,
-            new MockClusterMap(), QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
+            new MockClusterMap(), QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, null, metrics);
   }
 

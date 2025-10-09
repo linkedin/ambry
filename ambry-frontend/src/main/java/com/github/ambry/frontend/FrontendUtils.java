@@ -85,6 +85,42 @@ public class FrontendUtils {
   }
 
   /**
+   * Copies leading slash and/or extension from {@code src} to {@code dest} if present in {@code src} and not present
+   * in {@code dest}
+   * <p/>
+   * Does not overwrite if already present in {@code dest}. Does not create if not present in {@code src}.
+   * @param src the source string
+   * @param dest the destination string
+   * @return {@code dest} with leading slash and/or extension (depending on presence in {@code src} and {@code dest}).
+   */
+  public static String conditionalCopySlashAndExtension(String src, String dest) {
+    if (src.startsWith("/")) {
+      dest = addLeadingSlashIfAbsent(dest);
+    }
+    int destExtensionIndex = dest.indexOf(".");
+    if (destExtensionIndex == -1) {
+      int srcExtensionIndex = src.indexOf(".");
+      if (srcExtensionIndex != -1) {
+        String extension = src.substring(srcExtensionIndex);
+        dest = dest + extension;
+      }
+    }
+    return dest;
+  }
+
+  /**
+   * Adds a leading slash if {@code input} doesn't already have one.
+   * @param input the input string
+   * @return input string with a leading slash.
+   */
+  public static String addLeadingSlashIfAbsent(String input) {
+    if (!input.startsWith("/")) {
+      return "/" + input;
+    }
+    return input;
+  }
+
+  /**
    * @param metrics the {@link AsyncOperationTracker.Metrics} instance to update.
    * @param successAction the action to take if the callback was called successfully.
    * @param context the context in which this callback is being called (for logging)

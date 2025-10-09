@@ -67,6 +67,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -78,6 +79,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.commons.lang3.tuple.Pair;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -87,6 +89,7 @@ import org.mockito.Mockito;
 import static com.github.ambry.frontend.FrontendRestRequestServiceTest.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -146,6 +149,7 @@ public class PostBlobHandlerTest {
   private FrontendConfig frontendConfig;
   private PostBlobHandler postBlobHandler;
   private GetBlobHandler getBlobHandler;
+  private DeleteBlobHandler deleteBlobHandler;
 
   private String reservedMetadataId;
 
@@ -170,6 +174,7 @@ public class PostBlobHandlerTest {
     }
     initPostBlobHandler(props);
     initGetBlobHandler(props);
+    initDeleteBlobHandler(props);
   }
 
   /**
@@ -397,6 +402,14 @@ public class PostBlobHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     getBlobHandler = new GetBlobHandler(frontendConfig, router, securityServiceFactory.getSecurityService(),
         idConverterFactory.getIdConverter(), injector, metrics, CLUSTER_MAP, QUOTA_MANAGER, ACCOUNT_SERVICE);
+  }
+
+  private void initDeleteBlobHandler(Properties props) {
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    frontendConfig = new FrontendConfig(verifiableProperties);
+    deleteBlobHandler =
+        new DeleteBlobHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
+            injector, metrics, CLUSTER_MAP, QUOTA_MANAGER, ACCOUNT_SERVICE, idSigningService);
   }
 
   // ttlRequiredEnforcementTest() helpers

@@ -361,7 +361,8 @@ public class S3MultipartUploadTest {
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
             quotaManager, ACCOUNT_SERVICE);
     deleteBlobHandler =
-        new DeleteBlobHandler(router, securityService, idConverter, injector, metrics, clusterMap, quotaManager, ACCOUNT_SERVICE);
+        new DeleteBlobHandler(router, securityService, idConverter, injector, metrics, clusterMap, quotaManager, ACCOUNT_SERVICE,
+            null);
     s3MultipartUploadHandler = new S3MultipartUploadHandler(securityService, metrics, injector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
 

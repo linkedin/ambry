@@ -138,7 +138,7 @@ public class NamedBlobDeleteHandlerTest {
             ACCOUNT_SERVICE, null);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            injector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
+            injector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
   }
 
   @Test

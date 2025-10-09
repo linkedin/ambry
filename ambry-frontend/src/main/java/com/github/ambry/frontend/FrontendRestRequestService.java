@@ -211,7 +211,7 @@ class FrontendRestRequestService implements RestRequestService {
         new CopyDatasetVersionHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap, quotaManager, accountService);
+            clusterMap, quotaManager, accountService, idSigningService);
     deleteDatasetHandler =
         new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector,
             deleteBlobHandler);
