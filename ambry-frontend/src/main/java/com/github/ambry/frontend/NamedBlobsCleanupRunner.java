@@ -93,6 +93,12 @@ public class NamedBlobsCleanupRunner implements Runnable {
 
           blobName = staleBlobsWithLatestBlobName.getLatestBlob();
         } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
+        try {
+          logger.info("Finished cleaning container {}. Sleeping for 7 days before next container...", container.getId());
+          Thread.sleep(604800000); // 7 days
+        } catch (InterruptedException e) {
+          logger.error("Sleep interrupted after container cleanup", e);
+        }
       }
       logger.info("Named Blobs Cleanup Runner is completed");
     } catch (ExecutionException e) {

@@ -894,6 +894,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
     if (!staleBlobs.isEmpty()) {
       logger.info("These are the number of stale blobs that will be marked for deletion:  ", staleBlobs.size());
+      logger.info("Deleted blobs: {}", staleBlobs);
     }
 
     StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName =
