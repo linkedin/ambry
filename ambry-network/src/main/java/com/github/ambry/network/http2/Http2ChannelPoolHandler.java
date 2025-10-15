@@ -97,7 +97,9 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
         // This usually happens when server returns response for a request which was already dropped.
         logger.info("StreamException: {}", cause.getMessage());
       } else if (cause instanceof NativeIoException) {
-        logger.info("Remote peer not available: " + cause.toString());
+        logger.info("Remote peer not available:", cause);
+      } else if (cause instanceof OutOfMemoryError) {
+        super.exceptionCaught(ctx, cause);
       } else {
         logger.warn("Connection inbound exception:", cause);
       }
