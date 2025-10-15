@@ -551,6 +551,9 @@ public class RestUtils {
      * Is the request a head bucket request
      */
     public static final String HEAD_BUCKET_REQUEST = KEY_PREFIX + "is-head-bucket-request";
+    /**
+     * The key is to help identify get content or get md5. If the value is true, it means get md5 only for a getContent call.
+     */
     public static final String REQUEST_MD5_ONLY = KEY_PREFIX + "request-md5-only";
   }
 
