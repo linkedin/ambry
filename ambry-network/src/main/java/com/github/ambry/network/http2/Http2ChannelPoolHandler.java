@@ -17,14 +17,10 @@ package com.github.ambry.network.http2;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.pool.AbstractChannelPoolHandler;
 import io.netty.channel.pool.ChannelPoolHandler;
-import io.netty.channel.unix.Errors.NativeIoException;
-import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
@@ -44,7 +40,6 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
   private final String host;
   private final int port;
   private final Http2ClientConfig http2ClientConfig;
-  private final ConnectionInboundExceptionHandler connectionInboundExceptionHandler;
   private final Http2ClientMetrics http2ClientMetrics;
   private final Http2PeerCertificateValidator http2PeerCertificateValidator;
   /**
@@ -60,7 +55,6 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
     this.host = host;
     this.port = port;
     this.http2ClientConfig = http2ClientConfig;
-    this.connectionInboundExceptionHandler = new ConnectionInboundExceptionHandler();
     this.http2ClientMetrics = http2ClientMetrics;
     if (!http2ClientConfig.http2PeerCertificateSanRegex.trim().isEmpty()) {
       this.http2PeerCertificateValidator =
@@ -85,23 +79,6 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "client"))
         .build());
     pipeline.addLast(new Http2MultiplexHandler(new ChannelInboundHandlerAdapter()));
-    pipeline.addLast(connectionInboundExceptionHandler);
-  }
-
-  @ChannelHandler.Sharable
-  private static class ConnectionInboundExceptionHandler extends ChannelInboundHandlerAdapter {
-
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-      if (cause instanceof Http2Exception.StreamException) {
-        // This usually happens when server returns response for a request which was already dropped.
-        logger.info("StreamException: {}", cause.getMessage());
-      } else if (cause instanceof NativeIoException) {
-        logger.info("Remote peer not available: " + cause.toString());
-      } else {
-        logger.warn("Connection inbound exception:", cause);
-      }
-    }
   }
 }
 
