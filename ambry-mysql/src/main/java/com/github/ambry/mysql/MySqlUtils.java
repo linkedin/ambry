@@ -91,6 +91,15 @@ public class MySqlUtils {
    * @return The new url with ssl settings
    */
   public static String addSslSettingsToUrl(String url, SSLConfig sslConfig, DbEndpoint.SSLMode sslMode) {
+
+    System.out.println("=== SSL URL Debug ===");
+    System.out.println("Original URL: " + url);
+    System.out.println("SSL Mode: " + sslMode);
+    System.out.println("Keystore Path: " + sslConfig.sslKeystorePath);
+    System.out.println("Keystore Type: " + sslConfig.sslKeystoreType);
+    System.out.println("Truststore Path: " + sslConfig.sslTruststorePath);
+    System.out.println("Truststore Type: " + sslConfig.sslTruststoreType);
+
     //@formatter:off
     String delimiter = url.contains("?") ? "&" : "?";
     String sslSuffix = delimiter + SSL_SETTING_USE_SSL
@@ -101,8 +110,11 @@ public class MySqlUtils {
         + SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_TYPE + sslConfig.sslTruststoreType
         + SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_URL + sslConfig.sslTruststorePath
         + SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_PASSWORD + sslConfig.sslTruststorePassword;
-    return url + sslSuffix;
-    //@formatter:on
+
+    String finalUrl = url + sslSuffix;
+    System.out.println("Final SSL URL: " + finalUrl);
+    System.out.println("=====================");
+    return finalUrl;
   }
 
   /**
