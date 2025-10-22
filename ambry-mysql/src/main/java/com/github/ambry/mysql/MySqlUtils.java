@@ -22,12 +22,16 @@ import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Contains utils methods for MySqlAccountService
  */
 public class MySqlUtils {
+
+  private static final Logger logger = LoggerFactory.getLogger(MySqlUtils.class);
 
   static final String URL_STR = "url";
   static final String DATACENTER_STR = "datacenter";
@@ -92,13 +96,13 @@ public class MySqlUtils {
    */
   public static String addSslSettingsToUrl(String url, SSLConfig sslConfig, DbEndpoint.SSLMode sslMode) {
 
-    System.out.println("=== SSL URL Debug ===");
-    System.out.println("Original URL: " + url);
-    System.out.println("SSL Mode: " + sslMode);
-    System.out.println("Keystore Path: " + sslConfig.sslKeystorePath);
-    System.out.println("Keystore Type: " + sslConfig.sslKeystoreType);
-    System.out.println("Truststore Path: " + sslConfig.sslTruststorePath);
-    System.out.println("Truststore Type: " + sslConfig.sslTruststoreType);
+    logger.info("=== SSL URL Debug ===");
+    logger.info("Original URL: " + url);
+    logger.info("SSL Mode: " + sslMode);
+    logger.info("Keystore Path: " + sslConfig.sslKeystorePath);
+    logger.info("Keystore Type: " + sslConfig.sslKeystoreType);
+    logger.info("Truststore Path: " + sslConfig.sslTruststorePath);
+    logger.info("Truststore Type: " + sslConfig.sslTruststoreType);
 
     //@formatter:off
     String delimiter = url.contains("?") ? "&" : "?";
@@ -112,8 +116,8 @@ public class MySqlUtils {
         + SSL_SETTING_TRUST_CERTIFICATE_KEY_STORE_PASSWORD + sslConfig.sslTruststorePassword;
 
     String finalUrl = url + sslSuffix;
-    System.out.println("Final SSL URL: " + finalUrl);
-    System.out.println("=====================");
+    logger.info("Final SSL URL: " + finalUrl);
+    logger.info("=====================");
     return finalUrl;
   }
 
