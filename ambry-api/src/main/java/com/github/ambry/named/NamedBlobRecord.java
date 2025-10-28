@@ -33,6 +33,7 @@ public class NamedBlobRecord {
   private final long blobSize;
   private long modifiedTimeMs;
   private final boolean isDirectory;
+  private final String digest;
 
   /**
    * A helper method to create a {@link NamedBlobRecord} for Put operation.
@@ -48,6 +49,23 @@ public class NamedBlobRecord {
       long expirationTimeMs, long blobSize) {
     return new NamedBlobRecord(accountName, containerName, blobName, blobId, expirationTimeMs, UNINITIALIZED_VERSION,
         blobSize, 0, false);
+  }
+
+  /**
+   * A helper method to create a {@link NamedBlobRecord} for Put operation.
+   * @param accountName      the account name.
+   * @param containerName    the container name.
+   * @param blobName         the blob name within the container.
+   * @param blobId           the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param blobSize         the size of the blob.
+   * @param digest           the digest of the blob content, can be null if not set
+   * @return
+   */
+  public static NamedBlobRecord forPut(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long blobSize, String digest) {
+    return new NamedBlobRecord(accountName, containerName, blobName, blobId, expirationTimeMs, UNINITIALIZED_VERSION,
+        blobSize, 0, false, digest);
   }
 
   /**
@@ -109,6 +127,21 @@ public class NamedBlobRecord {
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    * @param version          the version of this named blob.
    * @param blobSize         the size of the blob.
+   * @param digest           the digest of the blob content, can be null if not set
+   */
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long version, long blobSize, String digest) {
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, version, blobSize, 0, false, digest);
+  }
+
+  /**
+   * @param accountName      the account name.
+   * @param containerName    the container name.
+   * @param blobName         the blob name within the container.
+   * @param blobId           the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param version          the version of this named blob.
+   * @param blobSize         the size of the blob.
    * @param modifiedTimeMs   the modified time of the blob in milliseconds since epoch
    * @param isDirectory      whether the blob is a directory (virtual folder name separated by '/')
    */
@@ -123,6 +156,40 @@ public class NamedBlobRecord {
     this.blobSize = blobSize;
     this.modifiedTimeMs = modifiedTimeMs;
     this.isDirectory = isDirectory;
+    this.digest = null;
+  }
+
+  /**
+   * @param accountName      the account name.
+   * @param containerName    the container name.
+   * @param blobName         the blob name within the container.
+   * @param blobId           the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param version          the version of this named blob.
+   * @param blobSize         the size of the blob.
+   * @param modifiedTimeMs   the modified time of the blob in milliseconds since epoch
+   * @param isDirectory      whether the blob is a directory (virtual folder name separated by '/')
+   * @param digest           the digest of the blob content, can be null if not set
+   */
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long version, long blobSize, long modifiedTimeMs, boolean isDirectory, String digest) {
+    this.accountName = accountName;
+    this.containerName = containerName;
+    this.blobName = blobName;
+    this.blobId = blobId;
+    this.expirationTimeMs = expirationTimeMs;
+    this.version = version;
+    this.blobSize = blobSize;
+    this.modifiedTimeMs = modifiedTimeMs;
+    this.isDirectory = isDirectory;
+    this.digest = digest;
+  }
+
+  /**
+   * @return the digest of the blob content, can be null if not set
+   */
+  public String getDigest() {
+    return digest;
   }
 
   /**
@@ -185,7 +252,7 @@ public class NamedBlobRecord {
     NamedBlobRecord record = (NamedBlobRecord) o;
     return expirationTimeMs == record.expirationTimeMs && Objects.equals(accountName, record.accountName)
         && Objects.equals(containerName, record.containerName) && Objects.equals(blobName, record.blobName)
-        && Objects.equals(blobId, record.blobId);
+        && Objects.equals(blobId, record.blobId) && Objects.equals(digest, record.getDigest());
   }
 
   @Override
@@ -196,7 +263,7 @@ public class NamedBlobRecord {
   @Override
   public String toString() {
     return "NamedBlobRecord[accountName=" + accountName + ",containerName=" + containerName + ",blobName=" + blobName
-        + ",blobId=" + blobId + ",expirationTimeMs=" + expirationTimeMs + ",version=" + version + "]";
+        + ",blobId=" + blobId + ",expirationTimeMs=" + expirationTimeMs + ",version=" + version + ",digest=" + digest + "]";
   }
 
   /**
