@@ -56,11 +56,9 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Mockito;
 
 import static com.github.ambry.frontend.s3.S3Constants.*;
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 
 public class S3BatchDeleteHandlerTest {
@@ -144,12 +142,9 @@ public class S3BatchDeleteHandlerTest {
   }
 
   @Test
-  public void testBufferReleaseInDeserializeRequest() throws Exception {
-    // Arrange
-    S3BatchDeleteHandler handler = new S3BatchDeleteHandler(null, null);
-    RetainingAsyncWritableChannel channel = mock(RetainingAsyncWritableChannel.class);
-    ByteBuf mockByteBuf = mock(ByteBuf.class);
-
+  public void testConsumeContentAsBytesReleasesBuffer() {
+    // Arrange: Create a ByteBuf with some data
+    ByteBuf testBuf = Unpooled.buffer();
     String validXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
         "<Delete xmlns=\"http://s3.amazonaws.com/doc/2006-03-01\">" +
         "<Object>" +
@@ -165,21 +160,22 @@ public class S3BatchDeleteHandlerTest {
         "<Key>key-success-2</Key>" +
         "</Object>" +
         "</Delete>";
-
     byte[] xmlBytes = validXml.getBytes();
+    testBuf.writeBytes(xmlBytes);
+    // Wrap the consumeContentAsByteBuf method to return the test buffer
+    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel() {
+      @Override
+      public ByteBuf consumeContentAsByteBuf() {
+        return testBuf;
+      }
+    };
 
-    when(channel.consumeContentAsByteBuf()).thenReturn(mockByteBuf);
-    when(mockByteBuf.readableBytes()).thenReturn(xmlBytes.length);
-    doAnswer(invocation -> {
-      byte[] buffer = invocation.getArgument(0);
-      System.arraycopy(xmlBytes, 0, buffer, 0, xmlBytes.length);
-      return null;
-    }).when(mockByteBuf).readBytes(Mockito.any(byte[].class));
+    // Act: Call the method
+    byte[] result = channel.consumeContentAsBytes();
 
-    S3MessagePayload.S3BatchDeleteObjects result = handler.deserializeRequest(channel);
-
-    assertNotNull(result);
-    verify(mockByteBuf, times(1)).release(); // Verify that release() was called
+    // Assert: Verify the buffer was released and the data matches
+    assertArrayEquals(xmlBytes, result);
+    assertEquals("Buffer should be released", 0, testBuf.refCnt());
   }
 
   @Test
