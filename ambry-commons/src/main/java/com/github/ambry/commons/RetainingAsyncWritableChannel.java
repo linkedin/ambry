@@ -171,6 +171,26 @@ public class RetainingAsyncWritableChannel implements AsyncWritableChannel {
   }
 
   /**
+   * Consume the collected content buffer and return its contents as a byte array.
+   *
+   * @return a byte array containing all data received up to this point.
+   * @throws IllegalStateException if the content has already been consumed or the channel was closed.
+   */
+  public byte[] consumeContentAsBytes() {
+    ByteBuf buf = null;
+    try {
+      buf = consumeContentAsByteBuf();
+      byte[] data = new byte[buf.readableBytes()];
+      buf.readBytes(data);
+      return data;
+    } finally {
+      if (buf != null) {
+        buf.release();
+      }
+    }
+  }
+
+  /**
    * @return an {@link InputStream} that contains the data from the chunks received up to this point in time.
    */
   public ByteBufInputStream consumeContentAsInputStream() {
