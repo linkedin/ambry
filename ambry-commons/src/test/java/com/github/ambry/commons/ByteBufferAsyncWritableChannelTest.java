@@ -82,6 +82,40 @@ public class ByteBufferAsyncWritableChannelTest {
   }
 
   @Test
+  public void writeAfterCloseShouldFailWithClosedChannelException() throws Exception {
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
+
+    // Close the channel first
+    channel.close();
+    assertFalse("Channel should be closed", channel.isOpen());
+
+    // Prepare a dummy ByteBuf
+    ByteBuf src = ByteBufAllocator.DEFAULT.heapBuffer(50);
+    src.writeBytes(new byte[]{1, 2, 3});
+
+    WriteCallback callback = new WriteCallback(0);
+
+    // Perform write
+    Future<Long> future = channel.write(src, callback);
+
+    // The future should fail with ClosedChannelException
+    try {
+      future.get();
+      fail("Expected write to fail due to closed channel");
+    } catch (ExecutionException e) {
+      Throwable root = Utils.getRootCause(e);
+      assertTrue("Expected ClosedChannelException but got " + root, root instanceof ClosedChannelException);
+    }
+
+    // The callback should also have received a ClosedChannelException
+    assertTrue("Expected callback exception to be ClosedChannelException but got " + callback.exception,
+        callback.exception instanceof ClosedChannelException);
+
+    // The ByteBuf should have been released
+    assertEquals("Expected src ByteBuf to be released", 0, src.refCnt());
+  }
+
+  @Test
   public void commonCaseTestForNettyByteBuf() throws Exception {
     for (boolean useCompositeByteBuf : Arrays.asList(false, true)) {
       ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();

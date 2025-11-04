@@ -20,6 +20,7 @@ import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -100,13 +101,19 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     if (src == null) {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
+    if (!isOpen()) {
+      src.release();
+      CompletableFuture<Long> failedFuture = new CompletableFuture<>();
+      failedFuture.completeExceptionally(new ClosedChannelException());
+      if (callback != null) {
+        callback.onCompletion(0L, new ClosedChannelException());
+      }
+      return failedFuture;
+    }
     ChunkData chunkData = new ChunkData(src, callback);
     chunks.add(chunkData);
     if (channelEventListener != null) {
       channelEventListener.onEvent(EventType.Write);
-    }
-    if (!isOpen()) {
-      resolveAllRemainingChunks(new ClosedChannelException());
     }
     return chunkData.future;
   }
