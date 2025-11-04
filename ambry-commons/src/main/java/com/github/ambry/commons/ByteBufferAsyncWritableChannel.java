@@ -101,11 +101,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     if (src == null) {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
-    ChunkData chunkData = new ChunkData(src, callback);
-    chunks.add(chunkData);
-    if (channelEventListener != null) {
-      channelEventListener.onEvent(EventType.Write);
-    }
     if (!isOpen()) {
       src.release();
       CompletableFuture<Long> failedFuture = new CompletableFuture<>();
@@ -114,6 +109,11 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
         callback.onCompletion(0L, new ClosedChannelException());
       }
       return failedFuture;
+    }
+    ChunkData chunkData = new ChunkData(src, callback);
+    chunks.add(chunkData);
+    if (channelEventListener != null) {
+      channelEventListener.onEvent(EventType.Write);
     }
     return chunkData.future;
   }
