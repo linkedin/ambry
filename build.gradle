@@ -159,6 +159,17 @@ subprojects {
         systemProperty 'io.netty.allocator.normalCacheSize', '0'
         systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
 
+        // ByteBuf Flow Tracker configuration
+        // Add the tracker agent if the JAR exists
+        def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
+        if (trackerJar.exists()) {
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
+            systemProperty 'bytebuf.tracker.enabled', 'true'
+        }
+
+        // Add test listener to print tracker output at end
+        systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
+
         // make sure Powermockito would be happy
         if (JavaVersion.current().java9Compatible) {
             jvmArgs '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED'
@@ -190,6 +201,17 @@ subprojects {
         }
         maxHeapSize = "6g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
+
+        // ByteBuf Flow Tracker configuration
+        // Add the tracker agent if the JAR exists
+        def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
+        if (trackerJar.exists()) {
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
+            systemProperty 'bytebuf.tracker.enabled', 'true'
+        }
+
+        // Add test listener to print tracker output at end
+        systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
     }
 
     task allTest {

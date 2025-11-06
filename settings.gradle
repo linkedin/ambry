@@ -32,5 +32,6 @@ include 'ambry-api',
         'ambry-filesystem',
         'ambry-vcr',
         'ambry-file-transfer',
-        'ambry-prioritization'
+        'ambry-prioritization',
+        'bytebuf-tracker'
 
