@@ -6,115 +6,94 @@ This document describes the integration of the ByteBuddy ByteBuf Flow Tracker in
 
 The ByteBuf Flow Tracker is a lightweight Java agent that tracks Netty ByteBuf object flows through the application using a Trie data structure. It helps identify memory leaks by monitoring ByteBuf reference counts and detecting unreleased buffers.
 
+**Key Features:**
+- Zero allocation overhead - no stack trace collection
+- First-touch root approach - initial handler becomes the Trie root
+- Memory efficient - shared Trie prefixes minimize storage
+- Dual output formats - human-readable trees and LLM-optimized structured text
+- JMX integration - runtime monitoring via MBean
+- **Gradle-native** - fully integrated into Ambry's build system
+
+## Quick Start
+
+### Enable ByteBuf Tracking
+
+Simply add `-PwithByteBufTracking` to any Gradle command:
+
+```bash
+# Build with tracking enabled
+./gradlew allJar -PwithByteBufTracking
+
+# Run tests with tracking
+./gradlew test -PwithByteBufTracking
+
+# Run integration tests with tracking
+./gradlew intTest -PwithByteBufTracking
+```
+
+**That's it!** Gradle automatically:
+1. Builds the tracker agent JAR (if needed)
+2. Attaches it to test JVMs
+3. Instruments your code
+4. Prints a report at the end
+
+### Run Without Tracking (Normal Operation)
+
+Simply omit the flag:
+
+```bash
+./gradlew test
+```
+
+Tests run normally with no overhead.
+
 ## Integration Components
 
 ### 1. Git Submodule
 - **Location**: `modules/bytebuddy-bytebuf-tracer`
 - **Repository**: https://github.com/j-tyler/bytebuddy-bytebuf-tracer
-- **Purpose**: Contains the source code for the ByteBuf tracker agent
+- **Purpose**: Contains the original tracker source code
 
 ### 2. Bytebuf-Tracker Subproject
 - **Location**: `bytebuf-tracker/`
 - **Purpose**: Ambry-specific build of the tracker agent
-- **Dependencies**: Reuses Ambry's existing ByteBuddy and Netty dependencies
+- **Dependencies**: Reuses Ambry's existing ByteBuddy (1.14.9) and Netty dependencies
 - **Output**: `bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar` (fat JAR with all dependencies)
+- **Java Compatibility**: Java 8+ (matches Ambry's target)
 
 ### 3. Test Listener
 - **File**: `ambry-test-utils/src/main/java/com/github/ambry/testutils/ByteBufTrackerListener.java`
 - **Purpose**: JUnit RunListener that prints tracker output at the end of test execution
 - **Behavior**:
-  - Automatically detects if tracker agent is running
+  - Uses reflection to detect if tracker agent is running
   - Prints summary statistics and detailed flow trees
-  - Highlights memory leaks with warnings
+  - Highlights memory leaks with ⚠️ warnings
+  - Gracefully handles case when agent is not present
 
 ### 4. Build Configuration
 - **File**: `build.gradle` (root)
-- **Changes**:
-  - Test tasks automatically load the agent JAR if it exists
-  - Test tasks register the ByteBufTrackerListener
+- **Key Changes**:
+  - Test tasks check for `withByteBufTracking` property
+  - When enabled, automatically builds `:bytebuf-tracker:agentJar`
+  - Adds `-javaagent` JVM argument with agent path
+  - Registers `ByteBufTrackerListener` for output
   - Configuration applies to both `test` and `intTest` tasks
 
-## Building the Tracker Agent
+## How It Works
 
-Due to network connectivity requirements for downloading dependencies, the tracker agent must be built when network access is available.
+When you use `-PwithByteBufTracking`:
 
-### Option 1: Using the Build Script (Recommended)
-
-```bash
-./build-bytebuf-tracker.sh
-```
-
-This script attempts multiple build strategies:
-1. Gradle build (preferred)
-2. Manual JAR creation from cached dependencies (fallback)
-
-### Option 2: Manual Gradle Build
-
-```bash
-./gradlew :bytebuf-tracker:build
-```
-
-This builds the agent JAR at: `bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar`
-
-### Option 3: Build from Submodule (RECOMMENDED if build script fails)
-
-If the build script fails due to Gradle/Java version issues, build directly from the submodule:
-
-```bash
-cd modules/bytebuddy-bytebuf-tracer
-mvn clean install
-cd ../..
-mkdir -p bytebuf-tracker/build/libs
-cp modules/bytebuddy-bytebuf-tracer/bytebuf-flow-tracker/target/bytebuf-flow-tracker-*-agent.jar \
-   bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar
-```
-
-This requires Maven and Java 8-11. If you don't have Maven:
-
-```bash
-# Install Maven (macOS)
-brew install maven
-
-# Install Maven (Ubuntu/Debian)
-sudo apt-get install maven
-
-# Install Maven (other)
-# Download from https://maven.apache.org/download.cgi
-```
-
-## Running Tests with the Tracker
-
-### Automatic Mode (Recommended)
-
-Once the agent JAR is built, tests automatically use it:
-
-```bash
-# Run unit tests with tracker
-./gradlew test
-
-# Run integration tests with tracker
-./gradlew intTest
-
-# Run all tests
-./gradlew allTest
-```
-
-The tracker will automatically:
-- Instrument all methods in `com.github.ambry` packages
-- Track ByteBuf flows and reference counts
-- Print a comprehensive report at the end of each test module
-
-### Manual Mode (For Debugging)
-
-To manually control the tracker:
-
-```bash
-./gradlew test -Djavaagent.path=/path/to/bytebuf-tracker-agent.jar
-```
+1. **Gradle detects the property** in `build.gradle`
+2. **Builds the agent JAR** by executing `:bytebuf-tracker:agentJar` task
+3. **Creates fat JAR** with ByteBuddy, Netty, and all dependencies
+4. **Attaches agent** to test JVM via `-javaagent:path/to/agent.jar=include=com.github.ambry`
+5. **ByteBuddy instruments** all methods in `com.github.ambry` packages at JVM startup
+6. **Tracks ByteBuf flows** using a Trie data structure (zero allocation)
+7. **Test listener** retrieves tracking data and prints report at test completion
 
 ## Understanding the Output
 
-At the end of test execution, you'll see output like:
+At the end of test execution, you'll see:
 
 ```
 ================================================================================
@@ -146,35 +125,18 @@ LeakyHandler.handleRequest -> ErrorHandler.logError [FINAL REF=1] ⚠️ LEAK
 
 ### Interpreting Results
 
-- **⚠️ LEAK**: Indicates a ByteBuf that was not released (refCount > 0 at leaf node)
+- **⚠️ LEAK**: ByteBuf was not released (refCount > 0 at leaf node)
 - **ref=N**: Current reference count at this point in the flow
 - **count=N**: Number of times this path was traversed
 - **FINAL REF=N**: Reference count at the end of the flow (should be 0)
+- **ROOT**: The first method that handled the ByteBuf
 
-## Disabling the Tracker
+### Identifying Leaks
 
-### Temporary Disable
-
-Delete or rename the agent JAR:
-```bash
-mv bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar \
-   bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar.disabled
-```
-
-Tests will run normally without the tracker.
-
-### Permanent Disable
-
-Remove or comment out the tracker configuration in `build.gradle`:
-
-```groovy
-// Comment out these lines in the test task:
-// def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
-// if (trackerJar.exists()) {
-//     jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
-//     systemProperty 'bytebuf.tracker.enabled', 'true'
-// }
-```
+Look for:
+1. **Leaf nodes with ⚠️ LEAK** - These are the final methods holding unreleased ByteBufs
+2. **FINAL REF > 0** - Indicates the ByteBuf wasn't fully released
+3. **Paths in "Flat Paths" section** - Shows the complete journey of leaked ByteBufs
 
 ## Advanced Configuration
 
@@ -192,9 +154,19 @@ jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry,io.netty
 jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry;exclude=com.github.ambry.test"
 ```
 
+### Alternative Property Names
+
+All of these work:
+
+```bash
+./gradlew test -PwithByteBufTracking
+./gradlew test -PenableByteBufTracking
+./gradlew test -DenableByteBufTracking=true
+```
+
 ### JMX Monitoring
 
-Enable JMX to monitor ByteBuf flows in real-time:
+Enable JMX to monitor ByteBuf flows in real-time. Add to `build.gradle`:
 
 ```groovy
 systemProperty 'com.sun.management.jmxremote', 'true'
@@ -209,148 +181,266 @@ jconsole localhost:9999
 # Navigate to: MBeans → com.example → ByteBufFlowTracker
 ```
 
+**JMX Operations:**
+- `getTreeView()` - Visual tree representation
+- `getFlatView()` - Flat path list with leaks
+- `getCsvView()` - CSV export
+- `getJsonView()` - JSON export
+- `getSummary()` - Statistics summary
+- `reset()` - Clear all tracking data
+
 ## Troubleshooting
 
-### Agent JAR Not Found
+### "ByteBuf tracker agent JAR not found"
 
-**Symptom**: Tests run but no tracker output appears
+**Symptom**: Test fails with error about missing agent JAR
 
-**Solution**: Build the agent JAR:
+**Solution**: Make sure to use the `-PwithByteBufTracking` flag:
 ```bash
-./build-bytebuf-tracker.sh
+./gradlew test -PwithByteBufTracking
 ```
 
-### Class Not Found Errors
+The flag tells Gradle to build the agent JAR before running tests.
 
-**Symptom**: Tests fail with `ClassNotFoundException` for ByteBuddy classes
+### No Tracker Output Appears
 
-**Solution**: The agent JAR may not include all dependencies. Rebuild:
-```bash
-./gradlew :bytebuf-tracker:clean :bytebuf-tracker:build
-```
+**Symptom**: Tests run but no ByteBuf flow report is printed
 
-### No Tracking Data Appears
+**Solutions**:
+1. Verify you used the flag: `-PwithByteBufTracking`
+2. Check agent was loaded:
+   ```bash
+   ./gradlew test -PwithByteBufTracking --info | grep "ByteBuf"
+   ```
+   You should see: `Using ByteBuf Flow Tracker agent: ...`
+3. Verify ByteBufs are actually used in your tests
 
-**Symptom**: Agent loads but no ByteBuf flows are tracked
+### Build Failures
+
+**Symptom**: Build fails when trying to compile bytebuf-tracker
+
+**Common Causes & Solutions**:
+
+1. **Network connectivity issues** (dependencies can't download):
+   ```bash
+   ./gradlew test -PwithByteBufTracking --refresh-dependencies
+   ```
+
+2. **Gradle daemon issues**:
+   ```bash
+   ./gradlew --stop
+   ./gradlew test -PwithByteBufTracking --no-daemon
+   ```
+
+3. **Java version compatibility**:
+   - Ambry targets Java 8
+   - Ensure you're using Java 8, 11, or 17
+   - Check version: `java -version`
+
+### No Tracking Data for Specific Classes
+
+**Symptom**: Some classes don't appear in tracking output
 
 **Solution**:
-1. Verify ByteBufs are actually used in the test
-2. Check the package include pattern matches your code
-3. Enable verbose logging:
-   ```bash
-   ./gradlew test --debug | grep ByteBuf
-   ```
+1. Verify the package is included in the `include` pattern
+2. Check the class isn't in an excluded package
+3. Verify methods are `public` or `protected` (private methods aren't instrumented)
 
 ### Performance Impact
 
 **Symptom**: Tests run significantly slower with tracker enabled
 
-**Solution**:
-1. Narrow the package scope to only critical areas
-2. Use the tracker selectively for suspected leak areas
-3. Exclude test utility packages
-4. Run tracker on a subset of tests
-
-### Network Issues During Build
-
-**Symptom**: Build fails with network connection errors
-
-**Solution**:
-1. Retry the build (transient issues)
-2. Build from the submodule using Maven:
+**Solutions**:
+1. **Narrow package scope** - Only track critical packages
+2. **Run selectively** - Use tracker only on suspected leak areas
+3. **Exclude test utilities** - Don't track test helper classes
+4. **Use on subset** - Run tracker on specific test classes:
    ```bash
-   cd modules/bytebuddy-bytebuf-tracer
-   mvn clean install
-   cd ../..
-   mkdir -p bytebuf-tracker/build/libs
-   cp modules/bytebuddy-bytebuf-tracer/bytebuf-flow-tracker/target/*-agent.jar \
-      bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar
+   ./gradlew :ambry-commons:test -PwithByteBufTracking --tests SuspectedLeakyTest
    ```
-3. Wait for network connectivity and run `./build-bytebuf-tracker.sh`
 
-### Gradle/Java Version Compatibility Issues
+### Class Not Found Errors
 
-**Symptom**: Build fails with `NoClassDefFoundError: Could not initialize class org.codehaus.groovy.vmplugin.v7.Java7`
+**Symptom**: Tests fail with `ClassNotFoundException` for tracker classes
 
-**Cause**: Java version incompatibility with Gradle version
+**Cause**: Agent JAR may be incomplete
 
-**Solution**: Build from the submodule using Maven (which is more tolerant of Java versions):
+**Solution**: Clean and rebuild:
 ```bash
-cd modules/bytebuddy-bytebuf-tracer
-mvn clean install -DskipTests
-mkdir -p ../../bytebuf-tracker/build/libs
-cp bytebuf-flow-tracker/target/*-agent.jar ../../bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar
-cd ../..
+./gradlew :bytebuf-tracker:clean :bytebuf-tracker:agentJar -PwithByteBufTracking
 ```
 
-Alternatively, use a compatible Java version (Java 8-11):
-```bash
-# Check your Java version
-java -version
-
-# On macOS with SDKMAN
-sdk install java 11.0.12-open
-sdk use java 11.0.12-open
-
-# Then retry
-./build-bytebuf-tracker.sh
-```
-
-## Implementation Notes
+## Architecture & Implementation
 
 ### Why This Approach?
 
-1. **Zero code changes**: Tracker is added via Java agent (bytecode instrumentation)
-2. **Gradle-native**: Integrates cleanly with existing Ambry build
-3. **Optional**: Tests work with or without the tracker
-4. **Comprehensive**: Tracks all ByteBuf flows automatically
-5. **Production-safe**: Only active during tests, never in production
+1. **Zero code changes** - Tracker added via Java agent (bytecode instrumentation)
+2. **Gradle-native** - Integrates cleanly with existing Ambry build
+3. **Opt-in by default** - No overhead unless explicitly enabled
+4. **Comprehensive** - Tracks all ByteBuf flows automatically
+5. **Production-safe** - Only active during tests, never in production
+6. **Java 8 compatible** - Matches Ambry's target version
 
-### Architecture
+### Component Flow
 
 ```
-Ambry Test Suite
+User runs: ./gradlew test -PwithByteBufTracking
        ↓
-   JUnit Tests
+Gradle detects withByteBufTracking property
        ↓
-ByteBufTrackerListener ←------ Prints report at end
-       ↑
-ByteBufFlowTracker ←----------- Tracks flows during tests
-       ↑
-ByteBuddy Agent ←-------------- Instruments methods at JVM startup
+Builds bytebuf-tracker:agentJar (if needed)
+       ↓
+Test JVM starts with -javaagent
+       ↓
+ByteBuddy instruments com.github.ambry classes
+       ↓
+Tests run - ByteBuf flows tracked in Trie
+       ↓
+ByteBufTrackerListener prints report
 ```
 
 ### Key Files
 
-- `modules/bytebuddy-bytebuf-tracer/` - Submodule with tracker source
-- `bytebuf-tracker/` - Ambry's build of the tracker
-- `bytebuf-tracker/build.gradle` - Build configuration
-- `build-bytebuf-tracker.sh` - Build automation script
+- `build.gradle` - Root build file with tracker configuration
+- `bytebuf-tracker/build.gradle` - Tracker module build configuration
+- `bytebuf-tracker/src/main/java/` - Tracker source code (from submodule)
 - `ambry-test-utils/.../ByteBufTrackerListener.java` - Test integration
-- `build.gradle` - Test task configuration
+- `modules/bytebuddy-bytebuf-tracer/` - Original tracker project (git submodule)
 
-## References
+### Source Code Organization
 
-- [ByteBuf Flow Tracker GitHub](https://github.com/j-tyler/bytebuddy-bytebuf-tracer)
+```
+bytebuf-tracker/src/main/java/
+├── com/example/bytebuf/tracker/
+│   ├── ByteBufFlowTracker.java        # Main tracking logic
+│   ├── ByteBufObjectHandler.java      # ByteBuf-specific handler
+│   ├── ObjectTrackerHandler.java      # Interface for custom objects
+│   ├── ObjectTrackerRegistry.java     # Handler registry
+│   ├── agent/
+│   │   ├── ByteBufFlowAgent.java      # Java agent entry point
+│   │   ├── ByteBufFlowMBean.java      # JMX interface
+│   │   └── ByteBufTrackingAdvice.java # ByteBuddy advice
+│   ├── trie/
+│   │   └── FlowTrie.java              # Trie data structure
+│   └── view/
+│       └── TrieRenderer.java          # Output formatting
+```
+
+## Comparison with Netty's Leak Detection
+
+| Feature | Netty Leak Detector | ByteBuf Flow Tracker |
+|---------|---------------------|----------------------|
+| **Approach** | Sampling-based | Complete tracking |
+| **Coverage** | Random sample | All ByteBufs |
+| **Call paths** | Stack traces | Flow tree (Trie) |
+| **Memory usage** | High (stack traces) | Low (shared Trie) |
+| **Output** | Console warnings | Structured report |
+| **Root cause** | Allocation site | Flow path |
+| **False positives** | Possible | Minimal |
+| **Performance impact** | Low-medium | Low |
+
+**When to use each:**
+- **Netty**: Production monitoring, broad coverage
+- **ByteBuf Tracker**: Deep analysis, debugging specific leaks, understanding flow patterns
+
+## Best Practices
+
+### During Development
+
+1. **Run tests with tracker periodically**:
+   ```bash
+   ./gradlew test -PwithByteBufTracking
+   ```
+
+2. **Fix leaks immediately** - Don't accumulate technical debt
+
+3. **Use narrow package scope** for faster iteration:
+   ```groovy
+   // In build.gradle, modify to track only your module
+   jvmArgs "-javaagent:...=include=com.github.ambry.mymodule"
+   ```
+
+### In CI/CD
+
+1. **Run selectively** - Not on every build (performance)
+2. **Schedule nightly** - Deep leak analysis overnight
+3. **Fail on leaks** - Configure to fail build if leaks detected
+4. **Archive reports** - Save output for trend analysis
+
+### Debugging Leaks
+
+1. **Start broad** - Track entire package
+2. **Identify leak paths** - Look for ⚠️ LEAK markers
+3. **Narrow scope** - Focus on specific classes
+4. **Examine flow tree** - Understand ByteBuf journey
+5. **Fix root cause** - Not just symptoms
+
+## Migration from Shell Scripts
+
+**Old approach (deprecated):**
+```bash
+./build-bytebuf-tracker.sh  # Build agent
+./gradlew test              # Run tests (auto-detected)
+```
+
+**New approach (recommended):**
+```bash
+./gradlew test -PwithByteBufTracking  # One command!
+```
+
+The shell scripts (`build-bytebuf-tracker.sh`, `build-bytebuf-tracker-maven.sh`) are kept for backward compatibility but are no longer needed.
+
+## Related Documentation
+
+- **README-BYTEBUF-TRACKING.md** - Simple usage guide
+- **bytebuf-tracker/QUICKSTART.md** - Quick reference
+- **GRADLE-INTEGRATION-SUMMARY.md** - Migration guide from shell scripts
+- **modules/bytebuddy-bytebuf-tracer/README.md** - Original tracker documentation
+
+## External Resources
+
 - [ByteBuddy Documentation](https://bytebuddy.net/)
 - [Netty ByteBuf Reference Counting](https://netty.io/wiki/reference-counted-objects.html)
-- [Ambry Memory Leak Investigation](https://github.com/linkedin/ambry/issues/XXXX)
+- [Java Agents Tutorial](https://www.baeldung.com/java-instrumentation)
+- [Original ByteBuf Flow Tracker](https://github.com/j-tyler/bytebuddy-bytebuf-tracer)
 
-## Future Enhancements
+## Support & Contributing
+
+### Getting Help
+
+1. Check troubleshooting section above
+2. Verify agent JAR exists: `ls -lh bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar`
+3. Run with verbose logging: `./gradlew test -PwithByteBufTracking --info`
+4. Review recent commits for similar issues
+
+### Reporting Issues
+
+When reporting issues, include:
+- Command used
+- Error message
+- Java version: `java -version`
+- Gradle version: `./gradlew --version`
+- Whether agent JAR was built successfully
+
+### Future Enhancements
 
 Potential improvements:
+- Automatic leak threshold enforcement in CI
+- HTML report generation with visual flow diagrams
+- Per-test leak isolation and reporting
+- Historical trend tracking
+- Custom object tracking beyond ByteBuf
+- Integration with other memory analysis tools
 
-1. **CI Integration**: Automatically fail builds on detected leaks
-2. **Leak Thresholds**: Configure acceptable leak levels
-3. **Per-Test Tracking**: Track and report leaks per individual test
-4. **Historical Tracking**: Store leak reports for trend analysis
-5. **Custom Object Tracking**: Extend beyond ByteBuf to other resources
-6. **HTML Reports**: Generate visual flow diagrams
+## License
 
-## Support
+The ByteBuf Flow Tracker integration follows Ambry's Apache License 2.0.
+The original tracker project is also Apache License 2.0.
 
-For issues with the ByteBuf tracker:
-1. Check this document's troubleshooting section
-2. Review the tracker's README: `modules/bytebuddy-bytebuf-tracer/README.md`
-3. Open an issue on the tracker repository
-4. Contact the Ambry team for integration-specific issues
+---
+
+**Quick Links:**
+- [Quick Start](#quick-start)
+- [Troubleshooting](#troubleshooting)
+- [Advanced Configuration](#advanced-configuration)
+- [Related Documentation](#related-documentation)
