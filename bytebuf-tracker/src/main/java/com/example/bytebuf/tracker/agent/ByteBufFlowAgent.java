@@ -22,23 +22,23 @@ public class ByteBufFlowAgent {
     
     /**
      * Premain method for Java agent
-     * 
-     * @param arguments Agent arguments in format: include=pkg1,pkg2;exclude=pkg3,pkg4
+     *
+     * @param arguments Agent arguments in format: include=pkg1,pkg2;exclude=pkg3,pkg4;trackConstructors=class1,class2
      * @param inst Instrumentation instance
      */
     public static void premain(String arguments, Instrumentation inst) {
         AgentConfig config = AgentConfig.parse(arguments);
-        
+
         System.out.println("[ByteBufFlowAgent] Starting with config: " + config);
-        
+
         // Setup JMX MBean for monitoring
         setupJmxMonitoring();
-        
+
         // Setup shutdown hook for final report
         setupShutdownHook();
-        
-        // Build the agent
-        new AgentBuilder.Default()
+
+        // Build the agent with chained transformers
+        AgentBuilder.Identified.Extendable agentBuilder = new AgentBuilder.Default()
             .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
             .with(new AgentBuilder.Listener.StreamWriting(System.out).withTransformationsOnly())
             .ignore(
@@ -49,10 +49,21 @@ public class ByteBufFlowAgent {
                 .or(nameStartsWith("jdk."))
                 .or(nameStartsWith("com.example.bytebuf.tracker.")) // Don't instrument ourselves
             )
+            // Transform regular methods (non-constructors)
             .type(config.getTypeMatcher())
-            .transform(new ByteBufTransformer())
-            .installOn(inst);
-        
+            .transform(new ByteBufTransformer());
+
+        // Add constructor tracking for specified classes
+        if (!config.getConstructorTrackingClasses().isEmpty()) {
+            System.out.println("[ByteBufFlowAgent] Constructor tracking enabled for: " +
+                config.getConstructorTrackingClasses());
+            agentBuilder = agentBuilder
+                .type(config.getConstructorTrackingMatcher())
+                .transform(new ConstructorTrackingTransformer());
+        }
+
+        agentBuilder.installOn(inst);
+
         System.out.println("[ByteBufFlowAgent] Instrumentation installed successfully");
     }
     
@@ -65,16 +76,34 @@ public class ByteBufFlowAgent {
                 DynamicType.Builder<?> builder,
                 TypeDescription typeDescription,
                 ClassLoader classLoader,
-                JavaModule module,
-                java.security.ProtectionDomain protectionDomain) {
+                JavaModule module) {
 
             return builder
                 .method(
-                    // Match methods that might handle ByteBufs
+                    // Match methods that might handle ByteBufs (including static methods)
                     isPublic()
                     .or(isProtected())
                     .and(not(isConstructor()))
-                    .and(not(isStatic()))
+                )
+                .intercept(Advice.to(ByteBufTrackingAdvice.class));
+        }
+    }
+
+    /**
+     * Transformer that applies advice to constructors for specified classes
+     */
+    static class ConstructorTrackingTransformer implements AgentBuilder.Transformer {
+        @Override
+        public DynamicType.Builder<?> transform(
+                DynamicType.Builder<?> builder,
+                TypeDescription typeDescription,
+                ClassLoader classLoader,
+                JavaModule module) {
+
+            return builder
+                .constructor(
+                    // Match public and protected constructors
+                    isPublic().or(isProtected())
                 )
                 .intercept(Advice.to(ByteBufTrackingAdvice.class));
         }
@@ -114,66 +143,65 @@ public class ByteBufFlowAgent {
 class AgentConfig {
     private final Set<String> includePackages;
     private final Set<String> excludePackages;
-    
-    private AgentConfig(Set<String> includePackages, Set<String> excludePackages) {
+    private final Set<String> constructorTrackingClasses;
+
+    private AgentConfig(Set<String> includePackages, Set<String> excludePackages,
+                        Set<String> constructorTrackingClasses) {
         this.includePackages = includePackages;
         this.excludePackages = excludePackages;
+        this.constructorTrackingClasses = constructorTrackingClasses;
     }
-    
+
     /**
      * Parse agent arguments
-     * Format: include=com.example,com.myapp;exclude=com.example.legacy
+     * Format: include=com.example,com.myapp;exclude=com.example.legacy;trackConstructors=com.example.Message,com.example.Request
      */
     public static AgentConfig parse(String arguments) {
         Set<String> include = new HashSet<>();
         Set<String> exclude = new HashSet<>();
-        
+        Set<String> trackConstructors = new HashSet<>();
+
         if (arguments != null && !arguments.isEmpty()) {
             String[] parts = arguments.split(";");
             for (String part : parts) {
-                String[] kv = part.split("=");
+                String[] kv = part.split("=", 2); // Use limit=2 to handle class names with = in them
                 if (kv.length == 2) {
                     String key = kv[0].trim();
                     String value = kv[1].trim();
-                    
+
                     if ("include".equals(key)) {
                         include.addAll(Arrays.asList(value.split(",")));
                     } else if ("exclude".equals(key)) {
                         exclude.addAll(Arrays.asList(value.split(",")));
+                    } else if ("trackConstructors".equals(key)) {
+                        // Parse class names, trimming whitespace
+                        for (String className : value.split(",")) {
+                            trackConstructors.add(className.trim());
+                        }
                     }
                 }
             }
         }
-        
+
         // Default to common application packages if none specified
         if (include.isEmpty()) {
             include.add("com.");
             include.add("org.");
             include.add("net.");
         }
-        
-        return new AgentConfig(include, exclude);
+
+        return new AgentConfig(include, exclude, trackConstructors);
     }
-    
+
     /**
      * Get type matcher based on configuration
      */
-    @SuppressWarnings("unchecked")
     public ElementMatcher<TypeDescription> getTypeMatcher() {
-        ElementMatcher.Junction<TypeDescription> matcher = null;
+        ElementMatcher<TypeDescription> matcher = none();
 
         // Include packages
         for (String pkg : includePackages) {
-            if (matcher == null) {
-                matcher = nameStartsWith(pkg);
-            } else {
-                matcher = matcher.or(nameStartsWith(pkg));
-            }
-        }
-
-        // If no includes specified, match nothing
-        if (matcher == null) {
-            matcher = none();
+            matcher = matcher.or(nameStartsWith(pkg));
         }
 
         // Exclude packages
@@ -183,9 +211,39 @@ class AgentConfig {
 
         return matcher;
     }
-    
+
+    /**
+     * Get matcher for classes that should have constructor tracking
+     */
+    public ElementMatcher<TypeDescription> getConstructorTrackingMatcher() {
+        ElementMatcher<TypeDescription> matcher = none();
+
+        for (String className : constructorTrackingClasses) {
+            // Support both exact matches and pattern matches
+            if (className.endsWith("*")) {
+                // Wildcard pattern: com.example.* matches all classes in package
+                String prefix = className.substring(0, className.length() - 1);
+                matcher = matcher.or(nameStartsWith(prefix));
+            } else {
+                // Exact match
+                matcher = matcher.or(named(className));
+            }
+        }
+
+        return matcher;
+    }
+
+    /**
+     * Get the set of classes configured for constructor tracking
+     */
+    public Set<String> getConstructorTrackingClasses() {
+        return constructorTrackingClasses;
+    }
+
     @Override
     public String toString() {
-        return "AgentConfig{include=" + includePackages + ", exclude=" + excludePackages + "}";
+        return "AgentConfig{include=" + includePackages +
+               ", exclude=" + excludePackages +
+               ", trackConstructors=" + constructorTrackingClasses + "}";
     }
 }

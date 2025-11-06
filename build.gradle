@@ -180,7 +180,9 @@ subprojects {
                 logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
             }
 
-            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
+            // Configure ByteBuf tracking with constructor tracking for wrapper classes
+            // trackConstructors enables tracking ByteBufs passed to constructors and stored as fields
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry;trackConstructors=com.github.ambry.protocol.*,com.github.ambry.network.Request,com.github.ambry.network.Response,com.github.ambry.network.Send,com.github.ambry.router.GetBlobOperation,com.github.ambry.rest.NettyRequest,com.github.ambry.rest.NettyResponse"
             systemProperty 'bytebuf.tracker.enabled', 'true'
 
             // Add test listener to print tracker output at end
@@ -240,7 +242,9 @@ subprojects {
                 logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
             }
 
-            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
+            // Configure ByteBuf tracking with constructor tracking for wrapper classes
+            // trackConstructors enables tracking ByteBufs passed to constructors and stored as fields
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry;trackConstructors=com.github.ambry.protocol.*,com.github.ambry.network.Request,com.github.ambry.network.Response,com.github.ambry.network.Send,com.github.ambry.router.GetBlobOperation,com.github.ambry.rest.NettyRequest,com.github.ambry.rest.NettyResponse"
             systemProperty 'bytebuf.tracker.enabled', 'true'
 
             // Add test listener to print tracker output at end

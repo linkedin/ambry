@@ -13,6 +13,7 @@ The ByteBuf Flow Tracker is a lightweight Java agent that tracks Netty ByteBuf o
 - Dual output formats - human-readable trees and LLM-optimized structured text
 - JMX integration - runtime monitoring via MBean
 - **Gradle-native** - fully integrated into Ambry's build system
+- **Constructor tracking** - tracks ByteBufs passed to constructors and stored in wrapped objects (NEW!)
 
 ## Quick Start
 
@@ -392,6 +393,7 @@ The shell scripts (`build-bytebuf-tracker.sh`, `build-bytebuf-tracker-maven.sh`)
 
 ## Related Documentation
 
+- **CONSTRUCTOR_TRACKING.md** - Comprehensive guide to constructor tracking for wrapped objects (⭐ NEW!)
 - **README-BYTEBUF-TRACKING.md** - Simple usage guide
 - **bytebuf-tracker/QUICKSTART.md** - Quick reference
 - **GRADLE-INTEGRATION-SUMMARY.md** - Migration guide from shell scripts
