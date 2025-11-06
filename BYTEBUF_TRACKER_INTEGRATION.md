@@ -56,14 +56,30 @@ This script attempts multiple build strategies:
 
 This builds the agent JAR at: `bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar`
 
-### Option 3: Build from Submodule (if dependencies unavailable)
+### Option 3: Build from Submodule (RECOMMENDED if build script fails)
+
+If the build script fails due to Gradle/Java version issues, build directly from the submodule:
 
 ```bash
 cd modules/bytebuddy-bytebuf-tracer
 mvn clean install
 cd ../..
+mkdir -p bytebuf-tracker/build/libs
 cp modules/bytebuddy-bytebuf-tracer/bytebuf-flow-tracker/target/bytebuf-flow-tracker-*-agent.jar \
    bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar
+```
+
+This requires Maven and Java 8-11. If you don't have Maven:
+
+```bash
+# Install Maven (macOS)
+brew install maven
+
+# Install Maven (Ubuntu/Debian)
+sudo apt-get install maven
+
+# Install Maven (other)
+# Download from https://maven.apache.org/download.cgi
 ```
 
 ## Running Tests with the Tracker
@@ -241,12 +257,44 @@ jconsole localhost:9999
 
 **Solution**:
 1. Retry the build (transient issues)
-2. Use offline mode if dependencies are cached:
+2. Build from the submodule using Maven:
    ```bash
-   ./gradlew :bytebuf-tracker:build --offline
+   cd modules/bytebuddy-bytebuf-tracer
+   mvn clean install
+   cd ../..
+   mkdir -p bytebuf-tracker/build/libs
+   cp modules/bytebuddy-bytebuf-tracer/bytebuf-flow-tracker/target/*-agent.jar \
+      bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar
    ```
-3. Build from the submodule's pre-built classes
-4. Wait for network connectivity and run `./build-bytebuf-tracker.sh`
+3. Wait for network connectivity and run `./build-bytebuf-tracker.sh`
+
+### Gradle/Java Version Compatibility Issues
+
+**Symptom**: Build fails with `NoClassDefFoundError: Could not initialize class org.codehaus.groovy.vmplugin.v7.Java7`
+
+**Cause**: Java version incompatibility with Gradle version
+
+**Solution**: Build from the submodule using Maven (which is more tolerant of Java versions):
+```bash
+cd modules/bytebuddy-bytebuf-tracer
+mvn clean install -DskipTests
+mkdir -p ../../bytebuf-tracker/build/libs
+cp bytebuf-flow-tracker/target/*-agent.jar ../../bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar
+cd ../..
+```
+
+Alternatively, use a compatible Java version (Java 8-11):
+```bash
+# Check your Java version
+java -version
+
+# On macOS with SDKMAN
+sdk install java 11.0.12-open
+sdk use java 11.0.12-open
+
+# Then retry
+./build-bytebuf-tracker.sh
+```
 
 ## Implementation Notes
 
