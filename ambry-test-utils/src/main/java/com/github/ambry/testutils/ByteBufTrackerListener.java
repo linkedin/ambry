@@ -22,6 +22,22 @@ public class ByteBufTrackerListener extends RunListener {
 
   private static final String TRACKER_CLASS = "com.example.bytebuf.tracker.ByteBufFlowTracker";
   private static final String RENDERER_CLASS = "com.example.bytebuf.tracker.view.TrieRenderer";
+  private static final String SEPARATOR_LINE = "================================================================================";
+  private static final String SUBSECTION_LINE = "--------------------------------------------------------------------------------";
+
+  /**
+   * Helper method to repeat a string (Java 8 compatible).
+   * @param str the string to repeat
+   * @param count the number of times to repeat
+   * @return the repeated string
+   */
+  private static String repeat(String str, int count) {
+    StringBuilder sb = new StringBuilder(str.length() * count);
+    for (int i = 0; i < count; i++) {
+      sb.append(str);
+    }
+    return sb.toString();
+  }
 
   @Override
   public void testRunFinished(Result result) throws Exception {
@@ -36,30 +52,30 @@ public class ByteBufTrackerListener extends RunListener {
       Object renderer = rendererClass.getConstructor(trie.getClass()).newInstance(trie);
 
       // Print summary and full report
-      System.out.println("\n" + "=".repeat(80));
+      System.out.println("\n" + SEPARATOR_LINE);
       System.out.println("ByteBuf Flow Tracker Report");
-      System.out.println("=".repeat(80));
+      System.out.println(SEPARATOR_LINE);
 
       String summary = (String) rendererClass.getMethod("renderSummary").invoke(renderer);
       System.out.println(summary);
 
-      System.out.println("\n" + "-".repeat(80));
+      System.out.println("\n" + SUBSECTION_LINE);
       System.out.println("Flow Tree:");
-      System.out.println("-".repeat(80));
+      System.out.println(SUBSECTION_LINE);
 
       String tree = (String) rendererClass.getMethod("renderIndentedTree").invoke(renderer);
       System.out.println(tree);
 
-      System.out.println("\n" + "-".repeat(80));
+      System.out.println("\n" + SUBSECTION_LINE);
       System.out.println("Flat Paths (Leaks Highlighted):");
-      System.out.println("-".repeat(80));
+      System.out.println(SUBSECTION_LINE);
 
       String flatPaths = (String) rendererClass.getMethod("renderFlatPaths").invoke(renderer);
       System.out.println(flatPaths);
 
-      System.out.println("\n" + "=".repeat(80));
+      System.out.println("\n" + SEPARATOR_LINE);
       System.out.println("End of ByteBuf Flow Tracker Report");
-      System.out.println("=".repeat(80) + "\n");
+      System.out.println(SEPARATOR_LINE + "\n");
 
     } catch (ClassNotFoundException e) {
       // Tracker not available - agent not running or not in classpath
