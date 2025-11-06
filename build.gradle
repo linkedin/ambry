@@ -160,15 +160,32 @@ subprojects {
         systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
 
         // ByteBuf Flow Tracker configuration
-        // Add the tracker agent if the JAR exists
-        def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
-        if (trackerJar.exists()) {
+        def byteBufTrackingEnabled = project.hasProperty('withByteBufTracking') ||
+                                     project.hasProperty('enableByteBufTracking') ||
+                                     System.getProperty('enableByteBufTracking') == 'true'
+
+        if (byteBufTrackingEnabled) {
+            // Ensure the tracker is built before tests run
+            dependsOn ':bytebuf-tracker:agentJar'
+
+            // Add the tracker agent
+            def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
+            doFirst {
+                if (!trackerJar.exists()) {
+                    throw new GradleException(
+                        "ByteBuf tracker agent JAR not found at ${trackerJar}. " +
+                        "Ensure bytebuf-tracker module is built."
+                    )
+                }
+                logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
+            }
+
             jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
             systemProperty 'bytebuf.tracker.enabled', 'true'
-        }
 
-        // Add test listener to print tracker output at end
-        systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
+            // Add test listener to print tracker output at end
+            systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
+        }
 
         // make sure Powermockito would be happy
         if (JavaVersion.current().java9Compatible) {
@@ -203,15 +220,32 @@ subprojects {
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
 
         // ByteBuf Flow Tracker configuration
-        // Add the tracker agent if the JAR exists
-        def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
-        if (trackerJar.exists()) {
+        def byteBufTrackingEnabled = project.hasProperty('withByteBufTracking') ||
+                                     project.hasProperty('enableByteBufTracking') ||
+                                     System.getProperty('enableByteBufTracking') == 'true'
+
+        if (byteBufTrackingEnabled) {
+            // Ensure the tracker is built before tests run
+            dependsOn ':bytebuf-tracker:agentJar'
+
+            // Add the tracker agent
+            def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
+            doFirst {
+                if (!trackerJar.exists()) {
+                    throw new GradleException(
+                        "ByteBuf tracker agent JAR not found at ${trackerJar}. " +
+                        "Ensure bytebuf-tracker module is built."
+                    )
+                }
+                logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
+            }
+
             jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
             systemProperty 'bytebuf.tracker.enabled', 'true'
-        }
 
-        // Add test listener to print tracker output at end
-        systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
+            // Add test listener to print tracker output at end
+            systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
+        }
     }
 
     task allTest {

@@ -8,6 +8,11 @@
 // under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 // CONDITIONS OF ANY KIND, either express or implied.
 
+// Only build this module if ByteBuf tracking is enabled
+def byteBufTrackingEnabled = project.hasProperty('withByteBufTracking') ||
+                             project.hasProperty('enableByteBufTracking') ||
+                             System.getProperty('enableByteBufTracking') == 'true'
+
 dependencies {
     // Reuse Ambry's existing dependencies
     compile "net.bytebuddy:byte-buddy:1.14.9"
@@ -18,7 +23,13 @@ dependencies {
 
 // Task to build the fat agent JAR with all dependencies
 task agentJar(type: Jar) {
+    description = 'Builds the ByteBuf Flow Tracker agent JAR with all dependencies'
+    group = 'build'
+
+    // Set archive name
+    archiveBaseName = 'bytebuf-tracker'
     archiveClassifier = 'agent'
+
     manifest {
         attributes(
             'Premain-Class': 'com.example.bytebuf.tracker.agent.ByteBufFlowAgent',
@@ -28,14 +39,30 @@ task agentJar(type: Jar) {
             'Boot-Class-Path': ''
         )
     }
+
     from sourceSets.main.output
+
     // Include all runtime dependencies
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
+
+    // Exclude duplicates and signatures
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
 }
 
-// Make build depend on agentJar
-build.dependsOn agentJar
-assemble.dependsOn agentJar
+// Conditionally build the agent JAR
+if (byteBufTrackingEnabled) {
+    build.dependsOn agentJar
+    assemble.dependsOn agentJar
+
+    logger.lifecycle("ByteBuf tracking enabled - agent JAR will be built")
+} else {
+    logger.info("ByteBuf tracking disabled - use -PwithByteBufTracking to enable")
+}
+
+// Make the agent JAR available to other projects
+artifacts {
+    archives agentJar
+}
