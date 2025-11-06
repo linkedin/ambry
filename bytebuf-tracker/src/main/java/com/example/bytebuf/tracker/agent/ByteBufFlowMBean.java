@@ -12,23 +12,23 @@ import java.lang.management.ManagementFactory;
 import java.util.Date;
 
 /**
- * JMX MBean interface for ByteBuf flow monitoring
+ * JMX MBean interface for ByteBuf flow monitoring (package-private to avoid file naming issues)
  */
-public interface ByteBufFlowMBeanInterface {
+interface ByteBufFlowMBeanInterface {
     // View operations
     String getTreeView();
     String getFlatView();
     String getCsvView();
     String getJsonView();
     String getSummary();
-    
+
     // Statistics
     int getRootCount();
     int getActiveFlowCount();
-    
+
     // Export operations
     void exportToFile(String filepath, String format);
-    
+
     // Control operations
     void reset();
 }
@@ -140,12 +140,16 @@ class ByteBufFlowReporter {
     public String generateReport() {
         TrieRenderer renderer = new TrieRenderer(tracker.getTrie());
         StringBuilder report = new StringBuilder();
-        
+
         // Header
         report.append("ByteBuf Flow Analysis Report\n");
         report.append("Generated: ").append(new Date()).append("\n");
-        report.append("=" .repeat(80)).append("\n\n");
-        
+        // Java 8 compatible separator line
+        for (int i = 0; i < 80; i++) {
+            report.append("=");
+        }
+        report.append("\n\n");
+
         // Summary
         report.append(renderer.renderSummary()).append("\n");
         

@@ -65,8 +65,9 @@ public class ByteBufFlowAgent {
                 DynamicType.Builder<?> builder,
                 TypeDescription typeDescription,
                 ClassLoader classLoader,
-                JavaModule module) {
-            
+                JavaModule module,
+                java.security.ProtectionDomain protectionDomain) {
+
             return builder
                 .method(
                     // Match methods that might handle ByteBufs
@@ -157,19 +158,29 @@ class AgentConfig {
     /**
      * Get type matcher based on configuration
      */
+    @SuppressWarnings("unchecked")
     public ElementMatcher<TypeDescription> getTypeMatcher() {
-        ElementMatcher<TypeDescription> matcher = none();
-        
+        ElementMatcher.Junction<TypeDescription> matcher = null;
+
         // Include packages
         for (String pkg : includePackages) {
-            matcher = matcher.or(nameStartsWith(pkg));
+            if (matcher == null) {
+                matcher = nameStartsWith(pkg);
+            } else {
+                matcher = matcher.or(nameStartsWith(pkg));
+            }
         }
-        
+
+        // If no includes specified, match nothing
+        if (matcher == null) {
+            matcher = none();
+        }
+
         // Exclude packages
         for (String pkg : excludePackages) {
             matcher = matcher.and(not(nameStartsWith(pkg)));
         }
-        
+
         return matcher;
     }
     
