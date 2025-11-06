@@ -14,9 +14,16 @@ import org.junit.runner.Description;
 import org.junit.runner.Result;
 import org.junit.runner.notification.RunListener;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+
 /**
- * JUnit test listener that prints ByteBuf flow tracker information at the end of test execution.
+ * JUnit test listener that writes ByteBuf flow tracker information to a file at the end of test execution.
  * This integrates with the ByteBuddy ByteBuf tracer to detect memory leaks in tests.
+ *
+ * Output is written to: build/reports/bytebuf-tracking/[module-name].txt
  */
 public class ByteBufTrackerListener extends RunListener {
 
@@ -51,38 +58,83 @@ public class ByteBufTrackerListener extends RunListener {
       Class<?> rendererClass = Class.forName(RENDERER_CLASS);
       Object renderer = rendererClass.getConstructor(trie.getClass()).newInstance(trie);
 
-      // Print summary and full report
-      System.out.println("\n" + SEPARATOR_LINE);
-      System.out.println("ByteBuf Flow Tracker Report");
-      System.out.println(SEPARATOR_LINE);
+      // Build the report
+      StringBuilder report = new StringBuilder();
+      report.append("\n").append(SEPARATOR_LINE).append("\n");
+      report.append("ByteBuf Flow Tracker Report\n");
+      report.append(SEPARATOR_LINE).append("\n");
 
       String summary = (String) rendererClass.getMethod("renderSummary").invoke(renderer);
-      System.out.println(summary);
+      report.append(summary).append("\n");
 
-      System.out.println("\n" + SUBSECTION_LINE);
-      System.out.println("Flow Tree:");
-      System.out.println(SUBSECTION_LINE);
+      report.append("\n").append(SUBSECTION_LINE).append("\n");
+      report.append("Flow Tree:\n");
+      report.append(SUBSECTION_LINE).append("\n");
 
       String tree = (String) rendererClass.getMethod("renderIndentedTree").invoke(renderer);
-      System.out.println(tree);
+      report.append(tree).append("\n");
 
-      System.out.println("\n" + SUBSECTION_LINE);
-      System.out.println("Flat Paths (Leaks Highlighted):");
-      System.out.println(SUBSECTION_LINE);
+      report.append("\n").append(SUBSECTION_LINE).append("\n");
+      report.append("Flat Paths (Leaks Highlighted):\n");
+      report.append(SUBSECTION_LINE).append("\n");
 
       String flatPaths = (String) rendererClass.getMethod("renderFlatPaths").invoke(renderer);
-      System.out.println(flatPaths);
+      report.append(flatPaths).append("\n");
 
-      System.out.println("\n" + SEPARATOR_LINE);
-      System.out.println("End of ByteBuf Flow Tracker Report");
-      System.out.println(SEPARATOR_LINE + "\n");
+      report.append("\n").append(SEPARATOR_LINE).append("\n");
+      report.append("End of ByteBuf Flow Tracker Report\n");
+      report.append(SEPARATOR_LINE).append("\n");
+
+      // Write to file instead of stdout (Gradle captures stdout)
+      writeReportToFile(report.toString());
+
+      // Also print a notification to stdout
+      System.out.println("\n[ByteBufTracker] Report written to: " + getReportFile().getAbsolutePath());
 
     } catch (ClassNotFoundException e) {
       // Tracker not available - agent not running or not in classpath
-      System.out.println("\nByteBuf Flow Tracker not available (agent not running)");
+      // This is normal when tests run without -PwithByteBufTracking
     } catch (Exception e) {
       System.err.println("Error generating ByteBuf flow report: " + e.getMessage());
       e.printStackTrace();
+    }
+  }
+
+  /**
+   * Get the report file location
+   */
+  private File getReportFile() {
+    // Try to determine the module name from the working directory
+    String workingDir = System.getProperty("user.dir", "");
+    String moduleName = "unknown";
+
+    // Extract module name from path (e.g., /path/to/ambry/ambry-store -> ambry-store)
+    if (workingDir.contains(File.separator)) {
+      String[] parts = workingDir.split(File.separator);
+      if (parts.length > 0) {
+        moduleName = parts[parts.length - 1];
+      }
+    }
+
+    // Create reports directory
+    File reportsDir = new File("build/reports/bytebuf-tracking");
+    reportsDir.mkdirs();
+
+    return new File(reportsDir, moduleName + "-" + System.currentTimeMillis() + ".txt");
+  }
+
+  /**
+   * Write report to file
+   */
+  private void writeReportToFile(String report) {
+    File reportFile = getReportFile();
+    try (PrintWriter writer = new PrintWriter(new FileWriter(reportFile))) {
+      writer.write(report);
+      writer.flush();
+    } catch (IOException e) {
+      System.err.println("Failed to write ByteBuf tracking report to file: " + e.getMessage());
+      // Fall back to stdout
+      System.out.println(report);
     }
   }
 

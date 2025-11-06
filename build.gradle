@@ -765,6 +765,39 @@ task codeCoverageReport(type: JacocoReport) {
     }
 }
 
+// ByteBuf Flow Tracker report consolidation
+// When tests complete with tracking enabled, print all reports to console
+def byteBufTrackingEnabled = project.hasProperty('withByteBufTracking') ||
+                             project.hasProperty('enableByteBufTracking') ||
+                             System.getProperty('enableByteBufTracking') == 'true'
+
+if (byteBufTrackingEnabled) {
+    gradle.buildFinished {
+        println "\n"
+        println "="*80
+        println "ByteBuf Flow Tracker - Consolidated Reports"
+        println "="*80
+
+        def reportFiles = fileTree(dir: '.', include: '**/build/reports/bytebuf-tracking/*.txt')
+
+        if (reportFiles.isEmpty()) {
+            println "\nNo ByteBuf tracking reports found."
+            println "Reports should be generated at: [module]/build/reports/bytebuf-tracking/"
+        } else {
+            reportFiles.each { file ->
+                println "\n" + "-"*80
+                println "Report: ${file.path}"
+                println "-"*80
+                println file.text
+            }
+
+            println "\n" + "="*80
+            println "End of Consolidated ByteBuf Flow Tracker Reports"
+            println "="*80
+        }
+    }
+}
+
 if (hasProperty('buildScan')) {
     buildScan {
         termsOfServiceUrl = 'https://gradle.com/terms-of-service'
