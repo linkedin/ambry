@@ -12,9 +12,9 @@ import java.lang.management.ManagementFactory;
 import java.util.Date;
 
 /**
- * JMX MBean interface for ByteBuf flow monitoring (package-private to avoid file naming issues)
+ * JMX MBean interface for ByteBuf flow monitoring
  */
-interface ByteBufFlowMBeanInterface {
+public interface ByteBufFlowMBeanInterface {
     // View operations
     String getTreeView();
     String getFlatView();

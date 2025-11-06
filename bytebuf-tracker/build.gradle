@@ -19,6 +19,10 @@ dependencies {
     compile "net.bytebuddy:byte-buddy-agent:1.14.9"
     compile "io.netty:netty-all:$nettyVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
+
+    // Test dependencies
+    testCompile "junit:junit:4.12"
+    testCompile "io.netty:netty-all:$nettyVersion"
 }
 
 // Task to build the fat agent JAR with all dependencies
