@@ -1,0 +1,3 @@
+[submodule "modules/bytebuddy-bytebuf-tracer"]
+	path = modules/bytebuddy-bytebuf-tracer
+	url = https://github.com/j-tyler/bytebuddy-bytebuf-tracer.git

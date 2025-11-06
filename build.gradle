@@ -159,6 +159,34 @@ subprojects {
         systemProperty 'io.netty.allocator.normalCacheSize', '0'
         systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
 
+        // ByteBuf Flow Tracker configuration
+        def byteBufTrackingEnabled = project.hasProperty('withByteBufTracking') ||
+                                     project.hasProperty('enableByteBufTracking') ||
+                                     System.getProperty('enableByteBufTracking') == 'true'
+
+        if (byteBufTrackingEnabled) {
+            // Ensure the tracker is built before tests run
+            dependsOn ':bytebuf-tracker:agentJar'
+
+            // Add the tracker agent
+            def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
+            doFirst {
+                if (!trackerJar.exists()) {
+                    throw new GradleException(
+                        "ByteBuf tracker agent JAR not found at ${trackerJar}. " +
+                        "Ensure bytebuf-tracker module is built."
+                    )
+                }
+                logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
+            }
+
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
+            systemProperty 'bytebuf.tracker.enabled', 'true'
+
+            // Add test listener to print tracker output at end
+            systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
+        }
+
         // make sure Powermockito would be happy
         if (JavaVersion.current().java9Compatible) {
             jvmArgs '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED'
@@ -190,6 +218,34 @@ subprojects {
         }
         maxHeapSize = "6g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
+
+        // ByteBuf Flow Tracker configuration
+        def byteBufTrackingEnabled = project.hasProperty('withByteBufTracking') ||
+                                     project.hasProperty('enableByteBufTracking') ||
+                                     System.getProperty('enableByteBufTracking') == 'true'
+
+        if (byteBufTrackingEnabled) {
+            // Ensure the tracker is built before tests run
+            dependsOn ':bytebuf-tracker:agentJar'
+
+            // Add the tracker agent
+            def trackerJar = file("${rootProject.projectDir}/bytebuf-tracker/build/libs/bytebuf-tracker-agent.jar")
+            doFirst {
+                if (!trackerJar.exists()) {
+                    throw new GradleException(
+                        "ByteBuf tracker agent JAR not found at ${trackerJar}. " +
+                        "Ensure bytebuf-tracker module is built."
+                    )
+                }
+                logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
+            }
+
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry"
+            systemProperty 'bytebuf.tracker.enabled', 'true'
+
+            // Add test listener to print tracker output at end
+            systemProperty 'junit.listeners', 'com.github.ambry.testutils.ByteBufTrackerListener'
+        }
     }
 
     task allTest {
@@ -706,6 +762,39 @@ task codeCoverageReport(type: JacocoReport) {
         xml.destination file("${buildDir}/reports/jacoco/report.xml")
         html.enabled true
         csv.enabled true
+    }
+}
+
+// ByteBuf Flow Tracker report consolidation
+// When tests complete with tracking enabled, print all reports to console
+def byteBufTrackingEnabled = project.hasProperty('withByteBufTracking') ||
+                             project.hasProperty('enableByteBufTracking') ||
+                             System.getProperty('enableByteBufTracking') == 'true'
+
+if (byteBufTrackingEnabled) {
+    gradle.buildFinished {
+        println "\n"
+        println "="*80
+        println "ByteBuf Flow Tracker - Consolidated Reports"
+        println "="*80
+
+        def reportFiles = fileTree(dir: '.', include: '**/build/reports/bytebuf-tracking/*.txt')
+
+        if (reportFiles.isEmpty()) {
+            println "\nNo ByteBuf tracking reports found."
+            println "Reports should be generated at: [module]/build/reports/bytebuf-tracking/"
+        } else {
+            reportFiles.each { file ->
+                println "\n" + "-"*80
+                println "Report: ${file.path}"
+                println "-"*80
+                println file.text
+            }
+
+            println "\n" + "="*80
+            println "End of Consolidated ByteBuf Flow Tracker Reports"
+            println "="*80
+        }
     }
 }
 
