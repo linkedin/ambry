@@ -75,23 +75,25 @@ public class AggregatedAccountReportsDaoTest {
     when(mockQueryMonthStatement.executeQuery()).thenReturn(mockResultSet);
 
     // Set mocked statements in the mock connection
+    // Order matters in Mockito 5 - more specific matchers should come first
+    // Using lenient() for shared setup that may not be used by all tests
     mockConnection = mock(Connection.class);
-    when(mockConnection.prepareStatement(
-        contains("INSERT INTO " + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE))).thenReturn(
-        mockInsertAggregatedStatement);
-    when(mockConnection.prepareStatement(contains(
-        "INSERT " + AggregatedAccountReportsDao.MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE + " SELECT"))).thenReturn(
+    lenient().when(mockConnection.prepareStatement(
+        startsWith("INSERT " + AggregatedAccountReportsDao.MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE + " SELECT"))).thenReturn(
         mockInsertCopyStatement);
-    when(mockConnection.prepareStatement(
-        contains("INSERT INTO " + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE))).thenReturn(
+    lenient().when(mockConnection.prepareStatement(
+        startsWith("INSERT INTO " + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE))).thenReturn(
+        mockInsertAggregatedStatement);
+    lenient().when(mockConnection.prepareStatement(
+        startsWith("INSERT INTO " + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE))).thenReturn(
         mockInsertMonthStatement);
-    when(mockConnection.prepareStatement(
+    lenient().when(mockConnection.prepareStatement(
         matches("SELECT.+" + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE + ".+"))).thenReturn(
         mockQueryMonthStatement);
-    when(mockConnection.prepareStatement(
+    lenient().when(mockConnection.prepareStatement(
         matches("SELECT.+" + AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE + " .+"))).thenReturn(
         mockQueryAggregatedStatement);
-    when(mockConnection.prepareStatement(
+    lenient().when(mockConnection.prepareStatement(
         matches("SELECT.+" + AggregatedAccountReportsDao.MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE + ".+"))).thenReturn(
         mockQueryAggregatedStatement);
 
@@ -135,7 +137,7 @@ public class AggregatedAccountReportsDaoTest {
 
   @Test
   public void testInsertCopy() throws Exception {
-    when(mockInsertCopyStatement.executeUpdate()).thenReturn(1);
+    lenient().when(mockInsertCopyStatement.executeUpdate()).thenReturn(1);
     aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
     verify(mockConnection).prepareStatement(anyString());
     assertEquals("Copy success count should be 1", 1, metrics.copySuccessCount.getCount());
@@ -147,11 +149,39 @@ public class AggregatedAccountReportsDaoTest {
 
   @Test
   public void testInsertCopyWithException() throws Exception {
-    doThrow(new SQLTransientConnectionException()).when(mockInsertCopyStatement).executeUpdate();
+    // Create fresh mocks for this test to avoid interaction with constructor setup
+    Connection testConnection = mock(Connection.class);
+    PreparedStatement testCopyStatement = mock(PreparedStatement.class);
+    DataSource testDataSource = mock(DataSource.class);
+
+    // Set up the mock chain: dataSource -> connection -> preparedStatement
+    when(testDataSource.getConnection()).thenReturn(testConnection);
+    when(testConnection.prepareStatement(anyString())).thenReturn(testCopyStatement);
+
+    // Configure the statement to throw SQLException when executeUpdate is called
+    when(testCopyStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException("Test exception"));
+
+    // Create a new DAO instance with the test datasource
+    AggregatedAccountReportsDao testDao = new AggregatedAccountReportsDao(testDataSource, metrics);
+
+    // Record metrics before the test
+    long copyFailureCountBefore = metrics.copyFailureCount.getCount();
+
+    // Execute and verify the exception is thrown
     TestUtils.assertException(SQLTransientConnectionException.class,
-        () -> aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName), null);
-    assertEquals("Copy failure count should be 1", 1, metrics.copyFailureCount.getCount());
+        () -> testDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName), null);
+
+    // Verify the failure metric was incremented
+    assertEquals("Copy failure count should increment by 1",
+        copyFailureCountBefore + 1, metrics.copyFailureCount.getCount());
+
+    // Verify the interactions occurred in the expected order
+    verify(testDataSource).getConnection();
+    verify(testConnection).prepareStatement(anyString());
+    verify(testCopyStatement).setString(1, clusterName);
+    verify(testCopyStatement).executeUpdate();
   }
+
 
   @Test
   public void testInsertMonth() throws Exception {
