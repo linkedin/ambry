@@ -8,16 +8,13 @@ import net.bytebuddy.asm.Advice;
 /**
  * ByteBuddy advice for tracking object flow through methods.
  * Originally designed for ByteBuf, but now supports any object via ObjectTrackerHandler.
- *
- * IMPORTANT: Uses ThreadLocal to prevent re-entrant calls which can cause deadlock.
  */
 public class ByteBufTrackingAdvice {
 
-    /**
-     * ThreadLocal to detect and prevent re-entrant advice calls.
-     * This prevents deadlock when instrumented code calls other instrumented code.
-     */
-    private static final ThreadLocal<Boolean> IS_TRACKING = ThreadLocal.withInitial(() -> false);
+    // Re-entrance guard to prevent infinite recursion when tracking code
+    // triggers other instrumented methods
+    private static final ThreadLocal<Boolean> IS_TRACKING =
+        ThreadLocal.withInitial(() -> false);
 
     /**
      * Method entry advice - tracks objects in parameters
@@ -28,7 +25,7 @@ public class ByteBufTrackingAdvice {
             @Advice.Origin("#m") String methodName,
             @Advice.AllArguments Object[] arguments) {
 
-        // Re-entrance guard: if already tracking on this thread, skip to prevent deadlock
+        // Prevent re-entrant calls
         if (IS_TRACKING.get()) {
             return;
         }
@@ -39,7 +36,6 @@ public class ByteBufTrackingAdvice {
 
         try {
             IS_TRACKING.set(true);
-
             ObjectTrackerHandler handler = ObjectTrackerRegistry.getHandler();
             ByteBufFlowTracker tracker = ByteBufFlowTracker.getInstance();
 
@@ -70,14 +66,13 @@ public class ByteBufTrackingAdvice {
             @Advice.Return Object returnValue,
             @Advice.Thrown Throwable thrown) {
 
-        // Re-entrance guard: if already tracking on this thread, skip to prevent deadlock
+        // Prevent re-entrant calls
         if (IS_TRACKING.get()) {
             return;
         }
 
         try {
             IS_TRACKING.set(true);
-
             ObjectTrackerHandler handler = ObjectTrackerRegistry.getHandler();
             ByteBufFlowTracker tracker = ByteBufFlowTracker.getInstance();
 
