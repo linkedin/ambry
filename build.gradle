@@ -180,9 +180,20 @@ subprojects {
                 logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
             }
 
-            // Configure ByteBuf tracking with constructor tracking for wrapper classes
+            // Configure ByteBuf tracking with constructor tracking for all wrapper classes
             // trackConstructors enables tracking ByteBufs passed to constructors and stored as fields
-            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry;trackConstructors=com.github.ambry.protocol.*,com.github.ambry.network.Request,com.github.ambry.network.Response,com.github.ambry.network.Send,com.github.ambry.router.GetBlobOperation,com.github.ambry.rest.NettyRequest,com.github.ambry.rest.NettyResponse"
+            // Based on codebase analysis, these classes wrap ByteBuf in constructors:
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry;trackConstructors=" +
+                "com.github.ambry.protocol.*," +                                    // PutRequest (and other protocol messages)
+                "com.github.ambry.messageformat.BlobData," +                       // Blob data wrapper
+                "com.github.ambry.network.SocketServerRequest," +                  // Socket-based request wrapper
+                "com.github.ambry.network.NettyServerRequest," +                   // Netty-based request wrapper
+                "com.github.ambry.network.ResponseInfo," +                         // Network response wrapper
+                "com.github.ambry.router.EncryptJob," +                            // Encryption job with blob content
+                "com.github.ambry.router.EncryptJob\$EncryptJobResult," +          // Encryption result (inner class)
+                "com.github.ambry.router.DecryptJob," +                            // Decryption job with blob content
+                "com.github.ambry.rest.NettyResponseChannel\$Chunk," +             // Response chunk (inner class)
+                "com.github.ambry.utils.NettyByteBufDataInputStream"               // ByteBuf to InputStream wrapper
             systemProperty 'bytebuf.tracker.enabled', 'true'
 
             // Add test listener to print tracker output at end
@@ -242,9 +253,20 @@ subprojects {
                 logger.lifecycle("Using ByteBuf Flow Tracker agent: ${trackerJar}")
             }
 
-            // Configure ByteBuf tracking with constructor tracking for wrapper classes
+            // Configure ByteBuf tracking with constructor tracking for all wrapper classes
             // trackConstructors enables tracking ByteBufs passed to constructors and stored as fields
-            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry;trackConstructors=com.github.ambry.protocol.*,com.github.ambry.network.Request,com.github.ambry.network.Response,com.github.ambry.network.Send,com.github.ambry.router.GetBlobOperation,com.github.ambry.rest.NettyRequest,com.github.ambry.rest.NettyResponse"
+            // Based on codebase analysis, these classes wrap ByteBuf in constructors:
+            jvmArgs "-javaagent:${trackerJar.absolutePath}=include=com.github.ambry;trackConstructors=" +
+                "com.github.ambry.protocol.*," +                                    // PutRequest (and other protocol messages)
+                "com.github.ambry.messageformat.BlobData," +                       // Blob data wrapper
+                "com.github.ambry.network.SocketServerRequest," +                  // Socket-based request wrapper
+                "com.github.ambry.network.NettyServerRequest," +                   // Netty-based request wrapper
+                "com.github.ambry.network.ResponseInfo," +                         // Network response wrapper
+                "com.github.ambry.router.EncryptJob," +                            // Encryption job with blob content
+                "com.github.ambry.router.EncryptJob\$EncryptJobResult," +          // Encryption result (inner class)
+                "com.github.ambry.router.DecryptJob," +                            // Decryption job with blob content
+                "com.github.ambry.rest.NettyResponseChannel\$Chunk," +             // Response chunk (inner class)
+                "com.github.ambry.utils.NettyByteBufDataInputStream"               // ByteBuf to InputStream wrapper
             systemProperty 'bytebuf.tracker.enabled', 'true'
 
             // Add test listener to print tracker output at end

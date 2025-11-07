@@ -46,17 +46,22 @@ jvmArgs "-javaagent:${trackerJar}=include=com.github.ambry;trackConstructors=Cla
 
 ### Ambry's Current Configuration
 
-Located in `/home/user/ambry/build.gradle` (lines 185 and 247):
+Located in `/home/user/ambry/build.gradle` (lines 186-196 and 259-269):
 
 ```groovy
-trackConstructors=com.github.ambry.protocol.*,
-                  com.github.ambry.network.Request,
-                  com.github.ambry.network.Response,
-                  com.github.ambry.network.Send,
-                  com.github.ambry.router.GetBlobOperation,
-                  com.github.ambry.rest.NettyRequest,
-                  com.github.ambry.rest.NettyResponse
+trackConstructors=com.github.ambry.protocol.*,                          // All protocol messages (PutRequest, etc)
+                  com.github.ambry.messageformat.BlobData,              // Blob data wrapper
+                  com.github.ambry.network.SocketServerRequest,         // Socket request wrapper
+                  com.github.ambry.network.NettyServerRequest,          // Netty request wrapper
+                  com.github.ambry.network.ResponseInfo,                // Network response wrapper
+                  com.github.ambry.router.EncryptJob,                   // Encryption job
+                  com.github.ambry.router.EncryptJob$EncryptJobResult,  // Encryption result (inner)
+                  com.github.ambry.router.DecryptJob,                   // Decryption job
+                  com.github.ambry.rest.NettyResponseChannel$Chunk,     // Response chunk (inner)
+                  com.github.ambry.utils.NettyByteBufDataInputStream    // ByteBuf stream wrapper
 ```
+
+**Note:** Inner classes use `$` notation (e.g., `OuterClass$InnerClass`).
 
 ### What Gets Tracked
 
@@ -68,77 +73,71 @@ For each specified class:
 
 ---
 
-## Common Ambry Wrapper Classes
+## Ambry Wrapper Classes (All Currently Tracked)
 
-### 1. Protocol/Message Layer
+Based on comprehensive codebase analysis, these are **all classes** in Ambry that wrap ByteBuf in constructors:
 
-**Pattern:** Request/Response objects that wrap ByteBuf payloads
+### 1. Protocol Layer (com.github.ambry.protocol.*)
 
-```java
-// Typical pattern in com.github.ambry.protocol.*
-public class GetRequest {
-    private final ByteBuf buffer;  // ← Stored as field!
+**PutRequest** - `ambry-protocol/src/main/java/com/github/ambry/protocol/PutRequest.java`
+- **Lines:** 96-98, 116-118
+- **Usage:** Wraps `materializedBlob` ByteBuf containing blob data being uploaded
+- **Why track:** Protocol messages pass through multiple network and storage layers
 
-    public GetRequest(ByteBuf buffer) {
-        this.buffer = buffer;  // ← Without constructor tracking, flow breaks here
-    }
+### 2. Message Format Layer
 
-    public void process() {
-        // Use buffer...
-    }
-}
-```
+**BlobData** - `ambry-messageformat/src/main/java/com/github/ambry/messageformat/BlobData.java`
+- **Lines:** 35, 46
+- **Usage:** Wraps `content` ByteBuf representing actual blob data
+- **Why track:** Core blob storage wrapper, critical for leak detection
 
-**Why track:** Requests/responses often pass through many layers before release.
+### 3. Network Layer
 
-### 2. Network Layer
+**SocketServerRequest** - `ambry-network/src/main/java/com/github/ambry/network/SocketRequestResponseChannel.java`
+- **Line:** 39
+- **Usage:** Wraps `content` ByteBuf from socket and provides InputStream access
+- **Why track:** Socket-based request handling with async I/O
 
-**Pattern:** Network wrappers that hold buffers during transmission
+**NettyServerRequest** - `ambry-network/src/main/java/com/github/ambry/network/NettyServerRequest.java`
+- **Lines:** 32, 42
+- **Usage:** Wraps `content` ByteBuf from Netty channel
+- **Why track:** Netty-based request handling with complex lifecycle
 
-```java
-public class NetworkRequest {
-    private final ByteBuf payload;
+**ResponseInfo** - `ambry-api/src/main/java/com/github/ambry/network/ResponseInfo.java`
+- **Lines:** 61, 73-74
+- **Usage:** Wraps `content` ByteBuf with network response data
+- **Why track:** Response objects travel through network client layers
 
-    public NetworkRequest(ByteBuf payload) {
-        this.payload = payload;
-    }
-}
-```
+### 4. Router/Crypto Layer
 
-**Why track:** Network objects have complex lifecycles with async callbacks.
+**EncryptJob** - `ambry-router/src/main/java/com/github/ambry/router/EncryptJob.java`
+- **Lines:** 48-50
+- **Usage:** Wraps `blobContentToEncrypt` ByteBuf for encryption operations
+- **Why track:** Crypto operations have error paths that can leak
 
-### 3. Router Layer
+**EncryptJob.EncryptJobResult** (Inner Class) - `ambry-router/src/main/java/com/github/ambry/router/EncryptJob.java`
+- **Line:** 127
+- **Usage:** Wraps `encryptedBlobContent` ByteBuf as encryption output
+- **Why track:** Result objects passed through callbacks
 
-**Pattern:** Operation objects that accumulate ByteBuf chunks
+**DecryptJob** - `ambry-router/src/main/java/com/github/ambry/router/DecryptJob.java`
+- **Lines:** 50-53
+- **Usage:** Wraps `encryptedBlobContent` ByteBuf for decryption operations
+- **Why track:** Decryption failures can leave buffers unreleased
 
-```java
-public class GetBlobOperation {
-    private final List<ByteBuf> chunks;
+### 5. REST Layer
 
-    public GetBlobOperation(ByteBuf firstChunk) {
-        this.chunks = new ArrayList<>();
-        this.chunks.add(firstChunk);  // ← Easy to leak!
-    }
-}
-```
+**NettyResponseChannel.Chunk** (Inner Class) - `ambry-rest/src/main/java/com/github/ambry/rest/NettyResponseChannel.java`
+- **Line:** 910
+- **Usage:** Wraps `buffer` ByteBuf as response chunk for streaming
+- **Why track:** Response streaming has complex flow control
 
-**Why track:** Operations may accumulate buffers over time and fail to release on errors.
+### 6. Utilities Layer
 
-### 4. REST/Frontend Layer
-
-**Pattern:** HTTP-like wrappers for Netty ByteBufs
-
-```java
-public class NettyRequest {
-    private final ByteBuf body;
-
-    public NettyRequest(HttpRequest httpRequest) {
-        this.body = httpRequest.content();  // ← Wraps Netty's buffer
-    }
-}
-```
-
-**Why track:** Frontend objects bridge HTTP world with internal Ambry storage.
+**NettyByteBufDataInputStream** - `ambry-utils/src/main/java/com/github/ambry/utils/NettyByteBufDataInputStream.java`
+- **Line:** 31
+- **Usage:** Wraps `buffer` ByteBuf to provide InputStream interface
+- **Why track:** Stream wrapper used throughout codebase
 
 ---
 
@@ -254,14 +253,21 @@ By being selective (not tracking ALL constructors), you get:
 
 ### Add New Classes
 
-Edit `/home/user/ambry/build.gradle` at lines 185 and 247:
+Edit `/home/user/ambry/build.gradle` at lines 186-196 and 259-269:
 
 ```groovy
 trackConstructors=com.github.ambry.protocol.*,
-                  com.github.ambry.network.*,          // ← Added wildcard
-                  com.github.ambry.router.GetBlobOperation,
-                  com.github.ambry.yourmodule.YourClass  // ← Added your class
+                  com.github.ambry.messageformat.BlobData,
+                  // ... existing classes ...
+                  com.github.ambry.yourmodule.YourClass  // ← Add your class here
 ```
+
+**For inner classes**, use `$` notation:
+```groovy
+trackConstructors=com.github.ambry.yourmodule.OuterClass\$InnerClass
+```
+
+The backslash escapes the `$` for Groovy string literals.
 
 ### Remove Classes
 
@@ -299,10 +305,13 @@ When tests run with `-PwithByteBufTracking`, you'll see:
 [ByteBufFlowAgent] Starting with config: AgentConfig{
     include=[com.github.ambry],
     exclude=[],
-    trackConstructors=[com.github.ambry.protocol.*, com.github.ambry.network.Request, ...]
+    trackConstructors=[com.github.ambry.protocol.*, com.github.ambry.messageformat.BlobData,
+                       com.github.ambry.network.SocketServerRequest, ...]
 }
 [ByteBufFlowAgent] Constructor tracking enabled for: [com.github.ambry.protocol.*, ...]
 ```
+
+All 10 wrapper classes identified in the codebase are now tracked.
 
 ### Check Output
 
