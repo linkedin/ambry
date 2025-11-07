@@ -8,40 +8,52 @@ import java.util.concurrent.atomic.LongAdder;
  * Pure Trie data structure for ByteBuf flow tracking.
  * First method that touches a ByteBuf becomes the root.
  * No allocation tracking - simplified and efficient.
+ *
+ * IMPORTANT: Uses explicit get/put instead of computeIfAbsent to avoid
+ * re-entrance deadlock when instrumented code calls instrumented code.
  */
 public class FlowTrie {
     // Map from "ClassName.methodName" to root nodes
     private final Map<String, TrieNode> roots = new ConcurrentHashMap<>();
-    
+
     /**
      * Get or create a root node for a method
+     * Uses explicit get/put instead of computeIfAbsent to avoid re-entrance deadlock
      */
     public TrieNode getOrCreateRoot(String className, String methodName) {
         String key = className + "." + methodName;
-        return roots.computeIfAbsent(key, k -> new TrieNode(className, methodName, 1));
+        TrieNode root = roots.get(key);
+        if (root == null) {
+            root = new TrieNode(className, methodName, 1);
+            TrieNode existing = roots.putIfAbsent(key, root);
+            if (existing != null) {
+                root = existing;
+            }
+        }
+        return root;
     }
-    
+
     /**
      * Get all roots for analysis/viewing
      */
     public Map<String, TrieNode> getRoots() {
         return Collections.unmodifiableMap(roots);
     }
-    
+
     /**
      * Clear all data (useful for testing or resetting)
      */
     public void clear() {
         roots.clear();
     }
-    
+
     /**
      * Get total number of root nodes
      */
     public int getRootCount() {
         return roots.size();
     }
-    
+
     /**
      * Single node in the Trie representing a method invocation
      */
@@ -51,32 +63,39 @@ public class FlowTrie {
         private final int refCount;
         private final Map<NodeKey, TrieNode> children = new ConcurrentHashMap<>();
         private final LongAdder traversalCount = new LongAdder();
-        
+
         public TrieNode(String className, String methodName, int refCount) {
             this.className = className;
             this.methodName = methodName;
             this.refCount = refCount;
         }
-        
+
         /**
          * Record traversal through this node and get/create child
+         * Uses explicit get/put instead of computeIfAbsent to avoid re-entrance deadlock
          */
         public TrieNode traverse(String className, String methodName, int refCount) {
             traversalCount.increment();
-            
+
             NodeKey key = new NodeKey(className, methodName, refCount);
-            return children.computeIfAbsent(key, k -> 
-                new TrieNode(className, methodName, refCount)
-            );
+            TrieNode child = children.get(key);
+            if (child == null) {
+                child = new TrieNode(className, methodName, refCount);
+                TrieNode existing = children.putIfAbsent(key, child);
+                if (existing != null) {
+                    child = existing;
+                }
+            }
+            return child;
         }
-        
+
         /**
          * Just record that we passed through this node (for leaf nodes)
          */
         public void recordTraversal() {
             traversalCount.increment();
         }
-        
+
         // Getters for read-only access
         public String getClassName() { return className; }
         public String getMethodName() { return methodName; }
