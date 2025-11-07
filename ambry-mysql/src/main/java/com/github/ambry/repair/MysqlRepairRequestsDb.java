@@ -27,12 +27,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
-import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +60,8 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   private static final String OPERATION_TIME = "operationTime";
   private static final String LIFE_VERSION = "lifeVersion";
   private static final String EXPIRATION_TYPE = "expirationTime";
+
+  private static final Base64.Encoder BASE64_ENCODER_WITHOUT_PADDING = Base64.getUrlEncoder().withoutPadding();
 
   /**
    * Select the records for one partition with the oldest operation time.
@@ -152,7 +154,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
     long startTime = time.milliseconds();
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(DELETE_QUERY)) {
-        statement.setBytes(1, Base64.decodeBase64(blobId));
+        statement.setBytes(1, Base64.getUrlDecoder().decode(blobId));
         statement.setShort(2, (short) operationType.ordinal());
         statement.executeUpdate();
       }
@@ -173,7 +175,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
     long startTime = time.milliseconds();
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
-        statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
+        statement.setBytes(1, Base64.getUrlDecoder().decode(record.getBlobId()));
         statement.setLong(2, record.getPartitionId());
         statement.setString(3, record.getSourceHostName());
         statement.setInt(4, record.getSourceHostPort());
@@ -210,7 +212,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
         try (ResultSet resultSet = statement.executeQuery()) {
           List<RepairRequestRecord> result = new ArrayList<>();
           while (resultSet.next()) {
-            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+            String blobId = BASE64_ENCODER_WITHOUT_PADDING.encodeToString(resultSet.getBytes(1));
             String sourceHostName = resultSet.getString(2);
             int sourceHostPort = resultSet.getInt(3);
             OperationType operationType = OperationType.values()[resultSet.getShort(4)];
@@ -258,7 +260,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
         try (ResultSet resultSet = statement.executeQuery()) {
           List<RepairRequestRecord> result = new ArrayList<>();
           while (resultSet.next()) {
-            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+            String blobId = Base64.getUrlEncoder().withoutPadding().encodeToString(resultSet.getBytes(1));
             String hostName = resultSet.getString(2);
             int hostPort = resultSet.getInt(3);
             OperationType operationType = OperationType.values()[resultSet.getShort(4)];

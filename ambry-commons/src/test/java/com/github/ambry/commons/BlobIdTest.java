@@ -31,11 +31,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Base64;
 import java.util.Random;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.apache.commons.codec.binary.Base64;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -53,6 +53,7 @@ import static org.junit.Assume.*;
 @RunWith(Parameterized.class)
 public class BlobIdTest {
   private static final Random random = new Random();
+  private static final Base64.Encoder BASE64_ENCODER_WITHOUT_PADDING = Base64.getUrlEncoder().withoutPadding();
   private final short version;
   private final BlobIdType referenceType;
   private final byte referenceDatacenterId;
@@ -517,7 +518,7 @@ public class BlobIdTest {
         idBuf.put(uuid.getBytes());
     }
     idBuf.put(extraChars.getBytes());
-    return Base64.encodeBase64URLSafeString(idBuf.array());
+    return BASE64_ENCODER_WITHOUT_PADDING.encodeToString(idBuf.array());
   }
 
   /**
@@ -545,7 +546,7 @@ public class BlobIdTest {
    * @return the {@link DataInputStream}
    */
   private DataInputStream getStreamFromBase64(String base64String) {
-    return new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(base64String))));
+    return new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.getUrlDecoder().decode(base64String))));
   }
 
   /**
@@ -635,7 +636,7 @@ public class BlobIdTest {
    * @throws Exception Any unexpected exception.
    */
   private short getVersionFromBlobString(String blobId) throws Exception {
-    DataInputStream dis = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(blobId))));
+    DataInputStream dis = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.getUrlDecoder().decode(blobId))));
     try {
       return dis.readShort();
     } finally {
