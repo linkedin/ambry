@@ -19,42 +19,56 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
 import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest(Zstd.class)
 public class ZstdCompressionFailedTests {
   @Test
   public void testCompressNativeFailed() {
-    // When Zstd.compressByteArray() is called, return error code.
-    PowerMockito.mockStatic(Zstd.class);
-    PowerMockito.when(Zstd.compressByteArray(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(),
-        Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(), Mockito.anyInt())).thenReturn((long) -2);
-    PowerMockito.when(Zstd.isError(Mockito.anyLong())).thenReturn(true);
-
-    ZstdCompression zstd = new ZstdCompression();
-    Exception ex = TestUtils.getException(() ->
-        zstd.compressNative(ByteBuffer.wrap("ABC".getBytes(StandardCharsets.UTF_8)), 0, 3,
-            ByteBuffer.wrap(new byte[10]), 0, 10));
-    Assert.assertTrue(ex instanceof CompressionException);
+    // Mock all Zstd static methods that might be called during compression failure
+    try (MockedStatic<Zstd> zstdMock = Mockito.mockStatic(Zstd.class, invocation -> {
+      String methodName = invocation.getMethod().getName();
+      switch (methodName) {
+        case "compressByteArray":
+        case "compressDirectByteBuffer":
+          return (long) -2;  // Return error code
+        case "isError":
+          return true;  // Indicate this is an error
+        case "getErrorName":
+          return "MockedErrorName";  // Return error name for exception message
+        default:
+          throw new UnsupportedOperationException("Unexpected method call: " + methodName);
+      }
+    })) {
+      ZstdCompression zstd = new ZstdCompression();
+      Exception ex = TestUtils.getException(() ->
+          zstd.compressNative(ByteBuffer.wrap("ABC".getBytes(StandardCharsets.UTF_8)), 0, 3,
+              ByteBuffer.wrap(new byte[10]), 0, 10));
+      Assert.assertTrue(ex instanceof CompressionException);
+    }
   }
 
   @Test
   public void testDecompressNativeFailed() {
-    // When Zstd.compressByteArray() is called, return error code.
-    // Zstd.decompressByteArray(byte[] dst, int dstOffset, int dstSize, byte[] src, int srcOffset, int srcSize)
-    PowerMockito.mockStatic(Zstd.class);
-    PowerMockito.when(Zstd.decompressByteArray(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(),
-        Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt())).thenReturn((long) -2);
-    PowerMockito.when(Zstd.isError(Mockito.anyLong())).thenReturn(true);
-
-    ZstdCompression zstd = new ZstdCompression();
-    Exception ex = TestUtils.getException(() ->
-        zstd.decompressNative(ByteBuffer.wrap(new byte[10]), 0, 10, ByteBuffer.wrap(new byte[10]), 0, 10));
-    Assert.assertTrue(ex instanceof CompressionException);
+    // Mock all Zstd static methods that might be called during decompression failure
+    try (MockedStatic<Zstd> zstdMock = Mockito.mockStatic(Zstd.class, invocation -> {
+      String methodName = invocation.getMethod().getName();
+      switch (methodName) {
+        case "decompressByteArray":
+        case "decompressDirectByteBuffer":
+          return (long) -2;  // Return error code
+        case "isError":
+          return true;  // Indicate this is an error
+        case "getErrorName":
+          return "MockedErrorName";  // Return error name for exception message
+        default:
+          throw new UnsupportedOperationException("Unexpected method call: " + methodName);
+      }
+    })) {
+      ZstdCompression zstd = new ZstdCompression();
+      Exception ex = TestUtils.getException(() ->
+          zstd.decompressNative(ByteBuffer.wrap(new byte[10]), 0, 10, ByteBuffer.wrap(new byte[10]), 0, 10));
+      Assert.assertTrue(ex instanceof CompressionException);
+    }
   }
 }
