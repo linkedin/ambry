@@ -14,7 +14,7 @@ import java.util.Date;
 /**
  * JMX MBean interface for ByteBuf flow monitoring
  */
-public interface ByteBufFlowMBeanInterface {
+interface ByteBufFlowMBeanInterface {
     // View operations
     String getTreeView();
     String getFlatView();
