@@ -118,11 +118,6 @@ subprojects {
         testCompile "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
         testCompile "junit:junit:$junitVersion"
         testCompile "org.mockito:mockito-core:$mockitoVersion"
-        // Add PowerMock to support more unit test scenarios.
-        // See https://github.com/powermock/powermock/wiki/Mockito for detail about PowerMock.
-        testCompile "org.powermock:powermock-api-mockito2:$powermockVersion"
-        testCompile "org.powermock:powermock-core:$powermockVersion"
-        testCompile "org.powermock:powermock-module-junit4:$powermockVersion"
         testRuntime project(':log4j-test-config')
     }
 
@@ -158,12 +153,6 @@ subprojects {
         systemProperty 'io.netty.allocator.smallCacheSize', '0'
         systemProperty 'io.netty.allocator.normalCacheSize', '0'
         systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
-
-        // make sure Powermockito would be happy
-        if (JavaVersion.current().java9Compatible) {
-            jvmArgs '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED'
-        }
-
     }
 
     task intTest(type: Test) {
