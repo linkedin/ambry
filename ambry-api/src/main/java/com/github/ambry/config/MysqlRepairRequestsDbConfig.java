@@ -15,11 +15,17 @@
 
 package com.github.ambry.config;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+
 public class MysqlRepairRequestsDbConfig {
   private static final String PREFIX = "mysql.repair.requests.";
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
+  public static final String ENABLE_CERTIFICATE_BASED_AUTHENTICATION =
+      PREFIX + "enable.certificate.based.authentication";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -40,9 +46,31 @@ public class MysqlRepairRequestsDbConfig {
   @Config(LIST_MAX_RESULTS)
   public final int listMaxResults;
 
+  @Config(ENABLE_CERTIFICATE_BASED_AUTHENTICATION)
+  public final boolean enableCertificateBasedAuthentication;
+
+  public final SSLConfig sslConfig;
+
   public MysqlRepairRequestsDbConfig(VerifiableProperties verifiableProperties) {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
+    this.enableCertificateBasedAuthentication =
+        verifiableProperties.getBoolean(ENABLE_CERTIFICATE_BASED_AUTHENTICATION, false);
+    this.sslConfig = this.enableCertificateBasedAuthentication ? new SSLConfig(verifiableProperties) : null;
+    if (this.enableCertificateBasedAuthentication) {
+      // validate the sslConfig is valid
+      validateFilePath(this.sslConfig.sslKeystorePath, "ssl.keystore.path");
+      validateFilePath(this.sslConfig.sslTruststorePath, "ssl.truststore.path");
+    }
+  }
+
+  private void validateFilePath(String filePath, String configName) {
+    if (filePath == null || filePath.isEmpty()) {
+      throw new IllegalArgumentException(configName + " cannot be null or empty");
+    }
+    if (Files.notExists(Paths.get(filePath))) {
+      throw new IllegalArgumentException(configName + "'s file " + filePath + " does not exist");
+    }
   }
 }

@@ -16,7 +16,9 @@ package com.github.ambry.accountstats;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.mysql.MySqlUtils;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.SQLException;
@@ -76,8 +78,16 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
   }
 
   private HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
+    String url = dbEndpoint.getUrl();
+    if (accountStatsMySqlConfig.enableCertificateBasedAuthentication) {
+      MySqlUtils.DbEndpoint.SSLMode sslMode = dbEndpoint.getSslMode();
+      if (sslMode != null && sslMode.equals(MySqlUtils.DbEndpoint.SSLMode.NONE)) {
+        sslMode = MySqlUtils.DbEndpoint.SSLMode.VERIFY_CA;
+      }
+      url = MySqlUtils.addSslSettingsToUrl(url, accountStatsMySqlConfig.sslConfig, sslMode);
+    }
     HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
+    hikariConfig.setJdbcUrl(url);
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
     hikariConfig.setMaximumPoolSize(accountStatsMySqlConfig.poolSize);
