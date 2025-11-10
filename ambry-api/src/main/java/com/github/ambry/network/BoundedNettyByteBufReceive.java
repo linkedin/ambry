@@ -18,6 +18,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.io.EOFException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -59,10 +60,19 @@ public class BoundedNettyByteBufReceive extends AbstractByteBufHolder<BoundedNet
    * @throws IOException Any I/O error.
    */
   private int readBytesFromReadableByteChannel(ReadableByteChannel channel, ByteBuf buffer) throws IOException {
-    int n = channel.read(buffer.nioBuffer(buffer.writerIndex(), buffer.capacity() - buffer.writerIndex()));
+    // Use an intermediate ByteBuffer to completely avoid nioBuffer() which can cause pool
+    // deallocation issues when exceptions occur during channel.read(). This approach ensures
+    // the ByteBuf's internal state remains clean and pool metrics are correctly updated on release().
+    int writableBytes = buffer.capacity() - buffer.writerIndex();
+    ByteBuffer tempBuffer = ByteBuffer.allocate(writableBytes);
+
+    int n = channel.read(tempBuffer);
+
     if (n > 0) {
-      buffer.writerIndex(buffer.writerIndex() + n);
+      tempBuffer.flip();
+      buffer.writeBytes(tempBuffer);
     }
+
     return n;
   }
 
