@@ -178,6 +178,22 @@ public class MySqlUtils {
     }
 
     /**
+     * @return Url of the db with SSL info
+     */
+    public String getUrlWithSSL(SSLConfig sslConfig) {
+      if (sslConfig == null) {
+        return url;
+      }
+      if (sslMode == null) {
+        return addSslSettingsToUrl(url, sslConfig, SSLMode.VERIFY_CA);
+      }
+      else if (sslMode != null && sslMode != SSLMode.NONE) {
+        return addSslSettingsToUrl(url, sslConfig, sslMode);
+      }
+      return url;
+    }
+
+    /**
      * @return Data center of the db
      */
     public String getDatacenter() {

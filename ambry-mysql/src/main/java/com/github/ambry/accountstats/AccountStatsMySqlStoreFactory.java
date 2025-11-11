@@ -77,7 +77,7 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
 
   private HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
     HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
+    hikariConfig.setJdbcUrl(dbEndpoint.getUrlWithSSL(accountStatsMySqlConfig.sslConfig));
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
     hikariConfig.setMaximumPoolSize(accountStatsMySqlConfig.poolSize);
