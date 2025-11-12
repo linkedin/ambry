@@ -79,12 +79,9 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
 
   private HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
     String url = dbEndpoint.getUrl();
-    if (accountStatsMySqlConfig.enableCertificateBasedAuthentication) {
-      MySqlUtils.DbEndpoint.SSLMode sslMode = dbEndpoint.getSslMode();
-      if (sslMode != null && sslMode.equals(MySqlUtils.DbEndpoint.SSLMode.NONE)) {
-        sslMode = MySqlUtils.DbEndpoint.SSLMode.VERIFY_CA;
-      }
-      url = MySqlUtils.addSslSettingsToUrl(url, accountStatsMySqlConfig.sslConfig, sslMode);
+    MySqlUtils.DbEndpoint.SSLMode sslMode = dbEndpoint.getSslMode();
+    if (accountStatsMySqlConfig.sslConfig != null && sslMode != DbEndpoint.SSLMode.NONE) {
+      url = MySqlUtils.addSslSettingsToUrl(url, accountStatsMySqlConfig.sslConfig, dbEndpoint.getSslMode());
     }
     HikariConfig hikariConfig = new HikariConfig();
     hikariConfig.setJdbcUrl(url);

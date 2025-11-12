@@ -78,11 +78,8 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
    */
   public HikariDataSource buildDataSource(MySqlUtils.DbEndpoint dbEndpoint) {
     String url = dbEndpoint.getUrl();
-    if (config.enableCertificateBasedAuthentication) {
-      MySqlUtils.DbEndpoint.SSLMode sslMode = dbEndpoint.getSslMode();
-      if (sslMode != null && sslMode.equals(MySqlUtils.DbEndpoint.SSLMode.NONE)) {
-        sslMode = MySqlUtils.DbEndpoint.SSLMode.VERIFY_CA;
-      }
+    MySqlUtils.DbEndpoint.SSLMode sslMode = dbEndpoint.getSslMode();
+    if (config.sslConfig != null && sslMode != MySqlUtils.DbEndpoint.SSLMode.NONE) {
       url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, sslMode);
     }
     HikariConfig hikariConfig = new HikariConfig();

@@ -27,8 +27,6 @@ public class AccountStatsMySqlConfig {
   public static final String ENABLE_REWRITE_BATCHED_STATEMENT = PREFIX + "enable.rewrite.batched.statements";
   public static final String CONNECTION_IDLE_TIMEOUT = PREFIX + "connection.idle.timeout.ms";
   public static final String LOCAL_BACKUP_FILE_PATH = PREFIX + "local.backup.file.path";
-  public static final String ENABLE_CERTIFICATE_BASED_AUTHENTICATION =
-      PREFIX + "enable.certificate.based.authentication";
 
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
@@ -106,9 +104,6 @@ public class AccountStatsMySqlConfig {
   @Default("")
   public final String localBackupFilePath;
 
-  @Config(ENABLE_CERTIFICATE_BASED_AUTHENTICATION)
-  public final boolean enableCertificateBasedAuthentication;
-
   public final SSLConfig sslConfig;
 
   public AccountStatsMySqlConfig(VerifiableProperties verifiableProperties) {
@@ -119,22 +114,6 @@ public class AccountStatsMySqlConfig {
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
     connectionIdleTimeoutMs = verifiableProperties.getLong(CONNECTION_IDLE_TIMEOUT, 60 * 1000);
     localBackupFilePath = verifiableProperties.getString(LOCAL_BACKUP_FILE_PATH, "");
-    this.enableCertificateBasedAuthentication =
-        verifiableProperties.getBoolean(ENABLE_CERTIFICATE_BASED_AUTHENTICATION, false);
-    this.sslConfig = this.enableCertificateBasedAuthentication ? new SSLConfig(verifiableProperties) : null;
-    if (this.enableCertificateBasedAuthentication) {
-      // validate the sslConfig is valid
-      validateFilePath(this.sslConfig.sslKeystorePath, "ssl.keystore.path");
-      validateFilePath(this.sslConfig.sslTruststorePath, "ssl.truststore.path");
-    }
-  }
-
-  private void validateFilePath(String filePath, String configName) {
-    if (filePath == null || filePath.isEmpty()) {
-      throw new IllegalArgumentException(configName + " cannot be null or empty");
-    }
-    if (Files.notExists(Paths.get(filePath))) {
-      throw new IllegalArgumentException(configName + "'s file " + filePath + " does not exist");
-    }
+    this.sslConfig = new SSLConfig(verifiableProperties);
   }
 }
