@@ -64,12 +64,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.lang.reflect.Field;
+import org.apache.commons.codec.binary.Base64;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.FieldSetter;
 import org.mockito.junit.MockitoJUnitRunner;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -451,7 +452,7 @@ public class AzureCloudDestinationTest {
     List<BlobId> singleBlobList = Collections.singletonList(blobId);
     Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertEquals("Expected map of one", 1, metadataMap.size());
-    verifyZeroInteractions(mockCosmosAsyncContainer);
+    verifyNoInteractions(mockCosmosAsyncContainer);
     verify(mockBlockBlobAsyncClient).getPropertiesWithResponse(any());
 
     // Get for nonexistent blob
@@ -459,7 +460,7 @@ public class AzureCloudDestinationTest {
     when(mockBlockBlobAsyncClient.getPropertiesWithResponse(any())).thenReturn(Mono.error(ex));
     metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertTrue("Expected empty map", metadataMap.isEmpty());
-    verifyZeroInteractions(mockCosmosAsyncContainer);
+    verifyNoInteractions(mockCosmosAsyncContainer);
     verify(mockBlockBlobAsyncClient, times(2)).getPropertiesWithResponse(any());
 
     //
@@ -558,8 +559,9 @@ public class AzureCloudDestinationTest {
     try {
       azureReplicationFeed =
           new CosmosChangeFeedBasedReplicationFeed(mockChangeFeedQuery, azureMetrics, azureDest.getQueryBatchSize());
-      FieldSetter.setField(azureDest, azureDest.getClass().getDeclaredField("azureReplicationFeed"),
-          azureReplicationFeed);
+      Field azureReplicationFeedField = azureDest.getClass().getDeclaredField("azureReplicationFeed");
+      azureReplicationFeedField.setAccessible(true);
+      azureReplicationFeedField.set(azureDest, azureReplicationFeed);
       cloudBlobMetadataList.stream().forEach(doc -> mockChangeFeedQuery.add(doc));
       CosmosChangeFeedFindToken findToken = new CosmosChangeFeedFindToken();
       // Run the query

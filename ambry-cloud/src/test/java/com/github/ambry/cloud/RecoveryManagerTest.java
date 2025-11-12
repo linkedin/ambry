@@ -54,10 +54,10 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.Field;
 import org.json.JSONObject;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.mockito.internal.util.reflection.FieldSetter;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -220,14 +220,15 @@ public class RecoveryManagerTest {
 
   /** Test {@code RecoveryManager#getCloudDataNode} */
   @Test
-  public void testGetCloudDataNode() throws NoSuchFieldException, ReplicationException {
+  public void testGetCloudDataNode() throws NoSuchFieldException, IllegalAccessException, ReplicationException {
     RecoveryManager mockRecoveryManager = mock(RecoveryManager.class);
     List<DataNodeId> dataNodeIds = new ArrayList<>();
     Port port = new Port(1000, PortType.PLAINTEXT);
     AtomicReference<List<DataNodeId>> vcrNodes = new AtomicReference<>();
     vcrNodes.set(dataNodeIds);
-    FieldSetter.setField(mockRecoveryManager,
-        RecoveryManager.class.getDeclaredField("vcrNodes"), vcrNodes);
+    Field vcrNodesField = RecoveryManager.class.getDeclaredField("vcrNodes");
+    vcrNodesField.setAccessible(true);
+    vcrNodesField.set(mockRecoveryManager, vcrNodes);
     when(mockRecoveryManager.getCloudDataNode()).thenCallRealMethod();
 
     // test getCloudDataNode() with empty vcrNodes

@@ -520,13 +520,12 @@ class GetBlobOperation extends GetOperation {
         if (exception != null) {
           setOperationException(exception);
         }
-        int currentNumChunk = numChunksWrittenOut.get();
+        int currentNumChunk = numChunksWrittenOut.getAndIncrement();
         ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(currentNumChunk);
         if (byteBuf != null) {
           ReferenceCountUtil.safeRelease(byteBuf);
         }
         lastChunkWrittenDoneTime.set(SystemTime.getInstance().milliseconds());
-        numChunksWrittenOut.incrementAndGet();
         routerCallback.onPollReady();
       }
     };
