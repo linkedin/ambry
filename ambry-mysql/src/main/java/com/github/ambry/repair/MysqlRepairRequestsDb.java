@@ -260,7 +260,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
         try (ResultSet resultSet = statement.executeQuery()) {
           List<RepairRequestRecord> result = new ArrayList<>();
           while (resultSet.next()) {
-            String blobId = Base64.getUrlEncoder().withoutPadding().encodeToString(resultSet.getBytes(1));
+            String blobId = BASE64_ENCODER_WITHOUT_PADDING.encodeToString(resultSet.getBytes(1));
             String hostName = resultSet.getString(2);
             int hostPort = resultSet.getInt(3);
             OperationType operationType = OperationType.values()[resultSet.getShort(4)];
