@@ -38,12 +38,12 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.lang.reflect.Field;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
-import org.mockito.internal.util.reflection.FieldSetter;
 import org.mockito.stubbing.Answer;
 
 import static org.junit.Assert.*;
@@ -111,20 +111,30 @@ public class QuotaAwareOperationControllerTest {
         new QuotaAwareOperationController(null, null, null, networkClientFactory, clusterMap, routerConfig, null, null,
             routerMetrics, null, null, null, null, nonBlockingRouter);
     quotaAwareOperationController.putManager.close(); // closing existing put manager before setting mock to clean up the threads.
-    FieldSetter.setField(quotaAwareOperationController,
-        quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("putManager"), putManager);
-    FieldSetter.setField(quotaAwareOperationController,
-        quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("getManager"), getManager);
-    FieldSetter.setField(quotaAwareOperationController,
-        quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("deleteManager"), deleteManager);
-    FieldSetter.setField(quotaAwareOperationController,
-        quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("undeleteManager"), undeleteManager);
-    FieldSetter.setField(quotaAwareOperationController,
-        quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("ttlUpdateManager"),
-        ttlUpdateManager);
-    FieldSetter.setField(quotaAwareOperationController,
-        quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("replicateBlobManager"),
-        replicateBlobManager);
+
+    Field putManagerField = quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("putManager");
+    putManagerField.setAccessible(true);
+    putManagerField.set(quotaAwareOperationController, putManager);
+
+    Field getManagerField = quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("getManager");
+    getManagerField.setAccessible(true);
+    getManagerField.set(quotaAwareOperationController, getManager);
+
+    Field deleteManagerField = quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("deleteManager");
+    deleteManagerField.setAccessible(true);
+    deleteManagerField.set(quotaAwareOperationController, deleteManager);
+
+    Field undeleteManagerField = quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("undeleteManager");
+    undeleteManagerField.setAccessible(true);
+    undeleteManagerField.set(quotaAwareOperationController, undeleteManager);
+
+    Field ttlUpdateManagerField = quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("ttlUpdateManager");
+    ttlUpdateManagerField.setAccessible(true);
+    ttlUpdateManagerField.set(quotaAwareOperationController, ttlUpdateManager);
+
+    Field replicateBlobManagerField = quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("replicateBlobManager");
+    replicateBlobManagerField.setAccessible(true);
+    replicateBlobManagerField.set(quotaAwareOperationController, replicateBlobManager);
     doNothing().when(getManager).poll(requestsToSend, requestsToDrop);
     doNothing().when(deleteManager).poll(requestsToSend, requestsToDrop);
     doNothing().when(ttlUpdateManager).poll(requestsToSend, requestsToDrop);

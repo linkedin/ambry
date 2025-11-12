@@ -77,6 +77,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2153,6 +2154,145 @@ public class GetBlobOperationTest {
         operationException instanceof RouterException);
     Assert.assertEquals("Unexpected RouterErrorCode", RouterErrorCode.ChannelClosed,
         ((RouterException) operationException).getErrorCode());
+  }
+
+  @Test
+  public void testChunkAsyncWriteCallbackMemoryLeak() throws Exception {
+    // Three chunks ensure multiple callbacks are queued so we can force the concurrent completion ordering below.
+    blobSize = maxChunkSize * 3;
+    doPut();
+
+    final AtomicReference<Exception> callbackException = new AtomicReference<>();
+    final CountDownLatch readCompleteLatch = new CountDownLatch(1);
+    // Custom channel records callbacks so we can trigger two of them in parallel and mimic the original race.
+    final ConcurrentCallbackChannel channel = new ConcurrentCallbackChannel();
+
+    Callback<GetBlobResult> callback = new Callback<GetBlobResult>() {
+      @Override
+      public void onCompletion(GetBlobResult result, Exception exception) {
+        if (exception != null) {
+          callbackException.set(exception);
+          readCompleteLatch.countDown();
+        } else {
+          try {
+            // Capture the data stream on our test channel; the inner callback fires once the operation thinks the
+            // write is complete. The test channel will delay/coordinate the callbacks to exercise the leak scenario.
+            result.getBlobDataChannel().readInto(channel, new Callback<Long>() {
+              @Override
+              public void onCompletion(Long bytesRead, Exception exception) {
+                if (exception != null) {
+                  callbackException.set(exception);
+                }
+                readCompleteLatch.countDown();
+              }
+            });
+          } catch (Exception e) {
+            callbackException.set(e);
+            readCompleteLatch.countDown();
+          }
+        }
+      }
+    };
+
+    createOperationAndComplete(callback);
+    Assert.assertTrue("Timeout waiting for read to complete", readCompleteLatch.await(5, TimeUnit.SECONDS));
+
+    if (callbackException.get() != null) {
+      throw callbackException.get();
+    }
+
+    //Thread.sleep(500);
+    channel.close();
+  }
+
+  private static class ConcurrentCallbackChannel implements AsyncWritableChannel {
+    // Track callbacks by chunk index so that we can defer invoking them until both the first and second chunk arrive.
+    private final Map<Integer, Callback<Long>> callbacks = new HashMap<>();
+    private int chunkIndex = 0;
+    private volatile boolean open = true;
+
+    @Override
+    public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
+      return write(Unpooled.wrappedBuffer(src), callback);
+    }
+
+    @Override
+    public Future<Long> write(ByteBuf src, Callback<Long> callback) {
+      FutureResult<Long> future = new FutureResult<>();
+      if (!open) {
+        Exception e = new ClosedChannelException();
+        future.done(0L, e);
+        if (callback != null) {
+          callback.onCompletion(0L, e);
+        }
+        return future;
+      }
+
+      int index = chunkIndex++;
+      long size = src.readableBytes();
+      callbacks.put(index, callback);
+
+      if (index == 1) {
+        // When the second chunk appears we concurrently fire the first two callbacks to recreate the race on
+        // numChunksWrittenOut incrementing inside the operation.
+        invokeConcurrently(callbacks.get(0), callbacks.get(1), size);
+      } else if (index == 2) {
+        // The final chunk completes immediately so the test focuses on the first two callbacks racing.
+        callback.onCompletion(size, null);
+      }
+
+      future.done(size, null);
+      return future;
+    }
+
+    private void invokeConcurrently(Callback<Long> cb1, Callback<Long> cb2, long size) {
+      CountDownLatch start = new CountDownLatch(1);
+      CountDownLatch done = new CountDownLatch(2);
+
+      Runnable task1 = () -> {
+        try {
+          start.await();
+          if (cb1 != null) cb1.onCompletion(size, null);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        } finally {
+          done.countDown();
+        }
+      };
+
+      Runnable task2 = () -> {
+        try {
+          start.await();
+          if (cb2 != null) cb2.onCompletion(size, null);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        } finally {
+          done.countDown();
+        }
+      };
+
+      // Launch both callbacks and release them at once so they race with the shared state in the production code.
+      new Thread(task1).start();
+      new Thread(task2).start();
+      start.countDown();
+
+      try {
+        done.await(2, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    }
+
+    @Override
+    public boolean isOpen() {
+      return open;
+    }
+
+    @Override
+    public void close() {
+      open = false;
+      callbacks.clear();
+    }
   }
 
   /**

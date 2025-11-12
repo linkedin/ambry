@@ -35,7 +35,7 @@ public class ReplicaStatusDelegateTest {
     List<ReplicaId> replicaIds = Collections.singletonList(replicaId);
 
     //Checks that the right underlying ClusterParticipant methods are called
-    verifyZeroInteractions(clusterParticipant);
+    verifyNoInteractions(clusterParticipant);
     delegate.seal(replicaId);
     verify(clusterParticipant).setReplicaSealedState(replicaId, ReplicaSealStatus.SEALED);
     verifyNoMoreInteractions(clusterParticipant);
