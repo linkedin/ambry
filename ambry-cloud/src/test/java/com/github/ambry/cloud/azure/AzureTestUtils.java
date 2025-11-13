@@ -48,7 +48,7 @@ import static org.mockito.Mockito.*;
  */
 class AzureTestUtils {
 
-  static final String base64key = Utils.base64EncodeUrlSafeWithPadding("ambrykey".getBytes());
+  static final String base64key = Utils.base64EncodeWithPadding("ambrykey".getBytes());
   static final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   static final byte dataCenterId = 66;

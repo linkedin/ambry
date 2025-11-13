@@ -85,7 +85,7 @@ import static org.mockito.BDDMockito.*;
 @Ignore
 public class AzureCloudDestinationTest {
 
-  private final String base64key = Utils.base64EncodeUrlSafeWithPadding("ambrykey".getBytes());
+  private final String base64key = Utils.base64EncodeWithPadding("ambrykey".getBytes());
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final String clusterName = "main";
