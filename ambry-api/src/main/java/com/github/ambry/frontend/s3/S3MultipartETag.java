@@ -20,8 +20,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.frontend.PutBlobMetaInfo;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 
@@ -55,7 +55,6 @@ public class S3MultipartETag {
   private short version;
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
-  private static final Base64.Encoder BASE64_ENCODER_WITHOUT_PADDING = Base64.getUrlEncoder().withoutPadding();
 
   /**
    * Construct S3MultipartETag
@@ -94,7 +93,7 @@ public class S3MultipartETag {
     rootObject.put(DATA_CHUNK_LIST, chunks);
     rootObject.put(VERSION, CURRENT_VERSION);
 
-    return BASE64_ENCODER_WITHOUT_PADDING.encodeToString(rootObject.toString().getBytes());
+    return Utils.base64EncodeUrlSafeWithoutPadding(rootObject.toString().getBytes());
   }
 
   /**
@@ -102,7 +101,7 @@ public class S3MultipartETag {
    * @return the {@link S3MultipartETag}
    */
   public static S3MultipartETag deserialize(String encodedETagStr) throws IOException {
-    String eTagStr = new String(Base64.getUrlDecoder().decode(encodedETagStr));
+    String eTagStr = new String(Utils.base64DecodeUrlSafe(encodedETagStr));
     JsonNode rootNode;
     try {
       rootNode = objectMapper.readTree(eTagStr);

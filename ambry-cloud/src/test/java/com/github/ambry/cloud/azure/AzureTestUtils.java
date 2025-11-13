@@ -33,7 +33,6 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -49,7 +48,7 @@ import static org.mockito.Mockito.*;
  */
 class AzureTestUtils {
 
-  static final String base64key = Base64.getEncoder().encodeToString("ambrykey".getBytes());
+  static final String base64key = Utils.base64EncodeUrlSafeWithPadding("ambrykey".getBytes());
   static final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   static final byte dataCenterId = 66;

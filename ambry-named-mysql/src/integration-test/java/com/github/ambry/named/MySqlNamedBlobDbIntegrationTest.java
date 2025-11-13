@@ -37,7 +37,6 @@ import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.Base64;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -991,7 +990,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    * @return the uppercase hexadecimal string representation
    */
   public static String base64BlobIdToHex(String base64BlobId) {
-    byte[] decodedBytes = Base64.getUrlDecoder().decode(base64BlobId);
+    byte[] decodedBytes = Utils.base64DecodeUrlSafe(base64BlobId);
     return Hex.encodeHexString(decodedBytes).toUpperCase();
   }
 

@@ -45,7 +45,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.Base64;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -251,7 +250,7 @@ public class MySqlNamedBlobDbTest {
             when(dataSource.getConnection()).thenReturn(connection);
           } else {
             when(resultSet.next()).thenReturn(true);
-            when(resultSet.getBytes(1)).thenReturn(Base64.getUrlDecoder().decode(id));
+            when(resultSet.getBytes(1)).thenReturn(Utils.base64DecodeUrlSafe(id));
             when(statement.executeQuery()).thenReturn(resultSet);
             Connection connection = mock(Connection.class);
             when(connection.prepareStatement(any())).thenReturn(statement);
@@ -271,7 +270,7 @@ public class MySqlNamedBlobDbTest {
           PreparedStatement statement = mock(PreparedStatement.class);
           ResultSet resultSet = mock(ResultSet.class);
           when(resultSet.next()).thenReturn(true);
-          when(resultSet.getBytes(1)).thenReturn(Base64.getUrlDecoder().decode(id));
+          when(resultSet.getBytes(1)).thenReturn(Utils.base64DecodeUrlSafe(id));
           when(statement.executeQuery()).thenReturn(resultSet);
           Connection connection = mock(Connection.class);
           when(connection.prepareStatement(any())).thenReturn(statement);

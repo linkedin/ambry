@@ -54,7 +54,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -86,7 +85,7 @@ import static org.mockito.BDDMockito.*;
 @Ignore
 public class AzureCloudDestinationTest {
 
-  private final String base64key = Base64.getEncoder().encodeToString("ambrykey".getBytes());
+  private final String base64key = Utils.base64EncodeUrlSafeWithPadding("ambrykey".getBytes());
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final String clusterName = "main";

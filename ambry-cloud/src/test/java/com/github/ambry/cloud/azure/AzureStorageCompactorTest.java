@@ -44,7 +44,6 @@ import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -73,7 +72,7 @@ import static org.mockito.BDDMockito.*;
 @Ignore
 public class AzureStorageCompactorTest {
 
-  private final String base64key = Base64.getEncoder().encodeToString("ambrykey".getBytes());
+  private final String base64key = Utils.base64EncodeUrlSafeWithPadding("ambrykey".getBytes());
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final int blobSize = 1024;
