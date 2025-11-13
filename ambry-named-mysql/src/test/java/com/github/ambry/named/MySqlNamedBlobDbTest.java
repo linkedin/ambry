@@ -30,6 +30,7 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;

@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
