@@ -30,6 +30,7 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -49,7 +50,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import javax.sql.DataSource;
-import org.apache.commons.codec.binary.Base64;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
@@ -251,7 +251,7 @@ public class MySqlNamedBlobDbTest {
             when(dataSource.getConnection()).thenReturn(connection);
           } else {
             when(resultSet.next()).thenReturn(true);
-            when(resultSet.getBytes(1)).thenReturn(Base64.decodeBase64(id));
+            when(resultSet.getBytes(1)).thenReturn(Utils.base64DecodeUrlSafe(id));
             when(statement.executeQuery()).thenReturn(resultSet);
             Connection connection = mock(Connection.class);
             when(connection.prepareStatement(any())).thenReturn(statement);
@@ -271,7 +271,7 @@ public class MySqlNamedBlobDbTest {
           PreparedStatement statement = mock(PreparedStatement.class);
           ResultSet resultSet = mock(ResultSet.class);
           when(resultSet.next()).thenReturn(true);
-          when(resultSet.getBytes(1)).thenReturn(Base64.decodeBase64(id));
+          when(resultSet.getBytes(1)).thenReturn(Utils.base64DecodeUrlSafe(id));
           when(statement.executeQuery()).thenReturn(resultSet);
           Connection connection = mock(Connection.class);
           when(connection.prepareStatement(any())).thenReturn(statement);

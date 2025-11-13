@@ -54,7 +54,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.sql.DataSource;
-import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -598,7 +597,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
               blobName);
         }
-        String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+        String blobId = Utils.base64EncodeUrlSafeWithoutPadding(resultSet.getBytes(1));
         long version = resultSet.getLong(2);
         Timestamp deletionTime = resultSet.getTimestamp(3);
         long currentTime = this.time.milliseconds();
@@ -644,7 +643,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             nextContinuationToken = blobName;
             break;
           }
-          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
+          String blobId = Utils.base64EncodeUrlSafeWithoutPadding(resultSet.getBytes(2));
           long version = resultSet.getLong(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
           long blobSize = resultSet.getLong(5);
@@ -732,7 +731,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, record.getBlobName());
-      statement.setBytes(4, Base64.decodeBase64(record.getBlobId()));
+      statement.setBytes(4, Utils.base64DecodeUrlSafe(record.getBlobId()));
       if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
         statement.setTimestamp(5, new Timestamp(record.getExpirationTimeMs()));
       } else {
@@ -798,7 +797,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       metricsRecoder.namedBlobDeleteRate.mark();
       try (ResultSet resultSet = statement.executeQuery()) {
         while (resultSet.next()) {
-          blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+          blobId = Utils.base64EncodeUrlSafeWithoutPadding(resultSet.getBytes(1));
           version = resultSet.getLong(2);
           Timestamp originalDeletionTime = resultSet.getTimestamp(3);
           currentDeleteTime = resultSet.getTimestamp(4);
@@ -938,7 +937,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           short accountId = resultSet.getShort(1);
           short containerId = resultSet.getShort(2);
           String blobName = resultSet.getString(3);
-          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+          String blobId = Utils.base64EncodeUrlSafeWithoutPadding(resultSet.getBytes(4));
           long version = resultSet.getLong(5);
           NamedBlobState blobState = NamedBlobState.values()[resultSet.getInt(6)];
           Timestamp modifiedTime = resultSet.getTimestamp(7);

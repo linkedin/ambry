@@ -41,7 +41,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
-import org.apache.commons.codec.binary.Base64;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -991,7 +990,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    * @return the uppercase hexadecimal string representation
    */
   public static String base64BlobIdToHex(String base64BlobId) {
-    byte[] decodedBytes = Base64.decodeBase64(base64BlobId);
+    byte[] decodedBytes = Utils.base64DecodeUrlSafe(base64BlobId);
     return Hex.encodeHexString(decodedBytes).toUpperCase();
   }
 

@@ -26,7 +26,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.UUID;
-import org.apache.commons.codec.binary.Base64;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -326,7 +325,7 @@ public class BlobId extends StoreKey {
    * @throws IOException
    */
   public BlobId(String id, ClusterMap clusterMap) throws IOException {
-    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap, true);
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Utils.base64DecodeUrlSafe(id)))), clusterMap, true);
   }
 
   /**
@@ -442,7 +441,7 @@ public class BlobId extends StoreKey {
    */
   public static boolean isEncrypted(String blobIdString) throws IOException {
     DataInputStream stream =
-        new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(blobIdString))));
+        new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Utils.base64DecodeUrlSafe(blobIdString))));
     return (stream.readShort() >= BLOB_ID_V3) && ((stream.readByte() & IS_ENCRYPTED_MASK) != 0);
   }
 
@@ -529,7 +528,7 @@ public class BlobId extends StoreKey {
 
   @Override
   public String getID() {
-    return Base64.encodeBase64URLSafeString(toBytes());
+    return Utils.base64EncodeUrlSafeWithoutPadding(toBytes());
   }
 
   @Override
@@ -703,7 +702,7 @@ public class BlobId extends StoreKey {
    */
   public static boolean isCrafted(String idStr) throws IOException {
     BlobIdPreamble blobIdPreamble =
-        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Utils.base64DecodeUrlSafe(idStr)))));
     return blobIdPreamble.type == BlobIdType.CRAFTED;
   }
 
@@ -715,7 +714,7 @@ public class BlobId extends StoreKey {
    */
   public static short getVersion(String idStr) throws IOException {
     BlobIdPreamble blobIdPreamble =
-        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Utils.base64DecodeUrlSafe(idStr)))));
     return blobIdPreamble.version;
   }
 
@@ -729,7 +728,7 @@ public class BlobId extends StoreKey {
    */
   public static Pair<Short, Short> getAccountAndContainerIds(String idStr) throws IOException {
     BlobIdPreamble blobIdPreamble =
-        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Utils.base64DecodeUrlSafe(idStr)))));
     return new Pair<>(blobIdPreamble.accountId, blobIdPreamble.containerId);
   }
 
@@ -741,7 +740,7 @@ public class BlobId extends StoreKey {
    */
   public static BlobDataType getBlobDataType(String idStr) throws IOException {
     BlobIdPreamble blobIdPreamble =
-        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Utils.base64DecodeUrlSafe(idStr)))));
     return blobIdPreamble.blobDataType;
   }
 

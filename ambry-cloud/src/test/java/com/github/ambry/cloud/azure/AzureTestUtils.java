@@ -36,7 +36,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.commons.codec.binary.Base64;
 import reactor.core.publisher.Flux;
 
 import static com.github.ambry.commons.BlobId.*;
@@ -49,7 +48,7 @@ import static org.mockito.Mockito.*;
  */
 class AzureTestUtils {
 
-  static final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
+  static final String base64key = Utils.base64EncodeWithPadding("ambrykey".getBytes());
   static final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   static final byte dataCenterId = 66;
