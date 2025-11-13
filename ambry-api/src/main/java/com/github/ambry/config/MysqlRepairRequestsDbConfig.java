@@ -40,9 +40,12 @@ public class MysqlRepairRequestsDbConfig {
   @Config(LIST_MAX_RESULTS)
   public final int listMaxResults;
 
+  public final SSLConfig sslConfig;
+
   public MysqlRepairRequestsDbConfig(VerifiableProperties verifiableProperties) {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
+    this.sslConfig = new SSLConfig(verifiableProperties);
   }
 }
