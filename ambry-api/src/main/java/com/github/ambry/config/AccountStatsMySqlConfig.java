@@ -13,10 +13,6 @@
  */
 package com.github.ambry.config;
 
-import java.nio.file.Files;
-import java.nio.file.Paths;
-
-
 public class AccountStatsMySqlConfig {
   private static final String PREFIX = "account.stats.mysql.";
 

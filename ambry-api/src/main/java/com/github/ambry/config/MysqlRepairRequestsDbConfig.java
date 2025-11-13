@@ -20,8 +20,6 @@ public class MysqlRepairRequestsDbConfig {
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
-  public static final String ENABLE_CERTIFICATE_BASED_AUTHENTICATION =
-      PREFIX + "enable.certificate.based.authentication";
 
   /**
    * Serialized json array containing the information about all mysql end points.
