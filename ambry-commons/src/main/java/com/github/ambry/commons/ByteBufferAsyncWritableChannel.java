@@ -252,8 +252,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
   /**
    * Resolves the oldest "checked-out" chunk and invokes the callback and future that accompanied the chunk. Once a
    * chunk is resolved, the data inside it is considered void. If no chunks have been "checked-out" yet, does nothing.
-   * If the chunk's ByteBuf is an internal wrapper (created by {@link #write(ByteBuffer, Callback)}), it will be
-   * automatically released to prevent memory leaks.
    * @param exception any {@link Exception} that occurred during the handling that needs to be notified.
    */
   public void resolveOldestChunk(Exception exception) {
@@ -283,7 +281,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
 
   /**
    * Resolves all the remaining chunks with {@link ClosedChannelException}.
-   * Internal wrapper ByteBufs are automatically released to prevent memory leaks.
    * @param e the exception to use to resolve all the chunks.
    */
   private void resolveAllRemainingChunks(Exception e) {
