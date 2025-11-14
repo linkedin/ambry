@@ -1580,23 +1580,31 @@ class PutOperation {
      * Submits encrypt job for the given {@link PutChunk} and processes the callback for the same
      */
     private void encryptChunk() {
+      ByteBuf retainedCopy = null;
       try {
         logger.trace("{}: Chunk at index {} moves to {} state", loggingContext, chunkIndex, ChunkState.Encrypting);
         state = ChunkState.Encrypting;
         chunkEncryptReadyAtMs = time.milliseconds();
         encryptJobMetricsTracker.onJobSubmission();
         logger.trace("{}: Submitting encrypt job for chunk at index {}", loggingContext, chunkIndex);
+        retainedCopy = isMetadataChunk() ? null : buf.retainedDuplicate();
         cryptoJobHandler.submitJob(
             new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-                isMetadataChunk() ? null : buf.retainedDuplicate(), ByteBuffer.wrap(chunkUserMetadata),
-                kms.getRandomKey(), cryptoService, kms, options, encryptJobMetricsTracker, this::encryptionCallback));
+                retainedCopy, ByteBuffer.wrap(chunkUserMetadata), kms.getRandomKey(),
+                cryptoService, kms, options, encryptJobMetricsTracker, this::encryptionCallback));
       } catch (GeneralSecurityException e) {
+        if (retainedCopy != null) {
+          retainedCopy.release();
+        }
         encryptJobMetricsTracker.incrementOperationError();
         logger.trace("{}: Exception thrown while generating random key for chunk at index {}", loggingContext,
             chunkIndex, e);
         setOperationExceptionAndComplete(new RouterException(
             "GeneralSecurityException thrown while generating random key for chunk at index " + chunkIndex, e,
             RouterErrorCode.UnexpectedInternalError));
+      } finally {
+        // ownership transferred to EncryptJob or cleaned up on exception
+        retainedCopy = null;
       }
     }
 
