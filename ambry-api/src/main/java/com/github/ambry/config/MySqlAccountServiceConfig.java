@@ -161,8 +161,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Config(TRANSACTION_ISOLATION_LEVEL)
   public final TransactionIsolationLevel transactionIsolationLevel;
 
-
-
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
