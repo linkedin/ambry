@@ -88,21 +88,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     if (src == null) {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
-    if (!isOpen()) {
-      CompletableFuture<Long> failedFuture = new CompletableFuture<>();
-      failedFuture.completeExceptionally(new ClosedChannelException());
-      if (callback != null) {
-        callback.onCompletion(0L, new ClosedChannelException());
-      }
-      return failedFuture;
-    }
-    ByteBuf wrapper = Unpooled.wrappedBuffer(src);
-    ChunkData chunkData = new ChunkData(wrapper, callback, true);
-    chunks.add(chunkData);
-    if (channelEventListener != null) {
-      channelEventListener.onEvent(EventType.Write);
-    }
-    return chunkData.future;
+    return writeInternal(Unpooled.wrappedBuffer(src), callback, true);
   }
 
   /**
@@ -117,6 +103,17 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     if (src == null) {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
+    return writeInternal(src, callback, false);
+  }
+
+  /**
+   * Internal write implementation shared by both public write methods.
+   * @param src the ByteBuf to write to the channel.
+   * @param callback the {@link Callback} that will be invoked once the write succeeds/fails. This can be null.
+   * @param isInternalWrapper true if the ByteBuf is an internal wrapper that should be released by the channel.
+   * @return a {@link Future} that will eventually contain the result of the write operation.
+   */
+  private Future<Long> writeInternal(ByteBuf src, Callback<Long> callback, boolean isInternalWrapper) {
     if (!isOpen()) {
       src.release();
       CompletableFuture<Long> failedFuture = new CompletableFuture<>();
@@ -126,7 +123,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
       }
       return failedFuture;
     }
-    ChunkData chunkData = new ChunkData(src, callback, false);
+    ChunkData chunkData = new ChunkData(src, callback, isInternalWrapper);
     chunks.add(chunkData);
     if (channelEventListener != null) {
       channelEventListener.onEvent(EventType.Write);
