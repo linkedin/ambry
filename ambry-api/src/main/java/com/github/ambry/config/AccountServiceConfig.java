@@ -58,6 +58,8 @@ public class AccountServiceConfig {
   @Config(CONTAINER_DEPRECATION_RETENTION_DAYS)
   public final int containerDeprecationRetentionDays;
 
+  public final SSLConfig sslConfig;
+
   public AccountServiceConfig(VerifiableProperties verifiableProperties) {
     containerIdStartNumber =
         verifiableProperties.getShortInRange(CONTAINER_ID_START_NUMBER, (short) 1, (short) 0, Short.MAX_VALUE);
@@ -65,5 +67,7 @@ public class AccountServiceConfig {
     retryDelayMs = verifiableProperties.getLongInRange(RETRY_DELAY_MS, 1000, 1, Long.MAX_VALUE);
     ignoreVersionMismatch = verifiableProperties.getBoolean(IGNORE_VERSION_MISMATCH, false);
     containerDeprecationRetentionDays = verifiableProperties.getIntInRange(CONTAINER_DEPRECATION_RETENTION_DAYS, 13, 0, Integer.MAX_VALUE);
+    this.sslConfig = new SSLConfig(verifiableProperties);
+
   }
 }
