@@ -68,6 +68,5 @@ public class AccountServiceConfig {
     ignoreVersionMismatch = verifiableProperties.getBoolean(IGNORE_VERSION_MISMATCH, false);
     containerDeprecationRetentionDays = verifiableProperties.getIntInRange(CONTAINER_DEPRECATION_RETENTION_DAYS, 13, 0, Integer.MAX_VALUE);
     this.sslConfig = new SSLConfig(verifiableProperties);
-
   }
 }
