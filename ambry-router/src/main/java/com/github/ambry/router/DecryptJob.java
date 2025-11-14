@@ -19,6 +19,7 @@ import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import io.netty.util.ReferenceCountUtil;
 
 
 /**
@@ -100,7 +101,7 @@ class DecryptJob implements CryptoJob {
     } finally {
       // After decryption, we release the ByteBuf;
       if (encryptedBlobContent != null) {
-        encryptedBlobContent.release();
+        ReferenceCountUtil.safeRelease(encryptedBlobContent);
       }
       decryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
@@ -117,7 +118,7 @@ class DecryptJob implements CryptoJob {
   public void closeJob(GeneralSecurityException gse) {
     if (closed.compareAndSet(false, true)) {
       if (encryptedBlobContent != null) {
-        encryptedBlobContent.release();
+        ReferenceCountUtil.safeRelease(encryptedBlobContent);
       }
       callback.onCompletion(null, gse);
     }
