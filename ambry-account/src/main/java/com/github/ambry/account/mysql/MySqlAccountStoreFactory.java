@@ -65,15 +65,16 @@ public class MySqlAccountStoreFactory {
     dcToMySqlDBEndpoints.values().forEach(dbEndpoints::addAll);
     List<DbEndpoint> dbEndpointsWithSSL = new ArrayList<>();
     for(int i = 0; i < dbEndpoints.size(); i++) {
+      DbEndpoint dbE = dbEndpoints.get(i);
       if (dbEndpoints.get(i).getSslMode() != DbEndpoint.SSLMode.NONE && config.sslConfig != null) {
-        String url = MySqlUtils.addSslSettingsToUrl(dbEndpoints.get(i).getUrl(), config.sslConfig, dbEndpoints.get(i).getSslMode());
-        dbEndpointsWithSSL.add(new DbEndpoint(url, dbEndpoints.get(i).getDatacenter(),
-            dbEndpoints.get(i).isWriteable(), dbEndpoints.get(i).getUsername(), dbEndpoints.get(i).getPassword(),
-            dbEndpoints.get(i).getSslMode()));
+        String url = MySqlUtils.addSslSettingsToUrl(dbE.getUrl(), config.sslConfig, dbE.getSslMode());
+        dbEndpointsWithSSL.add(new DbEndpoint(url, dbE.getDatacenter(),
+            dbE.isWriteable(), dbE.getUsername(), dbE.getPassword(),
+            dbE.getSslMode()));
       } else {
-        dbEndpointsWithSSL.add(dbEndpoints.get(i));
+        dbEndpointsWithSSL.add(dbE);
       }
-      logger.info("DB Endpoint {}: {}", i, dbEndpoints.get(i));
+      logger.info("DB Endpoint {}: {}", i, dbE);
     }
     try {
       return new MySqlAccountStore(dbEndpointsWithSSL, localDatacenter, metrics, config);
