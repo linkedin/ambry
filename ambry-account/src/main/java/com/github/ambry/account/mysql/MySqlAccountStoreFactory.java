@@ -66,7 +66,7 @@ public class MySqlAccountStoreFactory {
     List<DbEndpoint> dbEndpointsWithSSL = new ArrayList<>();
     for(int i = 0; i < dbEndpoints.size(); i++) {
       DbEndpoint dbE = dbEndpoints.get(i);
-      if (dbEndpoints.get(i).getSslMode() != DbEndpoint.SSLMode.NONE && config.sslConfig != null) {
+      if (dbE.getSslMode() != DbEndpoint.SSLMode.NONE && config.sslConfig != null) {
         String url = MySqlUtils.addSslSettingsToUrl(dbE.getUrl(), config.sslConfig, dbE.getSslMode());
         dbEndpointsWithSSL.add(new DbEndpoint(url, dbE.getDatacenter(),
             dbE.isWriteable(), dbE.getUsername(), dbE.getPassword(),
