@@ -18,6 +18,8 @@ import com.github.ambry.commons.Callback;
 import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import io.netty.util.ReferenceCountUtil;
 
 
 /**
@@ -33,6 +35,7 @@ class DecryptJob implements CryptoJob {
   private final KeyManagementService kms;
   private final CryptoJobMetricsTracker decryptJobMetricsTracker;
   private final GetBlobOptions getBlobOptions;
+  private final AtomicBoolean closed = new AtomicBoolean(false);
 
   /**
    * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
@@ -71,6 +74,9 @@ class DecryptJob implements CryptoJob {
    * 5. Invoke callback with the decryptedBlobContent
    */
   public void run() {
+    if (closed.get()) {
+      return;  // Job already closed, don't execute
+    }
     decryptJobMetricsTracker.onJobProcessingStart();
     Exception exception = null;
     ByteBuf decryptedBlobContent = null;
@@ -95,7 +101,7 @@ class DecryptJob implements CryptoJob {
     } finally {
       // After decryption, we release the ByteBuf;
       if (encryptedBlobContent != null) {
-        encryptedBlobContent.release();
+        ReferenceCountUtil.safeRelease(encryptedBlobContent);
       }
       decryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
@@ -110,7 +116,12 @@ class DecryptJob implements CryptoJob {
    */
   @Override
   public void closeJob(GeneralSecurityException gse) {
-    callback.onCompletion(null, gse);
+    if (closed.compareAndSet(false, true)) {
+      if (encryptedBlobContent != null) {
+        ReferenceCountUtil.safeRelease(encryptedBlobContent);
+      }
+      callback.onCompletion(null, gse);
+    }
   }
 
   /**

@@ -194,8 +194,8 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       toDecrypt.skipBytes(toDecrypt.readableBytes());
       return decryptedContent;
     } catch (Exception e) {
-      if (toDecrypt != null) {
-        toDecrypt.release();
+      if (decryptedContent != null) {
+        decryptedContent.release();
       }
       throw new GeneralSecurityException("Exception thrown while decrypting data", e);
     } finally {

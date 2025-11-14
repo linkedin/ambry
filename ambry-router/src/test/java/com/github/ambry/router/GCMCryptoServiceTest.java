@@ -328,6 +328,108 @@ public class GCMCryptoServiceTest {
   }
 
   /**
+   * Test that decrypt() with corrupted ciphertext doesn't leak or release caller's buffer.
+   */
+  @Test
+  public void testDecryptWithCorruptedCiphertextOwnership() throws Exception {
+    String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+    Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_IN_CHARS);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
+    CryptoService<SecretKeySpec> cryptoService =
+        new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
+
+    ByteBuf originalContent = PooledByteBufAllocator.DEFAULT.heapBuffer(1024);
+    originalContent.writeBytes(TestUtils.getRandomBytes(1024));
+    ByteBuf encryptedContent = cryptoService.encrypt(originalContent, secretKeySpec);
+    originalContent.release();
+
+    // Corrupt encrypted content
+    int corruptionStart = 20;
+    for (int i = corruptionStart; i < corruptionStart + 16; i++) {
+      encryptedContent.setByte(i, (byte) 0xFF);
+    }
+
+    Assert.assertEquals("Input buffer should have refCnt=1", 1, encryptedContent.refCnt());
+
+    try {
+      cryptoService.decrypt(encryptedContent, secretKeySpec);
+      Assert.fail("Should have thrown GeneralSecurityException");
+    } catch (GeneralSecurityException e) {
+      // Expected
+    }
+
+    // Input buffer should NOT have been released by service
+    Assert.assertEquals("Input buffer should still have refCnt=1", 1, encryptedContent.refCnt());
+    encryptedContent.release();
+  }
+
+  /**
+   * Test that decrypt() with wrong key doesn't leak or release caller's buffer.
+   * Tests exception path for authentication failure.
+   */
+  @Test
+  public void testDecryptWithWrongKeyOwnership() throws Exception {
+    String key1 = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+    String key2 = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+    Properties props = getKMSProperties(key1, DEFAULT_KEY_SIZE_IN_CHARS);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    SecretKeySpec correctKey = new SecretKeySpec(Hex.decode(key1), "AES");
+    SecretKeySpec wrongKey = new SecretKeySpec(Hex.decode(key2), "AES");
+    CryptoService<SecretKeySpec> cryptoService =
+        new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
+
+    ByteBuf originalContent = PooledByteBufAllocator.DEFAULT.heapBuffer(512);
+    originalContent.writeBytes(TestUtils.getRandomBytes(512));
+    ByteBuf encryptedContent = cryptoService.encrypt(originalContent, correctKey);
+    originalContent.release();
+
+    Assert.assertEquals("Input buffer should have refCnt=1", 1, encryptedContent.refCnt());
+
+    try {
+      cryptoService.decrypt(encryptedContent, wrongKey);
+      Assert.fail("Should have thrown GeneralSecurityException");
+    } catch (GeneralSecurityException e) {
+      // Expected
+    }
+
+    // Input buffer should NOT have been released by service
+    Assert.assertEquals("Input buffer should still have refCnt=1", 1, encryptedContent.refCnt());
+    encryptedContent.release();
+  }
+
+  /**
+   * Test that successful decrypt() respects ownership (doesn't release input).
+   * Baseline test for proper ownership semantics.
+   */
+  @Test
+  public void testSuccessfulDecryptOwnership() throws Exception {
+    String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+    Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_IN_CHARS);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
+    CryptoService<SecretKeySpec> cryptoService =
+        new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
+
+    ByteBuf originalContent = PooledByteBufAllocator.DEFAULT.heapBuffer(1024);
+    originalContent.writeBytes(TestUtils.getRandomBytes(1024));
+    ByteBuf encryptedContent = cryptoService.encrypt(originalContent, secretKeySpec);
+    originalContent.release();
+
+    Assert.assertEquals("Input buffer should have refCnt=1", 1, encryptedContent.refCnt());
+
+    ByteBuf decryptedContent = cryptoService.decrypt(encryptedContent, secretKeySpec);
+    Assert.assertNotNull("Should have decrypted content", decryptedContent);
+
+    // Input buffer should still be owned by caller
+    Assert.assertEquals("Input buffer should still have refCnt=1", 1, encryptedContent.refCnt());
+
+    // Caller releases both buffers
+    encryptedContent.release();
+    decryptedContent.release();
+  }
+
+  /**
    * Test {@link GCMCryptoServiceFactory}
    */
   @Test
