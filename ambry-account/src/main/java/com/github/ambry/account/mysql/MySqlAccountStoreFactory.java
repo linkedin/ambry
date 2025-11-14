@@ -18,6 +18,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.mysql.MySqlUtils;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,8 +63,21 @@ public class MySqlAccountStoreFactory {
     // Flatten to List (TODO: does utility method need to return map?)
     List<DbEndpoint> dbEndpoints = new ArrayList<>();
     dcToMySqlDBEndpoints.values().forEach(dbEndpoints::addAll);
+    List<DbEndpoint> dbEndpointsWithSSL = new ArrayList<>();
+    for(int i = 0; i < dbEndpoints.size(); i++) {
+      DbEndpoint dbE = dbEndpoints.get(i);
+      if (dbE.getSslMode() != DbEndpoint.SSLMode.NONE && config.sslConfig != null) {
+        String url = MySqlUtils.addSslSettingsToUrl(dbE.getUrl(), config.sslConfig, dbE.getSslMode());
+        dbEndpointsWithSSL.add(new DbEndpoint(url, dbE.getDatacenter(),
+            dbE.isWriteable(), dbE.getUsername(), dbE.getPassword(),
+            dbE.getSslMode()));
+      } else {
+        dbEndpointsWithSSL.add(dbE);
+      }
+      logger.info("DB Endpoint {}: {}", i, dbE);
+    }
     try {
-      return new MySqlAccountStore(dbEndpoints, localDatacenter, metrics, config);
+      return new MySqlAccountStore(dbEndpointsWithSSL, localDatacenter, metrics, config);
     } catch (SQLException e) {
       logger.error("MySQL account store creation failed", e);
       throw e;
