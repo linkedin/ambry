@@ -86,4 +86,121 @@ public class BoundedNettyByteBufReceiveTest {
     }
     buffer.clear();
   }
+
+  /**
+   * Regression test for ByteBuf pool leak when IOException occurs during content read.
+   * Verifies that the intermediate buffer approach correctly handles exceptions without leaking ByteBufs.
+   *
+   * This test specifically validates the fix for a bug where using nioBuffer() caused pool
+   * deallocation issues when exceptions occurred during channel.read(). The fix uses an
+   * intermediate ByteBuffer to completely decouple the channel read from ByteBuf internal state.
+   *
+   * @throws Exception
+   */
+  @Test
+  public void testIOExceptionDuringContentReadNoLeak() throws Exception {
+    int requestSize = 100;
+
+    // Channel that returns size, then 0, then throws IOException
+    // This forces readFrom() to be called twice: once for size, once for content
+    java.nio.channels.ReadableByteChannel faultingChannel = new java.nio.channels.ReadableByteChannel() {
+      private int readCount = 0;
+
+      @Override
+      public int read(ByteBuffer dst) throws IOException {
+        if (readCount == 0) {
+          dst.putLong(requestSize);
+          readCount++;
+          return Long.BYTES;
+        } else if (readCount == 1) {
+          // Return 0 to force readFrom() to return before reading content
+          readCount++;
+          return 0;
+        } else {
+          throw new IOException("Simulated network error during content read");
+        }
+      }
+
+      @Override
+      public boolean isOpen() {
+        return true;
+      }
+
+      @Override
+      public void close() throws IOException {
+      }
+    };
+
+    BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive(100000);
+
+    // First call reads size successfully
+    long bytesRead = receive.readFrom(faultingChannel);
+    Assert.assertEquals("Should have read size header", Long.BYTES, bytesRead);
+
+    // Second call should throw IOException during content read
+    try {
+      receive.readFrom(faultingChannel);
+      Assert.fail("Should have thrown IOException");
+    } catch (IOException e) {
+      Assert.assertTrue("Exception should mention content read error",
+          e.getMessage().contains("content read"));
+    }
+
+    // NettyByteBufLeakHelper.afterTest() will verify no leaks
+  }
+
+  /**
+   * Regression test for ByteBuf pool leak when EOFException occurs during content read.
+   * Verifies that the intermediate buffer approach correctly handles EOF without leaking ByteBufs.
+   *
+   * @throws Exception
+   */
+  @Test
+  public void testEOFExceptionDuringContentReadNoLeak() throws Exception {
+    int requestSize = 100;
+
+    // Channel that returns size, then 0, then EOF
+    java.nio.channels.ReadableByteChannel eofChannel = new java.nio.channels.ReadableByteChannel() {
+      private int readCount = 0;
+
+      @Override
+      public int read(ByteBuffer dst) throws IOException {
+        if (readCount == 0) {
+          dst.putLong(requestSize);
+          readCount++;
+          return Long.BYTES;
+        } else if (readCount == 1) {
+          // Return 0 to force readFrom() to return before reading content
+          readCount++;
+          return 0;
+        }
+        return -1; // EOF during content read
+      }
+
+      @Override
+      public boolean isOpen() {
+        return true;
+      }
+
+      @Override
+      public void close() throws IOException {
+      }
+    };
+
+    BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive(100000);
+
+    // First call reads size successfully
+    long bytesRead = receive.readFrom(eofChannel);
+    Assert.assertEquals("Should have read size header", Long.BYTES, bytesRead);
+
+    // Second call should throw EOFException during content read
+    try {
+      receive.readFrom(eofChannel);
+      Assert.fail("Should have thrown EOFException");
+    } catch (IOException e) {
+      // Expected
+    }
+
+    // NettyByteBufLeakHelper.afterTest() will verify no leaks
+  }
 }
