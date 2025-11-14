@@ -263,10 +263,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     ChunkData chunkData = chunksAwaitingResolution.poll();
     if (chunkData != null) {
       chunkData.resolveChunk(exception);
-      // Release wrapper if it was created by write(ByteBuffer)
-      if (chunkData.isInternalWrapper && chunkData.buf != null) {
-        chunkData.buf.release();
-      }
     }
   }
 
@@ -299,19 +295,11 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
       ChunkData chunkData = chunksAwaitingResolution.poll();
       while (chunkData != null) {
         chunkData.resolveChunk(e);
-        // Release wrapper if it was created by write(ByteBuffer)
-        if (chunkData.isInternalWrapper && chunkData.buf != null) {
-          chunkData.buf.release();
-        }
         chunkData = chunksAwaitingResolution.poll();
       }
       chunkData = chunks.poll();
       while (chunkData != null) {
         chunkData.resolveChunk(e);
-        // Release wrapper if it was created by write(ByteBuffer)
-        if (chunkData.isInternalWrapper && chunkData.buf != null) {
-          chunkData.buf.release();
-        }
         chunkData = chunks.poll();
       }
       chunks.add(new ChunkData(null, null, false));
@@ -370,6 +358,10 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
         future.done(bytesWritten, exception);
         if (callback != null) {
           callback.onCompletion(bytesWritten, exception);
+        }
+        // Release wrapper if it was created by write(ByteBuffer)
+        if (isInternalWrapper) {
+          buf.release();
         }
       }
     }
