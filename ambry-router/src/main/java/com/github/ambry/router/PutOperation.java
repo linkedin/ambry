@@ -1634,7 +1634,7 @@ class PutOperation {
      * @param channelReadBuf the {@link ByteBuf} from which to read data.
      * @return the number of bytes transferred in this operation.
      */
-    int fillFrom(ByteBuf channelReadBuf) {
+    synchronized int fillFrom(ByteBuf channelReadBuf) {
       int toWrite;
       ByteBuf slice;
       if (buf == null) {
