@@ -40,6 +40,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
+import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -215,9 +216,11 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           String blobId = RestUtils.stripSlashAndExtensionFromId(input);
           long expirationTimeMs = Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(),
               blobProperties.getTimeToLiveInSeconds());
+          byte[] digestBytes = restRequest.getDigest();
+          String digest = digestBytes != null ? Base64.encodeBase64URLSafeString(digestBytes) : null;
           NamedBlobRecord record =
               NamedBlobRecord.forPut(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                  namedBlobPath.getBlobName(), blobId, expirationTimeMs, blobProperties.getBlobSize());
+                  namedBlobPath.getBlobName(), blobId, expirationTimeMs, blobProperties.getBlobSize(), digest);
           NamedBlobState state = NamedBlobState.READY;
           if (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
             // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
