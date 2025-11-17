@@ -35,6 +35,7 @@ import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.After;
 import org.junit.Before;
@@ -586,6 +587,158 @@ public class CryptoJobHandlerTest {
         getRandomShort(TestUtils.RANDOM),
         referenceClusterMap.getRandomWritablePartition(MockClusterMap.DEFAULT_PARTITION_CLASS, null), false,
         BlobId.BlobDataType.DATACHUNK);
+  }
+
+  /**
+   * Test that closeJob() properly releases encryptedBlobContent when called before run().
+   */
+  @Test
+  public void testDecryptJobCloseBeforeRunReleasesBuffer() throws Exception {
+    TestBlobData testBlobData = getRandomBlob(referenceClusterMap);
+    ByteBuf blobContent = testBlobData.blobContent;
+
+    SecretKeySpec perBlobKey = kms.getRandomKey();
+    ByteBuf encryptedContent = cryptoService.encrypt(blobContent, perBlobKey);
+    blobContent.release();
+
+    SecretKeySpec containerKey = kms.getKey(null, testBlobData.blobId.getAccountId(),
+        testBlobData.blobId.getContainerId());
+    ByteBuffer encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
+
+    CountDownLatch latch = new CountDownLatch(1);
+    DecryptJob job = new DecryptJob(testBlobData.blobId, encryptedKey, encryptedContent, null,
+        cryptoService, kms, null, new CryptoJobMetricsTracker(new CryptoJobMetrics(
+            CryptoJobHandlerTest.class, DECRYPT_JOB_TYPE, REGISTRY)),
+        (result, exception) -> latch.countDown());
+
+    // Close before running - this should release encryptedContent
+    job.closeJob(new GeneralSecurityException("Aborted before execution"));
+
+    assertTrue("Callback should complete", latch.await(5, TimeUnit.SECONDS));
+    // NettyByteBufLeakHelper will detect any leaks
+  }
+
+  /**
+   * Test that closeJob() is idempotent and protects against:
+   * 1. Double-release of ByteBuf (no IllegalReferenceCountException)
+   * 2. Double callback invocation (callback should only fire once)
+   * Tests the AtomicBoolean-based idempotency fix.
+   */
+  @Test
+  public void testDecryptJobCloseIdempotent() throws Exception {
+    TestBlobData testBlobData = getRandomBlob(referenceClusterMap);
+    ByteBuf blobContent = testBlobData.blobContent;
+
+    SecretKeySpec perBlobKey = kms.getRandomKey();
+    ByteBuf encryptedContent = cryptoService.encrypt(blobContent, perBlobKey);
+    blobContent.release();
+
+    SecretKeySpec containerKey = kms.getKey(null, testBlobData.blobId.getAccountId(),
+        testBlobData.blobId.getContainerId());
+    ByteBuffer encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
+
+    AtomicInteger callbackCount = new AtomicInteger(0);
+    CountDownLatch latch = new CountDownLatch(1);
+    DecryptJob job = new DecryptJob(testBlobData.blobId, encryptedKey, encryptedContent, null,
+        cryptoService, kms, null, new CryptoJobMetricsTracker(new CryptoJobMetrics(
+            CryptoJobHandlerTest.class, DECRYPT_JOB_TYPE, REGISTRY)),
+        (result, exception) -> {
+          callbackCount.incrementAndGet();
+          latch.countDown();
+        });
+
+    // Call closeJob() multiple times - should not cause double-release or double-callback
+    job.closeJob(new GeneralSecurityException("First close"));
+    assertTrue("Callback should complete", latch.await(5, TimeUnit.SECONDS));
+
+    job.closeJob(new GeneralSecurityException("Second close"));
+    job.closeJob(new GeneralSecurityException("Third close"));
+
+    // Callback should have been invoked exactly once (from first closeJob only)
+    assertEquals("Callback should only be invoked once despite multiple closeJob calls",
+        1, callbackCount.get());
+  }
+
+
+  /**
+   * Test that normal decrypt execution doesn't leak.
+   * Baseline test for DecryptJob memory management.
+   */
+  @Test
+  public void testDecryptJobNormalExecutionNoLeak() throws Exception {
+    TestBlobData testBlobData = getRandomBlob(referenceClusterMap);
+    ByteBuf blobContent = testBlobData.blobContent;
+
+    SecretKeySpec perBlobKey = kms.getRandomKey();
+    ByteBuf encryptedContent = cryptoService.encrypt(blobContent, perBlobKey);
+    blobContent.release();
+
+    SecretKeySpec containerKey = kms.getKey(null, testBlobData.blobId.getAccountId(),
+        testBlobData.blobId.getContainerId());
+    ByteBuffer encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
+
+    CountDownLatch latch = new CountDownLatch(1);
+    List<DecryptJob.DecryptJobResult> results = new CopyOnWriteArrayList<>();
+    DecryptJob job = new DecryptJob(testBlobData.blobId, encryptedKey, encryptedContent, null,
+        cryptoService, kms, null, new CryptoJobMetricsTracker(new CryptoJobMetrics(
+            CryptoJobHandlerTest.class, DECRYPT_JOB_TYPE, REGISTRY)),
+        (result, exception) -> {
+          results.add(result);
+          latch.countDown();
+        });
+
+    job.run();
+
+    assertTrue("Callback should complete", latch.await(5, TimeUnit.SECONDS));
+    assertEquals("Should have one result", 1, results.size());
+    assertNotNull("Should have decrypted content", results.get(0).getDecryptedBlobContent());
+
+    // Caller must release the result
+    results.get(0).getDecryptedBlobContent().release();
+  }
+
+  /**
+   * Test that run() gracefully handles being called after closeJob().
+   * This tests the race condition where closeJob() is called and then run() executes.
+   * Without proper closed flag checking in run(), this would cause:
+   * 1. IllegalReferenceCountException (trying to use released buffer)
+   * 2. Double-release of encryptedBlobContent
+   * 3. Callback invoked twice
+   */
+  @Test
+  public void testDecryptJobRunAfterClose() throws Exception {
+    TestBlobData testBlobData = getRandomBlob(referenceClusterMap);
+    ByteBuf blobContent = testBlobData.blobContent;
+
+    SecretKeySpec perBlobKey = kms.getRandomKey();
+    ByteBuf encryptedContent = cryptoService.encrypt(blobContent, perBlobKey);
+    blobContent.release();
+
+    SecretKeySpec containerKey = kms.getKey(null, testBlobData.blobId.getAccountId(),
+        testBlobData.blobId.getContainerId());
+    ByteBuffer encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
+
+    AtomicInteger callbackCount = new AtomicInteger(0);
+    CountDownLatch latch = new CountDownLatch(1);
+    DecryptJob job = new DecryptJob(testBlobData.blobId, encryptedKey, encryptedContent, null,
+        cryptoService, kms, null, new CryptoJobMetricsTracker(new CryptoJobMetrics(
+            CryptoJobHandlerTest.class, DECRYPT_JOB_TYPE, REGISTRY)),
+        (result, exception) -> {
+          callbackCount.incrementAndGet();
+          latch.countDown();
+        });
+
+    // Close first - this releases encryptedContent
+    job.closeJob(new GeneralSecurityException("Closed before run"));
+    assertTrue("Callback should complete from closeJob", latch.await(5, TimeUnit.SECONDS));
+
+    // Now call run() - should detect closed flag and not execute
+    job.run();
+
+    // Callback should only have been invoked once (from closeJob, not from run)
+    assertEquals("Callback should only be invoked once", 1, callbackCount.get());
+
+    // NettyByteBufLeakHelper will detect any leaks from double-release
   }
 
   /**
