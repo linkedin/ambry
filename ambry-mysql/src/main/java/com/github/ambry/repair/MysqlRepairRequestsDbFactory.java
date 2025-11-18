@@ -77,8 +77,13 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
    * @return the {@link HikariDataSource} for the {@link MySqlUtils.DbEndpoint}.
    */
   public HikariDataSource buildDataSource(MySqlUtils.DbEndpoint dbEndpoint) {
+    String url = dbEndpoint.getUrl();
+    MySqlUtils.DbEndpoint.SSLMode sslMode = dbEndpoint.getSslMode();
+    if (config.sslConfig != null && sslMode != MySqlUtils.DbEndpoint.SSLMode.NONE) {
+      url = MySqlUtils.addSslSettingsToUrl(url, config.sslConfig, sslMode);
+    }
     HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
+    hikariConfig.setJdbcUrl(url);
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
     hikariConfig.setMaximumPoolSize(config.localPoolSize);

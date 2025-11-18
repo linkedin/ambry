@@ -492,7 +492,13 @@ public class NettyRequest implements RestRequest {
     }
     // Retain this httpContent so it won't be garbage collected right away. Release it in the callback.
     httpContent.retain();
-    writeChannel.write(httpContent.content(), new ContentWriteCallback(httpContent, isLast, callbackWrapper));
+    try {
+      writeChannel.write(httpContent.content(), new ContentWriteCallback(httpContent, isLast, callbackWrapper));
+    } catch (Exception e) {
+      // If write() throws, callback won't be created, so we must release the retained content
+      httpContent.release();
+      throw e;
+    }
     allContentReceived = isLast;
   }
 

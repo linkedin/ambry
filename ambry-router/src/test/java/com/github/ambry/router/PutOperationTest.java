@@ -1339,4 +1339,96 @@ public class PutOperationTest {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
     return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().content());
   }
+
+  /**
+   * KMS exception during EncryptJob constructor in PutOperation does not leak
+   */
+  @Test
+  public void testProductionBug_KmsExceptionAfterRetainedDuplicateLeaksBuffer() throws Exception {
+    // Set up crypto infrastructure
+    String defaultKey = TestUtils.getRandomKey(64);
+    Properties cryptoProps = new Properties();
+    cryptoProps.setProperty("kms.default.container.key", defaultKey);
+    cryptoProps.setProperty("kms.random.key.size.in.bits", "256");
+    VerifiableProperties cryptoVerifiableProps = new VerifiableProperties(cryptoProps);
+
+    // Create a working KMS for reference
+    KeyManagementService<javax.crypto.spec.SecretKeySpec> workingKms =
+        new SingleKeyManagementServiceFactory(cryptoVerifiableProps, "test-cluster",
+            new com.codahale.metrics.MetricRegistry()).getKeyManagementService();
+
+    // Create a KMS that throws during getRandomKey()
+    KeyManagementService<javax.crypto.spec.SecretKeySpec> faultyKms =
+        new KeyManagementService<javax.crypto.spec.SecretKeySpec>() {
+      @Override
+      public void register(short accountId, short containerId) throws java.security.GeneralSecurityException {
+      }
+
+      @Override
+      public void register(String context) throws java.security.GeneralSecurityException {
+      }
+
+      @Override
+      public javax.crypto.spec.SecretKeySpec getKey(com.github.ambry.rest.RestRequest restRequest,
+          short accountId, short containerId) throws java.security.GeneralSecurityException {
+        return workingKms.getKey(restRequest, accountId, containerId);
+      }
+
+      @Override
+      public javax.crypto.spec.SecretKeySpec getKey(com.github.ambry.rest.RestRequest restRequest,
+          String context) throws java.security.GeneralSecurityException {
+        return workingKms.getKey(restRequest, context);
+      }
+
+      @Override
+      public javax.crypto.spec.SecretKeySpec getRandomKey() throws java.security.GeneralSecurityException {
+        // This will be called during EncryptJob constructor argument evaluation
+        throw new java.security.GeneralSecurityException("Simulated KMS failure during getRandomKey");
+      }
+
+      @Override
+      public void close() {
+      }
+    };
+
+    CryptoService<javax.crypto.spec.SecretKeySpec> cryptoService =
+        new GCMCryptoServiceFactory(cryptoVerifiableProps,
+            new com.codahale.metrics.MetricRegistry()).getCryptoService();
+
+    CryptoJobHandler cryptoJobHandler = new CryptoJobHandler(2);
+
+    // Create router config with encryption enabled
+    Properties routerProps = createBasicRouterProperties();
+    VerifiableProperties vProps = new VerifiableProperties(routerProps);
+    RouterConfig testRouterConfig = new RouterConfig(vProps);
+
+    // Create blob properties and content
+    BlobProperties blobProperties =
+        new BlobProperties(chunkSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    FutureResult<String> future = new FutureResult<>();
+
+    // Create PutOperation with faulty KMS
+    PutOperation op =
+        PutOperation.forUpload(testRouterConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<>()), null, faultyKms, cryptoService,
+            cryptoJobHandler, time, blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback,
+            compressionService);
+
+    op.startOperation();
+
+    // Fill chunks - this would have trigger the memory leak
+    op.fillChunks();
+
+    cryptoJobHandler.close();
+
+    // Let afterTest() check for leaks (it will pass or fail based on actual memory state)
+  }
 }

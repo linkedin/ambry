@@ -18,14 +18,18 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Queue;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.After;
 import org.junit.Before;
@@ -79,6 +83,40 @@ public class ByteBufferAsyncWritableChannelTest {
     assertFalse("Channel is still open", channel.isOpen());
     assertNull("There should have been no chunk returned", channel.getNextChunk());
     assertNull("There should have been no chunk returned", channel.getNextChunk(0));
+  }
+
+  @Test
+  public void writeAfterCloseShouldFailWithClosedChannelException() throws Exception {
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
+
+    // Close the channel first
+    channel.close();
+    assertFalse("Channel should be closed", channel.isOpen());
+
+    // Prepare a dummy ByteBuf
+    ByteBuf src = ByteBufAllocator.DEFAULT.heapBuffer(50);
+    src.writeBytes(new byte[]{1, 2, 3});
+
+    WriteCallback callback = new WriteCallback(0);
+
+    // Perform write
+    Future<Long> future = channel.write(src, callback);
+
+    // The future should fail with ClosedChannelException
+    try {
+      future.get();
+      fail("Expected write to fail due to closed channel");
+    } catch (ExecutionException e) {
+      Throwable root = Utils.getRootCause(e);
+      assertTrue("Expected ClosedChannelException but got " + root, root instanceof ClosedChannelException);
+    }
+
+    // The callback should also have received a ClosedChannelException
+    assertTrue("Expected callback exception to be ClosedChannelException but got " + callback.exception,
+        callback.exception instanceof ClosedChannelException);
+
+    // The ByteBuf should have been released
+    assertEquals("Expected src ByteBuf to be released", 0, src.refCnt());
   }
 
   @Test
@@ -248,6 +286,55 @@ public class ByteBufferAsyncWritableChannelTest {
     assertTrue("Close should have been notified", closeNotified.get());
   }
 
+  /**
+   * Test that verifies write(ByteBuffer) properly releases internal wrapper ByteBufs.
+   * This test ensures that the wrapper created by Unpooled.wrappedBuffer() is released
+   * after resolveOldestChunk() to prevent memory leaks.
+   */
+  @Test
+  public void testWriteByteBufferReleasesWrapper() throws Exception {
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
+    try {
+      // Create a direct ByteBuffer
+      ByteBuffer nioBuffer = ByteBuffer.allocateDirect(100);
+      nioBuffer.put(new byte[100]);
+      nioBuffer.flip();
+
+      CountDownLatch latch = new CountDownLatch(1);
+
+      // Call write(ByteBuffer) - this creates a wrapper via Unpooled.wrappedBuffer()
+      channel.write(nioBuffer, new Callback<Long>() {
+        @Override
+        public void onCompletion(Long result, Exception exception) {
+          assertNull("Should have no exception", exception);
+          latch.countDown();
+        }
+      });
+
+      // Consume the chunk (normal flow)
+      ByteBuffer chunk = channel.getNextChunk();
+      assertNotNull("Should have chunk", chunk);
+
+      // Get the wrapper ByteBuf from the channel before resolving
+      ByteBuf wrapper = getWrapperFromChannel(channel);
+      assertNotNull("Wrapper should exist", wrapper);
+      assertEquals("Wrapper should have refCnt=1 before resolve", 1, wrapper.refCnt());
+
+      // Resolve the chunk (normal flow - this should release the wrapper)
+      channel.resolveOldestChunk(null);
+
+      // Wait for callback
+      assertTrue("Callback should complete", latch.await(5, TimeUnit.SECONDS));
+
+      // ASSERTION: Wrapper should be released (refCnt=0)
+      assertEquals("Wrapper ByteBuf should be released after resolveOldestChunk()", 0, wrapper.refCnt());
+    } finally {
+      if (channel.isOpen()) {
+        channel.close();
+      }
+    }
+  }
+
   // helpers
 
   // checkoutMultipleChunksAndResolveTest() helpers.
@@ -265,6 +352,26 @@ public class ByteBufferAsyncWritableChannelTest {
       writeCallback = channelWriter.writes.get(i).writeCallback;
       assertFalse("Callback for a chunk younger than the expected is invoked", writeCallback.callbackInvoked.get());
     }
+  }
+
+  /**
+   * Gets the wrapper ByteBuf from the channel's resolved chunks using reflection.
+   * @param channel the channel to extract the wrapper from
+   * @return the wrapper ByteBuf from chunksAwaitingResolution
+   */
+  private ByteBuf getWrapperFromChannel(ByteBufferAsyncWritableChannel channel) throws Exception {
+    Field awaitingField = ByteBufferAsyncWritableChannel.class.getDeclaredField("chunksAwaitingResolution");
+    awaitingField.setAccessible(true);
+    Queue<?> chunksAwaiting = (Queue<?>) awaitingField.get(channel);
+
+    Object chunkData = chunksAwaiting.peek();
+    if (chunkData == null) {
+      return null;
+    }
+
+    Field bufField = chunkData.getClass().getDeclaredField("buf");
+    bufField.setAccessible(true);
+    return (ByteBuf) bufField.get(chunkData);
   }
 }
 

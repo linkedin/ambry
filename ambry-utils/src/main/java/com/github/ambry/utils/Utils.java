@@ -47,6 +47,7 @@ import java.sql.Timestamp;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -1595,5 +1596,57 @@ public class Utils {
       hexString.append(hex);
     }
     return hexString.toString();
+  }
+
+  // Static encoder/decoder instances to avoid allocations on each call
+  private static final Base64.Encoder BASE64_URL_ENCODER_WITHOUT_PADDING = Base64.getUrlEncoder().withoutPadding();
+  // Note: This doesn't allocate but just being symmetrical.
+  private static final Base64.Encoder BASE64_ENCODER_WITH_PADDING = Base64.getEncoder();
+
+  /**
+   * Encodes binary data to a URL-safe base64 string without padding.
+   * This is equivalent to Apache Commons {@code Base64.encodeBase64URLSafeString()}.
+   *
+   * @param data the byte array to encode
+   * @return the URL-safe base64 encoded string without padding
+   */
+  public static String base64EncodeUrlSafeWithoutPadding(byte[] data) {
+    return BASE64_URL_ENCODER_WITHOUT_PADDING.encodeToString(data);
+  }
+
+  /**
+   * Encodes binary data to a standard base64 string with padding.
+   * This is equivalent to Apache Commons {@code Base64.encodeBase64String()}.
+   *
+   * @param data the byte array to encode
+   * @return the standard base64 encoded string with padding
+   */
+  public static String base64EncodeWithPadding(byte[] data) {
+    return BASE64_ENCODER_WITH_PADDING.encodeToString(data);
+  }
+
+  /**
+   * Decodes a URL-safe base64 encoded string in a lenient manner, compatible with Apache Commons Base64.
+   * This method provides a performance-optimized hybrid approach:
+   * <ul>
+   *   <li>Fast path: Uses Java 8's strict URL decoder for valid base64 (all non-error cases)</li>
+   *   <li>Fallback path: Uses Apache Commons Base64 for legacy invalid data</li>
+   * </ul>
+   * This ensures compatibility with data encoded by Apache Commons Base64's lenient decoder while maintaining
+   * high performance for well-formed data.
+   *
+   * @param base64String the URL-safe base64 encoded string to decode
+   * @return the decoded byte array
+   * @throws IllegalArgumentException if the string cannot be decoded
+   */
+  public static byte[] base64DecodeUrlSafe(String base64String) {
+    try {
+      // Fast path: try Java 8 decoder first (handles valid base64 efficiently)
+      return Base64.getUrlDecoder().decode(base64String);
+    } catch (IllegalArgumentException e) {
+      // Fallback path: use Apache Commons Base64 for legacy invalid data
+      // Apache Commons Base64 is very lenient - it ignores invalid characters and handles improper padding
+      return org.apache.commons.codec.binary.Base64.decodeBase64(base64String);
+    }
   }
 }

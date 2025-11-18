@@ -18,9 +18,9 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import org.apache.commons.codec.binary.Base64;
 
 
 /**
@@ -34,7 +34,7 @@ public class AmbryIdSigningService implements IdSigningService {
   public String getSignedId(String blobId, Map<String, String> metadata) throws RestServiceException {
     try {
       String jsonString = SignedIdSerDe.toJson(blobId, metadata);
-      return RestUtils.SIGNED_ID_PREFIX + Base64.encodeBase64URLSafeString(jsonString.getBytes(StandardCharsets.UTF_8));
+      return RestUtils.SIGNED_ID_PREFIX + Utils.base64EncodeUrlSafeWithoutPadding(jsonString.getBytes(StandardCharsets.UTF_8));
     } catch (Exception e) {
       throw new RestServiceException("Error serializing signed ID", e, RestServiceErrorCode.InternalServerError);
     }
@@ -54,7 +54,7 @@ public class AmbryIdSigningService implements IdSigningService {
     try {
       int startIndex = RestUtils.SIGNED_ID_PREFIX.length() + (signedId.startsWith("/") ? 1 : 0);
       String base64String = signedId.substring(startIndex);
-      String jsonString = new String(Base64.decodeBase64(base64String), StandardCharsets.UTF_8);
+      String jsonString = new String(Utils.base64DecodeUrlSafe(base64String), StandardCharsets.UTF_8);
       return SignedIdSerDe.fromJson(jsonString);
     } catch (Exception e) {
       throw new RestServiceException("Error deserializing signed ID", e, RestServiceErrorCode.BadRequest);

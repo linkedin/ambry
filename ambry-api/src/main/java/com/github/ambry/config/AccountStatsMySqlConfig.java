@@ -100,6 +100,8 @@ public class AccountStatsMySqlConfig {
   @Default("")
   public final String localBackupFilePath;
 
+  public final SSLConfig sslConfig;
+
   public AccountStatsMySqlConfig(VerifiableProperties verifiableProperties) {
     dbInfo = verifiableProperties.getString(DB_INFO, "");
     domainNamesToRemove = verifiableProperties.getString(DOMAIN_NAMES_TO_REMOVE, "");
@@ -108,5 +110,6 @@ public class AccountStatsMySqlConfig {
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
     connectionIdleTimeoutMs = verifiableProperties.getLong(CONNECTION_IDLE_TIMEOUT, 60 * 1000);
     localBackupFilePath = verifiableProperties.getString(LOCAL_BACKUP_FILE_PATH, "");
+    this.sslConfig = new SSLConfig(verifiableProperties);
   }
 }

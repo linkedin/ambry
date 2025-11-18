@@ -14,6 +14,9 @@
  */
 package com.github.ambry.frontend;
 import com.github.ambry.commons.InMemNamedBlobDbFactory;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.nio.charset.StandardCharsets;
 
 import com.codahale.metrics.MetricRegistry;
@@ -42,6 +45,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -49,6 +53,8 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Properties;
 import org.json.JSONObject;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.frontend.s3.S3Constants.*;
@@ -67,6 +73,8 @@ public class S3BatchDeleteHandlerTest {
   private FrontendConfig frontendConfig;
   private NamedBlobPutHandler namedBlobPutHandler;
   private S3BatchDeleteHandler s3BatchDeleteHandler;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
 
   public S3BatchDeleteHandlerTest() throws Exception {
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -81,6 +89,16 @@ public class S3BatchDeleteHandlerTest {
     performPutOperation(KEY_NAME, CONTENT_TYPE, container, account);
     performPutOperation(KEY_NAME_2, CONTENT_TYPE, container, account);
     performPutOperation(KEY_NAME_3, KEY_NAME, container, account);
+  }
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
   }
 
   @Test
@@ -122,6 +140,72 @@ public class S3BatchDeleteHandlerTest {
     assertEquals(response.getErrors().get(0).toString(), new S3MessagePayload.S3ErrorObject("key-error","NotFound").toString());
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
   }
+
+  @Test
+  public void testConsumeContentAsBytesReleasesBuffer() {
+    // Arrange: Create a ByteBuf with some data
+    ByteBuf testBuf = Unpooled.buffer();
+    String validXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+        "<Delete xmlns=\"http://s3.amazonaws.com/doc/2006-03-01\">" +
+        "<Object>" +
+        "<Key>key-success</Key>" +
+        "</Object>" +
+        "<Object>" +
+        "<Key>key-error</Key>" +
+        "</Object>" +
+        "<Object>" +
+        "<Key>key-error2</Key>" +
+        "</Object>" +
+        "<Object>" +
+        "<Key>key-success-2</Key>" +
+        "</Object>" +
+        "</Delete>";
+    byte[] xmlBytes = validXml.getBytes();
+    testBuf.writeBytes(xmlBytes);
+    // Wrap the consumeContentAsByteBuf method to return the test buffer
+    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel() {
+      @Override
+      public ByteBuf consumeContentAsByteBuf() {
+        return testBuf;
+      }
+    };
+
+    // Act: Call the method
+    byte[] result = channel.consumeContentAsBytes();
+
+    // Assert: Verify the buffer was released and the data matches
+    assertArrayEquals(xmlBytes, result);
+    assertEquals("Buffer should be released", 0, testBuf.refCnt());
+  }
+
+  @Test
+  public void testDeserializeRequestWithRealChannel() throws Exception {
+    // Arrange
+    String validXml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" + "<Delete xmlns=\"http://s3.amazonaws.com/doc/2006-03-01\">"
+            + "<Object>" + "<Key>key-success</Key>" + "</Object>" + "<Object>" + "<Key>key-error</Key>" + "</Object>"
+            + "</Delete>";
+
+    ByteBuf byteBuf = Unpooled.wrappedBuffer(validXml.getBytes());
+    RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
+    channel.write(byteBuf, (result, exception) -> {
+      if (exception != null) {
+        fail("Failed to write to channel: " + exception.getMessage());
+      }
+    });
+
+    S3BatchDeleteHandler handler = new S3BatchDeleteHandler(null, null);
+
+    // Act
+    S3MessagePayload.S3BatchDeleteObjects result = handler.deserializeRequest(channel);
+
+    // Assert
+    assertNotNull(result);
+    assertEquals(2, result.getObjects().size());
+    assertEquals("key-success", result.getObjects().get(0).getKey());
+    assertEquals("key-error", result.getObjects().get(1).getKey());
+  }
+
 
   @Test
   public void malformedXMLRequestTest() throws Exception {

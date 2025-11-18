@@ -1,0 +1,18 @@
+# JMH generated files
+/build/
+/out/
+
+# JMH results
+*.log
+jmh-result.*
+
+# IDE files
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+bin/
+
+# Generated JMH sources
+/generated/

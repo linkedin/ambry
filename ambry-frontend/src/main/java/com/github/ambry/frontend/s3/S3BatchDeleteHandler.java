@@ -188,9 +188,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   public S3MessagePayload.S3BatchDeleteObjects deserializeRequest(RetainingAsyncWritableChannel channel)
       throws RestServiceException {
     try {
-      ByteBuf byteBuffer = channel.consumeContentAsByteBuf();
-      byte[] byteArray = new byte[byteBuffer.readableBytes()];
-      byteBuffer.readBytes(byteArray);
+      byte[] byteArray = channel.consumeContentAsBytes();
       return new XmlMapper().readValue(byteArray, S3MessagePayload.S3BatchDeleteObjects.class);
     } catch (Exception e) {
       logger.trace("s3batchdelete failed to deserialize request");
