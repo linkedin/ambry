@@ -40,9 +40,9 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
-import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.github.ambry.utils.Utils;
 
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
@@ -217,7 +217,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           long expirationTimeMs = Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(),
               blobProperties.getTimeToLiveInSeconds());
           byte[] digestBytes = restRequest.getDigest();
-          String digest = digestBytes != null ? Base64.encodeBase64URLSafeString(digestBytes) : null;
+          String digest = digestBytes != null ? Utils.base64EncodeUrlSafeWithoutPadding(digestBytes) : null;
           NamedBlobRecord record =
               NamedBlobRecord.forPut(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
                   namedBlobPath.getBlobName(), blobId, expirationTimeMs, blobProperties.getBlobSize(), digest);
