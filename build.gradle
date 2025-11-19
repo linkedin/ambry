@@ -90,18 +90,18 @@ subprojects {
     configurations {
         // This configuration allows for test suites to properly depend on utility classes in other subprojects.
         // Dependencies should be included in the classpath when depending on testArtifacts in another subproject
-        testArchives.extendsFrom testRuntime
+        testArchives.extendsFrom testRuntimeOnly
 
         // These configurations allow for the integration test source set to be compiled and run as a test suite.
         // Integration tests should be able to get the same dependencies as the corresponding unit tests.
-        intTestCompile.extendsFrom testCompile
-        intTestRuntime.extendsFrom testRuntime
+        intTestImplementation.extendsFrom testImplementation
+        intTestRuntimeOnly.extendsFrom testRuntimeOnly
     }
 
     // this test jar is used to represent a test dependency for a subproject, since depending directly on a source set
     // does not guarantee that the source set was actually built.
     task testJar(type: Jar, dependsOn: testClasses) {
-        classifier = 'test'
+        archiveClassifier.set('test')
         from sourceSets.test.output
     }
 
@@ -112,13 +112,14 @@ subprojects {
     }
 
     dependencies {
-        compile "org.slf4j:slf4j-api:$slf4jVersion"
-        testCompile "org.apache.logging.log4j:log4j-core:$log4jVersion"
-        testCompile "org.apache.logging.log4j:log4j-api:$log4jVersion"
-        testCompile "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
-        testCompile "junit:junit:$junitVersion"
-        testCompile "org.mockito:mockito-core:$mockitoVersion"
-        testRuntime project(':log4j-test-config')
+        implementation "org.slf4j:slf4j-api:$slf4jVersion"
+        implementation "com.google.code.findbugs:jsr305:$jsr305Version"
+        testImplementation "org.apache.logging.log4j:log4j-core:$log4jVersion"
+        testImplementation "org.apache.logging.log4j:log4j-api:$log4jVersion"
+        testImplementation "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
+        testImplementation "junit:junit:$junitVersion"
+        testImplementation "org.mockito:mockito-core:$mockitoVersion"
+        testRuntimeOnly project(':log4j-test-config')
     }
 
     idea {
@@ -126,7 +127,7 @@ subprojects {
         module {
             testSourceDirs += sourceSets.intTest.java.srcDirs
             testResourceDirs += sourceSets.intTest.resources.srcDirs
-            scopes.TEST.plus += [configurations.intTestCompile]
+            scopes.TEST.plus += [configurations.intTestImplementation]
         }
     }
 
@@ -199,174 +200,205 @@ subprojects {
 
 project(':ambry-utils') {
     dependencies {
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "commons-codec:commons-codec:$commonsVersion"
-        compile "org.json:json:$jsonVersion"
-        compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-        compile "io.netty:netty-all:$nettyVersion"
-        testCompile project(":ambry-test-utils")
-        testCompile "io.netty:netty-transport-native-epoll:$nettyVersion"
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "commons-codec:commons-codec:$commonsVersion"
+        implementation "org.json:json:$jsonVersion"
+        implementation "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        implementation "io.netty:netty-all:$nettyVersion"
+        testImplementation project(":ambry-test-utils")
+        testImplementation "io.netty:netty-transport-native-epoll:$nettyVersion"
+        testImplementation "commons-io:commons-io:$commonsIoVersion"
     }
 }
 
 project(':ambry-test-utils') {
     dependencies {
-        compile "junit:junit:$junitVersion"
-        compile "org.mockito:mockito-core:2.+"
-        compile project(":ambry-utils")
-        compile project(":ambry-commons")
-        compile project(":ambry-clustermap")
-        compile project(":ambry-network")
-        compile project(":ambry-router")
-        compile project(":ambry-server")
-        compile project(":ambry-store")
-        compile project(":ambry-file-transfer")
-        compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
-        compile("org.apache.hadoop:hadoop-common:$hadoopCommonVersion") {
+        implementation "junit:junit:$junitVersion"
+        implementation "org.mockito:mockito-core:2.+"
+        implementation project(":ambry-api")
+        implementation project(":ambry-utils")
+        implementation project(":ambry-commons")
+        implementation project(":ambry-clustermap")
+        implementation project(":ambry-network")
+        implementation project(":ambry-router")
+        implementation project(":ambry-server")
+        implementation project(":ambry-store")
+        implementation project(":ambry-file-transfer")
+        implementation project(":ambry-protocol")
+        implementation project(":ambry-messageformat")
+        implementation project(":ambry-replication")
+        implementation project(":ambry-mysql")
+        implementation "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
+        implementation "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
+        implementation "org.json:json:$jsonVersion"
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation("org.apache.hadoop:hadoop-common:$hadoopCommonVersion") {
             exclude group: "org.bouncycastle"
         }
     }
 }
 
 project(':ambry-api') {
+    apply plugin: 'java-library'
+
     dependencies {
-        compile project(':ambry-utils')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
-        compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
-        compile "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
-        compile "com.fasterxml.jackson.dataformat:jackson-dataformat-xml:$jacksonVersion"
-        testCompile project(':ambry-clustermap')
-        testCompile project(':ambry-test-utils')
+        implementation project(':ambry-utils')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
+        implementation "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
+        implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+        implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-xml:$jacksonVersion"
+        implementation "commons-codec:commons-codec:$commonsVersion"
+        // These dependencies are exposed in public API method signatures
+        api "io.netty:netty-all:$nettyVersion"
+        api "org.json:json:$jsonVersion"
+        testImplementation project(':ambry-clustermap')
+        testImplementation project(':ambry-test-utils')
     }
 }
 
 project(':ambry-messageformat') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-utils')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-commons')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
     }
 }
 
 project(':ambry-commons') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-messageformat'),
                 project(':ambry-utils')
 
         // See https://github.com/facebook/zstd/releases for Zstd releases.  On Jan 2022, latest release is 1.5.2
         // See https://repo.maven.apache.org/maven2/com/github/luben/zstd-jni/ for library versions.
-        compile "com.github.luben:zstd-jni:$zstdVersion"
+        implementation "com.github.luben:zstd-jni:$zstdVersion"
 
         // See https://github.com/lz4/lz4/releases for LZ4 releases.
         // There are JNI and Pure Java LZ4 provided at https://repo.maven.apache.org/maven2/org/lz4
         // The latest LZ4 library is 1.8.0 on 06/2021.
-        compile "org.lz4:lz4-java:$lz4Version"
+        implementation "org.lz4:lz4-java:$lz4Version"
 
-        compile "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
-        compile "io.netty:netty-all:$nettyVersion"
-        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
-        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
-        compile "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "com.github.ben-manes.caffeine:caffeine:$caffeineVersion"
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+        implementation "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
+        implementation "io.netty:netty-all:$nettyVersion"
+        implementation "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
+        implementation "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "com.github.ben-manes.caffeine:caffeine:$caffeineVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-clustermap')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
 }
 
 
 project(':ambry-account') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-mysql')
-        compile "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "org.json:json:$jsonVersion"
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile "com.google.jimfs:jimfs:$jimFsVersion"
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "org.json:json:$jsonVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-server')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-server', configuration: 'testArchives')
+        testImplementation "com.google.jimfs:jimfs:$jimFsVersion"
     }
 }
 
 project(':ambry-clustermap') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-commons'),
                 project(':ambry-utils')
-        compile "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:helix-lock:$helixLockVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
-        compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
-        compile "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "org.json:json:$jsonVersion"
-        testCompile project(':ambry-commons')
-        testCompile project(':ambry-test-utils')
-        testCompile project(':ambry-mysql')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-lock:$helixLockVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
+        implementation "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
+        implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "org.json:json:$jsonVersion"
+        testImplementation project(':ambry-commons')
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-mysql')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
     }
 }
 
 project(':ambry-network') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-clustermap'),
                 project(':ambry-protocol')
-        compile "io.netty:netty-all:$nettyVersion"
-        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
-        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
-        compile "io.netty:netty-transport-native-epoll:$nettyVersion"
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        testCompile project(':ambry-test-utils')
+        implementation "io.netty:netty-all:$nettyVersion"
+        implementation "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
+        implementation "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
+        implementation "io.netty:netty-transport-native-epoll:$nettyVersion"
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
+        testImplementation "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
 project (':ambry-prioritization') {
     dependencies{
-        compile project(':ambry-api')
-        compile project(':ambry-commons')
-        compile project(':ambry-store')
-        compile project(':ambry-clustermap')
-        compile project(':ambry-replication')
-        testCompile project(':ambry-test-utils')
+        implementation project(':ambry-api')
+        implementation project(':ambry-commons')
+        implementation project(':ambry-store')
+        implementation project(':ambry-clustermap')
+        implementation project(':ambry-replication')
+        implementation project(':ambry-utils')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation "com.google.guava:guava:$guavaVersion"
     }
 }
 
 project (':ambry-file-transfer') {
     dependencies{
-        compile project(':ambry-api')
-        compile project(':ambry-commons')
-        compile project(':ambry-store')
-        compile project(':ambry-prioritization')
-        compile project(':ambry-clustermap')
-        compile project(':ambry-protocol')
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+        implementation project(':ambry-api')
+        implementation project(':ambry-commons')
+        implementation project(':ambry-store')
+        implementation project(':ambry-prioritization')
+        implementation project(':ambry-clustermap')
+        implementation project(':ambry-protocol')
+        implementation project(':ambry-utils')
+        implementation project(':ambry-network')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
 }
 
 project(':ambry-server') {
     dependencies {
-        compile project(':ambry-cloud'),
+        implementation project(':ambry-api'),
+                project(':ambry-cloud'),
                 project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
                 project(':ambry-network'),
@@ -380,31 +412,46 @@ project(':ambry-server') {
                 project(':ambry-mysql'),
                 project(':ambry-prioritization'),
                 project(':ambry-file-transfer')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
         runtimeOnly "org.apache.logging.log4j:log4j-core:$log4jVersion"
         runtimeOnly "org.apache.logging.log4j:log4j-api:$log4jVersion"
         runtimeOnly "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
-        testCompile project(':ambry-router')
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
-        testCompile project(path: ':ambry-replication', configuration: 'testArchives')
-        testCompile project(path: ':ambry-messageformat', configuration: 'testArchives')
+        testImplementation project(':ambry-router')
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-replication', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-messageformat', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-store', configuration: 'testArchives')
     }
 }
 
 project(':ambry-store') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-account'),
-                project(':ambry-messageformat')
-        compile "net.smacke:jaydio:$jaydioVersion"
-        testCompile project(':ambry-clustermap')
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
+                project(':ambry-messageformat'),
+                project(':ambry-commons'),
+                project(':ambry-clustermap')
+        implementation "net.smacke:jaydio:$jaydioVersion"
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+        implementation "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
+        testImplementation "commons-io:commons-io:$commonsIoVersion"
+        testImplementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation("org.apache.hadoop:hadoop-common:$hadoopCommonVersion") {
+            exclude group: "org.bouncycastle"
+        }
     }
 
     test {
@@ -419,28 +466,29 @@ project(':ambry-store') {
 
 project(':ambry-replication') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-protocol'),
                 project(':ambry-store'),
                 project(':ambry-network'),
-                project(':ambry-clustermap')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "org.apache.commons:commons-lang3:$commonsLangVersion"
-        testCompile project(':ambry-store')
-        testCompile project(':ambry-clustermap')
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
-        testCompile project(path: ':ambry-messageformat', configuration: 'testArchives')
-        testCompile project(path: ':ambry-store', configuration: 'testArchives')
+                project(':ambry-clustermap'),
+                project(':ambry-messageformat')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+        testImplementation project(':ambry-store')
+        testImplementation project(':ambry-clustermap')
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-messageformat', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-store', configuration: 'testArchives')
     }
 }
 
 project(':ambry-tools') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-account'),
                 project(':ambry-store'),
                 project(':ambry-server'),
@@ -448,56 +496,77 @@ project(':ambry-tools') {
                 project(':ambry-frontend'),
                 project(':ambry-cloud'),
                 project(':ambry-named-mysql'),
-                project(':ambry-test-utils')
-        compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
-        compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-account', configuration: 'testArchives')
-        testCompile project(path: ':ambry-store', configuration: 'testArchives')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
+                project(':ambry-test-utils'),
+                project(':ambry-protocol'),
+                project(':ambry-utils'),
+                project(':ambry-commons'),
+                project(':ambry-messageformat'),
+                project(':ambry-network'),
+                project(':ambry-mysql'),
+                project(':ambry-clustermap'),
+                project(':ambry-replication')
+        implementation "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        implementation "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        implementation platform("com.azure:azure-sdk-bom:$azureSdkBom")
+        implementation "com.azure:azure-storage-blob"
+        implementation "com.azure:azure-storage-blob-batch"
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "commons-io:commons-io:$commonsIoVersion"
+        implementation "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
+        implementation "com.zaxxer:HikariCP:$hikariVersion"
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-account', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-store', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
     }
 }
 
 project(':ambry-protocol') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
                 project(':ambry-utils'),
                 project(':ambry-commons')
-        testCompile project(':ambry-test-utils')
+        testImplementation project(':ambry-test-utils')
+        testImplementation "org.apache.commons:commons-math3:3.6.1"
+        testImplementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
     }
 }
 
 project(':ambry-rest') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-account'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-quota'),
                 project(':ambry-network')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
-        compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-        compile "io.netty:netty-all:$nettyVersion"
-        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
-        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
-        compile "io.netty:netty-transport-native-epoll:$nettyVersion"
-        compile "javax.servlet:javax.servlet-api:$javaxVersion"
-        runtimeOnly "org.apache.logging.log4j:log4j-core:$log4jVersion"
-        runtimeOnly "org.apache.logging.log4j:log4j-api:$log4jVersion"
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        implementation "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        implementation "io.netty:netty-all:$nettyVersion"
+        implementation "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
+        implementation "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
+        implementation "io.netty:netty-transport-native-epoll:$nettyVersion"
+        implementation "javax.servlet:javax.servlet-api:$javaxVersion"
+        implementation "org.apache.logging.log4j:log4j-core:$log4jVersion"
+        implementation "org.apache.logging.log4j:log4j-api:$log4jVersion"
         runtimeOnly "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
-        testCompile project(path: ':ambry-account', configuration: 'testArchives')
-        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-account', configuration: 'testArchives')
+        testImplementation "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
 project(':ambry-router') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-clustermap'),
@@ -505,122 +574,170 @@ project(':ambry-router') {
                 project(':ambry-protocol'),
                 project(':ambry-network'),
                 project(':ambry-cloud'),
-                project(':ambry-rest')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-network', configuration: 'testArchives')
-        testCompile project(path: ':ambry-cloud', configuration: 'testArchives')
+                project(':ambry-rest'),
+                project(':ambry-quota')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
+        implementation "com.google.guava:guava:$guavaVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-mysql')
+        testImplementation project(path: ':ambry-network', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-cloud', configuration: 'testArchives')
+        testImplementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+        testImplementation "org.apache.commons:commons-math:2.2"
+        testImplementation "org.apache.commons:commons-math3:3.6.1"
     }
 }
 
 project(':ambry-frontend') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
                 project(':ambry-account'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-rest'),
                 project(':ambry-router'),
-                project(':ambry-quota')
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        testCompile project(':ambry-test-utils')
-        testCompile project(':ambry-quota')
-        testCompile project(':ambry-named-mysql')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
-        testCompile project(path: ':ambry-rest', configuration: 'testArchives')
+                project(':ambry-quota'),
+                project(':ambry-clustermap')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+        implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-xml:$jacksonVersion"
+        implementation "commons-codec:commons-codec:$commonsVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-quota')
+        testImplementation project(':ambry-named-mysql')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-rest', configuration: 'testArchives')
+        testImplementation "com.google.guava:guava:$guavaVersion"
+        testImplementation "org.apache.commons:commons-lang3:$commonsLangVersion"
     }
 }
 
 project(':ambry-cloud') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
             project(':ambry-utils'),
             project(':ambry-commons'),
             project(':ambry-account'),
             project(':ambry-replication'),
-            project(':ambry-rest')
+            project(':ambry-rest'),
+            project(':ambry-store'),
+            project(':ambry-messageformat'),
+            project(':ambry-clustermap'),
+            project(':ambry-protocol')
 
         // use compile to include these jars during compile-time and make it avlb for ambry-tools
         // https://mvnrepository.com/artifact/com.azure/azure-sdk-bom
-        compile platform("com.azure:azure-sdk-bom:$azureSdkBom")
-        compile "com.azure:azure-cosmos"
-        compile "com.azure:azure-data-tables"
-        compile "com.azure:azure-identity"
-        compile "com.azure:azure-security-keyvault-secrets"
-        compile "com.azure:azure-storage-blob"
-        compile "com.azure:azure-storage-blob-batch"
+        implementation platform("com.azure:azure-sdk-bom:$azureSdkBom")
+        implementation "com.azure:azure-cosmos"
+        implementation "com.azure:azure-data-tables"
+        implementation "com.azure:azure-identity"
+        implementation "com.azure:azure-security-keyvault-secrets"
+        implementation "com.azure:azure-storage-blob"
+        implementation "com.azure:azure-storage-blob-batch"
 
-        compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
-        compile "com.microsoft.azure:msal4j:$azureMsal4jVersion"
-        compile "org.apache.helix:helix-lock:$helixLockVersion" exclude group: "org.apache.helix"
-        testCompile project(':ambry-router')
-        testCompile project(':ambry-store')
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-store', configuration: 'testArchives')
-        testCompile project(path: ':ambry-replication', configuration: 'testArchives')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        implementation "com.microsoft.azure:msal4j:$azureMsal4jVersion"
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-lock:$helixLockVersion" exclude group: "org.apache.helix"
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.httpcomponents:httpclient:$httpclientVersion"
+        implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+        testImplementation project(':ambry-router')
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-store', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-replication', configuration: 'testArchives')
     }
 }
 
 project(':ambry-vcr') {
     dependencies {
-        compile project(':ambry-server'),
-            project(':ambry-cloud')
-
-        testCompile project(':ambry-commons')
-        testCompile project(':ambry-server')
-        testCompile project(':ambry-test-utils')
-        testCompile project(':ambry-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-cloud', configuration: 'testArchives')
+        implementation project(':ambry-api'),
+                project(':ambry-server'),
+                project(':ambry-cloud'),
+                project(':ambry-commons'),
+                project(':ambry-utils'),
+                project(':ambry-network'),
+                project(':ambry-rest'),
+                project(':ambry-protocol'),
+                project(':ambry-replication'),
+                project(':ambry-messageformat')
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-clustermap')
+        testImplementation project(':ambry-store')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-cloud', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-store', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-replication', configuration: 'testArchives')
+        testImplementation platform("com.azure:azure-sdk-bom:$azureSdkBom")
+        testImplementation "com.azure:azure-data-tables"
+        testImplementation "com.azure:azure-storage-blob"
+        testImplementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+        testImplementation "commons-io:commons-io:$commonsIoVersion"
+        testImplementation "org.apache.httpcomponents:httpclient:$httpclientVersion"
     }
 }
 
 project(':ambry-named-mysql') {
     dependencies {
-        compile project(':ambry-api')
-        compile project(':ambry-mysql')
-        compile project(':ambry-commons')
-        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
-        compile "com.zaxxer:HikariCP:$hikariVersion"
-        testCompile project(':ambry-test-utils')
+        implementation project(':ambry-api')
+        implementation project(':ambry-mysql')
+        implementation project(':ambry-commons')
+        implementation project(':ambry-utils')
+        implementation "mysql:mysql-connector-java:$mysqlConnectorVersion"
+        implementation "com.zaxxer:HikariCP:$hikariVersion"
+        implementation "io.dropwizard.metrics:metrics-core:$metricsVersion"
+        implementation "commons-codec:commons-codec:$commonsVersion"
+        testImplementation project(':ambry-test-utils')
     }
 }
 
 project(':ambry-quota') {
     dependencies {
-        compile project(':ambry-api'),
+        implementation project(':ambry-api'),
             project(':ambry-commons'),
             project(':ambry-mysql'),
-            project(':ambry-clustermap')
-        compile "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
-        testCompile project(':ambry-test-utils')
-        testCompile project(':ambry-account')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+            project(':ambry-clustermap'),
+            project(':ambry-utils')
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(':ambry-account')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
 }
 
 project(':ambry-mysql') {
     dependencies {
-        compile project(':ambry-api')
-        compile project(':ambry-utils')
-        compile project(':ambry-commons')
-        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
-        compile "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
-        compile "com.zaxxer:HikariCP:$hikariVersion"
-        testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
-        testCompile project(path: ':ambry-api', configuration: 'testArchives')
+        implementation project(':ambry-api')
+        implementation project(':ambry-utils')
+        implementation project(':ambry-commons')
+        implementation "mysql:mysql-connector-java:$mysqlConnectorVersion"
+        implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+        implementation "org.apache.helix:helix-core:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:helix-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:zookeeper-api:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metadata-store-directory-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "org.apache.helix:metrics-common:$helixVersion" exclude group: 'org.apache.helix'
+        implementation "com.zaxxer:HikariCP:$hikariVersion"
+        testImplementation project(':ambry-test-utils')
+        testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testImplementation project(path: ':ambry-api', configuration: 'testArchives')
     }
 }
 
@@ -628,31 +745,32 @@ project(':ambry-all') {
     dependencies {
         // this is a meta project that depends on all of the "entry-point" subprojects to make it easier to pull in the
         // entire dependency tree.
-        compile project(':ambry-frontend')
-        compile project(':ambry-server')
-        compile project(':ambry-tools')
-        compile project(':ambry-cloud')
-        compile project(':ambry-named-mysql')
-        compile project(':ambry-test-utils')
-        compile project(':ambry-quota')
-        compile project(':ambry-vcr')
-        compile project(':ambry-file-transfer')
+        implementation project(':ambry-frontend')
+        implementation project(':ambry-server')
+        implementation project(':ambry-tools')
+        implementation project(':ambry-cloud')
+        implementation project(':ambry-named-mysql')
+        implementation project(':ambry-test-utils')
+        implementation project(':ambry-quota')
+        implementation project(':ambry-vcr')
+        implementation project(':ambry-file-transfer')
     }
 }
 
 subprojects.each { subproject -> evaluationDependsOn(subproject.path)}
 
 task allJar(type: Jar, dependsOn: subprojects.assemble) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {
         attributes 'Implementation-Title': 'Ambry',
                    'Main-Class': 'com.github.ambry.server.AmbryMain'
     }
     zip64 true
-    destinationDir = file('target')
-    baseName = 'ambry'
+    destinationDirectory.set(file('target'))
+    archiveBaseName.set('ambry')
     subprojects.each { subproject ->
         from  {
-            (subproject.configurations.archives.allArtifacts.files + subproject.configurations.runtime).collect {
+            (subproject.configurations.archives.allArtifacts.files + subproject.configurations.runtimeClasspath).collect {
                 zipTree(it)
             }
         }
@@ -661,16 +779,17 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
 }
 
 task allJarVcr(type: Jar, dependsOn: subprojects.assemble) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {
         attributes 'Implementation-Title': 'Vcr',
                    'Main-Class': 'com.github.ambry.vcr.VcrMain'
     }
     zip64 true
-    destinationDir = file('target')
-    baseName = 'ambry-vcr'
+    destinationDirectory.set(file('target'))
+    archiveBaseName.set('ambry-vcr')
     subprojects.each { subproject ->
         from  {
-            (subproject.configurations.archives.allArtifacts.files + subproject.configurations.runtime).collect {
+            (subproject.configurations.archives.allArtifacts.files + subproject.configurations.runtimeClasspath).collect {
                 zipTree(it)
             }
         }

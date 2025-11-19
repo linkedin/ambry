@@ -7,19 +7,10 @@
 // Unless required by applicable law or agreed to in writing, software distributed
 // under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 // CONDITIONS OF ANY KIND, either express or implied.
-buildscript {
-    repositories {
-        maven {
-            url "https://plugins.gradle.org/m2/"
-        }
-    }
-    dependencies {
-        classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.8"
-    }
+plugins {
+    id 'java'
+    id 'me.champeau.jmh' version '0.7.3'
 }
-
-apply plugin: "me.champeau.gradle.jmh"
-apply plugin: 'java'
 
 dependencies {
     jmh "commons-codec:commons-codec:$commonsVersion"
@@ -32,7 +23,6 @@ jmh {
     iterations = 2
     timeOnIteration = '5s'
     fork = 1
-    include = 'com\\.github\\.ambry\\..*'
 
     // Enable GC profiler by default to track memory allocations
     // Shows allocation rate (MB/sec) and normalized allocation (B/op)

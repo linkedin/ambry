@@ -44,7 +44,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
-import joptsimple.internal.Strings;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -250,7 +250,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * Read all the container storage usage from local backup file.
    */
   private void readStatsFromLocalBackupFile() {
-    if (!Strings.isNullOrEmpty(config.localBackupFilePath)) {
+    if (!StringUtils.isEmpty(config.localBackupFilePath)) {
       // load backup file and this backup is the previous stats
       ObjectMapper objectMapper = new ObjectMapper();
       try {
