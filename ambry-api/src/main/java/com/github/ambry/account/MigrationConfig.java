@@ -109,6 +109,12 @@ public class MigrationConfig {
           Double.compare(that.dualWriteAndDeleteSyncPctStrict, dualWriteAndDeleteSyncPctStrict) == 0 &&
           writeAndDeleteOnlyToSecondary == that.writeAndDeleteOnlyToSecondary;
     }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(forceDisableDualWriteAndDelete, dualWriteAndDeleteAsyncPct,
+          dualWriteAndDeleteSyncPctNonStrict, dualWriteAndDeleteSyncPctStrict, writeAndDeleteOnlyToSecondary);
+    }
   }
 
   // Read ramp config
@@ -188,6 +194,12 @@ public class MigrationConfig {
           Double.compare(that.serveReadFromSecondaryPct, serveReadFromSecondaryPct) == 0 &&
           disableFallbackToPrimary == that.disableFallbackToPrimary;
     }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(forceDisableReadFromSecondary, shadowReadMetadataPct,
+          shadowReadMd5Pct, shadowReadContentPct, serveReadFromSecondaryPct, disableFallbackToPrimary);
+    }
   }
 
   // List ramp config.
@@ -247,6 +259,12 @@ public class MigrationConfig {
           Double.compare(that.serveListFromSecondaryPct, serveListFromSecondaryPct) == 0 &&
           disableFallbackToPrimary == that.disableFallbackToPrimary;
     }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(forceDisableListFromSecondary, shadowListPct,
+          serveListFromSecondaryPct, disableFallbackToPrimary);
+    }
   }
 
   // Default migration config.
@@ -280,5 +298,21 @@ public class MigrationConfig {
 
   public ListRamp getListRamp() {
     return listRamp;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    MigrationConfig that = (MigrationConfig) o;
+    return overrideAccountMigrationConfig == that.overrideAccountMigrationConfig &&
+        java.util.Objects.equals(writeRamp, that.writeRamp) &&
+        java.util.Objects.equals(readRamp, that.readRamp) &&
+        java.util.Objects.equals(listRamp, that.listRamp);
+  }
+
+  @Override
+  public int hashCode() {
+    return java.util.Objects.hash(overrideAccountMigrationConfig, writeRamp, readRamp, listRamp);
   }
 }
