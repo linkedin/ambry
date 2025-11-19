@@ -719,6 +719,7 @@ project(':ambry-quota') {
         testImplementation project(':ambry-test-utils')
         testImplementation project(':ambry-account')
         testImplementation project(path: ':ambry-clustermap', configuration: 'testArchives')
+        intTestImplementation project(path: ':ambry-api', configuration: 'testArchives')
     }
 }
 
