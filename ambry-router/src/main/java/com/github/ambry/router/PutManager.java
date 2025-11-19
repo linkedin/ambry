@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;

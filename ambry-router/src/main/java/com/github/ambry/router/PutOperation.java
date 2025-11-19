@@ -578,6 +578,11 @@ class PutOperation {
    */
   public void cleanupChunks() {
     releaseDataForAllChunks();
+    // At this point, if the channelReadBuf is not null it means it did not get fully read
+    // by the ChunkFiller in fillChunks and needs to be released.
+    if (channelReadBuf != null) {
+      channelReadBuf.release();
+    }
   }
 
   /**
@@ -1642,7 +1647,7 @@ class PutOperation {
      * @param channelReadBuf the {@link ByteBuf} from which to read data.
      * @return the number of bytes transferred in this operation.
      */
-    synchronized int fillFrom(ByteBuf channelReadBuf) {
+    int fillFrom(ByteBuf channelReadBuf) {
       int toWrite;
       ByteBuf slice;
       if (buf == null) {
