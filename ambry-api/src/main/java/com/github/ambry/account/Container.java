@@ -756,7 +756,8 @@ public class Container {
         && Objects.equals(accessControlAllowOrigin, container.accessControlAllowOrigin)
         && Objects.equals(contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload)
         && Objects.equals(cacheTtlInSecond, container.cacheTtlInSecond)
-        && Objects.equals(userMetadataKeysToNotPrefixInResponse, container.userMetadataKeysToNotPrefixInResponse);
+        && Objects.equals(userMetadataKeysToNotPrefixInResponse, container.userMetadataKeysToNotPrefixInResponse)
+        && Objects.equals(migrationConfig, container.migrationConfig);
     //@formatter:on
   }
 

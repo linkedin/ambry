@@ -370,7 +370,8 @@ public class Account {
     // We don't compare snapshot version and lastModifiedTime
     return id == account.id && name.equals(account.name) && status == account.status
         && aclInheritedByContainer == account.aclInheritedByContainer && quotaResourceType == account.quotaResourceType
-        && Objects.equals(rampControl, account.rampControl);
+        && Objects.equals(rampControl, account.rampControl)
+        && Objects.equals(migrationConfig, account.migrationConfig);
   }
 
   @Override

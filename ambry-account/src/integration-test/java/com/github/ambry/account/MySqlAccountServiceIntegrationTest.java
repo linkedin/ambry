@@ -2116,4 +2116,94 @@ public class MySqlAccountServiceIntegrationTest {
     assertNotNull("Container should exist after removing MigrationConfig", fetchedContainer3);
     assertNull("MigrationConfig should be null after removal", fetchedContainer3.getMigrationConfig());
   }
+
+  /**
+   * Integration test for adding migration config to an existing account that was created without one.
+   * This test verifies that the equality check properly detects the migration config change.
+   */
+  @Test
+  public void testAddMigrationConfigToExistingAccount() throws Exception {
+    // 1. Create an account WITHOUT migration config
+    Account accountWithoutMigrationConfig =
+        new AccountBuilder((short) 127, "accountWithoutMigration", Account.AccountStatus.ACTIVE).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountWithoutMigrationConfig));
+
+    // 2. Fetch and verify migration config is null
+    Account fetched = mySqlAccountService.getAccountById(accountWithoutMigrationConfig.getId());
+    assertNotNull("Account should exist", fetched);
+    assertNull("MigrationConfig should be null initially", fetched.getMigrationConfig());
+
+    // 3. Update the account to ADD migration config
+    MigrationConfig migrationConfig =
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(false, 25.0, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp());
+    Account updatedWithMigrationConfig = new AccountBuilder(fetched).migrationConfig(migrationConfig).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(updatedWithMigrationConfig));
+
+    // 4. Fetch and verify migration config was added successfully
+    Account fetched2 = mySqlAccountService.getAccountById(updatedWithMigrationConfig.getId());
+    assertNotNull("Account should exist after adding MigrationConfig", fetched2);
+    assertNotNull("MigrationConfig should not be null after adding", fetched2.getMigrationConfig());
+    assertEquals("Async dual write percentage should match", 75.0,
+        fetched2.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+    assertEquals("Shadow read metadata percentage should match", 25.0,
+        fetched2.getMigrationConfig().getReadRamp().getShadowReadMetadataPct(), 0.001);
+
+    // 5. Verify that the account was detected as updated (not just added)
+    // This implicitly tests that equalsWithoutContainers() now includes migrationConfig
+    assertFalse("Account should not equal the original without migration config",
+        fetched.equalsWithoutContainers(fetched2));
+  }
+
+  /**
+   * Integration test for adding migration config to an existing container that was created without one.
+   * This test verifies that the equality check properly detects the migration config change.
+   */
+  @Test
+  public void testAddMigrationConfigToExistingContainer() throws Exception {
+    // 1. Create an account with a container WITHOUT migration config
+    Container containerWithoutMigrationConfig =
+        new ContainerBuilder((short) 3, "containerWithoutMigration", Container.ContainerStatus.ACTIVE,
+            "containerWithoutMigration", (short) 128).build();
+    Account account =
+        new AccountBuilder((short) 128, "accountForContainerMigration", Account.AccountStatus.ACTIVE).containers(
+            Collections.singleton(containerWithoutMigrationConfig)).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(account));
+
+    // 2. Fetch and verify container migration config is null
+    Account fetched = mySqlAccountService.getAccountById(account.getId());
+    assertNotNull("Account should exist", fetched);
+    Container fetchedContainer = fetched.getContainerByName(containerWithoutMigrationConfig.getName());
+    assertNotNull("Container should exist", fetchedContainer);
+    assertNull("Container MigrationConfig should be null initially", fetchedContainer.getMigrationConfig());
+
+    // 3. Update the container to ADD migration config
+    MigrationConfig migrationConfig =
+        new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 80.0, 10.0, 5.0, false),
+            new MigrationConfig.ReadRamp(false, 30.0, 20.0, 15.0, 10.0, false),
+            new MigrationConfig.ListRamp(false, 40.0, 50.0, false));
+    Container updatedContainer = new ContainerBuilder(fetchedContainer).setMigrationConfig(migrationConfig).build();
+    Account updatedAccount = new AccountBuilder(fetched).containers(Collections.singleton(updatedContainer)).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(updatedAccount));
+
+    // 4. Fetch and verify migration config was added successfully
+    Account fetched2 = mySqlAccountService.getAccountById(updatedAccount.getId());
+    assertNotNull("Account should exist after adding container MigrationConfig", fetched2);
+    Container fetchedContainer2 = fetched2.getContainerByName(updatedContainer.getName());
+    assertNotNull("Container should exist after adding MigrationConfig", fetchedContainer2);
+    assertNotNull("Container MigrationConfig should not be null after adding", fetchedContainer2.getMigrationConfig());
+    assertTrue("overrideAccountMigrationConfig should be true",
+        fetchedContainer2.getMigrationConfig().isOverrideAccountMigrationConfig());
+    assertEquals("Async dual write percentage should match", 80.0,
+        fetchedContainer2.getMigrationConfig().getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+    assertEquals("Shadow read metadata percentage should match", 30.0,
+        fetchedContainer2.getMigrationConfig().getReadRamp().getShadowReadMetadataPct(), 0.001);
+    assertEquals("Shadow list percentage should match", 40.0,
+        fetchedContainer2.getMigrationConfig().getListRamp().getShadowListPct(), 0.001);
+
+    // 5. Verify that the container was detected as updated (not just added)
+    // This implicitly tests that Container.equals() now includes migrationConfig
+    assertFalse("Container should not equal the original without migration config",
+        fetchedContainer.equals(fetchedContainer2));
+  }
 }
