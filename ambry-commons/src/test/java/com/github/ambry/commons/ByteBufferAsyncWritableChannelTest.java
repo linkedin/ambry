@@ -100,7 +100,11 @@ public class ByteBufferAsyncWritableChannelTest {
     WriteCallback callback = new WriteCallback(0);
 
     // Perform write
-    Future<Long> future = channel.write(src, callback);
+    Future<Long> future = channel.write(src, (r, e) -> {
+      // The callback should return the buffer
+      src.release();
+      callback.onCompletion(r, e);
+    });
 
     // The future should fail with ClosedChannelException
     try {
