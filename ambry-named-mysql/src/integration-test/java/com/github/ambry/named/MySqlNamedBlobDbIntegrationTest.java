@@ -92,6 +92,29 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     }
   }
 
+  @Test
+  public void testPutWithDigest() throws Exception {
+    List<NamedBlobRecord> records = new ArrayList<>();
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "name/more path segments--";
+    long expirationTime = Utils.Infinite_Time;
+    long blobSize = 20;
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime,
+            time.milliseconds(), blobSize, Hex.encodeHexString(TestUtils.getRandomBytes(32)));
+    namedBlobDb.put(record).get();
+    records.add(record);
+    time.sleep(1000);
+
+
+    NamedBlobRecord recordFromStore =
+        namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+    assertEquals("Record does not match expectations.", record, recordFromStore);
+    assertEquals("Version should match", record.getDigest(), recordFromStore.getDigest());
+  }
+
   /**
    * Tests sequences of puts, gets, lists, and deletes across multiple containers.
    * @throws Exception
