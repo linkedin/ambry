@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS named_blobs_v2 (
     deleted_ts datetime(6) DEFAULT NULL,
     blob_size bigint unsigned DEFAULT 0,
     modified_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6),
+    digest varchar(255) DEFAULT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
 )
 

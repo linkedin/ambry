@@ -150,7 +150,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
     if (record.getVersion() == NamedBlobRecord.UNINITIALIZED_VERSION) {
       record = new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
           record.getBlobId(), record.getExpirationTimeMs(), time.milliseconds(), record.getBlobSize(),
-          record.getModifiedTimeMs(), record.isDirectory());
+          record.getModifiedTimeMs(), record.isDirectory(), record.getDigest());
     }
     putInternal(record, state);
     future.complete(new PutResult(record));
@@ -311,11 +311,10 @@ public class InMemNamedBlobDb implements NamedBlobDb {
 
   private void updateExpirationTimeMs(NamedBlobRow row, long expirationTimeMs) {
     NamedBlobRecord currRecord = row.getRecord();
-    // Change the expiration time (deleted ts)
     row.setRecord(
         new NamedBlobRecord(currRecord.getAccountName(), currRecord.getContainerName(), currRecord.getBlobName(),
             currRecord.getBlobId(), expirationTimeMs, currRecord.getVersion(), currRecord.getBlobSize(),
-            currRecord.getModifiedTimeMs(), currRecord.isDirectory()));
+            currRecord.getModifiedTimeMs(), currRecord.isDirectory(), currRecord.getDigest()));
   }
 
   @Override
@@ -348,3 +347,4 @@ public class InMemNamedBlobDb implements NamedBlobDb {
     }
   }
 }
+
