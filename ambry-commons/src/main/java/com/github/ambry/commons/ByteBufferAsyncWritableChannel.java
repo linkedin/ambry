@@ -115,7 +115,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    */
   private Future<Long> writeInternal(ByteBuf src, Callback<Long> callback, boolean isInternalWrapper) {
     if (!isOpen()) {
-      src.release();
       CompletableFuture<Long> failedFuture = new CompletableFuture<>();
       failedFuture.completeExceptionally(new ClosedChannelException());
       if (callback != null) {
