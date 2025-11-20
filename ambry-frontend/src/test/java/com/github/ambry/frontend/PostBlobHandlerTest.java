@@ -50,7 +50,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
-import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -67,7 +66,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -79,7 +77,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.apache.commons.lang3.tuple.Pair;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -87,9 +84,7 @@ import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static com.github.ambry.frontend.FrontendRestRequestServiceTest.*;
-import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 
 /**
@@ -588,7 +583,7 @@ public class PostBlobHandlerTest {
       BlobProperties blobProperties =
           new BlobProperties(-1, SERVICE_ID, OWNER_ID, CONTENT_TYPE, !container.isCacheable(), blobTtlSecs,
               creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null, null,
-              null, null);
+              null, null, null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);

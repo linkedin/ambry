@@ -1381,7 +1381,7 @@ class PutOperation {
               passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
               passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
               passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-              passedInBlobProperties.getFilename(), resolveReservedMetadataId());
+              passedInBlobProperties.getFilename(), resolveReservedMetadataId(), null);
 
             try {
               // Attempt to get the operation tracker
@@ -2307,7 +2307,7 @@ class PutOperation {
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
-              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null);
+              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null, null);
 
       if (options.skipCompositeChunk()) {
         // close the request as the single blob. we don't generate the composite blob.

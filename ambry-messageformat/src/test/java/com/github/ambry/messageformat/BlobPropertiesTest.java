@@ -72,6 +72,7 @@ public class BlobPropertiesTest {
     String ownerId = "OwnerId";
     String contentType = "ContentType";
     String externalAssetTag = "some-external-asset-tag";
+    String md5 = "md5";
     String contentEncoding = version >= BlobPropertiesSerDe.VERSION_4 ? "gzip" : null;
     String filename = version >= BlobPropertiesSerDe.VERSION_4 ? "filename" : null;
     int timeToLiveInSeconds = 144;
@@ -88,34 +89,35 @@ public class BlobPropertiesTest {
         new MockPartitionId(), false, BlobId.BlobDataType.METADATA).getID();
 
     BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
-        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, null, null, null);
+        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, null, null, null,
+        null);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     ByteBuffer serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
-        containerIdToExpect, encryptFlagToExpect, null, null, null, null);
+        containerIdToExpect, encryptFlagToExpect, null, null, null, null, null);
 
     blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
-        filename, null);
+        filename, null, null);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
-        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null, null);
     assertTrue(blobProperties.getCreationTimeInMs() > 0);
     assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
 
     blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag, contentEncoding,
-        filename, null);
+        filename, null, null);
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
-        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null, null);
 
     blobProperties =
         new BlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, accountId, containerId,
@@ -126,21 +128,23 @@ public class BlobPropertiesTest {
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
-        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null,
+        null);
     assertTrue(blobProperties.getCreationTimeInMs() > 0);
     assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
 
     long creationTimeMs = SystemTime.getInstance().milliseconds();
     blobProperties =
         new BlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, creationTimeMs,
-            accountId, containerId, isEncrypted, "some-external-asset-tag", contentEncoding, filename, null);
+            accountId, containerId, isEncrypted, "some-external-asset-tag", contentEncoding, filename, null, null);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
 
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
-        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null,
+        null);
     assertEquals(blobProperties.getCreationTimeInMs(), creationTimeMs);
 
     long creationTimeInSecs = TimeUnit.MILLISECONDS.toSeconds(creationTimeMs);
@@ -155,50 +159,61 @@ public class BlobPropertiesTest {
     for (long ttl : validTTLs) {
       blobProperties =
           new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs, accountId,
-              containerId, isEncrypted, null, contentEncoding, filename, null);
+              containerId, isEncrypted, null, contentEncoding, filename, null, null);
       serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
       blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
           new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
       verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountIdToExpect,
-          containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+          containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null, null);
     }
 
     blobProperties =
         new BlobProperties(blobSize, serviceId, null, null, false, timeToLiveInSeconds, creationTimeMs, accountId,
-            containerId, isEncrypted, externalAssetTag, contentEncoding, filename, null);
+            containerId, isEncrypted, externalAssetTag, contentEncoding, filename, null, null);
     verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds, accountId,
-        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, null);
+        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, null, null);
     blobProperties.setTimeToLiveInSeconds(timeToLiveInSeconds + 1);
     verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds + 1, accountId,
-        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, null);
+        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, null, null);
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, timeToLiveInSeconds + 1, accountIdToExpect,
-        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null, null);
 
     blobProperties.setBlobSize(blobSize + 1);
     verifyBlobProperties(blobProperties, blobSize + 1, serviceId, "", "", false, timeToLiveInSeconds + 1,
-        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null,
+        null);
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize + 1, serviceId, "", "", false, timeToLiveInSeconds + 1,
-        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        accountIdToExpect, containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null,
+        null);
 
     blobProperties =
         new BlobProperties(blobSize, serviceId, null, null, false, timeToLiveInSeconds,
-            creationTimeMs, accountId, containerId, isEncrypted, externalAssetTag, contentEncoding, filename, blobId);
+            creationTimeMs, accountId, containerId, isEncrypted, externalAssetTag, contentEncoding, filename, blobId,
+            null);
     verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds, accountId,
-        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, blobId);
+        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, blobId, null);
     blobProperties.setTimeToLiveInSeconds(timeToLiveInSeconds + 1);
     verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds + 1, accountId,
-        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, blobId);
+        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, blobId, null);
     serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, timeToLiveInSeconds + 1, accountIdToExpect,
-        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, version > VERSION_4 ? blobId : null);
+        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, version > VERSION_4 ? blobId : null,
+        null);
+
+    blobProperties =
+    new BlobProperties(blobSize, serviceId, null, null, false, timeToLiveInSeconds,
+        creationTimeMs, accountId, containerId, isEncrypted, externalAssetTag, contentEncoding, filename, blobId,
+        md5);
+    verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds, accountId,
+        containerId, isEncrypted, externalAssetTag, contentEncodingToExpect, filenameToExpect, blobId, md5);
   }
 
   /**
@@ -276,24 +291,27 @@ public class BlobPropertiesTest {
 
   /**
    * Verify {@link BlobProperties} for its constituent values
-   * @param blobProperties the {@link BlobProperties} that needs to be compared against
-   * @param blobSize the size of the blob
-   * @param serviceId the serviceId associated with the {@link BlobProperties}
-   * @param ownerId the ownerId associated with the {@link BlobProperties}
-   * @param contentType the contentType associated with the {@link BlobProperties}
-   * @param isPrivate refers to whether the blob is private or not
-   * @param ttlInSecs the time to live associated with the {@link BlobProperties} in secs
-   * @param accountId accountId of the user who uploaded the blob
-   * @param containerId containerId of the blob
-   * @param isEncrypted whether the blob is encrypted
-   * @param externalAssetTag the externalAssetTag of the blob.
-   * @param contentEncoding the field to identify if the blob is compressed.
-   * @param filename the name of the file.
-   * @param reservedMetadataBlobId the reserved metadata blob id for chunked uploads or stitched blobs. Can be {@code null}.
+   *
+   * @param blobProperties         the {@link BlobProperties} that needs to be compared against
+   * @param blobSize               the size of the blob
+   * @param serviceId              the serviceId associated with the {@link BlobProperties}
+   * @param ownerId                the ownerId associated with the {@link BlobProperties}
+   * @param contentType            the contentType associated with the {@link BlobProperties}
+   * @param isPrivate              refers to whether the blob is private or not
+   * @param ttlInSecs              the time to live associated with the {@link BlobProperties} in secs
+   * @param accountId              accountId of the user who uploaded the blob
+   * @param containerId            containerId of the blob
+   * @param isEncrypted            whether the blob is encrypted
+   * @param externalAssetTag       the externalAssetTag of the blob.
+   * @param contentEncoding        the field to identify if the blob is compressed.
+   * @param filename               the name of the file.
+   * @param reservedMetadataBlobId the reserved metadata blob id for chunked uploads or stitched blobs. Can be
+   *                               {@code null}.
+   * @param md5                    the md5 of the blob.  Can be {@code null}.
    */
   private void verifyBlobProperties(BlobProperties blobProperties, long blobSize, String serviceId, String ownerId,
       String contentType, boolean isPrivate, long ttlInSecs, short accountId, short containerId, boolean isEncrypted,
-      String externalAssetTag, String contentEncoding, String filename, String reservedMetadataBlobId) {
+      String externalAssetTag, String contentEncoding, String filename, String reservedMetadataBlobId, String md5) {
     assertEquals(blobProperties.getBlobSize(), blobSize);
     assertEquals(blobProperties.getServiceId(), serviceId);
     assertEquals(blobProperties.getOwnerId(), ownerId);
@@ -307,5 +325,6 @@ public class BlobPropertiesTest {
     assertEquals("contentEncoding mismatch", contentEncoding, blobProperties.getContentEncoding());
     assertEquals("filename mismatch", filename, blobProperties.getFilename());
     assertEquals("reserved metadata id mismatch", reservedMetadataBlobId, blobProperties.getReservedMetadataBlobId());
+    assertEquals("md5 mismatch", md5, blobProperties.getMd5());
   }
 }
