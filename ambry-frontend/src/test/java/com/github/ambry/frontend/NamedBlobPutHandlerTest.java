@@ -255,8 +255,18 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void putNamedBlobDigestTest() throws Exception {
-    putBlobAndVerifyDigest(null, TestUtils.TTL_SECS);
-    putBlobAndVerifyDigest(null, Utils.Infinite_Time);
+    byte[] smallContent = "Ambry blob storage".getBytes(StandardCharsets.UTF_8);
+    byte[] largeContent = new byte[5 * 1024 * 1024];
+    new java.util.Random().nextBytes(largeContent);
+
+    byte[][] contents = {smallContent, largeContent};
+    long[] ttls = {TestUtils.TTL_SECS, Utils.Infinite_Time};
+
+    for (byte[] content : contents) {
+      for (long ttl : ttls) {
+        putBlobAndVerifyDigest(null, ttl, content);
+      }
+    }
   }
 
   /**
@@ -629,12 +639,12 @@ public class NamedBlobPutHandlerTest {
    * @param ttl the ttl used for the blob
    * @throws Exception
    */
-  private void putBlobAndVerifyDigest(ThrowingConsumer<ExecutionException> errorChecker, long ttl) throws Exception {
+  private void putBlobAndVerifyDigest(ThrowingConsumer<ExecutionException> errorChecker, long ttl, byte[] content) throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, ttl, !REF_CONTAINER.isCacheable(), SERVICE_ID,
         CONTENT_TYPE, OWNER_ID, null, null, null);
     //byte[] content = TestUtils.getRandomBytes(1024);
-    byte[] content = "Ambry blob storage".getBytes(StandardCharsets.UTF_8);
+    // byte[] content = "Ambry blob storage".getBytes(StandardCharsets.UTF_8);
     RestRequest request = getRestRequest(headers, request_path, content);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> future = new FutureResult<>();
