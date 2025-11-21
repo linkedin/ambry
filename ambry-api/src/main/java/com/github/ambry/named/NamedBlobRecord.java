@@ -106,6 +106,20 @@ public class NamedBlobRecord {
   }
 
   /**
+   * @param accountName the account name.
+   * @param containerName the container name.
+   * @param blobName the blob name within the container.
+   * @param blobId the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param version the version of this named blob.
+   * @param digest the digest of this blob
+   */
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long version, String digest) {
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, version, 0, digest);
+  }
+
+  /**
    * @param accountName      the account name.
    * @param containerName    the container name.
    * @param blobName         the blob name within the container.

@@ -104,7 +104,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime,
             time.milliseconds(), blobSize, Hex.encodeHexString(TestUtils.getRandomBytes(32)));
-    namedBlobDb.put(record).get();
+    namedBlobDb.put(record);
     records.add(record);
     time.sleep(1000);
 
