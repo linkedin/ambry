@@ -112,7 +112,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     NamedBlobRecord recordFromStore =
         namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
     assertEquals("Record does not match expectations.", record, recordFromStore);
-    assertEquals("Version should match", record.getDigest(), recordFromStore.getDigest());
+    assertEquals("Digest should match", record.getDigest(), recordFromStore.getDigest());
   }
 
   /**
