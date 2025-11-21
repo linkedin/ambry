@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.DataNodeId;
@@ -22,6 +23,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufReadableStreamChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -37,7 +39,6 @@ import com.github.ambry.frontend.IdConverterFactory;
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.NetworkClientFactory;
@@ -97,6 +98,8 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import javax.sql.DataSource;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -4549,5 +4552,53 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       assertEquals(expectedRecord.getLifeVersion(), record.getLifeVersion());
       assertEquals(expectedRecord.getExpirationTimeMs(), record.getExpirationTimeMs());
     }
+  }
+
+  /**
+   * Test for bytebuf memory leaks in PutOperation when operations are aborted in the middle of a put operation.
+   * This test verifies that PutOperation properly releases bytebuf when the operation completes/fails, even if
+   * the ChunkFiller thread hasn't processed some data yet.
+   */
+  @Test
+  public void testPutOperationByteBufLeakOnAbort() throws Exception {
+    NettyByteBufLeakHelper testLeakHelper = new NettyByteBufLeakHelper();
+    testLeakHelper.beforeTest();
+
+    Properties props = getNonBlockingRouterProperties(localDcName);
+    int chunkSize = 512;
+    props.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    setRouter(props, mockServerLayout, new LoggingNotificationSystem());
+
+    // Configure servers to succeed for first few chunks, then fail
+    List<ServerErrorCode> serverErrorList = new ArrayList<>();
+    serverErrorList.add(ServerErrorCode.NoError);
+    serverErrorList.add(ServerErrorCode.NoError);
+    for (int i = 0; i < 100; i++) {
+      serverErrorList.add(ServerErrorCode.PartitionReadOnly);
+    }
+    mockServerLayout.getMockServers().forEach(server -> server.setServerErrors(serverErrorList));
+
+    // The first two will run normally, but 3+ will get ServerErrorCode.PartitionReadOnly
+    int blobSize = 100 * chunkSize;
+    byte[] blobData = new byte[blobSize];
+    ThreadLocalRandom.current().nextBytes(blobData);
+    ByteBuf pooledBuf = PooledByteBufAllocator.DEFAULT.buffer(blobSize);
+    pooledBuf.writeBytes(blobData);
+    ByteBufReadableStreamChannel channel = new ByteBufReadableStreamChannel(pooledBuf);
+
+    BlobProperties blobProperties = new BlobProperties(blobSize, "serviceId", "ownerId", "contentType",
+        false, Utils.Infinite_Time, Utils.getRandomShort(ThreadLocalRandom.current()),
+        Utils.getRandomShort(ThreadLocalRandom.current()), false, null, null, null);
+
+    try {
+      router.putBlob(blobProperties, new byte[10], channel, PutBlobOptions.DEFAULT).get();
+    } catch (ExecutionException e) {
+      // Expected for operations that hit error responses
+    }
+    // If there are leaks, it will be detected in NettyByteBufLeakHelper and fail the test.
+    // Should be called before router close as closing of the router shouldn't be required to prevent leaks.
+    testLeakHelper.afterTest();
+    router.close();
+    router = null;
   }
 }
