@@ -1684,14 +1684,9 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
+      // Once bytebuf is read, it either needs to be released or returned as BlobData.
       ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
-      long crc = crcStream.getValue();
-      long streamCrc = dataStream.readLong();
-      if (crc != streamCrc) {
-        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
-        throw new MessageFormatException("corrupt data while parsing blob content",
-            MessageFormatErrorCodes.DataCorrupt);
-      }
+      validateCrcAndManageByteBuf(crcStream, dataStream, byteBuf, logger);
       return new BlobData(BlobType.DataBlob, dataSize, byteBuf);
     }
   }
@@ -1742,14 +1737,9 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
+      // Once bytebuf is read, it either needs to be released or returned as BlobData.
       ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
-      long crc = crcStream.getValue();
-      long streamCrc = dataStream.readLong();
-      if (crc != streamCrc) {
-        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
-        throw new MessageFormatException("corrupt data while parsing blob content",
-            MessageFormatErrorCodes.DataCorrupt);
-      }
+      validateCrcAndManageByteBuf(crcStream, dataStream, byteBuf, logger);
       return new BlobData(blobContentType, dataSize, byteBuf);
     }
   }
@@ -1815,20 +1805,43 @@ public class MessageFormatRecord {
       }
       ByteBuf byteBuf = null;
       try {
+        // Once bytebuf is read, it either needs to be released or returned as BlobData.
         byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
       } catch (RuntimeException e) {
         logger.error("Failed to read ByteBuf from crc input stream with size: {}", dataSize);
         throw e;
       }
+      validateCrcAndManageByteBuf(crcStream, dataStream, byteBuf, logger);
+      return new BlobData(blobContentType, dataSize, byteBuf, isCompressed);
+    }
+  }
+
+  /**
+   * Validates CRC and released ByteBuf if crc validation fails.
+   *
+   * @param crcStream the CRC input stream to validate against
+   * @param dataStream the data input stream to read the stored CRC from
+   * @param byteBuf the ByteBuf to manage (will be released on error, kept on success)
+   * @param logger the logger to use for error messages
+   * @throws IOException if reading from the stream fails
+   * @throws MessageFormatException if CRC validation fails
+   */
+  private static void validateCrcAndManageByteBuf(CrcInputStream crcStream, DataInputStream dataStream,
+      ByteBuf byteBuf, Logger logger) throws IOException, MessageFormatException {
+    boolean success = false;
+    try {
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
-        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
-        throw new MessageFormatException("corrupt data while parsing blob content",
+        logger.error("Corrupt data while parsing blob content. Expected crc {} Actual crc {}", crc, streamCrc);
+        throw new MessageFormatException("Corrupt data while parsing blob content.",
             MessageFormatErrorCodes.DataCorrupt);
       }
-
-      return new BlobData(blobContentType, dataSize, byteBuf, isCompressed);
+      success = true;
+    } finally {
+      if (!success) {
+        byteBuf.release();
+      }
     }
   }
 
