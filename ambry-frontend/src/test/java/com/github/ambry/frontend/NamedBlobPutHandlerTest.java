@@ -33,6 +33,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
+import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -57,6 +59,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -245,6 +248,25 @@ public class NamedBlobPutHandlerTest {
   public void putNamedBlobTest() throws Exception {
     putBlobAndVerify(null, TestUtils.TTL_SECS);
     putBlobAndVerify(null, Utils.Infinite_Time);
+  }
+
+  /**
+   * Test put Named Blob with digest.
+   */
+  @Test
+  public void putNamedBlobDigestTest() throws Exception {
+    byte[] smallContent = "Ambry blob storage".getBytes(StandardCharsets.UTF_8);
+    byte[] largeContent = new byte[5 * 1024 * 1024];
+    new java.util.Random().nextBytes(largeContent);
+
+    byte[][] contents = {smallContent, largeContent};
+    long[] ttls = {TestUtils.TTL_SECS, Utils.Infinite_Time};
+
+    for (byte[] content : contents) {
+      for (long ttl : ttls) {
+        putBlobAndVerifyDigest(null, ttl, content);
+      }
+    }
   }
 
   /**
@@ -608,6 +630,63 @@ public class NamedBlobPutHandlerTest {
     } catch (RestServiceException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  /**
+   * Make a stitch blob call using {@link PostBlobHandler} and verify the result of the operation.
+   * @param errorChecker if non-null, expect an exception to be thrown by the post flow and verify it using this
+   *                     {@link ThrowingConsumer}.
+   * @param ttl the ttl used for the blob
+   * @throws Exception
+   */
+  private void putBlobAndVerifyDigest(ThrowingConsumer<ExecutionException> errorChecker, long ttl, byte[] content) throws Exception {
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, ttl, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+        CONTENT_TYPE, OWNER_ID, null, null, null);
+    //byte[] content = TestUtils.getRandomBytes(1024);
+    // byte[] content = "Ambry blob storage".getBytes(StandardCharsets.UTF_8);
+    RestRequest request = getRestRequest(headers, request_path, content);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> future = new FutureResult<>();
+    idConverterFactory.lastInput = null;
+    idConverterFactory.lastBlobProperties = null;
+    idConverterFactory.lastConvertedId = null;
+    request.setDigestAlgorithm("MD5");
+    namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+
+    if (errorChecker == null) {
+      future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      // in id converter, the callback is invoked before the lastConvertedId is set, we need to wait
+      // for a while before we can check the lastConvertedId.
+      Thread.sleep(100);
+      NamedBlobRecord record  = namedBlobDb.get(REF_ACCOUNT.getName(),
+          REF_CONTAINER.getName(), BLOBNAME).get();
+
+      assertNotNull(record.getDigest());
+      assertEquals(record.getDigest(), calculateMD5(content));
+
+      assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
+          restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+      InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+      assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
+      assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
+      assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
+    } else {
+      TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
+          errorChecker);
+    }
+  }
+
+  /**
+   *
+   * @param content
+   * @return String of md5
+   * @throws NoSuchAlgorithmException
+   */
+  private  String calculateMD5(byte[] content) throws NoSuchAlgorithmException {
+    java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+    byte[] digest = md.digest(content);
+    return org.apache.commons.codec.binary.Base64.encodeBase64URLSafeString(digest);
   }
 
   /**
