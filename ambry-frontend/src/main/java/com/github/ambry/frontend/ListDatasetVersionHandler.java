@@ -26,7 +26,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.util.GregorianCalendar;
 import java.util.function.Function;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

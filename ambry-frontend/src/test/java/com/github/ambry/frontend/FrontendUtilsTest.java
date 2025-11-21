@@ -23,6 +23,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -106,4 +107,17 @@ public class FrontendUtilsTest {
     assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
     assertEquals("Wrong isEncrypted value in blobId: " + blobId, isEncrypted, BlobId.isEncrypted(blobId.getID()));
   }
+
+  /**
+   *
+   * @param content
+   * @return String of md5
+   * @throws NoSuchAlgorithmException
+   */
+  public static String calculateMD5(byte[] content) throws NoSuchAlgorithmException {
+    java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+    byte[] digest = md.digest(content);
+    return org.apache.commons.codec.binary.Base64.encodeBase64URLSafeString(digest);
+  }
+
 }

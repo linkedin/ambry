@@ -23,6 +23,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -73,10 +75,11 @@ public class GetBlobHandler {
   private final QuotaManager quotaManager;
   private final GetReplicasHandler getReplicasHandler;
   private final AccountService accountService;
+  private final NamedBlobDb namedBlobDb;
 
   GetBlobHandler(FrontendConfig frontendConfig, Router router, SecurityService securityService, IdConverter idConverter,
       AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      QuotaManager quotaManager, AccountService accountService) {
+      QuotaManager quotaManager, AccountService accountService, NamedBlobDb namedBlobDb) {
     this.frontendConfig = frontendConfig;
     this.router = router;
     this.securityService = securityService;
@@ -87,6 +90,7 @@ public class GetBlobHandler {
     this.quotaManager = quotaManager;
     getReplicasHandler = new GetReplicasHandler(metrics, clusterMap);
     this.accountService = accountService;
+    this.namedBlobDb = namedBlobDb;
   }
 
   public void handle(RequestPath requestPath, RestRequest restRequest, RestResponseChannel restResponseChannel,
@@ -99,6 +103,18 @@ public class GetBlobHandler {
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
       accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metricsGroup);
+    }
+    if (RestUtils.isS3Request(restRequest)) {
+      NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+      GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
+      if (namedBlobDb != null) {
+        namedBlobDb.get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(),
+            getOption, false).thenAccept(record -> {
+          if (record != null) {
+            restRequest.setArg(BLOB_MD5, record.getDigest());
+          }
+        });
+      }
     }
     restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
     new CallbackChain(restRequest, restResponseChannel, metricsGroup, requestPath, subResource, options,

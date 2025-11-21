@@ -35,7 +35,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
-import java.io.IOException;
 import java.util.GregorianCalendar;
 import java.util.Map;
 import org.slf4j.Logger;
