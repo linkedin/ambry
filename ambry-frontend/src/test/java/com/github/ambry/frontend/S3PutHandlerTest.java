@@ -31,6 +31,7 @@ import com.github.ambry.frontend.s3.S3PutHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -51,12 +52,16 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.mockito.Mockito;
 
+import static com.github.ambry.frontend.FrontendUtilsTest.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 public class S3PutHandlerTest {
@@ -136,6 +141,7 @@ public class S3PutHandlerTest {
     s3GetHandler.handle(request, restResponseChannel, getResult::done);
     ReadableStreamChannel readableStreamChannel = getResult.get();
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("", calculateMD5(content), request.getArgs().get(BLOB_MD5));
     assertArrayEquals("Mismatch in blob content", content, ((ByteBufferRSC) readableStreamChannel).getBuffer().array());
     assertEquals("Mismatch in content length size", size / 2,
         Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
@@ -173,7 +179,7 @@ public class S3PutHandlerTest {
             frontendConfig, metrics, CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     GetBlobHandler getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
-            QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
+            QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, namedBlobDb);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, null, metrics);
     s3GetHandler = new S3GetHandler(null, null, getBlobHandler, securityService, metrics, injector);
   }

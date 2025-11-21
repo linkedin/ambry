@@ -359,7 +359,7 @@ public class S3MultipartUploadTest {
     QuotaManager quotaManager = QuotaTestUtils.createDummyQuotaManager();
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
-            quotaManager, ACCOUNT_SERVICE);
+            quotaManager, ACCOUNT_SERVICE, null);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, injector, metrics, clusterMap, quotaManager, ACCOUNT_SERVICE,
             null);

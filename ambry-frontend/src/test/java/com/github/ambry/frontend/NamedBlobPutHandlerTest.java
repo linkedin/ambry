@@ -77,6 +77,7 @@ import java.util.stream.Stream;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.frontend.FrontendUtilsTest.*;
 import static org.junit.Assert.*;
 
 
@@ -675,18 +676,6 @@ public class NamedBlobPutHandlerTest {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);
     }
-  }
-
-  /**
-   *
-   * @param content
-   * @return String of md5
-   * @throws NoSuchAlgorithmException
-   */
-  private  String calculateMD5(byte[] content) throws NoSuchAlgorithmException {
-    java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-    byte[] digest = md.digest(content);
-    return org.apache.commons.codec.binary.Base64.encodeBase64URLSafeString(digest);
   }
 
   /**
