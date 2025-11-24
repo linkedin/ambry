@@ -1817,7 +1817,7 @@ public class MessageFormatRecord {
   }
 
   /**
-   * Validates CRC and released ByteBuf if crc validation fails.
+   * Validates CRC and releases passed bytebuf if crc validation fails or streams throw.
    *
    * @param crcStream the CRC input stream to validate against
    * @param dataStream the data input stream to read the stored CRC from
