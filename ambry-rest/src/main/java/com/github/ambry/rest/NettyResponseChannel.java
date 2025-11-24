@@ -155,15 +155,19 @@ class NettyResponseChannel implements RestResponseChannel {
   @Override
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
     FutureResult<Long> futureResult = new FutureResult<>();
-    write(Unpooled.wrappedBuffer(src), new Callback<Long>() {
-      @Override
-      public void onCompletion(Long result, Exception exception) {
+    // This internal wrapped bytebuffer is owned by this class and must be released in the callback.
+    ByteBuf wrapper = Unpooled.wrappedBuffer(src);
+    write(wrapper, (result, exception) -> {
+      try {
         long r = result == null ? src.position() : result.longValue();
         src.position((int) r);
         futureResult.done(r, exception);
         if (callback != null) {
           callback.onCompletion(result, exception);
         }
+      } finally {
+        // Release the wrapper we created following the callback contract guarantee that the called released the buf
+        wrapper.release();
       }
     });
     return futureResult;
