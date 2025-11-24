@@ -106,7 +106,6 @@ public class NettyResponseChannelMemoryManagementTest {
       String testData = "test data";
       ByteBuf callerByteBuf = Unpooled.wrappedBuffer(testData.getBytes(StandardCharsets.UTF_8));
       assertEquals("Caller's bytebuf should start with refCnt=1", 1, callerByteBuf.refCnt());
-      // Call write(ByteBuf) passing the bytebuf
       responseChannel.write(callerByteBuf, new ReleasingCallback(callerByteBuf));
     });
   }

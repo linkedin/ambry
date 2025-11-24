@@ -166,7 +166,7 @@ class NettyResponseChannel implements RestResponseChannel {
           callback.onCompletion(result, exception);
         }
       } finally {
-        // Release the wrapper we created following the callback contract guarantee that the called released the buf
+        // Release the wrapped bytebuffer we created using the callback contract guarantee that the creator releases
         wrapper.release();
       }
     });
