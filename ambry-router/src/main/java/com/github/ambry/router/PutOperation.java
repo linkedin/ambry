@@ -57,6 +57,7 @@ import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -574,14 +575,22 @@ class PutOperation {
 
   /**
    * Clean up the chunks to release any data buffer. This should be invoked when terminating the operation with
-   * an exception.
+   * an exception. This method also closes the chunkFillerChannel to fire any pending callbacks, ensuring the original
+   * buffer from the ReadableStreamChannel is properly released. Synchronized for memory visibility on channelReadBuf.
+   * The contract upheld by PutManager is that this method is called AT-MOST-ONCE.
    */
-  public void cleanupChunks() {
-    releaseDataForAllChunks();
-    // At this point, if the channelReadBuf is not null it means it did not get fully read
-    // by the ChunkFiller in fillChunks and needs to be released.
-    if (channelReadBuf != null) {
-      channelReadBuf.release();
+  public synchronized void cleanupChunks() {
+    try {
+      releaseDataForAllChunks();
+    } finally {
+      // Release the extra reference we retained when storing in channelReadBuf.
+      if (channelReadBuf != null) {
+        channelReadBuf.release();
+        channelReadBuf = null;
+      }
+      // Close the chunkFillerChannel to fire any remaining callbacks in chunksAwaitingResolution.
+      // This ensures the original buffer (owned by the callback) is released and not leaked.
+      chunkFillerChannel.close();
     }
   }
 
@@ -688,6 +697,11 @@ class PutOperation {
         // Attempt to fill a chunk
         if (channelReadBuf == null) {
           channelReadBuf = chunkFillerChannel.getNextByteBuf(0);
+          if (channelReadBuf != null) {
+            // Retain the buffer to protect against the channel callback releasing it
+            // while we still hold a reference we're processing.
+            channelReadBuf.retain();
+          }
         }
         if (channelReadBuf != null) {
           if (channelReadBuf.readableBytes() > 0 && isChunkAwaitingResolution()) {
@@ -712,8 +726,13 @@ class PutOperation {
               routerCallback.onPollReady();
             }
             if (!channelReadBuf.isReadable()) {
-              chunkFillerChannel.resolveOldestChunk(null);
-              channelReadBuf = null;
+              try {
+                chunkFillerChannel.resolveOldestChunk(null);
+              } finally {
+                // Release the reference we retained when storing getNextByteBuf, even if resolveOldestChunk throws.
+                channelReadBuf.release();
+                channelReadBuf = null;
+              }
             }
           }
         } else {
@@ -1101,16 +1120,19 @@ class PutOperation {
   }
 
   /**
-   * Set the exception associated with this operation.
-   * First, if current operationException is null, directly set operationException as exception;
-   * Second, if operationException exists, compare ErrorCodes of exception and existing operation Exception depending
-   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
-   * level. Update the operationException if necessary.
-   * @param exception the {@link RouterException} to possibly set.
+   * Set the exception associated with this operation and mark it complete.
+   * For {@link RouterException}: uses precedence-based replacement where lower precedence
+   * levels override higher ones.
+   * For {@link java.nio.channels.ClosedChannelException}: only set if no other exception has
+   * been set to avoid overwriting meaningful errors.
+   * For all others simply set the exception as we don't know what they are or how to classify them.
+   * @param exception the {@link Exception} to possibly set.
    */
   void setOperationExceptionAndComplete(Exception exception) {
     if (exception instanceof RouterException) {
       RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
+    } else if (exception instanceof ClosedChannelException) {
+      operationException.compareAndSet(null, exception);
     } else {
       operationException.set(exception);
     }
