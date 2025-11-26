@@ -690,7 +690,7 @@ class PutOperation {
    * chunkFillerChannel, if there is any.
    * @throws InterruptedException if the call to get a chunk from the chunkFillerChannel is interrupted.
    */
-  void fillChunks() {
+  synchronized void fillChunks() {
     try {
       PutChunk chunkToFill;
       while (!isChunkFillingDone()) {
