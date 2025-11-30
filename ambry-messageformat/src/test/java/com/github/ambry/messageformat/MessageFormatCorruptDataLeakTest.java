@@ -77,7 +77,7 @@ public class MessageFormatCorruptDataLeakTest {
     }
 
     @Override
-    public ByteBuf slice(int index, int length) {
+    public ByteBuf retainedSlice(int index, int length) {
       ByteBuf slice = super.slice(index, length);
       capturedSlices.add(slice);
       return slice;
