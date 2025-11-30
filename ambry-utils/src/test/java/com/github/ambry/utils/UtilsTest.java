@@ -785,6 +785,54 @@ public class UtilsTest {
     }
     assertTrue(thrownEx instanceof IllegalArgumentException);
   }
+
+  /**
+   * Tests for {@link Utils#readNettyByteBufFromCrcInputStream(CrcInputStream, int)} ByteBuf ownership semantics.
+   * Verifies that the returned ByteBuf has its own reference count and must be released independently.
+   */
+  @Test
+  public void testReadNettyByteBufFromCrcInputStreamOwnership() throws IOException {
+    int blobSize = 1024;
+    byte[] testData = new byte[blobSize];
+    new Random().nextBytes(testData);
+
+    ByteBuf sourceByteBuf = ByteBufAllocator.DEFAULT.heapBuffer(blobSize);
+
+    sourceByteBuf.writeBytes(testData);
+    assertEquals("Verify source ByteBuf has refCnt of 1", 1, sourceByteBuf.refCnt());
+
+    NettyByteBufDataInputStream nettyDataInputStream = new NettyByteBufDataInputStream(sourceByteBuf);
+    CrcInputStream crcStream = new CrcInputStream(nettyDataInputStream);
+    ByteBuf returnedByteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, blobSize);
+
+    // Verify the returned ByteBuf has its own reference count while sourceByteBuf shows refCnt 2
+    assertEquals("Returned ByteBuf should have refCnt of 1 (slice owned by caller)", 1, returnedByteBuf.refCnt());
+    assertEquals("Source ByteBuf should have refCnt 2 (retainedSlice increments underlying buffer refCnt)", 2,
+        sourceByteBuf.refCnt());
+  }
+
+  /**
+   * Tests for {@link Utils#readNettyByteBufFromCrcInputStream(CrcInputStream, int)} ByteBuf ownership semantics.
+   * Verifies that the returned ByteBuf has its own reference count and must be released independently
+   *  with non-NettyByteBufDataInputStream.
+   */
+  @Test
+  public void testReadNettyByteBufFromCrcInputStreamWithNonNettyInputStream() throws IOException {
+    int blobSize = 1024;
+    byte[] testData = new byte[blobSize];
+    new Random().nextBytes(testData);
+
+    // Use a regular ByteBufferInputStream instead of NettyByteBufDataInputStream
+    ByteBuffer buffer = ByteBuffer.wrap(testData);
+    ByteBufferDataInputStream byteBufferDataInputStream = new ByteBufferDataInputStream(buffer);
+    CrcInputStream crcStream = new CrcInputStream(byteBufferDataInputStream);
+
+    // Call readNettyByteBufFromCrcInputStream which heap fallback path
+    ByteBuf returnedByteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, blobSize);
+
+    // Verify the returned ByteBuf has its own reference count.
+    assertEquals("Returned ByteBuf should have refCnt of 1 (slice owned by caller)", 1, returnedByteBuf.refCnt());
+  }
 }
 
 class MockClassForTesting {

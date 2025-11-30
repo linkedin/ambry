@@ -398,7 +398,8 @@ public class Utils {
 
   /**
    * Transfer {@code dataSize} bytes of data from the given crc stream to a newly create {@link ByteBuf}. The method
-   * would also update the crc value in the crc stream.
+   * would also update the crc value in the crc stream. The caller of this method owns the ByteBuf returned and must
+   * release it when it's finished using it.
    * @param crcStream The crc stream.
    * @param dataSize The number of bytes to transfer.
    * @return the newly created {@link ByteBuf} which contains the transferred data.
@@ -411,7 +412,7 @@ public class Utils {
       ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
       // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
       int startIndex = nettyByteBuf.readerIndex();
-      output = nettyByteBuf.slice(startIndex, dataSize);
+      output = nettyByteBuf.retainedSlice(startIndex, dataSize);
       crcStream.updateCrc(output.nioBuffer());
       nettyByteBuf.readerIndex(startIndex + dataSize);
     } else {
