@@ -182,9 +182,11 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private boolean flush(ByteBuffer buf) throws IOException {
     int remaining = buf.remaining();
     if (remaining > 0) {
-      long startNs = SystemTime.getInstance().nanoseconds();
+      long startNs = logger.isTraceEnabled() ? SystemTime.getInstance().nanoseconds() : 0;
       int written = socketChannel.write(buf);
-      logger.trace("Flushed {} bytes in {} ns", written, SystemTime.getInstance().nanoseconds() - startNs);
+      if (logger.isTraceEnabled()) {
+        logger.trace("Flushed {} bytes in {} ns", written, SystemTime.getInstance().nanoseconds() - startNs);
+      }
       return written >= remaining;
     }
     return true;
@@ -412,8 +414,10 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     long startTimeMs = time.milliseconds();
     long bytesRead = networkReceive.getReceivedBytes().readFrom(this);
     long readTimeMs = time.milliseconds() - startTimeMs;
-    logger.trace("Bytes read {} from {} using key {} Time: {} Ms.", bytesRead,
-        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
+    if (logger.isTraceEnabled()) {
+      logger.trace("Bytes read {} from {} using key {} Time: {} Ms.", bytesRead,
+          socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
+    }
     if (bytesRead > 0) {
       metrics.transmissionReceiveTime.update(readTimeMs);
       metrics.transmissionReceiveSize.update(bytesRead);
@@ -529,8 +533,10 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     long startTimeMs = time.milliseconds();
     long bytesWritten = send.writeTo(this);
     long writeTimeMs = time.milliseconds() - startTimeMs;
-    logger.trace("Bytes written {} to {} using key {} Time: {} ms", bytesWritten,
-        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    if (logger.isTraceEnabled()) {
+      logger.trace("Bytes written {} to {} using key {} Time: {} ms", bytesWritten,
+          socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    }
     if (bytesWritten > 0) {
       metrics.transmissionSendTime.update(writeTimeMs);
       metrics.transmissionSendSize.update(bytesWritten);
