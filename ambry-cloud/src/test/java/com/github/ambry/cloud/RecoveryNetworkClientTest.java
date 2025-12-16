@@ -130,13 +130,6 @@ public class RecoveryNetworkClientTest {
     properties.setProperty(ReplicationConfig.REPLICATION_CLOUD_TOKEN_FACTORY,
         RecoveryTokenFactory.class.getCanonicalName());
     properties.setProperty("replication.metadata.request.version", "2");
-    properties.setProperty("clustermap.nimbus.service.metadata.file.path", "./etc/metadata/nimbus-service.json");
-    properties.setProperty("clustermap.listatefulset.metadata.file.path", "./etc/metadata/liStatefulSet.json");
-    properties.setProperty("clustermap.reserve.disk.space.percentage", "0.05");
-    properties.setProperty("clustermap.resource.tag.prefix", "TAG_");
-    properties.setProperty("clustermap.default.http2.port", "15388");
-    properties.setProperty("clustermap.default.port", "15088");
-    properties.setProperty("clustermap.default.ssl.port", "15288");
     verifiableProperties = new VerifiableProperties(properties);
     findTokenHelper = new FindTokenHelper(null, new ReplicationConfig(verifiableProperties));
     // Create test cluster
