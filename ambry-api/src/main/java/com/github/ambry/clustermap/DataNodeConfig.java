@@ -43,6 +43,25 @@ public class DataNodeConfig {
   private final Map<String, Map<String, String>> extraMapFields = new HashMap<>();
 
   /**
+   * @param datacenterName the datacenter this server is in.
+   * @param hostName the host name of the server.
+   * @param http2Port the HTTP2 port, or {@code null} if the server does not have one.
+   * @param port the port of the server.
+   * @param sslPort the ssl port, or {@code null} if the server does not have one.
+   */
+  public DataNodeConfig(String datacenterName, String hostName, Integer http2Port, int port,
+      Integer sslPort) {
+    this.datacenterName = datacenterName;
+    this.hostName = hostName;
+    this.http2Port = http2Port;
+    this.port = port;
+    this.sslPort = sslPort;
+    this.instanceName = "";
+    this.rackId = "";
+    this.xid = 0;
+  }
+
+  /**
    * @param instanceName a name that can be used as a unique key for this server.
    * @param hostName the host name of the server.
    * @param port the port of the server.
@@ -154,6 +173,15 @@ public class DataNodeConfig {
    */
   Map<String, DiskConfig> getDiskConfigs() {
     return diskConfigs;
+  }
+
+  /**
+   * Add a disk configuration to this DataNode.
+   * @param mountPath the mount path of the disk
+   * @param diskConfig the disk configuration
+   */
+  public void addDiskConfig(String mountPath, DiskConfig diskConfig) {
+    diskConfigs.put(mountPath, diskConfig);
   }
 
   /**

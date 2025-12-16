@@ -46,6 +46,11 @@ public interface ClusterParticipant extends AutoCloseable {
   void unblockStateTransition();
 
   /**
+   * Populates initial data node config.
+   */
+  boolean populateDataNodeConfig();
+
+  /**
    * Set the sealed state of the given replica.
    * @param replicaId         the {@link ReplicaId} whose sealed state will be updated.
    * @param replicaSealStatus {@link ReplicaSealStatus} to be set.

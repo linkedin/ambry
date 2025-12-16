@@ -13,6 +13,7 @@
  */
 package com.github.ambry.utils;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -21,6 +22,7 @@ import io.netty.channel.unix.Errors;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
@@ -39,9 +41,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import javax.net.ssl.SSLException;
 import org.apache.commons.io.FileUtils;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -53,6 +59,22 @@ import static org.mockito.Mockito.*;
  */
 public class UtilsTest {
   static final String STATIC_FIELD_TEST_STRING = "field1";
+  
+  private Path tempDir;
+
+  @Before
+  public void setUp() throws IOException {
+    tempDir = Files.createTempDirectory("utils-test");
+  }
+
+  @After
+  public void tearDown() throws IOException {
+    if (tempDir != null) {
+      Files.walk(tempDir)
+          .map(Path::toFile)
+          .forEach(File::delete);
+    }
+  }
 
   @Test(expected = IllegalArgumentException.class)
   public void testGetRandomLongException() {
@@ -784,6 +806,122 @@ public class UtilsTest {
       thrownEx = ex;
     }
     assertTrue(thrownEx instanceof IllegalArgumentException);
+  }
+
+  // JSON file utilities tests
+
+  /**
+   * Test class for JSON deserialization.
+   */
+  public static class TestData {
+    @JsonProperty("name")
+    public String name;
+
+    @JsonProperty("value")
+    public int value;
+
+    @JsonProperty("enabled")
+    public boolean enabled;
+  }
+
+  /**
+   * Test successful reading of valid JSON file.
+   */
+  @Test
+  public void testReadJsonFromFileValid() throws IOException {
+    String jsonContent = "{\n" +
+        "  \"name\": \"test-name\",\n" +
+        "  \"value\": 42,\n" +
+        "  \"enabled\": true\n" +
+        "}";
+
+    File jsonFile = createTempFile("valid.json", jsonContent);
+    TestData result = Utils.readJsonFromFile(jsonFile.getAbsolutePath(), TestData.class);
+
+    assertNotNull("Result should not be null", result);
+    assertEquals("Name should match", "test-name", result.name);
+    assertEquals("Value should match", 42, result.value);
+    assertTrue("Enabled should be true", result.enabled);
+  }
+
+  /**
+   * Test reading from null file path.
+   */
+  @Test
+  public void testReadJsonFromFileNullPath() {
+    TestData result = Utils.readJsonFromFile(null, TestData.class);
+    assertNull("Result should be null for null path", result);
+  }
+
+  /**
+   * Test reading from empty file path.
+   */
+  @Test
+  public void testReadJsonFromFileEmptyPath() {
+    TestData result = Utils.readJsonFromFile("", TestData.class);
+    assertNull("Result should be null for empty path", result);
+
+    result = Utils.readJsonFromFile("   ", TestData.class);
+    assertNull("Result should be null for whitespace path", result);
+  }
+
+  /**
+   * Test reading from non-existent file.
+   */
+  @Test
+  public void testReadJsonFromFileNonExistent() {
+    String nonExistentPath = tempDir.resolve("non-existent.json").toString();
+    TestData result = Utils.readJsonFromFile(nonExistentPath, TestData.class);
+    assertNull("Result should be null for non-existent file", result);
+  }
+
+  /**
+   * Test reading from file with invalid JSON.
+   */
+  @Test
+  public void testReadJsonFromFileInvalidJson() throws IOException {
+    String invalidJsonContent = "{\n" +
+        "  \"name\": \"test\",\n" +
+        "  \"value\": 42\n" +
+        "  // missing closing brace";
+
+    File jsonFile = createTempFile("invalid.json", invalidJsonContent);
+    TestData result = Utils.readJsonFromFile(jsonFile.getAbsolutePath(), TestData.class);
+    assertNull("Result should be null for invalid JSON", result);
+  }
+
+  /**
+   * Test reading from empty JSON file.
+   */
+  @Test
+  public void testReadJsonFromFileEmptyJson() throws IOException {
+    File jsonFile = createTempFile("empty.json", "{}");
+    TestData result = Utils.readJsonFromFile(jsonFile.getAbsolutePath(), TestData.class);
+
+    assertNotNull("Result should not be null for empty JSON", result);
+    assertNull("Name should be null", result.name);
+    assertEquals("Value should be default", 0, result.value);
+    assertFalse("Enabled should be default false", result.enabled);
+  }
+
+  /**
+   * Test getObjectMapper method.
+   */
+  @Test
+  public void testGetObjectMapper() {
+    assertNotNull("ObjectMapper should not be null", Utils.getObjectMapper());
+    assertSame("Should return same instance", Utils.getObjectMapper(), Utils.getObjectMapper());
+  }
+
+  /**
+   * Helper method to create a temporary file with given content.
+   */
+  private File createTempFile(String fileName, String content) throws IOException {
+    File file = tempDir.resolve(fileName).toFile();
+    try (FileWriter writer = new FileWriter(file)) {
+      writer.write(content);
+    }
+    return file;
   }
 }
 

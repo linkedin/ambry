@@ -154,4 +154,51 @@ public class AmbryServerTest {
           "failure during startup java.lang.IllegalArgumentException: Startup timed out waiting for data node config to be populated");
     });
   }
+
+  @Test
+  public void testPopulateDataNodeConfigWithHostnameCheck() throws Exception {
+    ClusterAgentsFactory spyClusterAgentsFactory = spy(new MockClusterAgentsFactory(false, false, 1, 1, 1));
+    DataNodeId dataNodeId = spyClusterAgentsFactory.getClusterMap().getDataNodeIds().get(0);
+    MockClusterMap spyClusterMap = spy(new MockClusterMap(false, false, 1, 1, 1, false, false, null));
+    doReturn(null).when(spyClusterMap).getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
+    doReturn(spyClusterMap).when(spyClusterAgentsFactory).getClusterMap();
+
+    // Test case 1: Matching hostnames - should call populateDataNodeConfig
+    Properties props1 = new Properties();
+    props1.setProperty("host.name", "localhost");
+    props1.setProperty("port", "1234");
+    props1.setProperty("clustermap.cluster.name", "test");
+    props1.setProperty("clustermap.datacenter.name", "DC1");
+    props1.setProperty("clustermap.host.name", "localhost"); // Same as host.name
+    props1.setProperty("clustermap.port", "1234");
+    props1.setProperty("server.datanode.config.timeout", "1"); // Short timeout for test
+
+    AmbryServer ambryServer1 = new AmbryServer(new VerifiableProperties(props1), spyClusterAgentsFactory, null,
+        new LoggingNotificationSystem(), SystemTime.getInstance(), null);
+
+    // Should timeout because populateDataNodeConfig is called but no listener triggers
+    assertException(InstantiationException.class, ambryServer1::startup, e -> {
+      assertTrue("Should timeout waiting for DataNode config", 
+          e.getMessage().contains("Startup timed out waiting for data node config to be populated"));
+    });
+
+    // Test case 2: Non-matching hostnames - should NOT call populateDataNodeConfig
+    Properties props2 = new Properties();
+    props2.setProperty("host.name", "localhost");
+    props2.setProperty("port", "1234");
+    props2.setProperty("clustermap.cluster.name", "test");
+    props2.setProperty("clustermap.datacenter.name", "DC1");
+    props2.setProperty("clustermap.host.name", "different-host"); // Different from host.name
+    props2.setProperty("clustermap.port", "1234");
+    props2.setProperty("server.datanode.config.timeout", "1"); // Short timeout for test
+
+    AmbryServer ambryServer2 = new AmbryServer(new VerifiableProperties(props2), spyClusterAgentsFactory, null,
+        new LoggingNotificationSystem(), SystemTime.getInstance(), null);
+
+    // Should also timeout, but for different reason - no DataNode config population attempted
+    assertException(InstantiationException.class, ambryServer2::startup, e -> {
+      assertTrue("Should timeout waiting for DataNode config", 
+          e.getMessage().contains("Startup timed out waiting for data node config to be populated"));
+    });
+  }
 }

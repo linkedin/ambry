@@ -622,6 +622,35 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       this.blockStateTransitionLatch.countDown();
   }
 
+  // Populate the data node config to property store
+  @Override
+  public boolean populateDataNodeConfig() {
+    // Short term solution to collect disk information via df -h, while pending DEPEND-92318.
+    Map<String, DiskInfoCollector.DiskInfo> diskInfo = DiskInfoCollector.collectDiskInfo();
+    if (!diskInfo.isEmpty()) {
+      logger.info("Populating DataNode config");
+      DataNodeConfig dataNodeConfig = new DataNodeConfig(
+          clusterMapConfig.clusterMapDatacenterName,
+          clusterMapConfig.clusterMapHostName,
+          clusterMapConfig.clusterMapDefaultHttp2Port,
+          clusterMapConfig.clusterMapDefaultPort,
+          clusterMapConfig.clusterMapDefaultSslPort);
+      for (Map.Entry<String, DiskInfoCollector.DiskInfo> entry : diskInfo.entrySet()) {
+        // e.g. /mnt/u001/ambrydata
+        String mountPath = entry.getKey();
+        // Calculate capacity with reserved space
+        long totalCapacity = entry.getValue().getSizeInBytes();
+        long availableCapacity = (long) (totalCapacity * (1.0 - clusterMapConfig.clusterMapReserveDiskSpacePercentage));
+        DataNodeConfig.DiskConfig diskConfig =
+            new DataNodeConfig.DiskConfig(HardwareState.AVAILABLE, availableCapacity);
+        dataNodeConfig.addDiskConfig(mountPath, diskConfig);
+      }
+      return dataNodeConfigSource.set(dataNodeConfig);
+    }
+    logger.error("No disk information collected, nothing to populate");
+    return false;
+  }
+
   /**
    * A zookeeper based implementation for distributed lock.
    */

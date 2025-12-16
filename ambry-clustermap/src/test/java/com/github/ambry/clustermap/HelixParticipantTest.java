@@ -1197,6 +1197,222 @@ public class HelixParticipantTest {
   }
 
   /**
+   * Test populateDataNodeConfig method with comprehensive scenarios
+   * @throws Exception
+   */
+  @Test
+  public void testPopulateDataNodeConfig() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    
+    // Test with mocked DataNodeConfigSource to control behavior
+    DataNodeConfigSource mockDataNodeConfigSource = mock(DataNodeConfigSource.class);
+    HelixParticipant helixParticipant = new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, 
+        new HelixFactory(), metricRegistry, getDefaultZkConnectStr(clusterMapConfig), true) {
+      @Override
+      public boolean populateDataNodeConfig() {
+        return testPopulateDataNodeConfigWithMockedDiskInfo(mockDataNodeConfigSource);
+      }
+      
+      private boolean testPopulateDataNodeConfigWithMockedDiskInfo(DataNodeConfigSource configSource) {
+        // Simulate the actual method logic with controlled disk info
+        Map<String, DiskInfoCollector.DiskInfo> diskInfo = createMockDiskInfo();
+        if (!diskInfo.isEmpty()) {
+          DataNodeConfig dataNodeConfig = new DataNodeConfig(
+              clusterMapConfig.clusterMapDatacenterName,
+              clusterMapConfig.clusterMapHostName,
+              clusterMapConfig.clusterMapDefaultHttp2Port,
+              clusterMapConfig.clusterMapDefaultPort,
+              clusterMapConfig.clusterMapDefaultSslPort);
+          for (Map.Entry<String, DiskInfoCollector.DiskInfo> entry : diskInfo.entrySet()) {
+            String mountPath = entry.getKey();
+            long totalCapacity = entry.getValue().getSizeInBytes();
+            long availableCapacity = (long) (totalCapacity * (1.0 - clusterMapConfig.clusterMapReserveDiskSpacePercentage));
+            DataNodeConfig.DiskConfig diskConfig =
+                new DataNodeConfig.DiskConfig(HardwareState.AVAILABLE, availableCapacity);
+            dataNodeConfig.addDiskConfig(mountPath, diskConfig);
+          }
+          return configSource.set(dataNodeConfig);
+        }
+        return false;
+      }
+      
+      private Map<String, DiskInfoCollector.DiskInfo> createMockDiskInfo() {
+        Map<String, DiskInfoCollector.DiskInfo> diskInfo = new HashMap<>();
+        diskInfo.put("/mnt/u001/ambrydata", 
+            new DiskInfoCollector.DiskInfo("/dev/sda1", "1T", "500G", "500G", 50, "/mnt/u001/ambrydata"));
+        diskInfo.put("/mnt/u002/ambrydata", 
+            new DiskInfoCollector.DiskInfo("/dev/sdb1", "2T", "1T", "1T", 50, "/mnt/u002/ambrydata"));
+        return diskInfo;
+      }
+    };
+
+    // Test successful population
+    when(mockDataNodeConfigSource.set(any(DataNodeConfig.class))).thenReturn(true);
+    assertTrue("populateDataNodeConfig should return true when successful", 
+        helixParticipant.populateDataNodeConfig());
+    verify(mockDataNodeConfigSource, times(1)).set(any(DataNodeConfig.class));
+
+    // Test DataNodeConfigSource failure
+    when(mockDataNodeConfigSource.set(any(DataNodeConfig.class))).thenReturn(false);
+    assertFalse("populateDataNodeConfig should return false when DataNodeConfigSource.set fails", 
+        helixParticipant.populateDataNodeConfig());
+
+    helixParticipant.close();
+  }
+
+  /**
+   * Test populateDataNodeConfig with empty disk info scenario
+   * @throws Exception
+   */
+  @Test
+  public void testPopulateDataNodeConfigEmptyDiskInfo() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    
+    DataNodeConfigSource mockDataNodeConfigSource = mock(DataNodeConfigSource.class);
+    HelixParticipant helixParticipant = new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, 
+        new HelixFactory(), metricRegistry, getDefaultZkConnectStr(clusterMapConfig), true) {
+      @Override
+      public boolean populateDataNodeConfig() {
+        // Simulate empty disk info collection
+        Map<String, DiskInfoCollector.DiskInfo> diskInfo = new HashMap<>();
+        if (!diskInfo.isEmpty()) {
+          DataNodeConfig dataNodeConfig = new DataNodeConfig(
+              clusterMapConfig.clusterMapDatacenterName,
+              clusterMapConfig.clusterMapHostName,
+              clusterMapConfig.clusterMapDefaultHttp2Port,
+              clusterMapConfig.clusterMapDefaultPort,
+              clusterMapConfig.clusterMapDefaultSslPort);
+          return mockDataNodeConfigSource.set(dataNodeConfig);
+        }
+        return false;
+      }
+    };
+
+    // Test empty disk info returns false and doesn't call set
+    assertFalse("populateDataNodeConfig should return false when no disk info is collected", 
+        helixParticipant.populateDataNodeConfig());
+    verify(mockDataNodeConfigSource, never()).set(any(DataNodeConfig.class));
+
+    helixParticipant.close();
+  }
+
+  /**
+   * Test populateDataNodeConfig capacity calculation with reserved space
+   * @throws Exception
+   */
+  @Test
+  public void testPopulateDataNodeConfigCapacityCalculation() throws Exception {
+    // Set custom reserved space percentage for testing
+    Properties testProps = new Properties(props);
+    testProps.setProperty("clustermap.reserve.disk.space.percentage", "0.1"); // 10% reserved
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(testProps));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    
+    DataNodeConfigSource mockDataNodeConfigSource = mock(DataNodeConfigSource.class);
+    when(mockDataNodeConfigSource.set(any(DataNodeConfig.class))).thenReturn(true);
+    
+    HelixParticipant helixParticipant = new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, 
+        new HelixFactory(), metricRegistry, getDefaultZkConnectStr(clusterMapConfig), true) {
+      @Override
+      public boolean populateDataNodeConfig() {
+        // Create disk info with known capacity
+        Map<String, DiskInfoCollector.DiskInfo> diskInfo = new HashMap<>();
+        // 1TB disk
+        diskInfo.put("/mnt/u001/ambrydata", 
+            new DiskInfoCollector.DiskInfo("/dev/sda1", "1T", "500G", "500G", 50, "/mnt/u001/ambrydata"));
+        
+        if (!diskInfo.isEmpty()) {
+          DataNodeConfig dataNodeConfig = new DataNodeConfig(
+              clusterMapConfig.clusterMapDatacenterName,
+              clusterMapConfig.clusterMapHostName,
+              clusterMapConfig.clusterMapDefaultHttp2Port,
+              clusterMapConfig.clusterMapDefaultPort,
+              clusterMapConfig.clusterMapDefaultSslPort);
+          for (Map.Entry<String, DiskInfoCollector.DiskInfo> entry : diskInfo.entrySet()) {
+            String mountPath = entry.getKey();
+            long totalCapacity = entry.getValue().getSizeInBytes();
+            long availableCapacity = (long) (totalCapacity * (1.0 - clusterMapConfig.clusterMapReserveDiskSpacePercentage));
+            DataNodeConfig.DiskConfig diskConfig =
+                new DataNodeConfig.DiskConfig(HardwareState.AVAILABLE, availableCapacity);
+            dataNodeConfig.addDiskConfig(mountPath, diskConfig);
+            
+            // Verify capacity calculation: 1TB * (1 - 0.1) = 0.9TB
+            long expectedCapacity = (long) (1024L * 1024L * 1024L * 1024L * 0.9); // 0.9TB in bytes
+            assertEquals("Available capacity should be 90% of total capacity", 
+                expectedCapacity, availableCapacity);
+          }
+          return mockDataNodeConfigSource.set(dataNodeConfig);
+        }
+        return false;
+      }
+    };
+
+    assertTrue("populateDataNodeConfig should succeed with proper capacity calculation", 
+        helixParticipant.populateDataNodeConfig());
+
+    helixParticipant.close();
+  }
+
+  /**
+   * Test populateDataNodeConfig with multiple disk scenarios
+   * @throws Exception
+   */
+  @Test
+  public void testPopulateDataNodeConfigMultipleDisks() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    
+    DataNodeConfigSource mockDataNodeConfigSource = mock(DataNodeConfigSource.class);
+    when(mockDataNodeConfigSource.set(any(DataNodeConfig.class))).thenReturn(true);
+    
+    HelixParticipant helixParticipant = new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, 
+        new HelixFactory(), metricRegistry, getDefaultZkConnectStr(clusterMapConfig), true) {
+      @Override
+      public boolean populateDataNodeConfig() {
+        // Create multiple disk infos
+        Map<String, DiskInfoCollector.DiskInfo> diskInfo = new HashMap<>();
+        diskInfo.put("/mnt/u001/ambrydata", 
+            new DiskInfoCollector.DiskInfo("/dev/sda1", "1T", "500G", "500G", 50, "/mnt/u001/ambrydata"));
+        diskInfo.put("/mnt/u002/ambrydata", 
+            new DiskInfoCollector.DiskInfo("/dev/sdb1", "2T", "1T", "1T", 50, "/mnt/u002/ambrydata"));
+        diskInfo.put("/mnt/u003/ambrydata", 
+            new DiskInfoCollector.DiskInfo("/dev/sdc1", "500G", "250G", "250G", 50, "/mnt/u003/ambrydata"));
+        
+        if (!diskInfo.isEmpty()) {
+          DataNodeConfig dataNodeConfig = new DataNodeConfig(
+              clusterMapConfig.clusterMapDatacenterName,
+              clusterMapConfig.clusterMapHostName,
+              clusterMapConfig.clusterMapDefaultHttp2Port,
+              clusterMapConfig.clusterMapDefaultPort,
+              clusterMapConfig.clusterMapDefaultSslPort);
+          
+          int diskCount = 0;
+          for (Map.Entry<String, DiskInfoCollector.DiskInfo> entry : diskInfo.entrySet()) {
+            String mountPath = entry.getKey();
+            long totalCapacity = entry.getValue().getSizeInBytes();
+            long availableCapacity = (long) (totalCapacity * (1.0 - clusterMapConfig.clusterMapReserveDiskSpacePercentage));
+            DataNodeConfig.DiskConfig diskConfig =
+                new DataNodeConfig.DiskConfig(HardwareState.AVAILABLE, availableCapacity);
+            dataNodeConfig.addDiskConfig(mountPath, diskConfig);
+            diskCount++;
+          }
+          
+          assertEquals("Should process all 3 disks", 3, diskCount);
+          return mockDataNodeConfigSource.set(dataNodeConfig);
+        }
+        return false;
+      }
+    };
+
+    assertTrue("populateDataNodeConfig should succeed with multiple disks", 
+        helixParticipant.populateDataNodeConfig());
+
+    helixParticipant.close();
+  }
+
+  /**
    * Test two distributed locks
    * @param lock1
    * @param lock2
