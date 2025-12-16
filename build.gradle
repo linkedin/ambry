@@ -205,6 +205,9 @@ project(':ambry-utils') {
         implementation "org.json:json:$jsonVersion"
         implementation "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         implementation "io.netty:netty-all:$nettyVersion"
+        implementation "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
+        implementation "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
+        implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
         testImplementation project(":ambry-test-utils")
         testImplementation "io.netty:netty-transport-native-epoll:$nettyVersion"
         testImplementation "commons-io:commons-io:$commonsIoVersion"

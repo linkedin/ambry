@@ -217,6 +217,13 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
+    public boolean populateDataNodeConfig() {
+      // Mock cluster participant doesn't support populating data node config.
+      // Return false to indicate this operation is not supported.
+      return false;
+    }
+
+    @Override
     public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
       String replicaPath = replicaId.getReplicaPath();
       switch (replicaSealStatus) {

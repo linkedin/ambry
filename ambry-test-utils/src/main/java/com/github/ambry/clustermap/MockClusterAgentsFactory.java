@@ -99,6 +99,13 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
+        public boolean populateDataNodeConfig() {
+          // Mock cluster doesn't support populating data node config.
+          // Return false to indicate this operation is not supported.
+          return false;
+        }
+
+        @Override
         public void close() {
 
         }
