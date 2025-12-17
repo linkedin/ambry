@@ -36,6 +36,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.router.ReadableStreamChannelWrapperFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
@@ -73,6 +74,8 @@ public class GetBlobHandler {
   private final QuotaManager quotaManager;
   private final GetReplicasHandler getReplicasHandler;
   private final AccountService accountService;
+  private ReadableStreamChannelWrapperFactory channelWrapperFactory = null;
+
 
   GetBlobHandler(FrontendConfig frontendConfig, Router router, SecurityService securityService, IdConverter idConverter,
       AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
@@ -87,6 +90,14 @@ public class GetBlobHandler {
     this.quotaManager = quotaManager;
     getReplicasHandler = new GetReplicasHandler(metrics, clusterMap);
     this.accountService = accountService;
+    if (frontendConfig.readableStreamChannelWrapperFactory != null) {
+      try {
+        channelWrapperFactory = Utils.getObj(frontendConfig.readableStreamChannelWrapperFactory, clusterMap, metrics);
+      } catch (ReflectiveOperationException e) {
+        LOGGER.warn("Failed to create ReadableStreamChannelWrapperFactory from factory: {}",
+            frontendConfig.readableStreamChannelWrapperFactory, e);
+      }
+    }
   }
 
   public void handle(RequestPath requestPath, RestRequest restRequest, RestResponseChannel restResponseChannel,
@@ -102,7 +113,7 @@ public class GetBlobHandler {
     }
     restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
     new CallbackChain(restRequest, restResponseChannel, metricsGroup, requestPath, subResource, options,
-        callback).start();
+        callback, channelWrapperFactory).start();
   }
 
   private class CallbackChain {
@@ -114,15 +125,19 @@ public class GetBlobHandler {
     private final SubResource subResource;
     private final GetBlobOptions options;
     private String blobIdStr;
+    private long requestStartTimeMs;
+    private final ReadableStreamChannelWrapperFactory channelWrapperFactory;
+
 
     /**
-     * @param restRequest the {@link RestRequest}.
-     * @param restResponseChannel the {@link RestResponseChannel}.
-     * @param finalCallback the {@link Callback} to call on completion.
+     * @param restRequest                  the {@link RestRequest}.
+     * @param restResponseChannel          the {@link RestResponseChannel}.
+     * @param finalCallback                the {@link Callback} to call on completion.
+     * @param channelWrapperFactory         the {@link ReadableStreamChannelWrapperFactory} to wrap the response channel if needed.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
         RestRequestMetricsGroup metricsGroup, RequestPath requestPath, SubResource subResource, GetBlobOptions options,
-        Callback<ReadableStreamChannel> finalCallback) {
+        Callback<ReadableStreamChannel> finalCallback, ReadableStreamChannelWrapperFactory channelWrapperFactory) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.metricsGroup = metricsGroup;
@@ -130,6 +145,7 @@ public class GetBlobHandler {
       this.subResource = subResource;
       this.options = options;
       this.finalCallback = finalCallback;
+      this.channelWrapperFactory = channelWrapperFactory;
     }
 
     /**
@@ -193,6 +209,7 @@ public class GetBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.getSecurityPostProcessRequestMetrics, result -> {
         if (subResource == null) {
+          requestStartTimeMs = System.currentTimeMillis();
           if (blobId == null) {
             router.getBlob(restRequest, blobIdStr, options, routerCallback(),
                 QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
@@ -260,6 +277,9 @@ public class GetBlobHandler {
             ReadableStreamChannel response = result.getBlobDataChannel();
             if (subResource == null) {
               response = closeChannelIfNotModified(result);
+              if (response != null && channelWrapperFactory != null) {
+                response = channelWrapperFactory.wrap(response, requestStartTimeMs, metrics);
+              }
             } else {
               switch (subResource) {
                 case BlobInfo:

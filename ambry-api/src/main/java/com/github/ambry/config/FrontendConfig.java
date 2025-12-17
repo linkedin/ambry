@@ -65,6 +65,8 @@ public class FrontendConfig {
   private static final String DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = "GetBlob,GetBlobInfo,GetSignedUrl";
 
   public static final String ENABLE_DELIMITER = PREFIX + "enable.delimiter";
+  public static final String READABLE_STREAM_CHANNEL_WRAPPER_FACTORY =
+      PREFIX + "readable.stream.channel.wrapper.factory";
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -317,6 +319,10 @@ public class FrontendConfig {
   @Default("false")
   public final boolean enableDelimiter;
 
+  @Config(READABLE_STREAM_CHANNEL_WRAPPER_FACTORY)
+  @Default("")
+  public final String readableStreamChannelWrapperFactory;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -384,6 +390,7 @@ public class FrontendConfig {
     this.listMaxResults =
         verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
     enableDelimiter = verifiableProperties.getBoolean(ENABLE_DELIMITER, false);
+    readableStreamChannelWrapperFactory = verifiableProperties.getString(READABLE_STREAM_CHANNEL_WRAPPER_FACTORY, "");
   }
 
   /**
