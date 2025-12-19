@@ -69,6 +69,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
     List<NamedBlobRow> rows = getInternal(accountName, containerName, blobName, NamedBlobState.READY);
     if (rows.isEmpty()) {
       future.completeExceptionally(new RestServiceException("NotFound", RestServiceErrorCode.NotFound));
+      return future;
     }
 
     NamedBlobRecord recordWithDelete = rows.get(rows.size() - 1).getRecord();
@@ -76,6 +77,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
         && recordWithDelete.getExpirationTimeMs() < time.milliseconds() && !includeDeletedOrExpiredOptions.contains(
         option)) {
       future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
+      return future;
     } else {
       future.complete(recordWithDelete);
     }
@@ -192,6 +194,7 @@ public class InMemNamedBlobDb implements NamedBlobDb {
     List<NamedBlobRow> rows = getInternal(accountName, containerName, blobName);
     if (rows.isEmpty()) {
       future.completeExceptionally(new RestServiceException("NotFound", RestServiceErrorCode.NotFound));
+      return future;
     } else {
       List<DeleteResult.BlobVersion> blobVersions = new ArrayList<>();
       for (NamedBlobRow row : rows) {
