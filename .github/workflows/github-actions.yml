@@ -48,12 +48,11 @@ jobs:
           npm install -g azurite
           azurite --silent &
 
-      - uses: burrunan/gradle-cache-action@v1
-        name: Run unit tests excluding ambry-store
-        with:
-          job-id: jdk11
-          arguments: --scan -x :ambry-store:test build codeCoverageReport
-          gradle-version: wrapper
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Run unit tests excluding ambry-store
+        run: ./gradlew --scan -x :ambry-store:test build codeCoverageReport
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -77,12 +76,11 @@ jobs:
           java-version: '11'
           distribution: 'adopt'
 
-      - uses: burrunan/gradle-cache-action@v1
-        name: Run unit tests for ambry-store
-        with:
-          job-id: jdk11
-          arguments: --scan :ambry-store:test codeCoverageReport
-          gradle-version: wrapper
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Run unit tests for ambry-store
+        run: ./gradlew --scan :ambry-store:test codeCoverageReport
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -125,12 +123,11 @@ jobs:
           mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
           mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
 
-      - uses: burrunan/gradle-cache-action@v1
-        name: Run integration tests excluding server integration test
-        with:
-          job-id: jdk11
-          arguments: --scan intTest -x :ambry-server:intTest codeCoverageReport
-          gradle-version: wrapper
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Run integration tests excluding server integration test
+        run: ./gradlew --scan intTest -x :ambry-server:intTest codeCoverageReport
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -173,12 +170,11 @@ jobs:
           mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
           mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
 
-      - uses: burrunan/gradle-cache-action@v1
-        name: Run integration tests
-        with:
-          job-id: jdk11
-          arguments: --scan :ambry-server:intTest codeCoverageReport
-          gradle-version: wrapper
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Run integration tests
+        run: ./gradlew --scan :ambry-server:intTest codeCoverageReport
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -207,23 +203,14 @@ jobs:
           java-version: '11'
           distribution: 'adopt'
 
-      - uses: burrunan/gradle-cache-action@v1
-        name: Build artifacts and create pom files
-        with:
-          job-id: jdk11
-          arguments: --scan assemble publishToMavenLocal
-          gradle-version: wrapper
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      - uses: burrunan/gradle-cache-action@v1
-        name: Test publication by uploading in dry run mode
-        with:
-          job-id: jdk11
-          arguments: -i --scan artifactoryPublishAll -Partifactory.dryRun
-          gradle-version: wrapper
+      - name: Build artifacts and create pom files
+        run: ./gradlew --scan assemble publishToMavenLocal
 
-      - uses: burrunan/gradle-cache-action@v1
-        name: Tag and upload to JFrog Artifactory
-        with:
-          job-id: jdk11
-          arguments: -i --scan ciPerformRelease
-          gradle-version: wrapper
+      - name: Test publication by uploading in dry run mode
+        run: ./gradlew -i --scan artifactoryPublishAll -Partifactory.dryRun
+
+      - name: Tag and upload to JFrog Artifactory
+        run: ./gradlew -i --scan ciPerformRelease
