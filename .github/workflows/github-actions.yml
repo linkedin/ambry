@@ -48,12 +48,10 @@ jobs:
           npm install -g azurite
           azurite --silent &
 
-      - uses: burrunan/gradle-cache-action@v1
+      - uses: gradle/gradle-build-action@v2
         name: Run unit tests excluding ambry-store
         with:
-          job-id: jdk11
           arguments: --scan -x :ambry-store:test build codeCoverageReport
-          gradle-version: wrapper
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -77,12 +75,10 @@ jobs:
           java-version: '11'
           distribution: 'adopt'
 
-      - uses: burrunan/gradle-cache-action@v1
+      - uses: gradle/gradle-build-action@v2
         name: Run unit tests for ambry-store
         with:
-          job-id: jdk11
           arguments: --scan :ambry-store:test codeCoverageReport
-          gradle-version: wrapper
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -125,12 +121,10 @@ jobs:
           mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
           mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
 
-      - uses: burrunan/gradle-cache-action@v1
+      - uses: gradle/gradle-build-action@v2
         name: Run integration tests excluding server integration test
         with:
-          job-id: jdk11
           arguments: --scan intTest -x :ambry-server:intTest codeCoverageReport
-          gradle-version: wrapper
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -173,12 +167,10 @@ jobs:
           mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
           mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
 
-      - uses: burrunan/gradle-cache-action@v1
+      - uses: gradle/gradle-build-action@v2
         name: Run integration tests
         with:
-          job-id: jdk11
           arguments: --scan :ambry-server:intTest codeCoverageReport
-          gradle-version: wrapper
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -207,23 +199,17 @@ jobs:
           java-version: '11'
           distribution: 'adopt'
 
-      - uses: burrunan/gradle-cache-action@v1
+      - uses: gradle/gradle-build-action@v2
         name: Build artifacts and create pom files
         with:
-          job-id: jdk11
           arguments: --scan assemble publishToMavenLocal
-          gradle-version: wrapper
 
-      - uses: burrunan/gradle-cache-action@v1
+      - uses: gradle/gradle-build-action@v2
         name: Test publication by uploading in dry run mode
         with:
-          job-id: jdk11
           arguments: -i --scan artifactoryPublishAll -Partifactory.dryRun
-          gradle-version: wrapper
 
-      - uses: burrunan/gradle-cache-action@v1
+      - uses: gradle/gradle-build-action@v2
         name: Tag and upload to JFrog Artifactory
         with:
-          job-id: jdk11
           arguments: -i --scan ciPerformRelease
-          gradle-version: wrapper
