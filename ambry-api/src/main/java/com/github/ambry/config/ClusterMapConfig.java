@@ -417,6 +417,55 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean enableFileCopyProtocol;
 
+  /**
+   * Path to the nimbus service metadata file containing instance information.
+   */
+  @Config("clustermap.nimbus.service.metadata.file.path")
+  @Default("")
+  public final String nimbusServiceMetadataFilePath;
+
+  /**
+   * Path to the LiStatefulSet metadata file containing Kubernetes StatefulSet information.
+   */
+  @Config("clustermap.listatefulset.metadata.file.path")
+  @Default("")
+  public final String liStatefulSetMetadataFilePath;
+
+  /**
+   * Percentage of disk space to reserve (0.0 to 1.0).
+   */
+  @Config("clustermap.reserve.disk.space.percentage")
+  @Default("0.0")
+  public final double clusterMapReserveDiskSpacePercentage;
+
+  /**
+   * Prefix for resource tags in cluster map.
+   */
+  @Config("clustermap.resource.tag.prefix")
+  @Default("")
+  public final String clusterMapResourceTagPrefix;
+
+  /**
+   * Default HTTP2 port for cluster nodes.
+   */
+  @Config("clustermap.default.http2.port")
+  @Default("0")
+  public final int clusterMapDefaultHttp2Port;
+
+  /**
+   * Default port for cluster nodes.
+   */
+  @Config("clustermap.default.port")
+  @Default("0")
+  public final int clusterMapDefaultPort;
+
+  /**
+   * Default SSL port for cluster nodes.
+   */
+  @Config("clustermap.default.ssl.port")
+  @Default("0")
+  public final int clusterMapDefaultSslPort;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -508,5 +557,12 @@ public class ClusterMapConfig {
     routerPutSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
     clusterMapPartitionFilteringEnabled = verifiableProperties.getBoolean(PARTITION_FILTERING_ENABLED, false);
     enableFileCopyProtocol = verifiableProperties.getBoolean(ENABLE_FILE_COPY_PROTOCOL, false);
+    nimbusServiceMetadataFilePath = verifiableProperties.getString("clustermap.nimbus.service.metadata.file.path", "");
+    liStatefulSetMetadataFilePath = verifiableProperties.getString("clustermap.listatefulset.metadata.file.path", "");
+    clusterMapReserveDiskSpacePercentage = verifiableProperties.getDouble("clustermap.reserve.disk.space.percentage", 0.0);
+    clusterMapResourceTagPrefix = verifiableProperties.getString("clustermap.resource.tag.prefix", "");
+    clusterMapDefaultHttp2Port = verifiableProperties.getInt("clustermap.default.http2.port", 0);
+    clusterMapDefaultPort = verifiableProperties.getInt("clustermap.default.port", 0);
+    clusterMapDefaultSslPort = verifiableProperties.getInt("clustermap.default.ssl.port", 0);
   }
 }
