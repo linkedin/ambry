@@ -94,5 +94,29 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
     }
     return helixParticipants;
   }
+
+  /**
+   * Get the ClusterMapConfig. Exposed for subclasses.
+   * @return the {@link ClusterMapConfig} associated with this factory.
+   */
+  protected ClusterMapConfig getClusterMapConfig() {
+    return clusterMapConfig;
+  }
+
+  /**
+   * Get the HelixFactory. Exposed for subclasses.
+   * @return the {@link HelixFactory} used by this factory.
+   */
+  protected HelixFactory getHelixFactory() {
+    return helixFactory;
+  }
+
+  /**
+   * Get the MetricRegistry. Exposed for subclasses.
+   * @return the {@link MetricRegistry} used by this factory.
+   */
+  protected MetricRegistry getMetricRegistry() {
+    return metricRegistry;
+  }
 }
 

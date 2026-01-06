@@ -72,7 +72,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -1649,50 +1648,5 @@ public class Utils {
       // Apache Commons Base64 is very lenient - it ignores invalid characters and handles improper padding
       return org.apache.commons.codec.binary.Base64.decodeBase64(base64String);
     }
-  }
-
-  // JSON file utilities
-  private static final ObjectMapper objectMapper = new ObjectMapper();
-
-  /**
-   * Read and parse a JSON file into the specified class type.
-   * @param filePath the path to the JSON file
-   * @param clazz the class type to deserialize into
-   * @param <T> the type of the class
-   * @return instance of the specified class, or null if file cannot be read or parsed
-   */
-  public static <T> T readJsonFromFile(String filePath, Class<T> clazz) {
-    if (filePath == null || filePath.trim().isEmpty()) {
-      logger.warn("JSON file path is null or empty for class: {}", clazz.getSimpleName());
-      return null;
-    }
-
-    File jsonFile = new File(filePath);
-    if (!jsonFile.exists()) {
-      logger.warn("JSON file does not exist: {} for class: {}", filePath, clazz.getSimpleName());
-      return null;
-    }
-
-    if (!jsonFile.canRead()) {
-      logger.warn("Cannot read JSON file: {} for class: {}", filePath, clazz.getSimpleName());
-      return null;
-    }
-
-    try {
-      T instance = objectMapper.readValue(jsonFile, clazz);
-      logger.info("Successfully read {} from: {}", clazz.getSimpleName(), filePath);
-      return instance;
-    } catch (IOException e) {
-      logger.error("Failed to parse JSON file: {} for class: {}", filePath, clazz.getSimpleName(), e);
-      return null;
-    }
-  }
-
-  /**
-   * Get the shared ObjectMapper instance.
-   * @return the ObjectMapper instance
-   */
-  public static ObjectMapper getObjectMapper() {
-    return objectMapper;
   }
 }

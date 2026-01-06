@@ -39,7 +39,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 public class HelixFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(HelixFactory.class);
-  private static final String DOMAIN_TEMPLATE = "mz=%s,host=%s,applicationInstanceId=%s";
 
   // exposed for use in testing
   private final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
@@ -119,30 +118,6 @@ public class HelixFactory {
         instanceConfigBuilder.setPort(port);
       }
 
-      NimbusServiceMetadata nimbusMetadata = NimbusServiceMetadata.readFromFile(clusterMapConfig.nimbusServiceMetadataFilePath);
-      if (nimbusMetadata != null) {
-        LOGGER.info("Loaded nimbus service metadata - AppInstanceID: {}, NodeName: {}, MaintenanceZone: {}",
-            nimbusMetadata.getAppInstanceID(), nimbusMetadata.getNodeName(), nimbusMetadata.getMaintenanceZone());
-        instanceConfigBuilder.setDomain(String.format(DOMAIN_TEMPLATE, nimbusMetadata.getMaintenanceZone(), nimbusMetadata.getNodeName(), nimbusMetadata.getAppInstanceID()));
-      }
-
-      LiStatefulSetMetadata liStatefulSetMetadata = LiStatefulSetMetadata.readFromFile(clusterMapConfig.liStatefulSetMetadataFilePath);
-      if (liStatefulSetMetadata != null) {
-        List<String> resourceTags = liStatefulSetMetadata.getResourceTags();
-        LOGGER.info("Loaded LiStatefulSet metadata - Name: {}, ResourceTags: {}",
-            liStatefulSetMetadata.getName(), resourceTags);
-        for (String resourceTag : resourceTags) {
-          instanceConfigBuilder.addTag(clusterMapConfig.clusterMapResourceTagPrefix + resourceTag);
-        }
-      }
-
-      // Short term solution to collect disk information via df -h, while pending DEPEND-92318.
-      Map<String, DiskInfoCollector.DiskInfo> diskInfo = DiskInfoCollector.collectDiskInfo();
-      if (!diskInfo.isEmpty()) {
-        Map<String, Integer> capacityMap = calculateInstanceCapacityMap(diskInfo, clusterMapConfig);
-        instanceConfigBuilder.setInstanceCapacityMap(capacityMap);
-      }
-
       HelixManagerProperty participantHelixProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(instanceConfigBuilder).build();
       HelixManagerProperty defaultHelixManagerProperty = new HelixManagerProperty.Builder().setDefaultInstanceConfigBuilder(new InstanceConfig.Builder()).build();
 
@@ -156,22 +131,6 @@ public class HelixFactory {
 
 
     return helixManager;
-  }
-
-  /**
-   * Calculate the capacity map for the instance based on the disk information.
-   * @param diskInfo the disk information.
-   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
-   * @return the capacity map for the instance.
-   */
-  private Map<String, Integer> calculateInstanceCapacityMap(Map<String, DiskInfoCollector.DiskInfo> diskInfo, ClusterMapConfig clusterMapConfig) {
-    long totalDiskCapacity = DiskInfoCollector.getTotalCapacity(diskInfo);
-    // Convert to GiB and apply reserved space
-    int capacityGiB = (int) (totalDiskCapacity / (1024.0 * 1024.0 * 1024.0) * (1.0 - clusterMapConfig.clusterMapReserveDiskSpacePercentage));
-    // Create the capacity map
-    Map<String, Integer> capacityMap = new HashMap<>();
-    capacityMap.put("DISK", capacityGiB);
-    return capacityMap;
   }
 
   /**

@@ -48,23 +48,7 @@ public class ClusterMapConfig {
   public static final String PARTITION_FILTERING_ENABLED = "clustermap.enable.partition.filtering";
 
   public static final String ENABLE_FILE_COPY_PROTOCOL = "clustermap.enable.file.copy.protocol";
-  public static final String NIMBUS_SERVICE_METADATA_FILE_PATH = "clustermap.nimbus.service.metadata.file.path";
-  public static final String LI_STATEFUL_SET_METADATA_FILE_PATH = "clustermap.listatefulset.metadata.file.path";
-  public static final String RESERVE_DISK_SPACE_PERCENTAGE = "clustermap.reserve.disk.space.percentage";
-  public static final String RESOURCE_TAG_PREFIX = "clustermap.resource.tag.prefix";
-  public static final String DEFAULT_HTTP2_PORT = "clustermap.default.http2.port";
-  public static final String DEFAULT_PORT = "clustermap.default.port";
-  public static final String DEFAULT_SSL_PORT = "clustermap.default.ssl.port";
-  
-  // Default values
-  public static final String DEFAULT_NIMBUS_SERVICE_METADATA_FILE_PATH = "./etc/metadata/nimbus-service.json";
-  public static final String DEFAULT_LI_STATEFUL_SET_METADATA_FILE_PATH = "./etc/metadata/liStatefulSet.json";
-  public static final double DEFAULT_RESERVE_DISK_SPACE_PERCENTAGE = 0.05;
-  public static final String DEFAULT_RESOURCE_TAG_PREFIX = "TAG_";
-  public static final int DEFAULT_HTTP2_PORT_VALUE = 15388;
-  public static final int DEFAULT_PORT_VALUE = 15088;
-  public static final int DEFAULT_SSL_PORT_VALUE = 15288;
-  
+
   /**
    * The factory class used to get the resource state policies.
    */
@@ -434,55 +418,6 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean enableFileCopyProtocol;
 
-  /**
-   * Path to the nimbus service metadata file containing instance information
-   */
-  @Config(NIMBUS_SERVICE_METADATA_FILE_PATH)
-  @Default(DEFAULT_NIMBUS_SERVICE_METADATA_FILE_PATH)
-  public final String nimbusServiceMetadataFilePath;
-
-  /**
-   * Path to the LiStatefulSet metadata file containing Kubernetes StatefulSet information
-   */
-  @Config(LI_STATEFUL_SET_METADATA_FILE_PATH)
-  @Default(DEFAULT_LI_STATEFUL_SET_METADATA_FILE_PATH)
-  public final String liStatefulSetMetadataFilePath;
-
-  /**
-   * Percentage of disk space to reserve, default to 5%
-   */
-  @Config(RESERVE_DISK_SPACE_PERCENTAGE)
-  @Default("" + DEFAULT_RESERVE_DISK_SPACE_PERCENTAGE)
-  public final double clusterMapReserveDiskSpacePercentage;
-
-  /**
-   * Prefix for resource tags in cluster map
-   */
-  @Config(RESOURCE_TAG_PREFIX)
-  @Default(DEFAULT_RESOURCE_TAG_PREFIX)
-  public final String clusterMapResourceTagPrefix;
-
-  /**
-   * Default HTTP2 port for cluster nodes
-   */
-  @Config(DEFAULT_HTTP2_PORT)
-  @Default("" + DEFAULT_HTTP2_PORT_VALUE)
-  public final int clusterMapDefaultHttp2Port;
-
-  /**
-   * Default port for cluster nodes
-   */
-  @Config(DEFAULT_PORT)
-  @Default("" + DEFAULT_PORT_VALUE)
-  public final int clusterMapDefaultPort;
-
-  /**
-   * Default SSL port for cluster nodes
-   */
-  @Config(DEFAULT_SSL_PORT)
-  @Default("" + DEFAULT_SSL_PORT_VALUE)
-  public final int clusterMapDefaultSslPort;
-
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -574,12 +509,5 @@ public class ClusterMapConfig {
     routerPutSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
     clusterMapPartitionFilteringEnabled = verifiableProperties.getBoolean(PARTITION_FILTERING_ENABLED, false);
     enableFileCopyProtocol = verifiableProperties.getBoolean(ENABLE_FILE_COPY_PROTOCOL, false);
-    nimbusServiceMetadataFilePath = verifiableProperties.getString(NIMBUS_SERVICE_METADATA_FILE_PATH, DEFAULT_NIMBUS_SERVICE_METADATA_FILE_PATH);
-    liStatefulSetMetadataFilePath = verifiableProperties.getString(LI_STATEFUL_SET_METADATA_FILE_PATH, DEFAULT_LI_STATEFUL_SET_METADATA_FILE_PATH);
-    clusterMapReserveDiskSpacePercentage = verifiableProperties.getDouble(RESERVE_DISK_SPACE_PERCENTAGE, DEFAULT_RESERVE_DISK_SPACE_PERCENTAGE);
-    clusterMapResourceTagPrefix = verifiableProperties.getString(RESOURCE_TAG_PREFIX, DEFAULT_RESOURCE_TAG_PREFIX);
-    clusterMapDefaultHttp2Port = verifiableProperties.getInt(DEFAULT_HTTP2_PORT, DEFAULT_HTTP2_PORT_VALUE);
-    clusterMapDefaultPort = verifiableProperties.getInt(DEFAULT_PORT, DEFAULT_PORT_VALUE);
-    clusterMapDefaultSslPort = verifiableProperties.getInt(DEFAULT_SSL_PORT, DEFAULT_SSL_PORT_VALUE);
   }
 }
