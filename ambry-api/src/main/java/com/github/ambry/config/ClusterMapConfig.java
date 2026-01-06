@@ -48,7 +48,6 @@ public class ClusterMapConfig {
   public static final String PARTITION_FILTERING_ENABLED = "clustermap.enable.partition.filtering";
 
   public static final String ENABLE_FILE_COPY_PROTOCOL = "clustermap.enable.file.copy.protocol";
-
   /**
    * The factory class used to get the resource state policies.
    */

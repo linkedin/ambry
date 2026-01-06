@@ -15,9 +15,6 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.SystemTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,7 +36,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 public class HelixFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(HelixFactory.class);
-
   // exposed for use in testing
   private final Map<ManagerKey, HelixManager> helixManagers = new ConcurrentHashMap<>();
   private final Map<String, DataNodeConfigSource> dataNodeConfigSources = new ConcurrentHashMap<>();
