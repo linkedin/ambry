@@ -364,6 +364,9 @@ public class AmbryServer {
 
         // wait for dataNode to be populated
         if (nodeId == null) {
+          if (clusterParticipant != null && !clusterParticipant.populateDataNodeConfig()) {
+            logger.error("Failed to populate data node config to property store for instance: {}", networkConfig.hostName);
+          }
           logger.info("Waiting on dataNode config to be populated...");
           if(!dataNodeLatch.await(serverConfig.serverDatanodeConfigTimeout, TimeUnit.SECONDS)) {
             throw new IllegalArgumentException("Startup timed out waiting for data node config to be populated");

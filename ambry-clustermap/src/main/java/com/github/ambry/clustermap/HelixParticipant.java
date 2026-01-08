@@ -622,6 +622,12 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       this.blockStateTransitionLatch.countDown();
   }
 
+  @Override
+  public boolean populateDataNodeConfig() {
+    // No-op in base implementation, returns true for backward compatibility.
+    return true;
+  }
+
   /**
    * A zookeeper based implementation for distributed lock.
    */
@@ -669,6 +675,22 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   protected void markDisablePartitionComplete() {
     disablePartitionsComplete = true;
+  }
+
+  /**
+   * Get the ClusterMapConfig. Exposed for subclasses.
+   * @return the {@link ClusterMapConfig} associated with this participant.
+   */
+  protected ClusterMapConfig getClusterMapConfig() {
+    return clusterMapConfig;
+  }
+
+  /**
+   * Get the DataNodeConfigSource. Exposed for subclasses.
+   * @return the {@link DataNodeConfigSource} associated with this participant.
+   */
+  protected DataNodeConfigSource getDataNodeConfigSource() {
+    return dataNodeConfigSource;
   }
 
   /**
