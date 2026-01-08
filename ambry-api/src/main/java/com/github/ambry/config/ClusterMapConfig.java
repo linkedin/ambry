@@ -417,7 +417,13 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean enableFileCopyProtocol;
 
+  /**
+   * The VerifiableProperties used to construct this config.
+   */
+  public final VerifiableProperties verifiableProperties;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
+    this.verifiableProperties = verifiableProperties;
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
     clusterMapResourceStatePolicyFactory = verifiableProperties.getString("clustermap.resourcestatepolicy.factory",
