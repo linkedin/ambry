@@ -107,8 +107,8 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         @Override
         public boolean populateDataNodeConfig() {
           // Static clustermap doesn't support populating data node config dynamically.
-          // Return false to indicate this operation is not supported.
-          return false;
+          // Return true as this is a no-op for static clustermap.
+          return true;
         }
 
         @Override

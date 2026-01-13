@@ -98,8 +98,8 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
         @Override
         public boolean populateDataNodeConfig() {
           // Recovery test cluster doesn't support populating data node config.
-          // Return false to indicate this operation is not supported.
-          return false;
+          // Return true as this is a no-op for recovery test cluster.
+          return true;
         }
 
         @Override
