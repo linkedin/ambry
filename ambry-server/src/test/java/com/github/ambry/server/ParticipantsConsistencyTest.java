@@ -219,8 +219,8 @@ public class ParticipantsConsistencyTest {
     @Override
     public boolean populateDataNodeConfig() {
       // Mock cluster participant doesn't support populating data node config.
-      // Return false to indicate this operation is not supported.
-      return false;
+      // Return true as this is a no-op for mock cluster participant.
+      return true;
     }
 
     @Override
