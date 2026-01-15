@@ -1656,6 +1656,16 @@ public class ReplicaThread implements Runnable {
                 StoreKey key = messageInfo.getStoreKey();
                 if (key instanceof BlobId) {
                   BlobId blobId = (BlobId) key;
+                  if (logger.isTraceEnabled()) {
+                    long timeDifferenceInSeconds =
+                        (time.milliseconds() - messageInfo.getOperationTimeMs()) / Time.MsPerSec;
+                    logger.trace("Remote node: {} Thread name: {} Remote replica: {} Blob replicated: {} Partition: {} "
+                            + "Local mount path: {} Blob creation time: {} now: {} time difference in seconds {}",
+                        remoteNode, threadName, remoteReplicaInfo.getReplicaId(), blobId,
+                        remoteReplicaInfo.getReplicaId().getPartitionId(),
+                        remoteReplicaInfo.getLocalReplicaId().getMountPath(), messageInfo.getOperationTimeMs(),
+                        time.milliseconds(), timeDifferenceInSeconds);
+                  }
                   // Replication Lag should be recorded against the originating datacenter
                   replicationMetrics.updateReplicationLagInSecondsForBlob(
                       clusterMap.getDatacenterName(blobId.getDatacenterId()),
