@@ -257,6 +257,9 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityProcessResponseCallback(GetBlobResult result) {
       return buildCallback(metrics.getBlobSecurityProcessResponseMetrics, securityCheckResult -> {
+            // Record blob age metric
+            recordBlobAge(result);
+            
             ReadableStreamChannel response = result.getBlobDataChannel();
             if (subResource == null) {
               response = closeChannelIfNotModified(result);
@@ -280,6 +283,27 @@ public class GetBlobHandler {
           }, restRequest.getUri(), LOGGER,
           // Still pass result.getBlobDataChannel() to finalCallback since we already have it.
           (r, e) -> finalCallback.onCompletion(result != null ? result.getBlobDataChannel() : null, e));
+    }
+
+    /**
+     * Record the age of the blob being queried.
+     * @param result The result of the request containing blob info.
+     */
+    private void recordBlobAge(GetBlobResult result) {
+      try {
+        if (result != null && result.getBlobInfo() != null && result.getBlobInfo().getBlobProperties() != null) {
+          long creationTimeInMs = result.getBlobInfo().getBlobProperties().getCreationTimeInMs();
+          long currentTimeInMs = System.currentTimeMillis();
+          long blobAgeInMs = currentTimeInMs - creationTimeInMs;
+          if (blobAgeInMs >= 0) {
+            long blobAgeInMinutes = blobAgeInMs / (60 * 1000);
+            metrics.blobAgeInMinutes.update(blobAgeInMinutes);
+          }
+        }
+      } catch (Exception e) {
+        // Log but don't fail the request if metric recording fails
+        LOGGER.debug("Failed to record blob age metric", e);
+      }
     }
 
     /**

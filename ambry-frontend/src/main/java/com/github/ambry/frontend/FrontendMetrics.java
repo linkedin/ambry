@@ -308,6 +308,9 @@ public class FrontendMetrics {
   public final Histogram listDatasetVersionProcessingTimeInMs;
   public final Histogram copyDatasetVersionProcessingTimeInMs;
 
+  // Blob age metrics
+  public final Histogram blobAgeInMinutes;
+
   private final MetricRegistry metricRegistry;
 
   /**
@@ -791,6 +794,10 @@ public class FrontendMetrics {
         MetricRegistry.name(ListDatasetVersionHandler.class, "ListDatasetVersionProcessingTimeInMs"));
     copyDatasetVersionProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(ListDatasetVersionHandler.class, "CopyDatasetVersionProcessingTimeInMs"));
+
+    // Blob age metrics
+    blobAgeInMinutes = metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "BlobAgeInMinutes"));
+
     this.metricRegistry = metricRegistry;
   }
 
