@@ -103,6 +103,10 @@ class NettyResponseChannel implements RestResponseChannel {
   private final Queue<Chunk> chunksToWrite = new ConcurrentLinkedQueue<Chunk>();
   private final Queue<Chunk> chunksAwaitingCallback = new ConcurrentLinkedQueue<Chunk>();
   private final AtomicLong chunksToWriteCount = new AtomicLong(0);
+  // Pre-wrapped ClosedChannelException that is recognized by Utils.isPossibleClientTermination()
+  // so that client disconnections are properly classified as client errors (4xx) instead of server errors (5xx)
+  private static final Exception CLIENT_CLOSED_CHANNEL_EXCEPTION =
+      Utils.convertToClientTerminationException(new ClosedChannelException());
 
   private NettyRequest request = null;
   // marked as true if force close is required because close() was called.
@@ -186,12 +190,12 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.channelStatusInconsistentCount.inc();
       } else {
         logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed.", ctx.channel());
-        writeFuture.addListener(new CleanupCallback(new ClosedChannelException()));
+        writeFuture.addListener(new CleanupCallback(CLIENT_CLOSED_CHANNEL_EXCEPTION));
       }
       FutureResult<Long> future = new FutureResult<Long>();
-      future.done(0L, new ClosedChannelException());
+      future.done(0L, CLIENT_CLOSED_CHANNEL_EXCEPTION);
       if (callback != null) {
-        callback.onCompletion(0L, new ClosedChannelException());
+        callback.onCompletion(0L, CLIENT_CLOSED_CHANNEL_EXCEPTION);
       }
       return future;
     }
@@ -211,7 +215,7 @@ class NettyResponseChannel implements RestResponseChannel {
       // the isOpen() check is not before addition to the queue because chunks need to be acknowledged in the order
       // they were received. If we don't add it to the queue and clean up, chunks may be acknowledged out of order.
       logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed", ctx.channel());
-      writeFuture.addListener(new CleanupCallback(new ClosedChannelException()));
+      writeFuture.addListener(new CleanupCallback(CLIENT_CLOSED_CHANNEL_EXCEPTION));
     } else if (finalResponseMetadata instanceof FullHttpResponse) {
       logger.debug("Scheduling a chunk cleanup on channel {} because Content-Length is 0", ctx.channel());
       Exception exception = null;
@@ -251,7 +255,7 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   @Override
   public void close() {
-    close(new ClosedChannelException());
+    close(CLIENT_CLOSED_CHANNEL_EXCEPTION);
   }
 
   @Override

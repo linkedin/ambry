@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultMaxBytesRecvByteBufAllocator;
@@ -64,7 +65,10 @@ public class NettyRequest implements RestRequest {
   // temporarily suspended. It will be resumed when the amount of data unacknowledged drops below this number. If this
   // is <=0, it is assumed that there is no limit on the size of unacknowledged data.
   static int bufferWatermark = -1;
-  private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
+  // Pre-wrapped ClosedChannelException that is recognized by Utils.isPossibleClientTermination()
+  // so that client disconnections are properly classified as client errors (4xx) instead of server errors (5xx)
+  protected static final Exception CLOSED_CHANNEL_EXCEPTION =
+      Utils.convertToClientTerminationException(new ClosedChannelException());
 
   protected final HttpRequest request;
   protected final Channel channel;
@@ -336,7 +340,7 @@ public class NettyRequest implements RestRequest {
     try {
       if (!isOpen()) {
         nettyMetrics.requestAlreadyClosedError.inc();
-        tempWrapper.invokeCallback(new ClosedChannelException());
+        tempWrapper.invokeCallback(CLOSED_CHANNEL_EXCEPTION);
       } else if (writeChannel != null) {
         throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }
