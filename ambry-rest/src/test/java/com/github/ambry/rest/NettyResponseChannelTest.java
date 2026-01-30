@@ -676,7 +676,8 @@ public class NettyResponseChannelTest {
     channel.writeInbound(request);
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    // Client termination is now properly recognized as a client error (400) instead of server error (500)
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
     assertFalse("Inconsistent value for Connection header", HttpUtil.isKeepAlive(response));
     // drain the channel of content.
     while (channel.readOutbound() != null) {
@@ -685,7 +686,7 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * ClosedChannelException is expected when write to a NettyResponseChannel and channel is inactive.
+   * Client termination exception is expected when write to a NettyResponseChannel and channel is inactive.
    */
   @Test
   public void channelInactiveTest() {
@@ -704,7 +705,9 @@ public class NettyResponseChannelTest {
       future.get();
       fail("Future.get() should throw exception.");
     } catch (InterruptedException | ExecutionException e) {
-      assertTrue("Should be ClosedChannelException", e.getCause() instanceof ClosedChannelException);
+      // The exception is now wrapped to be recognized as client termination
+      assertTrue("Should be recognized as client termination",
+          Utils.isPossibleClientTermination(e.getCause()));
     }
   }
 
