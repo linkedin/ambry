@@ -96,6 +96,19 @@ subprojects {
         // Integration tests should be able to get the same dependencies as the corresponding unit tests.
         intTestImplementation.extendsFrom testImplementation
         intTestRuntimeOnly.extendsFrom testRuntimeOnly
+
+        // This tells Gradle that the configurations used for building/running
+        // the sourceSet should inherit from your implementation bucket.
+        intTestImplementation {
+            // This is the direct fix for the 'canBeResolved=false' error
+            canBeResolved = true
+            extendsFrom testImplementation
+        }
+
+        intTestRuntimeOnly {
+            canBeResolved = true
+            extendsFrom testRuntimeOnly
+        }
     }
 
     // this test jar is used to represent a test dependency for a subproject, since depending directly on a source set
