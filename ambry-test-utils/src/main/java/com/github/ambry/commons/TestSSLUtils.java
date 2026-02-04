@@ -68,9 +68,7 @@ public class TestSSLUtils {
   private final static String TLS_V1_2_PROTOCOL = "TLSv1.2";
   private static final String SSL_V2_HELLO_PROTOCOL = "SSLv2Hello";
   private final static String ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
-  // Use modern cipher suite with forward secrecy (ECDHE) and authenticated encryption (GCM)
-  // The legacy TLS_RSA_WITH_AES_128_CBC_SHA is disabled in recent Java versions
-  private final static String SSL_CIPHER_SUITES = "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256";
+  private final static String SSL_CIPHER_SUITES = "TLS_RSA_WITH_AES_128_CBC_SHA";
   private final static String TRUSTSTORE_PASSWORD = "UnitTestTrustStorePassword";
   private final static String CLIENT_AUTHENTICATION = "required";
   private final static String KEYMANAGER_ALGORITHM = "PKIX";
