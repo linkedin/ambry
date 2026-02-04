@@ -366,8 +366,7 @@ class NettyResponseChannel implements RestResponseChannel {
     if (response == null) {
       response = responseMetadata;
     }
-    return Collections.unmodifiableList(
-        new ArrayList<>(response.headers().names()));
+    return Collections.unmodifiableList(new ArrayList<>(response.headers().names()));
   }
 
   /**
@@ -505,7 +504,8 @@ class NettyResponseChannel implements RestResponseChannel {
       GenericFutureListener<ChannelFuture> listener) {
     long writeProcessingStartTime = System.currentTimeMillis();
     boolean writtenThisTime = false;
-    if (ctx.channel().isActive() && responseMetadataWriteInitiated.compareAndSet(false, true)) {
+    boolean channelActive = ctx.channel().isActive();
+    if (channelActive && responseMetadataWriteInitiated.compareAndSet(false, true)) {
       // we do some manipulation here for chunking. According to the HTTP spec, we can have either a Content-Length
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked on 200 response. Note that sending HttpContent chunks data anyway - we are just
@@ -532,6 +532,9 @@ class NettyResponseChannel implements RestResponseChannel {
       if (request != null) {
         request.getMetricsTracker().nioMetricsTracker.markFirstByteSent();
       }
+    } else if (!channelActive) {
+      String uri = request != null ? request.getUri() : "";
+      logger.error("Channel is inactive for request {} when sending back response metadata", uri);
     }
     return writtenThisTime;
   }
@@ -553,7 +556,7 @@ class NettyResponseChannel implements RestResponseChannel {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       nettyMetrics.errorResponseProcessingTimeInMs.update(processingTime);
     } else {
-      logger.debug("Could not send error response on channel {}", ctx.channel());
+      logger.error("Could not send error response on channel {}", ctx.channel());
     }
     return responseSent;
   }
@@ -827,13 +830,13 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param exception the {@link Exception} that has to be logged.
    */
   private void log(Exception exception) {
+    String uri = "unknown";
+    RestMethod restMethod = RestMethod.UNKNOWN;
+    if (request != null) {
+      uri = request.getUri();
+      restMethod = request.getRestMethod();
+    }
     if (ctx.channel().isActive()) {
-      String uri = "unknown";
-      RestMethod restMethod = RestMethod.UNKNOWN;
-      if (request != null) {
-        uri = request.getUri();
-        restMethod = request.getRestMethod();
-      }
       if (exception instanceof RestServiceException) {
         RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
         ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
@@ -849,7 +852,8 @@ class NettyResponseChannel implements RestResponseChannel {
         logger.error("Unexpected error handling request {} with method {}", uri, restMethod, exception);
       }
     } else {
-      logger.debug("Exception encountered after channel {} became inactive", ctx.channel(), exception);
+      logger.error("Exception encountered after channel {} became inactive for request {} with method {}",
+          ctx.channel(), uri, restMethod, exception);
     }
   }
 
@@ -1117,8 +1121,8 @@ class NettyResponseChannel implements RestResponseChannel {
             writeFuture.setSuccess();
             //Don't close the request when we see 100-continue in EXPECT header.
             completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false,
-                !(nettyConfig.nettyEnableOneHundredContinue
-                    && RestUtils.isPutOrPostS3RequestAndExpectContinue(request)));
+                !(nettyConfig.nettyEnableOneHundredContinue && RestUtils.isPutOrPostS3RequestAndExpectContinue(
+                    request)));
           }
         } else {
           // otherwise there is some content to write.

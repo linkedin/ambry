@@ -141,6 +141,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       logger.error("Request {} was aborted because the channel {} became inactive", request.getUri(), ctx.channel());
       onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
     } else {
+      if (request != null) {
+        logger.error("Request {} on channel {} was already closed", request.getUri(), ctx.channel());
+      }
       close();
     }
   }
@@ -161,13 +164,14 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     try {
       if (request != null && request.isOpen() && cause instanceof Exception) {
         nettyMetrics.processorExceptionCaughtCount.inc();
+        logger.error("Swallowing request {} error on channel {}", request.getUri(), ctx.channel(), cause);
         onRequestAborted((Exception) cause);
       } else if (isOpen()) {
         if (cause instanceof RestServiceException) {
           nettyMetrics.processorRestServiceExceptionCount.inc();
           RestServiceErrorCode errorCode = ((RestServiceException) cause).getErrorCode();
           if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.BadRequest) {
-            logger.debug("Swallowing error on channel {}", ctx.channel(), cause);
+            logger.debug("Swallowing BadRequest error on channel {}", ctx.channel(), cause);
           } else {
             logger.error("Swallowing error on channel {}", ctx.channel(), cause);
           }
@@ -175,7 +179,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           // for this case, it is certain that the server hasn't made any mistakes and the exception is probably
           // due to the client closing the connection. Therefore this is logged at the DEBUG level.
           nettyMetrics.processorIOExceptionCount.inc();
-          logger.debug("Swallowing error on channel {}", ctx.channel(), cause);
+          logger.error("Swallowing error on channel {}", ctx.channel(), cause);
         } else if (cause instanceof Exception) {
           nettyMetrics.processorUnknownExceptionCount.inc();
           logger.error("Swallowing error on channel {}", ctx.channel(), cause);
@@ -186,7 +190,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         close();
       } else {
         nettyMetrics.processorErrorAfterCloseCount.inc();
-        logger.debug("Caught error on channel {} after it was closed", ctx.channel(), cause);
+        logger.error("Caught error on channel {} after it was closed", ctx.channel(), cause);
       }
     } catch (Exception e) {
       String uri = (request != null) ? request.getUri() : null;
@@ -309,8 +313,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
             request = new NettyMultipartRequest(httpRequest, ctx.channel(), nettyMetrics,
                 nettyConfig.nettyServerDenyListedQueryParams, nettyConfig.nettyMultipartPostMaxSizeBytes);
           } else {
-            request =
-                new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, nettyConfig.nettyServerDenyListedQueryParams);
+            request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics,
+                nettyConfig.nettyServerDenyListedQueryParams);
           }
           responseChannel.setRequest(request);
           logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
