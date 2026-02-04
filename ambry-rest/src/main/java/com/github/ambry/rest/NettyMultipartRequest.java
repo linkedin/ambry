@@ -111,7 +111,7 @@ class NettyMultipartRequest extends NettyRequest {
     callbackWrapper = new ReadIntoCallbackWrapper(callback);
     if (!isOpen()) {
       nettyMetrics.multipartRequestAlreadyClosedError.inc();
-      callbackWrapper.invokeCallback(CLOSED_CHANNEL_EXCEPTION);
+      callbackWrapper.invokeCallback(new ClosedChannelException());
     }
     HttpContent content = requestContents.poll();
     while (content != null) {

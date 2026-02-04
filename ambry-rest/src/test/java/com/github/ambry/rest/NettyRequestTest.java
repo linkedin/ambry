@@ -301,16 +301,10 @@ public class NettyRequestTest {
       nettyRequest.readInto(writeChannel, callback).get();
       fail("Request channel has been closed, so read should have thrown ClosedChannelException");
     } catch (ExecutionException e) {
-      // Use e.getCause() instead of Utils.getRootCause(e) to get the wrapped IOException,
-      // not the inner ClosedChannelException
-      Exception exception = (Exception) e.getCause();
-      // The exception is now wrapped to be recognized as client termination
-      assertTrue("Exception should be recognized as client termination",
-          Utils.isPossibleClientTermination(exception));
+      Exception exception = (Exception) Utils.getRootCause(e);
+      assertTrue("Exception is not ClosedChannelException", exception instanceof ClosedChannelException);
       callback.awaitCallback();
-      // Both the future and callback should receive the same wrapped exception
-      assertTrue("Callback exception should also be recognized as client termination",
-          Utils.isPossibleClientTermination(callback.exception));
+      assertEquals("Exceptions of callback and future differ", exception.getMessage(), callback.exception.getMessage());
     }
 
     try {
