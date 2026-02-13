@@ -42,6 +42,7 @@ public class AccountBuilder {
   private boolean aclInheritedByContainer = ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE;
   private RampControl rampControl = null;
   private MigrationConfig migrationConfig = null;
+  private Map<String, MigrationConfig> migrationConfigs = null;
   private final Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
 
   /**
@@ -65,6 +66,7 @@ public class AccountBuilder {
     quotaResourceType = origin.getQuotaResourceType();
     rampControl = origin.getRampControl();
     migrationConfig = origin.getMigrationConfig();
+    migrationConfigs = origin.getMigrationConfigs();
   }
 
   /**
@@ -222,6 +224,25 @@ public class AccountBuilder {
   }
 
   /**
+   * Sets fabric-specific migration configs for the account.
+   * @param migrationConfigs map of fabric name to MigrationConfig
+   * @return This builder.
+   */
+  public AccountBuilder migrationConfigs(Map<String, MigrationConfig> migrationConfigs) {
+    this.migrationConfigs = migrationConfigs;
+    return this;
+  }
+
+  /**
+   * Sets fabric-specific migration configs from JSON.
+   */
+  @JsonProperty("migrationConfigs")
+  public AccountBuilder migrationConfigsFromJson(Map<String, MigrationConfig> migrationConfigs) {
+    this.migrationConfigs = migrationConfigs;
+    return this;
+  }
+
+  /**
    * Clear the set of containers for the {@link Account} to build and add the provided ones.
    * @param containers A collection of {@link Container}s to use. Can be {@code null} to just remove all containers.
    * @return This builder.
@@ -285,6 +306,6 @@ public class AccountBuilder {
       }
     }
     return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(),
-        lastModifiedTime, quotaResourceType, rampControl, migrationConfig);
+        lastModifiedTime, quotaResourceType, rampControl, migrationConfig, migrationConfigs);
   }
 }

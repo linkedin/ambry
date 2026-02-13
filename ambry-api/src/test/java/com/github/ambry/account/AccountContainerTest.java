@@ -849,6 +849,34 @@ public class AccountContainerTest {
   }
 
   /**
+   * Test account metadata serialization with fabric-specific migrationConfigs map.
+   */
+  @Test
+  public void testAccountWithMigrationConfigsSerDe() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    // Account with migrationConfigs set.
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1", new MigrationConfig(false,
+        new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false),
+        new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    migrationConfigs.put("DC-2", new MigrationConfig(true,
+        new MigrationConfig.WriteRamp(), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    Account accountWithMigrationConfigs =
+        new AccountBuilder(refAccount).migrationConfigs(migrationConfigs).build();
+    String serializedAccountStr = mapper.writeValueAsString(accountWithMigrationConfigs);
+    Account deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
+    assertEquals("migrationConfigs should match", migrationConfigs, deserializedAccount.getMigrationConfigs());
+    assertEquals("Account should match", accountWithMigrationConfigs, deserializedAccount);
+
+    // Account with migrationConfigs not set.
+    Account accountWithoutMigrationConfigs =
+        new AccountBuilder(refAccount).migrationConfigs(null).build();
+    serializedAccountStr = mapper.writeValueAsString(accountWithoutMigrationConfigs);
+    deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
+    assertNull("migrationConfigs should be null", deserializedAccount.getMigrationConfigs());
+  }
+
+  /**
    * Test container metadata serialization with migration config.
    */
   @Test

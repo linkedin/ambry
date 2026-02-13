@@ -16,9 +16,11 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.account.MigrationConfig;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -38,7 +40,9 @@ import com.github.ambry.utils.ThrowingBiConsumer;
 import com.github.ambry.utils.ThrowingConsumer;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -195,6 +199,34 @@ public class GetAccountsHandlerTest {
     };
     testAction.accept(createRestRequest(account.getName(), null, null, Operations.ACCOUNTS));
     testAction.accept(createRestRequest(null, Short.toString(account.getId()), null, Operations.ACCOUNTS));
+  }
+
+  /**
+   * Test that an account with migrationConfigs survives a GET round-trip.
+   * @throws Exception
+   */
+  @Test
+  public void getAccountWithMigrationConfigsTest() throws Exception {
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1", new MigrationConfig());
+    migrationConfigs.put("DC-2", new MigrationConfig(true, new MigrationConfig.WriteRamp(),
+        new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    Account account = new AccountBuilder(accountService.createAndAddRandomAccount())
+        .migrationConfigs(migrationConfigs).build();
+    accountService.updateAccounts(Collections.singleton(account));
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    ReadableStreamChannel channel =
+        sendRequestGetResponse(createRestRequest(null, Short.toString(account.getId()), null, Operations.ACCOUNTS),
+            restResponseChannel);
+    assertNotNull("There should be a response", channel);
+    RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel((int) channel.getSize());
+    channel.readInto(asyncWritableChannel, null).get();
+    Account receivedAccount =
+        AccountCollectionSerde.accountsFromInputStreamInJson(asyncWritableChannel.consumeContentAsInputStream())
+            .iterator().next();
+    assertEquals("Account should match", account, receivedAccount);
+    assertEquals("migrationConfigs should match", migrationConfigs, receivedAccount.getMigrationConfigs());
   }
 
   /**
