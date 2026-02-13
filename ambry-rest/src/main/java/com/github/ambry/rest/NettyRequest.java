@@ -382,7 +382,7 @@ public class NettyRequest implements RestRequest {
    * @throws IllegalStateException if called before the channel has been emptied.
    */
   @Override
-  public byte[] getDigest() {
+  synchronized public byte[] getDigest() {
     if (digest == null) {
       return null;
     } else if (!allContentReceived) {
