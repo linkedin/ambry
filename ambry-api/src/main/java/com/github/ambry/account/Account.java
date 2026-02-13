@@ -91,7 +91,11 @@ import java.util.Set;
  *       "serveListFromSecondaryPct": 0.0,
  *       "disableFallbackToPrimary": 0.0
  *      }
- *    }
+ *    },
+ *   "migrationConfigs": {
+ *     "<e.g. fabric1>": { "overrideAccountMigrationConfig": false, "writeRamp": {...}, "readRamp": {...}, "listRamp": {...} },
+ *     "<e.g. fabric2>": { "overrideAccountMigrationConfig": false, "writeRamp": {...}, "readRamp": {...}, "listRamp": {...} }
+ *   }
  * }
  * </code></pre>
  * <p>
@@ -127,6 +131,7 @@ public class Account {
 
   // Migration config used to control and ramp up migration from one storage backend to another.
   static final String MIGRATION_CONFIG_KEY = "migrationConfig";
+  static final String MIGRATION_CONFIGS_KEY = "migrationConfigs";
 
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
@@ -152,6 +157,8 @@ public class Account {
   private final RampControl rampControl;
   @JsonProperty(MIGRATION_CONFIG_KEY)
   private final MigrationConfig migrationConfig;
+  @JsonProperty(MIGRATION_CONFIGS_KEY)
+  private final Map<String, MigrationConfig> migrationConfigs;
 
   // internal data structure
   @JsonIgnore
@@ -173,7 +180,7 @@ public class Account {
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
       Collection<Container> containers, QuotaResourceType quotaResourceType, RampControl rampControl, MigrationConfig migrationConfig) {
     this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-        quotaResourceType, rampControl, migrationConfig);
+        quotaResourceType, rampControl, migrationConfig, null);
   }
 
   /**
@@ -189,7 +196,7 @@ public class Account {
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
       Collection<Container> containers, QuotaResourceType quotaResourceType) {
     this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-        quotaResourceType, null, null);
+        quotaResourceType, null, null, null);
   }
 
   /**
@@ -205,7 +212,8 @@ public class Account {
    * @param rampControl {@link RampControl} object.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType, RampControl rampControl, MigrationConfig migrationConfig) {
+      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType,
+      RampControl rampControl, MigrationConfig migrationConfig, Map<String, MigrationConfig> migrationConfigs) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -219,6 +227,7 @@ public class Account {
     this.quotaResourceType = quotaResourceType;
     this.rampControl = rampControl;
     this.migrationConfig = migrationConfig;
+    this.migrationConfigs = migrationConfigs != null ? Collections.unmodifiableMap(migrationConfigs) : null;
   }
 
   /**
@@ -326,6 +335,13 @@ public class Account {
   }
 
   /**
+   * @return Map of fabric-specific MigrationConfigs keyed by fabric name. Can be null if not set.
+   */
+  public Map<String, MigrationConfig> getMigrationConfigs() {
+    return migrationConfigs;
+  }
+
+  /**
    * @return Whether secondary is enabled for this account.
    */
   public boolean isSecondaryEnabled() {
@@ -371,7 +387,8 @@ public class Account {
     return id == account.id && name.equals(account.name) && status == account.status
         && aclInheritedByContainer == account.aclInheritedByContainer && quotaResourceType == account.quotaResourceType
         && Objects.equals(rampControl, account.rampControl)
-        && Objects.equals(migrationConfig, account.migrationConfig);
+        && Objects.equals(migrationConfig, account.migrationConfig)
+        && Objects.equals(migrationConfigs, account.migrationConfigs);
   }
 
   @Override
