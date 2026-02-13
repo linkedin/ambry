@@ -19,6 +19,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.account.MigrationConfig;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
@@ -39,8 +40,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -92,6 +95,27 @@ public class PostAccountsHandlerTest {
       Account account = accountService.createAndAddRandomAccount();
       return new AccountBuilder(account).name(account.getName() + i).build();
     }).collect(Collectors.toList()));
+  }
+
+  /**
+   * Test posting an account with migrationConfigs.
+   * @throws Exception
+   */
+  @Test
+  public void postAccountWithMigrationConfigsTest() throws Exception {
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1", new MigrationConfig());
+    migrationConfigs.put("DC-2", new MigrationConfig(true, new MigrationConfig.WriteRamp(),
+        new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    Account account = new AccountBuilder(accountService.generateRandomAccount())
+        .migrationConfigs(migrationConfigs).build();
+
+    String requestBody = new String(AccountCollectionSerde.serializeAccountsInJson(
+        Collections.singleton(account), false));
+    sendRequestGetResponse(requestBody, new MockRestResponseChannel());
+    Account storedAccount = accountService.getAccountById(account.getId());
+    assertEquals("Account should match", account, storedAccount);
+    assertEquals("migrationConfigs should match", migrationConfigs, storedAccount.getMigrationConfigs());
   }
 
   /**
