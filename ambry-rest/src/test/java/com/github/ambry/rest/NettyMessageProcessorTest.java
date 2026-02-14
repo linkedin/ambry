@@ -384,10 +384,8 @@ public class NettyMessageProcessorTest {
     httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "continueHeaderPutRequestCloseRaceWithFixTest");
     httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
 
-    // Step 1: Send the HTTP request. This triggers handlePut() which synchronously writes a
-    // 100-continue
-    // FullHttpResponse. The DelayedContinueWriteHandler intercepts the write: the message itself is
-    // forwarded
+    // Step 1: Send the HTTP request. This triggers handlePut() which synchronously writes a 100-continue
+    // FullHttpResponse. The DelayedContinueWriteHandler intercepts the write: the message itself is forwarded
     // to the channel buffer (readable via readOutbound()), but the original promise is held.
     // Crucially, the ResponseMetadataWriteListener captures shouldCloseRequest=false at this point
     // because EXPECT is still "100-continue".
