@@ -1104,6 +1104,12 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private class ResponseMetadataWriteListener implements GenericFutureListener<ChannelFuture> {
     private final long responseWriteStartTime = System.currentTimeMillis();
+    // Capture the close decision at construction time to avoid a race condition where handleContent() clears the
+    // EXPECT header on the shared NettyRequest before this listener's operationComplete() fires.
+    // Reading the header at construction time (inside maybeWriteResponseMetadata) is safe because handleContent() has
+    // not yet run.
+    private final boolean shouldCloseRequest =
+        !(nettyConfig.nettyEnableOneHundredContinue && RestUtils.isPutOrPostS3RequestAndExpectContinue(request));
 
     /**
      * If the operation completed successfully, a write via the {@link ChunkedWriteHandler} is initiated. Otherwise,
@@ -1120,9 +1126,7 @@ class NettyResponseChannel implements RestResponseChannel {
           if (!writeFuture.isDone()) {
             writeFuture.setSuccess();
             //Don't close the request when we see 100-continue in EXPECT header.
-            completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false,
-                !(nettyConfig.nettyEnableOneHundredContinue && RestUtils.isPutOrPostS3RequestAndExpectContinue(
-                    request)));
+            completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false, shouldCloseRequest);
           }
         } else {
           // otherwise there is some content to write.
