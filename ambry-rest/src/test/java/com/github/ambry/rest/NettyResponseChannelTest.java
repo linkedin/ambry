@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.NettyConfig;
@@ -75,6 +76,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Before;
@@ -735,6 +737,52 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests error response delivery behavior matrix for 4xx/5xx on active/inactive channels.
+   */
+  @Test
+  public void errorResponseDeliveryMatrixTest() throws Exception {
+    // Active channel + 5xx => response should be sent.
+    EmbeddedChannel activeChannel = createEmbeddedChannel();
+    String sentMetricName = MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseSentCount");
+    long sentBefore = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(sentMetricName).getCount();
+    HttpRequest internalErrorRequest =
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.OnResponseCompleteWithNonRestException.toString(), null);
+    activeChannel.writeInbound(internalErrorRequest);
+    HttpResponse response = activeChannel.readOutbound();
+    assertEquals("Unexpected response status for active 5xx", HttpResponseStatus.INTERNAL_SERVER_ERROR,
+        response.status());
+    assertEquals("Sent error response should be tracked for active 5xx", sentBefore + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(sentMetricName).getCount());
+    while (activeChannel.readOutbound() != null) {
+    }
+
+    // Active channel + 4xx => response should be sent.
+    HttpHeaders badRequestHeaders = new DefaultHttpHeaders();
+    badRequestHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME,
+        RestServiceErrorCode.BadRequest);
+    sentBefore = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(sentMetricName).getCount();
+    HttpRequest badRequest =
+        RestTestUtils.createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(),
+            badRequestHeaders);
+    activeChannel.writeInbound(badRequest);
+    response = activeChannel.readOutbound();
+    assertEquals("Unexpected response status for active 4xx", HttpResponseStatus.BAD_REQUEST, response.status());
+    assertEquals("Sent error response should be tracked for active 4xx", sentBefore + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(sentMetricName).getCount());
+    while (activeChannel.readOutbound() != null) {
+    }
+    activeChannel.close();
+
+    // Inactive channel + 5xx => response should not be sent.
+    assertErrorResponseDroppedOnInactiveChannel(new RuntimeException("server error"),
+        nettyMetrics -> nettyMetrics.internalServerErrorCount);
+
+    // Inactive channel + 4xx => response should not be sent.
+    assertErrorResponseDroppedOnInactiveChannel(new RestServiceException("bad request", RestServiceErrorCode.BadRequest),
+        nettyMetrics -> nettyMetrics.badRequestCount);
+  }
+
+  /**
    * Tests that the underlying network channel is closed when {@link NettyResponseChannel#close()} is called.
    */
   @Test
@@ -1151,6 +1199,37 @@ public class NettyResponseChannelTest {
         assertFalse("Response should not contain any tracking headers", response.headers().contains(header));
       }
     }
+  }
+
+  /**
+   * Asserts that an error response is not sent when the channel is inactive.
+   * @param exception the exception to complete the response with.
+   * @param statusCounterSelector selects the status counter expected to increment (e.g. 4xx/5xx).
+   */
+  private void assertErrorResponseDroppedOnInactiveChannel(Exception exception,
+      Function<NettyMetrics, Counter> statusCounterSelector) {
+    ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+    EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    MetricRegistry metricRegistry = new MetricRegistry();
+    NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    NettyResponseChannel nettyResponseChannel =
+        new NettyResponseChannel(new MockChannelHandlerContext(channel), nettyMetrics,
+            new PerformanceConfig(verifiableProperties), new NettyConfig(verifiableProperties));
+    channel.disconnect().awaitUninterruptibly();
+    assertFalse("Channel should be inactive", channel.isActive());
+
+    long sentBefore = nettyMetrics.errorResponseSentCount.getCount();
+    long notSentBefore = nettyMetrics.errorResponseNotSentCount.getCount();
+    long statusCounterBefore = statusCounterSelector.apply(nettyMetrics).getCount();
+    nettyResponseChannel.onResponseComplete(exception);
+
+    assertNull("No response should be sent on inactive channel", channel.readOutbound());
+    assertEquals("Error response sent metric mismatch", sentBefore, nettyMetrics.errorResponseSentCount.getCount());
+    assertEquals("Error response not sent metric mismatch", notSentBefore + 1,
+        nettyMetrics.errorResponseNotSentCount.getCount());
+    assertEquals("Expected status counter should be incremented", statusCounterBefore + 1,
+        statusCounterSelector.apply(nettyMetrics).getCount());
   }
 
   // requestPerformanceEvaluationTest() helpers.
