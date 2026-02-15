@@ -548,6 +548,17 @@ class NettyResponseChannel implements RestResponseChannel {
     long processingStartTime = System.currentTimeMillis();
     boolean responseSent = false;
     logger.trace("Sending error response to client on channel {}", ctx.channel());
+    // If this is a likely client disconnect and the channel is already inactive, classify it as 4xx
+    // for accounting purposes but skip any response write attempt.
+    if (Utils.isPossibleClientTermination(exception) && !ctx.channel().isActive()) {
+      nettyMetrics.clientEarlyTerminationCount.inc();
+      nettyMetrics.clientTerminationOnInactiveChannelCount.inc();
+      errorResponseStatus = ResponseStatus.BadRequest;
+      responseStatus = errorResponseStatus;
+      logger.debug("Skipping error response write for client termination on inactive channel {}", ctx.channel());
+      nettyMetrics.errorResponseNotSentCount.inc();
+      return false;
+    }
     FullHttpResponse errorResponse = getErrorResponse(exception);
     if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
       logger.trace("Scheduled error response sending on channel {}", ctx.channel());
@@ -593,18 +604,14 @@ class NettyResponseChannel implements RestResponseChannel {
       }
     } else if (Utils.isPossibleClientTermination(cause)) {
       nettyMetrics.clientEarlyTerminationCount.inc();
-      if (ctx.channel().isActive()) {
-        nettyMetrics.clientTerminationOnActiveChannelCount.inc();
-        logger.warn("Client termination detected on ACTIVE channel {} for request {}. Exception: {}", ctx.channel(),
-            request != null ? request.getUri() : "unknown", cause.getMessage());
-        nettyMetrics.internalServerErrorCount.inc();
-        status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
-        errorResponseStatus = ResponseStatus.InternalServerError;
-      } else {
-        nettyMetrics.clientTerminationOnInactiveChannelCount.inc();
-        status = HttpResponseStatus.BAD_REQUEST;
-        errorResponseStatus = ResponseStatus.BadRequest;
-      }
+      // Inactive-channel accounting-only case is handled in maybeSendErrorResponse().
+      // Any path reaching response construction should use 500 to avoid emitting 4xx to a still-connected client.
+      nettyMetrics.clientTerminationOnActiveChannelCount.inc();
+      logger.warn("Client termination detected on ACTIVE channel {} for request {}. Exception: {}", ctx.channel(),
+          request != null ? request.getUri() : "unknown", cause.getMessage());
+      nettyMetrics.internalServerErrorCount.inc();
+      status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      errorResponseStatus = ResponseStatus.InternalServerError;
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
