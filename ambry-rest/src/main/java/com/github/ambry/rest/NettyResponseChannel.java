@@ -83,11 +83,6 @@ class NettyResponseChannel implements RestResponseChannel {
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST or PUT, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
-  static {
-    CLOSE_CONNECTION_ERROR_STATUSES.add(HttpResponseStatus.INTERNAL_SERVER_ERROR);
-    CLOSE_CONNECTION_ERROR_STATUSES.add(HttpResponseStatus.SERVICE_UNAVAILABLE);
-    CLOSE_CONNECTION_ERROR_STATUSES.add(HttpResponseStatus.BAD_REQUEST);
-  }
 
   private final ChannelHandlerContext ctx;
   private final NettyMetrics nettyMetrics;
