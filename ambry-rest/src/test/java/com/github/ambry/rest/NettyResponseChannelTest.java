@@ -600,6 +600,13 @@ public class NettyResponseChannelTest {
         channel.writeInbound(RestTestUtils.createRequest(HttpMethod.HEAD, uri.toString(), httpHeaders));
         response = channel.readOutbound();
         verifyTrackingHeaders(response, shouldTrackingHeadersExist);
+        boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(response.status());
+        assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
+        assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
+            HttpUtil.isKeepAlive(response));
+        if (!shouldBeAlive) {
+          channel = createEmbeddedChannel();
+        }
       }
       httpHeaders = new DefaultHttpHeaders();
       if (shouldTrackingHeadersExist) {
@@ -610,7 +617,15 @@ public class NettyResponseChannelTest {
       channel.writeInbound(RestTestUtils.createRequest(HttpMethod.HEAD, uri.toString(), httpHeaders));
       response = channel.readOutbound();
       verifyTrackingHeaders(response, shouldTrackingHeadersExist);
+      boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(response.status());
+      assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
+      assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
+          HttpUtil.isKeepAlive(response));
+      if (!shouldBeAlive) {
+        channel = createEmbeddedChannel();
+      }
     }
+    channel.close();
   }
 
   /**
