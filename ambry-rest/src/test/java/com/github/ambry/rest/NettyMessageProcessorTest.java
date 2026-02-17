@@ -31,6 +31,9 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
@@ -38,6 +41,7 @@ import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -345,6 +349,147 @@ public class NettyMessageProcessorTest {
     }
   }
 
+  /**
+   * Tests that the 100-continue PUT works correctly even when the write promise for the
+   * 100-continue response completes AFTER {@code handleContent()} has cleared the EXPECT header.
+   * This simulates the production scenario where the security service callback runs on a
+   * non-event-loop thread, causing the write promise to complete asynchronously.
+   *
+   * <p>Before the fix (capturing {@code shouldCloseRequest} at listener construction time), the
+   * {@code ResponseMetadataWriteListener} would re-evaluate {@code
+   * isPutOrPostS3RequestAndExpectContinue(request)} at completion time, see EXPECT="" (mutated by
+   * handleContent), and incorrectly call {@code request.close()}.
+   *
+   * <p>The fix captures the close decision when the listener is created (while EXPECT is still
+   * "100-continue"), so it correctly evaluates to {@code shouldCloseRequest=false} regardless of
+   * when the promise completes.
+   *
+   * @throws Exception
+   */
+  @Test
+  public void continueHeaderPutRequestCloseRaceWithFixTest() throws Exception {
+    notificationSystem.reset();
+    Properties properties = new Properties();
+    properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
+    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
+
+    DelayedContinueWriteHandler delayHandler = new DelayedContinueWriteHandler();
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(), processor);
+
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(EXPECT, CONTINUE);
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/s3/", headers);
+    httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "continueHeaderPutRequestCloseRaceWithFixTest");
+    httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+
+    // Step 1: Send the HTTP request. This triggers handlePut() which synchronously writes a 100-continue
+    // FullHttpResponse. The DelayedContinueWriteHandler intercepts the write: the message itself is forwarded
+    // to the channel buffer (readable via readOutbound()), but the original promise is held.
+    // Crucially, the ResponseMetadataWriteListener captures shouldCloseRequest=false at this point
+    // because EXPECT is still "100-continue".
+    channel.writeInbound(httpRequest);
+
+    // Step 2: Read and verify the 100-continue response is buffered.
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.CONTINUE, response.status());
+
+    // Step 3: Send content (not LastHttpContent). This triggers handleContent() which:
+    //   - Adds content to the request
+    //   - Detects hasContinueAndIsPutOrPost = true (EXPECT is still "100-continue")
+    //   - Clears EXPECT: request.setArg(EXPECT, "")
+    //   - Creates a new NettyResponseChannel (responseChannel2)
+    //   - Calls handleRequest(request, responseChannel2) to start the actual PUT
+    //   The PUT is now in progress but still waiting for more content (LastHttpContent not yet
+    // sent).
+    Random random = new Random();
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(random.nextInt(128) + 128));
+    channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(content)));
+
+    // Step 4: Complete the held continue write promise AFTER EXPECT has been cleared.
+    // This fires ResponseMetadataWriteListener.operationComplete() on responseChannel1.
+    // With the fix, shouldCloseRequest was captured as false at construction time, so
+    // request.close() is NOT called despite EXPECT now being "".
+    // Without the fix, this would re-read EXPECT="" and incorrectly close the request.
+    delayHandler.completeContinueWrite();
+
+    // Step 5: Send last content chunk. With the fix, the request is still open so
+    // addContent() succeeds and the PUT can complete normally.
+    // Without the fix, addContent() would throw RestServiceException(RequestChannelClosed) because
+    // the request was prematurely closed in step 4, causing exceptionCaught() to close the channel.
+    channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
+
+    // Step 6: Assert the channel is still open. This is the key assertion that differentiates
+    // the fixed vs unfixed behavior. Without the fix, the channel would be closed here because
+    // addContent() threw RestServiceException -> exceptionCaught() -> ctx.close().
+    assertTrue("Channel should still be open — the fix prevents the stale 100-continue listener from "
+        + "closing the request prematurely", channel.isOpen());
+
+    // Step 7: Assert the PUT succeeds with correct content.
+    if (!notificationSystem.operationCompleted.await(1000, TimeUnit.MILLISECONDS)) {
+      fail("Put did not succeed after 1000ms. The 100-continue write promise race condition was not fixed.");
+    }
+    ByteBuffer receivedContent = router.getActiveBlobs().get(notificationSystem.blobIdOperatedOn).getBlob();
+    compareContent(receivedContent, Collections.singletonList(content));
+  }
+
+  /**
+   * Tests that the 100-continue PUT works correctly under normal timing (no delayed promise). This
+   * is the baseline case where the write promise completes synchronously before {@code
+   * handleContent()} runs, so the {@code ResponseMetadataWriteListener} sees EXPECT="100-continue"
+   * and correctly sets {@code shouldCloseRequest=false}.
+   *
+   * <p>This test is identical to {@link #continueHeaderPutTest()} but uses the same {@link
+   * DelayedContinueWriteHandler} pipeline with the promise completed immediately (before content is
+   * sent), verifying the non-racy code path.
+   *
+   * @throws Exception
+   */
+  @Test
+  public void continueHeaderPutRequestCloseRaceWithoutDelayTest() throws Exception {
+    notificationSystem.reset();
+    Properties properties = new Properties();
+    properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
+    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
+
+    DelayedContinueWriteHandler delayHandler = new DelayedContinueWriteHandler();
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(), processor);
+
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(EXPECT, CONTINUE);
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/s3/", headers);
+    httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "continueHeaderPutRequestCloseRaceWithoutDelayTest");
+    httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+
+    // Step 1: Send the HTTP request. The DelayedContinueWriteHandler holds the promise.
+    channel.writeInbound(httpRequest);
+
+    // Step 2: Read the 100-continue response.
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.CONTINUE, response.status());
+
+    // Step 3: Complete the promise BEFORE sending content (simulating normal synchronous timing).
+    // The listener fires while EXPECT is still "100-continue", so shouldCloseRequest=false
+    // regardless of whether the fix is applied.
+    delayHandler.completeContinueWrite();
+
+    // Step 4: Send content and last content chunk.
+    Random random = new Random();
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(random.nextInt(128) + 128));
+    channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(content)));
+    channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
+
+    // Step 5: Assert the PUT succeeds normally.
+    if (!notificationSystem.operationCompleted.await(1000, TimeUnit.MILLISECONDS)) {
+      fail("Put did not succeed after 1000ms. There is an error or timeout needs to increase");
+    }
+    ByteBuffer receivedContent = router.getActiveBlobs().get(notificationSystem.blobIdOperatedOn).getBlob();
+    compareContent(receivedContent, Collections.singletonList(content));
+  }
+
   // helpers
   // general
 
@@ -590,6 +735,41 @@ public class NettyMessageProcessorTest {
     protected void reset() {
       blobIdOperatedOn = null;
       operationCompleted = new CountDownLatch(1);
+    }
+  }
+
+  /**
+   * A {@link ChannelOutboundHandlerAdapter} that intercepts the 100-continue {@link
+   * FullHttpResponse} write and delays its promise completion. This simulates the production
+   * scenario where the security service callback runs on a non-event-loop thread, causing {@code
+   * ctx.writeAndFlush()} to be scheduled asynchronously so the write promise completes after
+   * subsequent inbound processing has mutated shared state.
+   */
+  private static class DelayedContinueWriteHandler extends ChannelOutboundHandlerAdapter {
+    private ChannelPromise heldPromise;
+
+    @Override
+    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+      if (msg instanceof FullHttpResponse && ((FullHttpResponse) msg).status().equals(HttpResponseStatus.CONTINUE)) {
+        // Forward the message with a void promise so it is buffered in the channel (readable via
+        // readOutbound()),
+        // but the original promise is NOT completed — the ResponseMetadataWriteListener won't fire
+        // yet.
+        heldPromise = promise;
+        ctx.write(msg, ctx.voidPromise());
+      } else {
+        ctx.write(msg, promise);
+      }
+    }
+
+    /**
+     * Completes the held continue write promise, triggering the {@code
+     * ResponseMetadataWriteListener} that was attached to the original 100-continue response write.
+     */
+    void completeContinueWrite() {
+      if (heldPromise != null) {
+        heldPromise.setSuccess();
+      }
     }
   }
 }
