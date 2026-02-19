@@ -2206,4 +2206,98 @@ public class MySqlAccountServiceIntegrationTest {
     assertFalse("Container should not equal the original without migration config",
         fetchedContainer.equals(fetchedContainer2));
   }
+
+  /**
+   * Integration test for validating DC-specific migrationConfigs map on accounts.
+   * Covers create, update, and delete of the migrationConfigs map.
+   */
+  @Test
+  public void testAccountMigrationConfigsIntegration() throws Exception {
+    // 1. Create an account with migrationConfigs set
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1",
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 50.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    migrationConfigs.put("DC-2",
+        new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 100.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp()));
+    Account accountWithMigrationConfigs =
+        new AccountBuilder((short) 130, "migrationConfigsAccount", Account.AccountStatus.ACTIVE).migrationConfigs(
+            migrationConfigs).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountWithMigrationConfigs));
+
+    // 2. Fetch and verify migrationConfigs is persisted
+    Account fetched = mySqlAccountService.getAccountById(accountWithMigrationConfigs.getId());
+    assertNotNull("Account should exist", fetched);
+    assertNotNull("migrationConfigs should not be null", fetched.getMigrationConfigs());
+    assertEquals("migrationConfigs should have 2 entries", 2, fetched.getMigrationConfigs().size());
+    assertEquals("DC-1 async dual write percentage mismatch", 50.0,
+        fetched.getMigrationConfigs().get("DC-1").getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+    assertEquals("DC-2 async dual write percentage mismatch", 100.0,
+        fetched.getMigrationConfigs().get("DC-2").getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // 3. Update migrationConfigs to a different set of DCs
+    Map<String, MigrationConfig> updatedConfigs = new HashMap<>();
+    updatedConfigs.put("DC-3",
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(false, 30.0, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp()));
+    Account updated = new AccountBuilder(fetched).migrationConfigs(updatedConfigs).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(updated));
+
+    // 4. Fetch and verify the update
+    Account fetched2 = mySqlAccountService.getAccountById(updated.getId());
+    assertNotNull("Account should exist after update", fetched2);
+    assertNotNull("migrationConfigs should not be null after update", fetched2.getMigrationConfigs());
+    assertEquals("migrationConfigs should have 1 entry after update", 1, fetched2.getMigrationConfigs().size());
+    assertTrue("DC-3 should be present", fetched2.getMigrationConfigs().containsKey("DC-3"));
+    assertFalse("DC-1 should no longer be present", fetched2.getMigrationConfigs().containsKey("DC-1"));
+
+    // 5. Remove migrationConfigs (set to null)
+    Account removed = new AccountBuilder(fetched2).migrationConfigs(null).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(removed));
+
+    // 6. Fetch and verify migrationConfigs is null
+    Account fetched3 = mySqlAccountService.getAccountById(removed.getId());
+    assertNotNull("Account should exist after removing migrationConfigs", fetched3);
+    assertNull("migrationConfigs should be null after removal", fetched3.getMigrationConfigs());
+  }
+
+  /**
+   * Integration test for adding migrationConfigs to an existing account that was created without them.
+   * This test verifies that the equality check properly detects the migrationConfigs change.
+   */
+  @Test
+  public void testAddMigrationConfigsToExistingAccount() throws Exception {
+    // 1. Create an account WITHOUT migrationConfigs
+    Account accountWithoutMigrationConfigs =
+        new AccountBuilder((short) 131, "accountWithoutMigrationConfigs", Account.AccountStatus.ACTIVE).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(accountWithoutMigrationConfigs));
+
+    // 2. Fetch and verify migrationConfigs is null
+    Account fetched = mySqlAccountService.getAccountById(accountWithoutMigrationConfigs.getId());
+    assertNotNull("Account should exist", fetched);
+    assertNull("migrationConfigs should be null initially", fetched.getMigrationConfigs());
+
+    // 3. Update the account to ADD migrationConfigs
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1",
+        new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(false, 25.0, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp()));
+    Account updatedWithMigrationConfigs =
+        new AccountBuilder(fetched).migrationConfigs(migrationConfigs).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(updatedWithMigrationConfigs));
+
+    // 4. Fetch and verify migrationConfigs was added successfully
+    Account fetched2 = mySqlAccountService.getAccountById(updatedWithMigrationConfigs.getId());
+    assertNotNull("Account should exist after adding migrationConfigs", fetched2);
+    assertNotNull("migrationConfigs should not be null after adding", fetched2.getMigrationConfigs());
+    assertEquals("Should have 1 DC entry", 1, fetched2.getMigrationConfigs().size());
+    assertEquals("DC-1 async dual write percentage should match", 75.0,
+        fetched2.getMigrationConfigs().get("DC-1").getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // 5. Verify that the account was detected as updated (not just added)
+    // This implicitly tests that equalsWithoutContainers() includes migrationConfigs
+    assertFalse("Account should not equal the original without migrationConfigs",
+        fetched.equalsWithoutContainers(fetched2));
+  }
 }

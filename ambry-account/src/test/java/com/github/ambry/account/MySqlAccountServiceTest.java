@@ -29,7 +29,9 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -659,6 +661,51 @@ public class MySqlAccountServiceTest {
   }
 
   /**
+   * E2E test for account migrationConfigs (DC-specific map) persistence in MySqlAccountService.
+   * Covers create, update, and delete of migrationConfigs.
+   */
+  @Test
+  public void testAccountMigrationConfigsPersistence() throws Exception {
+    // 1. Create account with migrationConfigs
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1", new MigrationConfig());
+    migrationConfigs.put("DC-2",
+        new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 50.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    Account account = new AccountBuilder((short) 40, "migrationConfigsAccount", Account.AccountStatus.ACTIVE)
+        .migrationConfigs(migrationConfigs).build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(account));
+    mySqlAccountService = getAccountService();
+    Account loaded = mySqlAccountService.getAccountById(account.getId());
+    assertNotNull("Account should be loaded", loaded);
+    assertNotNull("migrationConfigs should be present", loaded.getMigrationConfigs());
+    assertEquals("migrationConfigs should have 2 entries", 2, loaded.getMigrationConfigs().size());
+    assertEquals("DC-2 dual async write should be 50%", 50.0,
+        loaded.getMigrationConfigs().get("DC-2").getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.01);
+
+    // 2. Update migrationConfigs to a different set of DCs
+    Map<String, MigrationConfig> updatedConfigs = new HashMap<>();
+    updatedConfigs.put("DC-3",
+        new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    Account updatedAccount = new AccountBuilder(loaded).migrationConfigs(updatedConfigs).build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(updatedAccount));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(account.getId());
+    assertNotNull("migrationConfigs should be present after update", loaded.getMigrationConfigs());
+    assertEquals("migrationConfigs should have 1 entry after update", 1, loaded.getMigrationConfigs().size());
+    assertTrue("DC-3 should be present", loaded.getMigrationConfigs().containsKey("DC-3"));
+    assertFalse("DC-1 should no longer be present", loaded.getMigrationConfigs().containsKey("DC-1"));
+
+    // 3. Delete migrationConfigs (set to null)
+    Account cleared = new AccountBuilder(loaded).migrationConfigs(null).build();
+    when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(Collections.singletonList(cleared));
+    mySqlAccountService = getAccountService();
+    loaded = mySqlAccountService.getAccountById(account.getId());
+    assertNull("migrationConfigs should be null after clearing", loaded.getMigrationConfigs());
+  }
+
+  /**
    * E2E test for container migrationConfig persistence in MySqlAccountService.
    */
   @Test
@@ -737,6 +784,7 @@ public class MySqlAccountServiceTest {
     assertFalse("secondaryEnabled should default to false", legacyAccount.isSecondaryEnabled());
     // Migration config should be null.
     assertNull("migrationConfig should be null", legacyAccount.getMigrationConfig());
+    assertNull("migrationConfigs should be null", legacyAccount.getMigrationConfigs());
   }
 
   /**

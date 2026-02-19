@@ -19,6 +19,8 @@ import com.github.ambry.config.InMemoryAccountConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
@@ -179,5 +181,59 @@ public class InMemoryAccountServiceTest {
 
     AccountService accountService = accountServiceFactory.getAccountService();
     accountService.updateAccounts(accountsToUpdate);
+  }
+
+  @Test
+  public void updateAccountMigrationConfigs() throws Exception {
+    // Create an account with migrationConfigs
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1", new MigrationConfig());
+    migrationConfigs.put("DC-2",
+        new MigrationConfig(true, new MigrationConfig.WriteRamp(), new MigrationConfig.ReadRamp(),
+            new MigrationConfig.ListRamp()));
+    Account account =
+        new AccountBuilder((short) 5000, "migrationTest", Account.AccountStatus.ACTIVE).migrationConfigs(
+            migrationConfigs).build();
+
+    AccountService accountService = accountServiceFactory.getAccountService();
+    accountService.updateAccounts(Collections.singletonList(account));
+    Account stored = accountService.getAccountById((short) 5000);
+    assertEquals("migrationConfigs should be set after initial create", migrationConfigs,
+        stored.getMigrationConfigs());
+
+    // Update the account with different migrationConfigs
+    Map<String, MigrationConfig> updatedConfigs = new HashMap<>();
+    updatedConfigs.put("DC-3",
+        new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
+            new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    Account updatedAccount = new AccountBuilder(stored).migrationConfigs(updatedConfigs).build();
+    accountService.updateAccounts(Collections.singletonList(updatedAccount));
+
+    Account afterUpdate = accountService.getAccountById((short) 5000);
+    assertEquals("migrationConfigs should reflect the update", updatedConfigs, afterUpdate.getMigrationConfigs());
+    assertFalse("Old DC-1 key should no longer be present", afterUpdate.getMigrationConfigs().containsKey("DC-1"));
+    assertTrue("New DC-3 key should be present", afterUpdate.getMigrationConfigs().containsKey("DC-3"));
+  }
+
+  @Test
+  public void updateAccountClearMigrationConfigs() throws Exception {
+    // Create an account with migrationConfigs
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1", new MigrationConfig());
+    Account account =
+        new AccountBuilder((short) 5001, "migrationClearTest", Account.AccountStatus.ACTIVE).migrationConfigs(
+            migrationConfigs).build();
+
+    AccountService accountService = accountServiceFactory.getAccountService();
+    accountService.updateAccounts(Collections.singletonList(account));
+    assertNotNull("migrationConfigs should be set",
+        accountService.getAccountById((short) 5001).getMigrationConfigs());
+
+    // Update to clear migrationConfigs
+    Account cleared =
+        new AccountBuilder(accountService.getAccountById((short) 5001)).migrationConfigs(null).build();
+    accountService.updateAccounts(Collections.singletonList(cleared));
+    assertNull("migrationConfigs should be null after clearing",
+        accountService.getAccountById((short) 5001).getMigrationConfigs());
   }
 }
