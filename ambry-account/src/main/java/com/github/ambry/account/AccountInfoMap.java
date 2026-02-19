@@ -278,6 +278,7 @@ class AccountInfoMap {
             .aclInheritedByContainer(account.isAclInheritedByContainer())
             .rampControl(account.getRampControl())
             .migrationConfig(account.getMigrationConfig())
+            .migrationConfigs(account.getMigrationConfigs())
             .quotaResourceType(account.getQuotaResourceType());
         account.getAllContainers().forEach(accountBuilder::addOrUpdateContainer);
         accountToUpdate = accountBuilder.build();

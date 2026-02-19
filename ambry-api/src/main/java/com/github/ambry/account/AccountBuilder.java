@@ -224,8 +224,8 @@ public class AccountBuilder {
   }
 
   /**
-   * Sets fabric-specific migration configs for the account.
-   * @param migrationConfigs map of fabric name to MigrationConfig
+   * Sets DC-specific migration configs for the account.
+   * @param migrationConfigs map of DC name to MigrationConfig
    * @return This builder.
    */
   public AccountBuilder migrationConfigs(Map<String, MigrationConfig> migrationConfigs) {
@@ -234,7 +234,7 @@ public class AccountBuilder {
   }
 
   /**
-   * Sets fabric-specific migration configs from JSON.
+   * Sets DC-specific migration configs from JSON.
    */
   @JsonProperty("migrationConfigs")
   public AccountBuilder migrationConfigsFromJson(Map<String, MigrationConfig> migrationConfigs) {
