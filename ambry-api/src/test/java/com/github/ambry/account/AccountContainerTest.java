@@ -849,7 +849,7 @@ public class AccountContainerTest {
   }
 
   /**
-   * Test account metadata serialization with fabric-specific migrationConfigs map.
+   * Test account metadata serialization with DC-specific migrationConfigs map.
    */
   @Test
   public void testAccountWithMigrationConfigsSerDe() throws IOException {

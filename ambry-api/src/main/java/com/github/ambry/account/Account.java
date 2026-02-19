@@ -93,8 +93,8 @@ import java.util.Set;
  *      }
  *    },
  *   "migrationConfigs": {
- *     "<e.g. fabric1>": { "overrideAccountMigrationConfig": false, "writeRamp": {...}, "readRamp": {...}, "listRamp": {...} },
- *     "<e.g. fabric2>": { "overrideAccountMigrationConfig": false, "writeRamp": {...}, "readRamp": {...}, "listRamp": {...} }
+ *     "<e.g. DC-1>": { "overrideAccountMigrationConfig": false, "writeRamp": {...}, "readRamp": {...}, "listRamp": {...} },
+ *     "<e.g. DC-2>": { "overrideAccountMigrationConfig": false, "writeRamp": {...}, "readRamp": {...}, "listRamp": {...} }
  *   }
  * }
  * </code></pre>
@@ -335,7 +335,7 @@ public class Account {
   }
 
   /**
-   * @return Map of fabric-specific MigrationConfigs keyed by fabric name. Can be null if not set.
+   * @return Map of DC-specific MigrationConfigs keyed by DC name. Can be null if not set.
    */
   public Map<String, MigrationConfig> getMigrationConfigs() {
     return migrationConfigs;
