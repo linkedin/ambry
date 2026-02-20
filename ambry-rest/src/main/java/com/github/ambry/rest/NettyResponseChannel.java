@@ -548,15 +548,28 @@ class NettyResponseChannel implements RestResponseChannel {
     long processingStartTime = System.currentTimeMillis();
     boolean responseSent = false;
     logger.trace("Sending error response to client on channel {}", ctx.channel());
+    // If this is a likely client disconnect and the channel is already inactive, classify it as 4xx
+    // for accounting purposes but skip any response write attempt.
+    if (Utils.isPossibleClientTermination(exception) && !ctx.channel().isActive()) {
+      nettyMetrics.clientEarlyTerminationCount.inc();
+      nettyMetrics.clientTerminationOnInactiveChannelCount.inc();
+      errorResponseStatus = ResponseStatus.BadRequest;
+      responseStatus = errorResponseStatus;
+      logger.debug("Skipping error response write for client termination on inactive channel {}", ctx.channel());
+      nettyMetrics.errorResponseNotSentCount.inc();
+      return false;
+    }
     FullHttpResponse errorResponse = getErrorResponse(exception);
     if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
       logger.trace("Scheduled error response sending on channel {}", ctx.channel());
       responseStatus = errorResponseStatus;
       responseSent = true;
+      nettyMetrics.errorResponseSentCount.inc();
       long processingTime = System.currentTimeMillis() - processingStartTime;
       nettyMetrics.errorResponseProcessingTimeInMs.update(processingTime);
     } else {
       logger.error("Could not send error response on channel {}", ctx.channel());
+      nettyMetrics.errorResponseNotSentCount.inc();
     }
     return responseSent;
   }
@@ -577,20 +590,28 @@ class NettyResponseChannel implements RestResponseChannel {
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
       status = getHttpResponseStatus(errorResponseStatus);
       if (shouldSendFailureReason(status, restServiceException)) {
+        Throwable rootCause = Utils.getRootCause(cause);
+        String rootMessage = rootCause.getMessage();
+        if (rootMessage == null) {
+          rootMessage = rootCause.getClass().getSimpleName();
+        }
         errReason = new String(
-            Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
+            rootMessage.replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
       }
       if (restServiceException.shouldIncludeExceptionMetadataInResponse()) {
         errHeaders = restServiceException.getExceptionHeadersMap();
       }
     } else if (Utils.isPossibleClientTermination(cause)) {
-      // Client closed the connection, it's likely that error response won't be able to reach client.
-      // If that's the case, then set the status to client error. This would then be recorded as client error
-      // in ContainerMetrics
       nettyMetrics.clientEarlyTerminationCount.inc();
-      status = HttpResponseStatus.BAD_REQUEST;
-      errorResponseStatus = ResponseStatus.BadRequest;
+      // Inactive-channel accounting-only case is handled in maybeSendErrorResponse().
+      // Any path reaching response construction should use 500 to avoid emitting 4xx to a still-connected client.
+      nettyMetrics.clientTerminationOnActiveChannelCount.inc();
+      logger.warn("Client termination detected on ACTIVE channel {} for request {}. Exception: {}", ctx.channel(),
+          request != null ? request.getUri() : "unknown", cause.getMessage());
+      nettyMetrics.internalServerErrorCount.inc();
+      status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      errorResponseStatus = ResponseStatus.InternalServerError;
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
@@ -846,8 +867,8 @@ class NettyResponseChannel implements RestResponseChannel {
           logger.trace("Error handling request {} with method {}", uri, restMethod, exception);
         }
       } else if (Utils.isPossibleClientTermination(exception)) {
-        logger.trace("Client likely terminated connection while handling request {} with method {}", uri, restMethod,
-            exception);
+        logger.debug("Client likely terminated connection while handling request {} with method {}. ChannelActive: {}",
+            uri, restMethod, ctx.channel().isActive(), exception);
       } else {
         logger.error("Unexpected error handling request {} with method {}", uri, restMethod, exception);
       }

@@ -106,8 +106,15 @@ public class NettyMetrics {
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
   public final Counter idleConnectionCloseCount;
+  public final Counter channelInactiveWithActiveRequestCount;
+  public final Counter channelInactiveWithoutActiveRequestCount;
   public final Counter processorErrorAfterCloseCount;
   public final Counter processorExceptionCaughtCount;
+  public final Counter exceptionCaughtConnectionResetCount;
+  public final Counter exceptionCaughtBrokenPipeCount;
+  public final Counter exceptionCaughtClosedChannelCount;
+  public final Counter exceptionCaughtSSLExceptionCount;
+  public final Counter exceptionCaughtOtherIOExceptionCount;
   public final Counter processorIOExceptionCount;
   public final Counter processorRestServiceExceptionCount;
   public final Counter processorThrowableCount;
@@ -115,6 +122,10 @@ public class NettyMetrics {
 
   // NettyResponseChannel
   public final Counter clientEarlyTerminationCount;
+  public final Counter clientTerminationOnActiveChannelCount;
+  public final Counter clientTerminationOnInactiveChannelCount;
+  public final Counter errorResponseSentCount;
+  public final Counter errorResponseNotSentCount;
   public final Counter acceptedCount;
   public final Counter createdCount;
   public final Counter okCount;
@@ -281,10 +292,24 @@ public class NettyMetrics {
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));
     idleConnectionCloseCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionCloseCount"));
+    channelInactiveWithActiveRequestCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelInactiveWithActiveRequestCount"));
+    channelInactiveWithoutActiveRequestCount = metricRegistry.counter(
+        MetricRegistry.name(NettyMessageProcessor.class, "ChannelInactiveWithoutActiveRequestCount"));
     processorErrorAfterCloseCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ErrorAfterCloseCount"));
     processorExceptionCaughtCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtCount"));
+    exceptionCaughtConnectionResetCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtConnectionResetCount"));
+    exceptionCaughtBrokenPipeCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtBrokenPipeCount"));
+    exceptionCaughtClosedChannelCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtClosedChannelCount"));
+    exceptionCaughtSSLExceptionCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtSSLExceptionCount"));
+    exceptionCaughtOtherIOExceptionCount = metricRegistry.counter(
+        MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtOtherIOExceptionCount"));
     processorIOExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IOExceptionCount"));
     processorRestServiceExceptionCount =
@@ -296,6 +321,14 @@ public class NettyMetrics {
     // NettyResponseChannel
     clientEarlyTerminationCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminationCount"));
+    clientTerminationOnActiveChannelCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ClientTerminationOnActiveChannelCount"));
+    clientTerminationOnInactiveChannelCount = metricRegistry.counter(
+        MetricRegistry.name(NettyResponseChannel.class, "ClientTerminationOnInactiveChannelCount"));
+    errorResponseSentCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseSentCount"));
+    errorResponseNotSentCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseNotSentCount"));
     acceptedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "AcceptedCount"));
     createdCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "CreatedCount"));
     okCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "OkCount"));

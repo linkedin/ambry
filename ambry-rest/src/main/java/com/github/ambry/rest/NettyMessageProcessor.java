@@ -33,6 +33,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.SSLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -138,9 +139,12 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     logger.trace("Channel {} inactive", ctx.channel());
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
-      logger.error("Request {} was aborted because the channel {} became inactive", request.getUri(), ctx.channel());
+      nettyMetrics.channelInactiveWithActiveRequestCount.inc();
+      logger.error("Request {} was aborted because the channel {} became inactive. Method: {}, bytesReceived: {}",
+          request.getUri(), ctx.channel(), request.getRestMethod(), request.getBlobBytesReceived());
       onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
     } else {
+      nettyMetrics.channelInactiveWithoutActiveRequestCount.inc();
       if (request != null) {
         logger.error("Request {} on channel {} was already closed", request.getUri(), ctx.channel());
       }
@@ -164,7 +168,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     try {
       if (request != null && request.isOpen() && cause instanceof Exception) {
         nettyMetrics.processorExceptionCaughtCount.inc();
-        logger.error("Swallowing request {} error on channel {}", request.getUri(), ctx.channel(), cause);
+        classifyAndCountException(cause);
+        logger.error("Swallowing request {} error on channel {}. ChannelActive: {}, exception: {} - {}",
+            request.getUri(), ctx.channel(), ctx.channel().isActive(), cause.getClass().getSimpleName(),
+            cause.getMessage(), cause);
         onRequestAborted((Exception) cause);
       } else if (isOpen()) {
         if (cause instanceof RestServiceException) {
@@ -198,6 +205,27 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       logger.error("Swallowing exception during exceptionCaught tasks on channel {} for request {}", ctx.channel(), uri,
           e);
       close();
+    }
+  }
+
+  /**
+   * Classifies the exception and increments counters for common network-termination failure categories.
+   * @param cause the exception to classify.
+   */
+  private void classifyAndCountException(Throwable cause) {
+    if (cause instanceof ClosedChannelException) {
+      nettyMetrics.exceptionCaughtClosedChannelCount.inc();
+    } else if (cause instanceof SSLException) {
+      nettyMetrics.exceptionCaughtSSLExceptionCount.inc();
+    } else if (cause instanceof IOException) {
+      String message = cause.getMessage();
+      if (message != null && message.contains("Connection reset")) {
+        nettyMetrics.exceptionCaughtConnectionResetCount.inc();
+      } else if (message != null && message.contains("Broken pipe")) {
+        nettyMetrics.exceptionCaughtBrokenPipeCount.inc();
+      } else {
+        nettyMetrics.exceptionCaughtOtherIOExceptionCount.inc();
+      }
     }
   }
 
