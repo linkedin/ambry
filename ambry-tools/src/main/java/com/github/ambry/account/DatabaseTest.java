@@ -83,7 +83,7 @@ public class DatabaseTest {
             .build());
         containersAdded++;
       }
-      accountUpdateInfos.add(new AccountUpdateInfo(account, true, false, containers, new ArrayList<>()));
+      accountUpdateInfos.add(new AccountUpdateInfo(account, true, false, containers, new ArrayList<>(), new ArrayList<>()));
     }
 
     accountDao.updateAccounts(accountUpdateInfos, 100);

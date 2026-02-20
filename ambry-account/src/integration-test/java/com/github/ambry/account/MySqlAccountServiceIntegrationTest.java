@@ -158,7 +158,7 @@ public class MySqlAccountServiceIntegrationTest {
     Account testAccount = makeTestAccountWithContainer();
     AccountUpdateInfo accountUpdateInfo =
         new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
-            new ArrayList<>());
+            new ArrayList<>(), new ArrayList<>());
     mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
     mySqlAccountService = getAccountService();
     // Test in-memory cache is updated with accounts from mysql store on start up.
@@ -271,7 +271,7 @@ public class MySqlAccountServiceIntegrationTest {
     // Add account to DB (could use second AS for this)
     mySqlAccountStore.updateAccounts(Collections.singletonList(
         new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
-            new ArrayList<>())));
+            new ArrayList<>(), new ArrayList<>())));
 
     // sleep for polling interval time
     Thread.sleep(Long.parseLong(mySqlConfigProps.getProperty(UPDATER_POLLING_INTERVAL_SECONDS)) * 1000 + 100);
