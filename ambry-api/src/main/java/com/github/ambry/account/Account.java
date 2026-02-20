@@ -293,7 +293,7 @@ public class Account {
    *                    container does not exist.
    */
   public Container getContainerByName(String containerName) {
-    return containerNameToContainerMap.get(containerName);
+    return containerNameToContainerMap.get(containerName.toLowerCase());
   }
 
   /**
@@ -405,7 +405,7 @@ public class Account {
       checkParentAccountIdInContainers(container);
       checkDuplicateContainerNameOrId(container);
       containerIdToContainerMap.put(container.getId(), container);
-      containerNameToContainerMap.put(container.getName(), container);
+      containerNameToContainerMap.put(container.getName().toLowerCase(), container);
       this.containers.add(container);
     }
   }
@@ -441,10 +441,10 @@ public class Account {
    */
   private void checkDuplicateContainerNameOrId(Container container) {
     if (containerIdToContainerMap.containsKey(container.getId()) || containerNameToContainerMap.containsKey(
-        container.getName())) {
+        container.getName().toLowerCase())) {
       Container conflictContainer = containerIdToContainerMap.get(container.getId());
       conflictContainer =
-          conflictContainer == null ? containerNameToContainerMap.get(container.getName()) : conflictContainer;
+          conflictContainer == null ? containerNameToContainerMap.get(container.getName().toLowerCase()) : conflictContainer;
       String errorMessage =
           new StringBuilder("Duplicate container id or name exists. containerId=").append(container.getId())
               .append(" containerName=")

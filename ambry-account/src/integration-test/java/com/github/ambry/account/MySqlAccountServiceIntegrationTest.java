@@ -1889,6 +1889,107 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch on the version", version1, datasetVersionRecordList.get(0).getVersion());
   }
 
+  /**
+   * Test case-insensitive behavior for container names.
+   */
+  @Test
+  public void testCaseInsensitiveContainerNames() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+
+    // Add a dataset with a container name in lowercase
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName().toLowerCase(), DATASET_NAME)
+        .setVersionSchema(Dataset.VersionSchema.MONOTONIC)
+        .build();
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // Retrieve the dataset using the container name in uppercase
+    Dataset retrievedDataset = mySqlAccountStore.getDataset(
+        testAccount.getId(),
+        testContainer.getId(),
+        testAccount.getName(),
+        testContainer.getName().toUpperCase(),
+        DATASET_NAME
+    );
+
+    // Verify the dataset is retrieved successfully
+    assertNotNull("Dataset should be retrieved successfully with case-insensitive container name", retrievedDataset);
+    assertEquals("Mismatch in dataset name", DATASET_NAME, retrievedDataset.getDatasetName());
+  }
+
+  /**
+   * Test case-insensitive behavior for creating and retrieving containers.
+   */
+  @Test
+  public void testCaseInsensitiveContainerCreationAndRetrieval() throws Exception {
+    // Create and add an account to the database
+    Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
+
+    // Create a container with a name in lowercase
+    String containerNameLowercase = "testcontainerlowercase";
+    Container containerLowercase = new ContainerBuilder(
+        (short) -1, containerNameLowercase, Container.ContainerStatus.ACTIVE, DESCRIPTION, testAccount.getId()).build();
+    mySqlAccountService.updateContainers(testAccount.getName(), Collections.singletonList(containerLowercase));
+
+    // Retrieve the container using the name in uppercase
+    Container retrievedContainerUppercase = mySqlAccountService.getContainerByName(
+        testAccount.getName(), containerNameLowercase.toUpperCase());
+
+    // Verify the container is retrieved successfully
+    assertNotNull("Container should be retrieved successfully with case-insensitive name", retrievedContainerUppercase);
+    assertEquals("Mismatch in container name", containerNameLowercase, retrievedContainerUppercase.getName());
+
+    // Retrieve the container using the name in mixed case
+    String containerNameMixedCase = "TestContainerLowerCase";
+    Container retrievedContainerMixedCase = mySqlAccountService.getContainerByName(
+        testAccount.getName(), containerNameMixedCase);
+
+    // Verify the container is retrieved successfully
+    assertNotNull("Container should be retrieved successfully with mixed-case name", retrievedContainerMixedCase);
+    assertEquals("Mismatch in container name", containerNameLowercase, retrievedContainerMixedCase.getName());
+  }
+
+  /**
+   * Test case-insensitive conflict when creating containers with the same name in different cases.
+   */
+  @Test
+  public void testCaseInsensitiveContainerNameConflict() throws Exception {
+    // Create and add an account to the database
+    Account testAccount = new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
+
+    // Create a container with a name in lowercase
+    String containerNameLowercase = "testcontainer";
+    Container containerLowercase = new ContainerBuilder(
+        (short) -1, containerNameLowercase, Container.ContainerStatus.ACTIVE, DESCRIPTION, testAccount.getId()).build();
+    mySqlAccountService.updateContainers(testAccount.getName(), Collections.singletonList(containerLowercase));
+
+    // Attempt to create a container with the same name in uppercase with diff setting
+    String containerNameUppercase = containerNameLowercase.toUpperCase();
+    Container containerUppercase =
+        new ContainerBuilder((short) -1, containerNameUppercase, Container.ContainerStatus.ACTIVE, DESCRIPTION,
+            testAccount.getId()).setEncrypted(true).build();
+
+    try {
+      mySqlAccountService.updateContainers(testAccount.getName(), Collections.singletonList(containerUppercase));
+      fail("Expected a conflict when creating a container with the same name in a different case");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
+    }
+
+    // Attempt to create a container with the same name in mixed case
+    String containerNameMixedCase = "TestContainer";
+    Container containerMixedCase = new ContainerBuilder(
+        (short) -1, containerNameMixedCase, Container.ContainerStatus.ACTIVE, DESCRIPTION, testAccount.getId()).build();
+
+    mySqlAccountService.updateContainers(testAccount.getName(), Collections.singletonList(containerMixedCase));
+    Container retrievedContainerUpperCase = mySqlAccountService.getContainerByName(
+        testAccount.getName(), containerNameUppercase);
+    assertEquals("Mismatch in container name", containerNameLowercase, retrievedContainerUpperCase.getName());
+
+  }
+
   private Account makeTestAccountWithContainer() {
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
