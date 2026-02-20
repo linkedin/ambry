@@ -69,6 +69,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
   private static final int MAX_NUMBER_OF_VERSIONS_IN_DELETE = 1000;
   private static final int VERSION_BASE = 100000;
+  private static final int MIN_STALE_BLOBS_TO_ACTIVATE_CLEANER = 10000;
 
   private final Time time;
   private static final String MULTI_VERSION_PLACE_HOLDER = "MULTI_VERSION_PLACE_HOLDER";
@@ -177,6 +178,20 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           + "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND ( deleted_ts IS NULL or deleted_ts > UTC_TIMESTAMP()) "
           + "ORDER BY %s ASC, %s DESC " + "LIMIT ?", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, VERSION, BLOB_STATE,
       MODIFIED_TS, DELETED_TS, NAMED_BLOBS_V2, BLOB_NAME, VERSION);
+
+  private static final String GET_MINIMUM_STALE_BLOB_COUNT = String.format(
+      "SELECT COUNT(*) AS single_occurrence_ready_count " +
+          "FROM ( " +
+          "    SELECT %s " +
+          "    FROM %s " +
+          "    WHERE container_id = ? " +
+          "      AND account_id = ? " +
+          "      AND blob_state = ? " +
+          "    GROUP BY %s, %s, %s " +
+          "    HAVING COUNT(*) = 1 " +
+          ") AS sub",
+      BLOB_NAME, NAMED_BLOBS_V2, BLOB_NAME, CONTAINER_ID, ACCOUNT_ID
+  );
 
   private final AccountService accountService;
   private final String localDatacenter;
@@ -384,6 +399,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
+      Boolean res = checkIfValidContainerForCleaning(connection, container);
+      if (!(res)) {
+        return new StaleBlobsWithLatestBlobName(new ArrayList<>(), null);
+      }
       List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, blobName);
       int resultSize = potentialStaleNamedBlobResults.size();
       if (resultSize == 0) {
@@ -957,6 +976,28 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     }
 
     return resultList;
+  }
+
+  public boolean checkIfValidContainerForCleaning(Connection connection, Container container) throws SQLException {
+    int minStaleCount = 0;
+    try (PreparedStatement statement = connection.prepareStatement(GET_MINIMUM_STALE_BLOB_COUNT)) {
+      statement.setInt(1, container.getId());
+      statement.setInt(2, container.getParentAccountId());
+      statement.setInt(3, NamedBlobState.READY.ordinal());
+
+      logger.info("Determining the minimum number of stale blobs: Query {}", statement.toString());
+
+      try (ResultSet resultSet = statement.executeQuery()) {
+        if (resultSet.next()) {
+          minStaleCount = resultSet.getInt(1);  // directly read the number returned by the query
+        }
+      }
+    } catch (SQLException e) {
+      logger.error("Error executing query: {}", e.getMessage());
+      throw e;
+    }
+
+    return minStaleCount >= MIN_STALE_BLOBS_TO_ACTIVATE_CLEANER;
   }
 
   /**
