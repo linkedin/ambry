@@ -243,6 +243,13 @@ public class ReplicationPrioritizationMetrics {
   }
 
   /**
+   * Record completion of replication for a partition.
+   */
+  public void recordPartitionReplicationComplete(int numPartitions) {
+    partitionsCompletedCount.inc(numPartitions);
+  }
+
+  /**
    * Record addition of partitions to high priority replication.
    * @param newHighPriorityPartitions The partitions added to high priority.
    */
