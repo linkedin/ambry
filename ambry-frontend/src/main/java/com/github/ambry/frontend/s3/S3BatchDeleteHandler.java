@@ -142,6 +142,7 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
             RequestPath.parse(singleDeletePath, restRequest.getArgs(), new ArrayList<>(), requestPath.getClusterName());
         WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
         singleDeleteRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+        singleDeleteRequest.removeArg(BATCH_DELETE_QUERY_PARAM);
         NoOpResponseChannel noOpResponseChannel = new NoOpResponseChannel();
         CompletableFuture<Void> future = new CompletableFuture<>();
 
