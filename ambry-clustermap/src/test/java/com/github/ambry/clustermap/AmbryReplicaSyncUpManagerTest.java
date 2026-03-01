@@ -286,4 +286,69 @@ public class AmbryReplicaSyncUpManagerTest {
         stateModelLatch.await(1, TimeUnit.SECONDS));
     replicaSyncUpService.reset();
   }
+
+  /**
+   * Test that bootstrap, deactivation, and disconnection complete immediately for a single-replica partition.
+   * When a partition has only one replica, there are no peers to replicate from/to, so
+   * updateReplicaLagAndCheckSyncStatus is never called. The sync-up manager should detect this at initiation
+   * time and complete the operation immediately instead of blocking forever.
+   * @throws Exception
+   */
+  @Test
+  public void singleReplicaPartitionTest() throws Exception {
+    // Create a partition with a single replica by using a single data node
+    List<MockDataNodeId> singleNodeList = new ArrayList<>();
+    singleNodeList.add(clusterMap.getDataNodes().get(0));
+    MockPartitionId singleReplicaPartition = new MockPartitionId(999, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        singleNodeList, 0);
+    ReplicaId singleReplica = singleReplicaPartition.getReplicaIds().get(0);
+    assertEquals("Single-replica partition should have exactly 1 replica", 1,
+        singleReplicaPartition.getReplicaIds().size());
+
+    // Test bootstrap: should complete immediately without blocking
+    replicaSyncUpService.initiateBootstrap(singleReplica);
+    // waitBootstrapCompleted should return immediately since there are no peers
+    CountDownLatch bootstrapLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      try {
+        replicaSyncUpService.waitBootstrapCompleted(singleReplicaPartition.toPathString());
+        bootstrapLatch.countDown();
+      } catch (InterruptedException e) {
+        // should not happen
+      }
+    }, false).start();
+    assertTrue("Bootstrap should complete immediately for single-replica partition",
+        bootstrapLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.reset();
+
+    // Test deactivation: should complete immediately without blocking
+    replicaSyncUpService.initiateDeactivation(singleReplica);
+    CountDownLatch deactivationLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      try {
+        replicaSyncUpService.waitDeactivationCompleted(singleReplicaPartition.toPathString());
+        deactivationLatch.countDown();
+      } catch (InterruptedException e) {
+        // should not happen
+      }
+    }, false).start();
+    assertTrue("Deactivation should complete immediately for single-replica partition",
+        deactivationLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.reset();
+
+    // Test disconnection: should complete immediately without blocking
+    replicaSyncUpService.initiateDisconnection(singleReplica);
+    CountDownLatch disconnectionLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      try {
+        replicaSyncUpService.waitDisconnectionCompleted(singleReplicaPartition.toPathString());
+        disconnectionLatch.countDown();
+      } catch (InterruptedException e) {
+        // should not happen
+      }
+    }, false).start();
+    assertTrue("Disconnection should complete immediately for single-replica partition",
+        disconnectionLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.reset();
+  }
 }
