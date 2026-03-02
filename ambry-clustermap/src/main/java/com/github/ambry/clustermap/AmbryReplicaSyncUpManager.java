@@ -63,6 +63,13 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     replicaToLagInfos.put(replicaId,
         new LocalReplicaLagInfos(replicaId, clusterMapConfig.clustermapReplicaCatchupAcceptableLagBytes,
             ReplicaState.BOOTSTRAP));
+    // If there are no peers (single-replica partition), complete bootstrap immediately since
+    // updateReplicaLagAndCheckSyncStatus will never be called by the replication manager.
+    if (hasNoPeers(replicaId)) {
+      logger.info("Partition {} has no peers to catch up with, completing bootstrap immediately",
+          replicaId.getPartitionId().toPathString());
+      onBootstrapComplete(replicaId);
+    }
   }
 
   @Override
@@ -78,6 +85,11 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     // once deactivation is initiated, local replica won't receive new PUTs. All remote replicas should be able to
     // eventually catch with last PUT in local store. Hence, we set acceptable lag threshold to 0.
     replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.INACTIVE));
+    if (hasNoPeers(replicaId)) {
+      logger.info("Partition {} has no peers to catch up with, completing deactivation immediately",
+          replicaId.getPartitionId().toPathString());
+      onDeactivationComplete(replicaId);
+    }
   }
 
   @Override
@@ -87,6 +99,11 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     // once disconnection is initiated, local replica won't receive any PUT/DELETE/TTLUpdate. All remote replicas should
     // be able to eventually catch with local replica. Hence, we set acceptable lag threshold to 0.
     replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.OFFLINE));
+    if (hasNoPeers(replicaId)) {
+      logger.info("Partition {} has no peers to catch up with, completing disconnection immediately",
+          replicaId.getPartitionId().toPathString());
+      onDisconnectionComplete(replicaId);
+    }
   }
 
   /**
@@ -293,6 +310,16 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   }
 
   /**
+   * Check if the given replica has no peers to sync with (single-replica partition).
+   * @param replicaId the replica to check.
+   * @return true if the replica has no peer replicas.
+   */
+  private boolean hasNoPeers(ReplicaId replicaId) {
+    LocalReplicaLagInfos lagInfos = replicaToLagInfos.get(replicaId);
+    return lagInfos != null && lagInfos.hasNoPeers();
+  }
+
+  /**
    * Count down the latch associated with given partition
    * @param countDownLatchMap the map in which the latch is specified for given partition.
    * @param partitionName the partition whose corresponding latch needs to count down.
@@ -391,6 +418,13 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
           remoteDcCaughtUpReplicas.remove(peerReplica);
         }
       }
+    }
+
+    /**
+     * @return true if there are no peer replicas at all (single-replica partition)
+     */
+    boolean hasNoPeers() {
+      return localDcPeerReplicaAndLag.isEmpty() && remoteDcPeerReplicaAndLag.isEmpty();
     }
 
     /**
