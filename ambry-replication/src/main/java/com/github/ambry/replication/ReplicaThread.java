@@ -1096,15 +1096,12 @@ public class ReplicaThread implements Runnable {
                 && remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.BOOTSTRAP) {
               ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
               ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
-              boolean isSyncCompleted =
-                  replicaSyncUpManager.updateReplicaLagAndCheckSyncStatus(localReplica, remoteReplica,
-                      exchangeMetadataResponse.localLagFromRemoteInBytes, ReplicaState.STANDBY);
-              // if catchup is completed by this update call, we can complete bootstrap in local store
-              if (isSyncCompleted) {
-                // complete BOOTSTRAP -> STANDBY transition
-                remoteReplicaInfo.getLocalStore().setCurrentState(ReplicaState.STANDBY);
-                remoteReplicaInfo.getLocalStore().completeBootstrap();
-              }
+              // Signal the sync-up manager that this peer has caught up. When enough peers have synced,
+              // the latch in waitBootstrapCompleted is counted down, unblocking HelixParticipant.
+              // Store state change to STANDBY and completeBootstrap are handled by StorageManager
+              // in onPartitionBecomeStandbyFromBootstrap, following the same pattern as deactivation/disconnection.
+              replicaSyncUpManager.updateReplicaLagAndCheckSyncStatus(localReplica, remoteReplica,
+                  exchangeMetadataResponse.localLagFromRemoteInBytes, ReplicaState.STANDBY);
             }
 
             // If remote token has not moved forward, wait for back off time before resending next metadata request

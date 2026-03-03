@@ -335,7 +335,7 @@ public class ReplicationManager extends ReplicationEngine {
       if (store.isBootstrapInProgress()) {
         logger.info("Partition {} bootstrap in progress, current state = {}", partitionName, currentState);
         store.setCurrentState(ReplicaState.BOOTSTRAP);
-        // store state will updated to STANDBY in ReplicaThread when bootstrap is complete
+        // store state will be updated to STANDBY by StorageManager after bootstrap sync-up completes
         replicaSyncUpManager.initiateBootstrap(localReplica);
       } else {
         logger.info("Partition {} bootstrap complete, current state = {}", partitionName, currentState);
