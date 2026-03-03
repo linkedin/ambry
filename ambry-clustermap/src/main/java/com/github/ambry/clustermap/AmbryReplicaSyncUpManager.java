@@ -63,10 +63,10 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     replicaToLagInfos.put(replicaId,
         new LocalReplicaLagInfos(replicaId, clusterMapConfig.clustermapReplicaCatchupAcceptableLagBytes,
             ReplicaState.BOOTSTRAP));
-    // If there are no peers (single-replica partition), complete bootstrap immediately since
-    // updateReplicaLagAndCheckSyncStatus will never be called by the replication manager.
-    if (hasNoPeers(replicaId)) {
-      logger.info("Partition {} has no peers to catch up with, completing bootstrap immediately",
+    // If sync-up is already satisfied (e.g. no peers, or catchup target is already met),
+    // complete bootstrap immediately since updateReplicaLagAndCheckSyncStatus may never be called.
+    if (isSyncUpComplete(replicaId)) {
+      logger.info("Partition {} already synced up with enough peers, completing bootstrap immediately",
           replicaId.getPartitionId().toPathString());
       onBootstrapComplete(replicaId);
     }
@@ -85,8 +85,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     // once deactivation is initiated, local replica won't receive new PUTs. All remote replicas should be able to
     // eventually catch with last PUT in local store. Hence, we set acceptable lag threshold to 0.
     replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.INACTIVE));
-    if (hasNoPeers(replicaId)) {
-      logger.info("Partition {} has no peers to catch up with, completing deactivation immediately",
+    if (isSyncUpComplete(replicaId)) {
+      logger.info("Partition {} already synced up with enough peers, completing deactivation immediately",
           replicaId.getPartitionId().toPathString());
       onDeactivationComplete(replicaId);
     }
@@ -99,8 +99,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     // once disconnection is initiated, local replica won't receive any PUT/DELETE/TTLUpdate. All remote replicas should
     // be able to eventually catch with local replica. Hence, we set acceptable lag threshold to 0.
     replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.OFFLINE));
-    if (hasNoPeers(replicaId)) {
-      logger.info("Partition {} has no peers to catch up with, completing disconnection immediately",
+    if (isSyncUpComplete(replicaId)) {
+      logger.info("Partition {} already synced up with enough peers, completing disconnection immediately",
           replicaId.getPartitionId().toPathString());
       onDisconnectionComplete(replicaId);
     }
@@ -310,16 +310,6 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   }
 
   /**
-   * Check if the given replica has no peers to sync with (single-replica partition).
-   * @param replicaId the replica to check.
-   * @return true if the replica has no peer replicas.
-   */
-  private boolean hasNoPeers(ReplicaId replicaId) {
-    LocalReplicaLagInfos lagInfos = replicaToLagInfos.get(replicaId);
-    return lagInfos != null && lagInfos.hasNoPeers();
-  }
-
-  /**
    * Count down the latch associated with given partition
    * @param countDownLatchMap the map in which the latch is specified for given partition.
    * @param partitionName the partition whose corresponding latch needs to count down.
@@ -421,16 +411,13 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     }
 
     /**
-     * @return true if there are no peer replicas at all (single-replica partition)
-     */
-    boolean hasNoPeers() {
-      return localDcPeerReplicaAndLag.isEmpty() && remoteDcPeerReplicaAndLag.isEmpty();
-    }
-
-    /**
      * @return whether current replica has caught up with enough peers
      */
     boolean hasSyncedUpWithEnoughPeers() {
+      // If there are no peers at all (single-replica partition), sync-up is trivially complete.
+      if (localDcPeerReplicaAndLag.isEmpty() && remoteDcPeerReplicaAndLag.isEmpty()) {
+        return true;
+      }
       // We don't need to check if replicas, which have been caught up with, are up or down currently. As long as, the
       // peer replica has been put into catchup set, this means it has been caught up sometime before it went down.
       return localDcCaughtUpReplicas.size() + remoteDcCaughtUpReplicas.size() >= catchupTarget;
