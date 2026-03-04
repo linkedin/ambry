@@ -2931,9 +2931,13 @@ public class ReplicationTest extends ReplicationTestHelper {
     specialReplicaInfo.getLocalStore().setCurrentState(ReplicaState.BOOTSTRAP);
     replicaSyncUpService.initiateBootstrap(specialReplicaInfo.getLocalReplicaId());
     replicaThread2.replicate();
-    // verify replica of special partition has completed bootstrap and becomes standby
-    assertEquals("Store state is not expected", ReplicaState.STANDBY,
-        specialReplicaInfo.getLocalStore().getCurrentState());
+    // After replicate(), ReplicaThread only signals the sync-up manager (counts down the latch).
+    // The store state remains BOOTSTRAP because the state change to STANDBY is now handled by
+    // StorageManager in onPartitionBecomeStandbyFromBootstrap (after waitBootstrapCompleted returns).
+    assertEquals("Store state should remain BOOTSTRAP after replicate; StorageManager sets it to STANDBY",
+        ReplicaState.BOOTSTRAP, specialReplicaInfo.getLocalStore().getCurrentState());
+    // verify that bootstrap sync-up was signaled as complete (waitBootstrapCompleted should return immediately)
+    replicaSyncUpService.waitBootstrapCompleted(specialPartitionId.toPathString());
   }
 
   /**

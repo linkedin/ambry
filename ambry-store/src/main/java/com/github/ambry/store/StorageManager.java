@@ -1069,18 +1069,26 @@ public class StorageManager implements StoreManager {
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      // This callback will be invoked after ReplicationManager's callback to transition from bootstrap to standby
-      // So if we are here, the partition is already standby.
-      //
-      // In onPartitionBecomeBootstrap callback, we add the blob store to storage manager, which would add this blob
-      // store to disk manager and the respective compaction manager. However, we disabled compaction for this blob
-      // store since replication should only copy live blobs so there is not much compaction to do. Now we finished
-      // bootstrap here, we should reenable compaction.
+      // This callback will be invoked after ReplicationManager's callback and after bootstrap sync-up is complete.
+      // We finalize the store state and clean up the bootstrap marker file here, following the same pattern as
+      // STANDBY -> INACTIVE where StorageManager sets the store state (see onPartitionBecomeInactiveFromStandby).
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       if (replica == null) {
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
             ReplicaNotFound);
       }
+      Store localStore = getStore(replica.getPartitionId());
+      if (localStore == null) {
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Bootstrap-To-Standby transition", StoreNotStarted);
+      }
+      // 1. set state to STANDBY and complete bootstrap
+      if (isPrimaryClusterManagerListener) {
+        localStore.setCurrentState(ReplicaState.STANDBY);
+        localStore.completeBootstrap();
+        logger.info("Store {} state set to STANDBY, bootstrap completed", partitionName);
+      }
+      // 2. re-enable compaction (was disabled during bootstrap since replication only copies live blobs)
       // Operation to enable compaction is idempotent
       if (!controlCompactionForBlobStoreStub(replica.getPartitionId(), true)) {
         logger.error("Fail to enable compaction for blob store {}", replica.getReplicaPath());
