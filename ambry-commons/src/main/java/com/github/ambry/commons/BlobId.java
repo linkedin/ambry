@@ -37,7 +37,7 @@ import static com.github.ambry.clustermap.ClusterMap.*;
  * returned back to a caller when posting a blob, and later will be required to fetch the blob. The id can
  * also embed other important metadata associated with the blob, and these are version dependent.
  * <br>
- * There are three BlobId versions:
+ * There are seven BlobId versions:
  * <br>
  * Version 1, which includes {@code partitionId}
  * of the blob. The {@code partitionId} is the {@link PartitionId} to which this blob is assigned.
@@ -132,6 +132,24 @@ import static com.github.ambry.clustermap.ClusterMap.*;
  * |  un-assigned | BlobDataType  | IsEncrypted |  BlobIdType   |
  * +--------------+---------------+-------------+---------------|
  * </pre>
+ *
+ * <br>
+ * Version 7, which keeps the compact UUID encoding from V6 and uses one flag bit for migration destination.
+ * This metadata is the backend identity at write time (for example, Ambry vs non-Ambry) and is not meant to
+ * represent dynamic routing roles such as primary/secondary.
+ * <br>
+ * <pre>
+ * +---------+--------+--------------+-----------+-------------+-------------+------------+
+ * | version | flag   | datacenterId | accountId | containerId | partitionId | uuid       |
+ * | (short) | (byte) | (byte)       | (short)   | (short)     | (n bytes)   | (16 bytes) |
+ * +---------+--------+--------------+-----------+-------------+-------------+------------+
+ *
+ * Flag format: 1 Byte
+ * +------------------+---------------+-------------+---------------+
+ * | MigrationDestBit | BlobDataType  | IsEncrypted |  BlobIdType   |
+ * |      bit 8       |    bits 4-5   |    bit 3    |    bits 1-2   |
+ * +------------------+---------------+-------------+---------------+
+ * </pre>
  */
 
 public class BlobId extends StoreKey {
@@ -141,6 +159,7 @@ public class BlobId extends StoreKey {
   public static final short BLOB_ID_V4 = 4;
   public static final short BLOB_ID_V5 = 5;
   public static final short BLOB_ID_V6 = 6;
+  public static final short BLOB_ID_V7 = 7;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
@@ -151,6 +170,8 @@ public class BlobId extends StoreKey {
   private static final int IS_ENCRYPTED_MASK = 0x4;
   private static final int BLOB_DATA_TYPE_MASK = 0x18;
   private static final int BLOB_DATA_TYPE_SHIFT = 3;
+  private static final int MIGRATION_DESTINATION_MASK = 0x80;
+  private static final int MIGRATION_DESTINATION_SHIFT = 7;
 
   private final short version;
   private final BlobIdType type;
@@ -171,6 +192,7 @@ public class BlobId extends StoreKey {
   private final String uuidStr;
   private final boolean isEncrypted;
   private final BlobDataType blobDataType;
+  private final MigrationDestination migrationDestination;
 
   /**
    * Constructs a new BlobId by taking arguments for the required fields.
@@ -189,7 +211,29 @@ public class BlobId extends StoreKey {
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
       PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType) {
     this(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, blobDataType,
-        UUID.randomUUID().toString());
+        defaultMigrationDestinationForVersion(version));
+  }
+
+  /**
+   * Constructs a new BlobId by taking arguments for the required fields.
+   * Not all the fields in the constructor may be used in constructing it. The current active version determines what
+   * fields will be used.
+   * @param version the version in which this blob should be created.
+   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
+   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
+   * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise.
+   *                                Valid for {@link BlobId#BLOB_ID_V4} and above.
+   * @param blobDataType The blob data type.
+   * @param migrationDestination The migration destination metadata embedded for {@link BlobId#BLOB_ID_V7}.
+   */
+  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
+      PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType,
+      MigrationDestination migrationDestination) {
+    this(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, blobDataType,
+        migrationDestination, UUID.randomUUID().toString());
   }
 
   /**
@@ -208,6 +252,27 @@ public class BlobId extends StoreKey {
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId, PartitionId partitionId,
       boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
+    this(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, blobDataType,
+        defaultMigrationDestinationForVersion(version), uuidStr);
+  }
+
+  /**
+   * Construct a BlobId by taking arguments for the required fields.
+   * Not all the fields in the constructor may be used in constructing it. The current active version determines what
+   * fields will be used.
+   * @param version the version in which this blob should be created.
+   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
+   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
+   * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
+   * @param blobDataType The blob data type.
+   * @param migrationDestination The migration destination metadata embedded for {@link BlobId#BLOB_ID_V7}.
+   * @param uuidStr The uuid that is to be used to construct this id.
+   */
+  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId, PartitionId partitionId,
+      boolean isEncrypted, BlobDataType blobDataType, MigrationDestination migrationDestination, String uuidStr) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
@@ -219,6 +284,7 @@ public class BlobId extends StoreKey {
         this.containerId = UNKNOWN_CONTAINER_ID;
         this.isEncrypted = false;
         this.blobDataType = null;
+        this.migrationDestination = MigrationDestination.UNKNOWN;
         this.uuid = null;
         this.uuidStr = uuidStr;
         break;
@@ -229,6 +295,7 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = false;
         this.blobDataType = null;
+        this.migrationDestination = MigrationDestination.UNKNOWN;
         this.uuid = null;
         this.uuidStr = uuidStr;
         break;
@@ -239,6 +306,7 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = false;
         this.blobDataType = null;
+        this.migrationDestination = MigrationDestination.UNKNOWN;
         this.uuid = null;
         this.uuidStr = uuidStr;
         break;
@@ -249,6 +317,7 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
         this.blobDataType = null;
+        this.migrationDestination = MigrationDestination.UNKNOWN;
         this.uuid = null;
         this.uuidStr = uuidStr;
         break;
@@ -259,6 +328,7 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
         this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version 5");
+        this.migrationDestination = MigrationDestination.UNKNOWN;
         this.uuid = null;
         this.uuidStr = uuidStr;
         break;
@@ -269,6 +339,22 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
         this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version 6");
+        this.migrationDestination = MigrationDestination.UNKNOWN;
+        this.uuid = UUID.fromString(uuidStr);
+        this.uuidStr = null;
+        break;
+      case BLOB_ID_V7:
+        this.type = type;
+        this.datacenterId = datacenterId;
+        this.accountId = accountId;
+        this.containerId = containerId;
+        this.isEncrypted = isEncrypted;
+        this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version 7");
+        this.migrationDestination =
+            Objects.requireNonNull(migrationDestination, "migrationDestination can't be null for id version 7");
+        if (this.migrationDestination == MigrationDestination.UNKNOWN) {
+          throw new IllegalArgumentException("migrationDestination must be AMBRY or NON_AMBRY for V7");
+        }
         this.uuid = UUID.fromString(uuidStr);
         this.uuidStr = null;
         break;
@@ -298,12 +384,14 @@ public class BlobId extends StoreKey {
     containerId = preamble.containerId;
     isEncrypted = preamble.isEncrypted;
     blobDataType = preamble.blobDataType;
+    migrationDestination = preamble.migrationDestination;
     partitionId = clusterMap.getPartitionIdFromStream(stream);
     if (partitionId == null) {
       throw new IllegalArgumentException("Partition ID cannot be null");
     }
     switch (version) {
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         uuid = UuidSerDe.deserialize(stream);
         uuidStr = null;
         break;
@@ -356,6 +444,7 @@ public class BlobId extends StoreKey {
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length
             + UUID_SIZE_FIELD_LENGTH_IN_BYTES + getUuid().getBytes().length);
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         return (short) (VERSION_FIELD_LENGTH_IN_BYTES + FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length
             + UuidSerDe.SIZE_IN_BYTES);
@@ -435,6 +524,28 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * @return the migration destination embedded in this id.
+   */
+  public MigrationDestination getMigrationDestination() {
+    return migrationDestination;
+  }
+
+  private static MigrationDestination defaultMigrationDestinationForVersion(short version) {
+    return version >= BLOB_ID_V7 ? MigrationDestination.AMBRY : MigrationDestination.UNKNOWN;
+  }
+
+  private static int getMigrationDestinationFlagValue(MigrationDestination migrationDestination) {
+    switch (migrationDestination) {
+      case AMBRY:
+        return 0;
+      case NON_AMBRY:
+        return 1;
+      default:
+        throw new IllegalArgumentException("migrationDestination must be AMBRY or NON_AMBRY for V7");
+    }
+  }
+
+  /**
    * Check if encrypted bit in blobId is set based on original blobId string.
    * @return {@code true} if encrypted bit in this string is set. {@code false} otherwise
    * @throws IOException If parsing a string blobId fails.
@@ -486,12 +597,23 @@ public class BlobId extends StoreKey {
         idBuf.putShort(accountId);
         idBuf.putShort(containerId);
         break;
+      case BLOB_ID_V7:
+        flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
+        flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
+        flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
+        flag |= (getMigrationDestinationFlagValue(migrationDestination) << MIGRATION_DESTINATION_SHIFT);
+        idBuf.put(flag);
+        idBuf.put(datacenterId);
+        idBuf.putShort(accountId);
+        idBuf.putShort(containerId);
+        break;
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
     idBuf.put(partitionId.getBytes());
     switch (version) {
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         UuidSerDe.serialize(uuid, idBuf);
         break;
       default:
@@ -517,6 +639,7 @@ public class BlobId extends StoreKey {
         uuidBuf.put(uuidBytes);
         break;
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         uuidBuf = ByteBuffer.allocate(UuidSerDe.SIZE_IN_BYTES);
         UuidSerDe.serialize(uuid, uuidBuf);
         break;
@@ -544,10 +667,14 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V4:
       case BLOB_ID_V5:
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         sb.append(":").append(type);
         sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
         sb.append(":").append(containerId);
+        if (version >= BLOB_ID_V7) {
+          sb.append(":").append(migrationDestination);
+        }
         break;
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
@@ -613,6 +740,7 @@ public class BlobId extends StoreKey {
           result = uuidStr.compareTo(other.uuidStr);
           break;
         case BLOB_ID_V6:
+        case BLOB_ID_V7:
           result = uuid.compareTo(other.uuid);
           break;
         default:
@@ -639,6 +767,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V5:
         return 3;
       case BLOB_ID_V6:
+      case BLOB_ID_V7:
         return 4;
       default:
         throw new IllegalArgumentException("Unrecognized blobId version " + version);
@@ -666,7 +795,7 @@ public class BlobId extends StoreKey {
    * @return all valid versions of BlobId.
    */
   public static Short[] getAllValidVersions() {
-    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3, BLOB_ID_V4, BLOB_ID_V5, BLOB_ID_V6};
+    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3, BLOB_ID_V4, BLOB_ID_V5, BLOB_ID_V6, BLOB_ID_V7};
   }
 
   /**
@@ -683,6 +812,9 @@ public class BlobId extends StoreKey {
    * @param targetVersion the version in which the new blob id should be crafted.
    * @param accountId The id of the {@link Account} to be embedded in the converted id.
    * @param containerId The id of the {@link Container} to be embedded in the converted id.
+   * If {@code targetVersion >= BLOB_ID_V7} and {@code inputId} is pre-V7, the crafted id defaults to
+   * {@link MigrationDestination#AMBRY}. Use
+   * {@link #craft(BlobId, short, short, short, MigrationDestination)} to choose a different destination explicitly.
    * @return The output BlobId will be a BlobId in the target version of type {@link BlobIdType#CRAFTED} with the given
    *         account id and container id association.
    */
@@ -690,8 +822,30 @@ public class BlobId extends StoreKey {
     if (targetVersion < BLOB_ID_V3) {
       throw new IllegalArgumentException("Target version for crafting must be V3 or higher");
     }
+    MigrationDestination migrationDestination = targetVersion >= BLOB_ID_V7 ? (inputId.getVersion() >= BLOB_ID_V7
+        ? inputId.getMigrationDestination() : MigrationDestination.AMBRY) : inputId.getMigrationDestination();
+    return craft(inputId, targetVersion, accountId, containerId, migrationDestination);
+  }
+
+  /**
+   * Create a {@link BlobIdType#CRAFTED} BlobId for the given input BlobId.
+   * @param inputId The input BlobId for which a new BlobId is to be crafted.
+   * @param targetVersion the version in which the new blob id should be crafted.
+   * @param accountId The id of the {@link Account} to be embedded in the converted id.
+   * @param containerId The id of the {@link Container} to be embedded in the converted id.
+   * @param migrationDestination migration destination to embed for V7 ids.
+   * @return crafted BlobId.
+   */
+  public static BlobId craft(BlobId inputId, short targetVersion, short accountId, short containerId,
+      MigrationDestination migrationDestination) {
+    if (targetVersion < BLOB_ID_V3) {
+      throw new IllegalArgumentException("Target version for crafting must be V3 or higher");
+    }
+    if (targetVersion >= BLOB_ID_V7 && migrationDestination == MigrationDestination.UNKNOWN) {
+      throw new IllegalArgumentException("migrationDestination must be AMBRY or NON_AMBRY for V7");
+    }
     return new BlobId(targetVersion, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
-        inputId.partitionId, inputId.isEncrypted, inputId.blobDataType, inputId.getUuid());
+        inputId.partitionId, inputId.isEncrypted, inputId.blobDataType, migrationDestination, inputId.getUuid());
   }
 
   /**
@@ -745,6 +899,18 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * Returns the migration destination of a given Blob id.
+   * @param idStr the blobId in string form.
+   * @return the {@link MigrationDestination} indicating the migration destination of the blob.
+   * @throws IOException if the input is not a valid Blob id.
+   */
+  public static MigrationDestination getMigrationDestination(String idStr) throws IOException {
+    BlobIdPreamble blobIdPreamble =
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+    return blobIdPreamble.migrationDestination;
+  }
+
+  /**
    * Indicates the context in which a {@link BlobId} gets created.
    */
   public enum BlobIdType {
@@ -778,6 +944,16 @@ public class BlobId extends StoreKey {
      * Indicates a data chunk within a composite blob.
      */
     DATACHUNK
+  }
+
+  /**
+   * Indicates backend identity captured at write time for migration tracking.
+   * This is intentionally stable metadata and not a dynamic routing role.
+   */
+  public enum MigrationDestination {
+    AMBRY,
+    NON_AMBRY,
+    UNKNOWN
   }
 
   /**
@@ -821,6 +997,7 @@ public class BlobId extends StoreKey {
     final short containerId;
     final boolean isEncrypted;
     final BlobDataType blobDataType;
+    final MigrationDestination migrationDestination;
 
     /**
      * Construct a BlobIdPreamble object by reading all the fields from a BlobId up to and not including the
@@ -839,6 +1016,7 @@ public class BlobId extends StoreKey {
           containerId = UNKNOWN_CONTAINER_ID;
           isEncrypted = false;
           blobDataType = null;
+          migrationDestination = MigrationDestination.UNKNOWN;
           break;
         case BLOB_ID_V2:
           stream.readByte();
@@ -848,6 +1026,7 @@ public class BlobId extends StoreKey {
           containerId = stream.readShort();
           isEncrypted = false;
           blobDataType = null;
+          migrationDestination = MigrationDestination.UNKNOWN;
           break;
         case BLOB_ID_V3:
           blobIdFlag = stream.readByte();
@@ -857,6 +1036,7 @@ public class BlobId extends StoreKey {
           containerId = stream.readShort();
           isEncrypted = false;
           blobDataType = null;
+          migrationDestination = MigrationDestination.UNKNOWN;
           break;
         case BLOB_ID_V4:
           blobIdFlag = stream.readByte();
@@ -866,6 +1046,7 @@ public class BlobId extends StoreKey {
           accountId = stream.readShort();
           containerId = stream.readShort();
           blobDataType = null;
+          migrationDestination = MigrationDestination.UNKNOWN;
           break;
         case BLOB_ID_V5:
         case BLOB_ID_V6:
@@ -877,6 +1058,20 @@ public class BlobId extends StoreKey {
           containerId = stream.readShort();
           int dataTypeOrdinal = (blobIdFlag & BLOB_DATA_TYPE_MASK) >> BLOB_DATA_TYPE_SHIFT;
           blobDataType = BlobDataType.values()[dataTypeOrdinal];
+          migrationDestination = MigrationDestination.UNKNOWN;
+          break;
+        case BLOB_ID_V7:
+          blobIdFlag = stream.readByte();
+          type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
+          isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
+          datacenterId = stream.readByte();
+          accountId = stream.readShort();
+          containerId = stream.readShort();
+          int v7DataTypeOrdinal = (blobIdFlag & BLOB_DATA_TYPE_MASK) >> BLOB_DATA_TYPE_SHIFT;
+          blobDataType = BlobDataType.values()[v7DataTypeOrdinal];
+          int migrationDestinationValue = (blobIdFlag & MIGRATION_DESTINATION_MASK) >> MIGRATION_DESTINATION_SHIFT;
+          migrationDestination =
+              migrationDestinationValue == 0 ? MigrationDestination.AMBRY : MigrationDestination.NON_AMBRY;
           break;
         default:
           throw new IllegalArgumentException("blobId version " + version + " is not supported.");
