@@ -866,7 +866,7 @@ public class RouterConfig {
             0.0, 1.0);
     routerBlobidCurrentVersion =
         verifiableProperties.getShortFromAllowedValues(ROUTER_BLOBID_CURRENT_VERSION, (short) 6,
-            new Short[]{1, 2, 3, 4, 5, 6});
+            new Short[]{1, 2, 3, 4, 5, 6, 7});
     routerMetadataContentVersion =
         verifiableProperties.getShortFromAllowedValues(ROUTER_METADATA_CONTENT_VERSION, (short) 2, new Short[]{2, 3});
     routerKeyManagementServiceFactory =
