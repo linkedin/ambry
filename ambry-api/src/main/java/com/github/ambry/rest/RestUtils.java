@@ -724,9 +724,14 @@ public class RestUtils {
           try {
             value = URLDecoder.decode(urlEncodedValue, CHARSET.name());
           } catch (UnsupportedEncodingException e) {
+            // Should never happen since UTF-8 is always supported, but required by the API signature
             throw new RestServiceException(
                 "Fail to decode the header value: " + urlEncodedValue + " for header: " + keyToStore,
                 RestServiceErrorCode.UnsupportedEncoding);
+          } catch (IllegalArgumentException e) {
+            throw new RestServiceException(
+                "Invalid URL-encoded user metadata value for header: " + key + " value: " + urlEncodedValue,
+                e, RestServiceErrorCode.BadRequest);
           }
           userMetadataMap.put(keyToStore, value);
           // value size

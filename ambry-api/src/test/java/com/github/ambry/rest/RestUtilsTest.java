@@ -434,6 +434,25 @@ public class RestUtilsTest {
   }
 
   /**
+   * Tests that malformed percent-encoding in encoded user metadata headers is rejected with BadRequest.
+   */
+  @Test
+  public void getMalformedEncodedUserMetadataTest() throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10),
+        Container.DEFAULT_PUBLIC_CONTAINER, "image/gif", generateRandomString(10));
+    // trailing "%" is invalid percent-encoding
+    headers.put(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + "badkey", "value%");
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    try {
+      RestUtils.buildUserMetadata(restRequest.getArgs());
+      fail("Expected RestServiceException for malformed percent-encoding");
+    } catch (RestServiceException e) {
+      assertEquals("Expected BadRequest error code", RestServiceErrorCode.BadRequest, e.getErrorCode());
+    }
+  }
+
+  /**
    * Tests deserializing user metadata from byte array
    */
   @Test
