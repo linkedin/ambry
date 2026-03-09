@@ -81,8 +81,9 @@ public class MigrationConfigTest {
   @Test
   public void testDeserializationWithoutDualHeadSyncPct() throws Exception {
     String json = "{\"overrideAccountMigrationConfig\":false,"
-        + "\"writeRamp\":{\"forceDisableWriteToSecondary\":false,\"dualWriteAndDeleteAsyncPct\":50.0,"
-        + "\"dualWriteAndDeleteSyncPct\":0.0,\"dualTtlUpdateSyncPct\":0.0,\"disableFallbackToPrimary\":false},"
+        + "\"writeRamp\":{\"forceDisableDualWriteAndDelete\":false,\"dualWriteAndDeleteAsyncPct\":50.0,"
+        + "\"dualWriteAndDeleteSyncPctNonStrict\":0.0,\"dualWriteAndDeleteSyncPctStrict\":0.0,"
+        + "\"writeAndDeleteOnlyToSecondary\":false},"
         + "\"readRamp\":{\"forceDisableReadFromSecondary\":false,\"shadowReadMetadataPct\":10.0,"
         + "\"shadowReadMd5Pct\":0.0,\"shadowReadContentPct\":0.0,\"serveReadFromSecondaryPct\":0.0,"
         + "\"disableFallbackToPrimary\":false},"
