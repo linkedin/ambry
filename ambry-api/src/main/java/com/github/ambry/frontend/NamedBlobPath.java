@@ -69,11 +69,14 @@ public class NamedBlobPath {
     }
     String accountName = splitPath[1];
     String containerName = splitPath[2];
+    validateNotEmpty(accountName, "account name", path);
+    validateNotEmpty(containerName, "container name", path);
     if (isListRequest) {
       String pageToken = RestUtils.getHeader(args, PAGE_PARAM, false);
       return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
     } else {
       String blobName = splitPath[3];
+      validateNotEmpty(blobName, "blob name", path);
       if (blobName.length() > MAX_BLOB_NAME_LENGTH) {
         throw new RestServiceException(
             String.format("Blob name maximum length should be less than %s", MAX_BLOB_NAME_LENGTH),
@@ -109,6 +112,8 @@ public class NamedBlobPath {
     }
     String accountName = splitPath[1];
     String containerName = splitPath[2];
+    validateNotEmpty(accountName, "account name", path);
+    validateNotEmpty(containerName, "container name", path);
     String pageToken;
     //S3 listObject use Marker as page token.
     //S3 listObjectV2 use ContinuationToken as page token.
@@ -121,6 +126,7 @@ public class NamedBlobPath {
       return new NamedBlobPath(accountName, containerName, null, null, null);
     } else {
       String blobName = splitPath[3];
+      validateNotEmpty(blobName, "blob name", path);
       if (blobName.length() > MAX_BLOB_NAME_LENGTH) {
         throw new RestServiceException(
             String.format("Blob name maximum length should be less than %s", MAX_BLOB_NAME_LENGTH),
@@ -139,6 +145,21 @@ public class NamedBlobPath {
    */
   public static NamedBlobPath parse(RequestPath requestPath, Map<String, Object> args) throws RestServiceException {
     return parse(requestPath.getOperationOrBlobId(true), args);
+  }
+
+  /**
+   * Validate that a parsed path segment is not empty.
+   * @param value the segment value to check.
+   * @param segmentName the name of the segment (for the error message).
+   * @param path the original path (for the error message).
+   * @throws RestServiceException if the value is empty.
+   */
+  private static void validateNotEmpty(String value, String segmentName, String path) throws RestServiceException {
+    if (value.isEmpty()) {
+      throw new RestServiceException(
+          String.format("Empty %s in named blob path. Received path='%s'", segmentName, path),
+          RestServiceErrorCode.BadRequest);
+    }
   }
 
   /**
