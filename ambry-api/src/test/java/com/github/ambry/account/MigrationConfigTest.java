@@ -25,7 +25,7 @@ public class MigrationConfigTest {
   @Test
   public void testConstructorAndGetters() {
     MigrationConfig.WriteRamp writeRamp = new MigrationConfig.WriteRamp(false, 50.0, 30.0, 20.0, true);
-    MigrationConfig.ReadRamp readRamp = new MigrationConfig.ReadRamp(false, 40.0, 60.0, 10.0, 5.0, true);
+    MigrationConfig.ReadRamp readRamp = new MigrationConfig.ReadRamp(false, 40.0, 60.0, 10.0, 5.0, true, 0.0);
     MigrationConfig.ListRamp listRamp = new MigrationConfig.ListRamp(false, 70.0, 80.0, true);
 
     MigrationConfig migrationConfig = new MigrationConfig(true, writeRamp, readRamp, listRamp);
@@ -39,7 +39,7 @@ public class MigrationConfigTest {
   @Test
   public void testJsonSerializationAndDeserialization() throws Exception {
     MigrationConfig.WriteRamp writeRamp = new MigrationConfig.WriteRamp(false, 50.0, 30.0, 20.0, true);
-    MigrationConfig.ReadRamp readRamp = new MigrationConfig.ReadRamp(false, 40.0, 60.0, 10.0, 5.0, true);
+    MigrationConfig.ReadRamp readRamp = new MigrationConfig.ReadRamp(false, 40.0, 60.0, 10.0, 5.0, true, 0.0);
     MigrationConfig.ListRamp listRamp = new MigrationConfig.ListRamp(false, 70.0, 80.0, true);
 
     MigrationConfig originalConfig = new MigrationConfig(true, writeRamp, readRamp, listRamp);

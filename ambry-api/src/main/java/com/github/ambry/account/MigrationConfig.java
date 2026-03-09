@@ -137,6 +137,15 @@ public class MigrationConfig {
     @JsonProperty("disableFallbackToPrimary")
     private boolean disableFallbackToPrimary;
 
+    @JsonProperty("dualHeadSyncPct")
+    private double dualHeadSyncPct;
+
+    public ReadRamp(boolean forceDisableReadFromSecondary, double shadowReadMetadataPct, double shadowReadMd5Pct,
+        double shadowReadContentPct, double serveReadFromSecondaryPct, boolean disableFallbackToPrimary) {
+      this(forceDisableReadFromSecondary, shadowReadMetadataPct, shadowReadMd5Pct, shadowReadContentPct,
+          serveReadFromSecondaryPct, disableFallbackToPrimary, 0.0);
+    }
+
     @JsonCreator
     public ReadRamp(
         @JsonProperty("forceDisableReadFromSecondary") boolean forceDisableReadFromSecondary,
@@ -144,13 +153,15 @@ public class MigrationConfig {
         @JsonProperty("shadowReadMd5Pct") double shadowReadMd5Pct,
         @JsonProperty("shadowReadContentPct") double shadowReadContentPct,
         @JsonProperty("serveReadFromSecondaryPct") double serveReadFromSecondaryPct,
-        @JsonProperty("disableFallbackToPrimary") boolean disableFallbackToPrimary) {
+        @JsonProperty("disableFallbackToPrimary") boolean disableFallbackToPrimary,
+        @JsonProperty("dualHeadSyncPct") double dualHeadSyncPct) {
       this.forceDisableReadFromSecondary = forceDisableReadFromSecondary;
       this.shadowReadMetadataPct = shadowReadMetadataPct;
       this.shadowReadMd5Pct = shadowReadMd5Pct;
       this.shadowReadContentPct = shadowReadContentPct;
       this.serveReadFromSecondaryPct = serveReadFromSecondaryPct;
       this.disableFallbackToPrimary = disableFallbackToPrimary;
+      this.dualHeadSyncPct = dualHeadSyncPct;
     }
 
     // Default constructor for ReadRamp
@@ -161,6 +172,7 @@ public class MigrationConfig {
       this.shadowReadContentPct = 0.0;
       this.serveReadFromSecondaryPct = 0.0;
       this.disableFallbackToPrimary = false;
+      this.dualHeadSyncPct = 0.0;
     }
 
     // Getters
@@ -182,6 +194,9 @@ public class MigrationConfig {
     public boolean isDisableFallbackToPrimary() {
       return disableFallbackToPrimary;
     }
+    public double getDualHeadSyncPct() {
+      return dualHeadSyncPct;
+    }
 
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -192,13 +207,15 @@ public class MigrationConfig {
           Double.compare(that.shadowReadMd5Pct, shadowReadMd5Pct) == 0 &&
           Double.compare(that.shadowReadContentPct, shadowReadContentPct) == 0 &&
           Double.compare(that.serveReadFromSecondaryPct, serveReadFromSecondaryPct) == 0 &&
-          disableFallbackToPrimary == that.disableFallbackToPrimary;
+          disableFallbackToPrimary == that.disableFallbackToPrimary &&
+          Double.compare(that.dualHeadSyncPct, dualHeadSyncPct) == 0;
     }
 
     @Override
     public int hashCode() {
       return java.util.Objects.hash(forceDisableReadFromSecondary, shadowReadMetadataPct,
-          shadowReadMd5Pct, shadowReadContentPct, serveReadFromSecondaryPct, disableFallbackToPrimary);
+          shadowReadMd5Pct, shadowReadContentPct, serveReadFromSecondaryPct, disableFallbackToPrimary,
+          dualHeadSyncPct);
     }
   }
 

@@ -2033,7 +2033,7 @@ public class MySqlAccountServiceIntegrationTest {
     // 3. Update migration config to switch dual async writes to 100% and enable shadow read metadata for 10%.
     MigrationConfig migrationConfig2 =
         new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 100.0, 0.0, 0.0, false),
-            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp());
+            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false, 0.0), new MigrationConfig.ListRamp());
     Account updated = new AccountBuilder(fetched).migrationConfig(migrationConfig2).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(updated));
 
@@ -2087,7 +2087,7 @@ public class MySqlAccountServiceIntegrationTest {
     // 3. Update migration config to switch dual async writes to 100% and enable shadow read metadata for 10%.
     MigrationConfig migrationConfig2 =
         new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 100.0, 0.0, 0.0, false),
-            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp());
+            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false, 0.0), new MigrationConfig.ListRamp());
     Container updatedContainer = new ContainerBuilder(fetchedContainer).setMigrationConfig(migrationConfig2).build();
     Account updatedAccount = new AccountBuilder(fetched).containers(Collections.singleton(updatedContainer)).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(updatedAccount));
@@ -2136,7 +2136,7 @@ public class MySqlAccountServiceIntegrationTest {
     // 3. Update the account to ADD migration config
     MigrationConfig migrationConfig =
         new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
-            new MigrationConfig.ReadRamp(false, 25.0, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp());
+            new MigrationConfig.ReadRamp(false, 25.0, 0.0, 0.0, 0.0, false, 0.0), new MigrationConfig.ListRamp());
     Account updatedWithMigrationConfig = new AccountBuilder(fetched).migrationConfig(migrationConfig).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(updatedWithMigrationConfig));
 
@@ -2180,7 +2180,7 @@ public class MySqlAccountServiceIntegrationTest {
     // 3. Update the container to ADD migration config
     MigrationConfig migrationConfig =
         new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 80.0, 10.0, 5.0, false),
-            new MigrationConfig.ReadRamp(false, 30.0, 20.0, 15.0, 10.0, false),
+            new MigrationConfig.ReadRamp(false, 30.0, 20.0, 15.0, 10.0, false, 0.0),
             new MigrationConfig.ListRamp(false, 40.0, 50.0, false));
     Container updatedContainer = new ContainerBuilder(fetchedContainer).setMigrationConfig(migrationConfig).build();
     Account updatedAccount = new AccountBuilder(fetched).containers(Collections.singleton(updatedContainer)).build();
@@ -2220,7 +2220,7 @@ public class MySqlAccountServiceIntegrationTest {
             new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
     migrationConfigs.put("DC-2",
         new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 100.0, 0.0, 0.0, false),
-            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp()));
+            new MigrationConfig.ReadRamp(false, 10, 0.0, 0.0, 0.0, false, 0.0), new MigrationConfig.ListRamp()));
     Account accountWithMigrationConfigs =
         new AccountBuilder((short) 130, "migrationConfigsAccount", Account.AccountStatus.ACTIVE).migrationConfigs(
             migrationConfigs).build();
@@ -2240,7 +2240,7 @@ public class MySqlAccountServiceIntegrationTest {
     Map<String, MigrationConfig> updatedConfigs = new HashMap<>();
     updatedConfigs.put("DC-3",
         new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
-            new MigrationConfig.ReadRamp(false, 30.0, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp()));
+            new MigrationConfig.ReadRamp(false, 30.0, 0.0, 0.0, 0.0, false, 0.0), new MigrationConfig.ListRamp()));
     Account updated = new AccountBuilder(fetched).migrationConfigs(updatedConfigs).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(updated));
 
@@ -2282,7 +2282,7 @@ public class MySqlAccountServiceIntegrationTest {
     Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
     migrationConfigs.put("DC-1",
         new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 75.0, 0.0, 0.0, false),
-            new MigrationConfig.ReadRamp(false, 25.0, 0.0, 0.0, 0.0, false), new MigrationConfig.ListRamp()));
+            new MigrationConfig.ReadRamp(false, 25.0, 0.0, 0.0, 0.0, false, 0.0), new MigrationConfig.ListRamp()));
     Account updatedWithMigrationConfigs =
         new AccountBuilder(fetched).migrationConfigs(migrationConfigs).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(updatedWithMigrationConfigs));
