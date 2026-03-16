@@ -269,11 +269,43 @@ public class RequestPathTest {
       String requestPath = "../";
       RestRequest restRequest = RestUtilsTest.createRestRequest(RestMethod.GET, requestPath, null);
       RequestPath.parse(restRequest, null, null);
+      fail("Expected RequestPath.parse to fail for malformed path");
     } catch (RestServiceException e) {
       assertEquals(RestServiceErrorCode.BadRequest, e.getErrorCode());
-      assert (e.getMessage().startsWith("java.lang.ArrayIndexOutOfBoundsException"));
+      assertEquals("Invalid path format", e.getMessage());
     } catch (UnsupportedEncodingException | URISyntaxException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  /**
+   * Test that malformed trailing-slash paths fail without leaking internal Java exception types.
+   */
+  @Test
+  public void testMalformedTrailingSlashPaths() {
+    for (String path : Arrays.asList("foo/", "a/", "../")) {
+      try {
+        RequestPath.parse(path, Collections.emptyMap(), Collections.emptyList(), null);
+        fail("Expected parse to fail for malformed path: " + path);
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected error code for path " + path, RestServiceErrorCode.BadRequest, e.getErrorCode());
+        assertFalse("Should not leak Java exception type in error message for path " + path,
+            e.getMessage().contains("ArrayIndexOutOfBoundsException"));
+        assertFalse("Should not leak java.* internal type in error message for path " + path,
+            e.getMessage().contains("java.lang."));
+      }
+    }
+  }
+
+  /**
+   * Test that valid Segment sub-resource paths are still parsed correctly.
+   */
+  @Test
+  public void testValidSegmentSubResourcePath() throws RestServiceException {
+    RequestPath requestPath = RequestPath.parse("/blobId/Segment/32", Collections.emptyMap(), Collections.emptyList(),
+        null);
+    assertEquals("/blobId", requestPath.getOperationOrBlobId(false));
+    assertEquals(RestUtils.SubResource.Segment, requestPath.getSubResource());
+    assertEquals(32, requestPath.getBlobSegmentIdx());
   }
 }
