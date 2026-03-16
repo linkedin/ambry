@@ -877,6 +877,33 @@ public class AccountContainerTest {
   }
 
   /**
+   * Test that Account serialization round-trips correctly when all optional fields (rampControl, migrationConfig,
+   * migrationConfigs) are populated simultaneously.
+   */
+  @Test
+  public void testAccountSerDeWithAllOptionalFields() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
+    migrationConfigs.put("DC-1", new MigrationConfig(false,
+        new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false),
+        new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
+    MigrationConfig migrationConfig = new MigrationConfig(true,
+        new MigrationConfig.WriteRamp(), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
+    Account account = new AccountBuilder(refAccount)
+        .rampControl(new RampControl(true))
+        .migrationConfig(migrationConfig)
+        .migrationConfigs(migrationConfigs)
+        .build();
+
+    String json = mapper.writeValueAsString(account);
+    Account deserialized = mapper.readValue(json, Account.class);
+    assertEquals("Round-trip account should match", account, deserialized);
+    assertEquals("migrationConfigs should match", migrationConfigs, deserialized.getMigrationConfigs());
+    assertEquals("migrationConfig should match", migrationConfig, deserialized.getMigrationConfig());
+    assertEquals("rampControl should match", new RampControl(true), deserialized.getRampControl());
+  }
+
+  /**
    * Test container metadata serialization with migration config.
    */
   @Test

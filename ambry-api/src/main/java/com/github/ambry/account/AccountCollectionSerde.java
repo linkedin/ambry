@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.github.ambry.frontend.Operations;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,7 +33,8 @@ import java.util.stream.Collectors;
  */
 public class AccountCollectionSerde {
   private static final String ACCOUNTS_KEY = Operations.ACCOUNTS;
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper =
+      new ObjectMapper().configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
 
   // Use a mix in class to remove containers from serialized bytes
   @JsonIgnoreProperties({"containers"})
@@ -40,7 +42,8 @@ public class AccountCollectionSerde {
   }
 
   private static final ObjectMapper objectMapperWithoutContainer =
-      new ObjectMapper().addMixIn(Account.class, AccountMixIn.class);
+      new ObjectMapper().configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true)
+          .addMixIn(Account.class, AccountMixIn.class);
 
   /**
    * Serialize a collection of accounts to json bytes that can be used in requests/responses.
