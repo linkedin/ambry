@@ -15,8 +15,10 @@ package com.github.ambry.account;
 
 import com.github.ambry.account.RampControl;
 import com.github.ambry.quota.QuotaResourceType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import java.util.Collection;
 import java.util.HashMap;
@@ -190,7 +192,8 @@ public class AccountBuilder {
   /**
    * Sets ramp control from JSON.
    */
-  @JsonProperty("rampControl")
+  @JsonIgnore
+  @JsonSetter("rampControl")
   public AccountBuilder rampControlFromJson(RampControl rampControl) {
     this.rampControl = rampControl;
     return this;
@@ -217,7 +220,8 @@ public class AccountBuilder {
   /**
    * Sets migration control from JSON.
    */
-  @JsonProperty("migrationConfig")
+  @JsonIgnore
+  @JsonSetter("migrationConfig")
   public AccountBuilder migrationConfigFromJson(MigrationConfig migrationConfig) {
     this.migrationConfig = migrationConfig;
     return this;
@@ -236,7 +240,8 @@ public class AccountBuilder {
   /**
    * Sets DC-specific migration configs from JSON.
    */
-  @JsonProperty("migrationConfigs")
+  @JsonIgnore
+  @JsonSetter("migrationConfigs")
   public AccountBuilder migrationConfigsFromJson(Map<String, MigrationConfig> migrationConfigs) {
     this.migrationConfigs = migrationConfigs;
     return this;
