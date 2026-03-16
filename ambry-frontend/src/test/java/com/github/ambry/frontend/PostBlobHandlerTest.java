@@ -376,6 +376,9 @@ public class PostBlobHandlerTest {
       stitchBlobAndVerify(
           getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1, null), uploadSession))),
           null, restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      // malformed trailing slash ID should fail without leaking Java internals
+      stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("foo/")), null,
+          restServiceExceptionChecker(RestServiceErrorCode.BadRequest, "ArrayIndexOutOfBoundsException"));
       // unsigned ID
       stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
           restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
@@ -558,6 +561,21 @@ public class PostBlobHandlerTest {
   private static ThrowingConsumer<ExecutionException> restServiceExceptionChecker(RestServiceErrorCode errorCode) {
     return executionException -> assertEquals("Unexpected error code", errorCode,
         ((RestServiceException) executionException.getCause()).getErrorCode());
+  }
+
+  /**
+   * @param errorCode the expected error code.
+   * @param disallowedMessageFragment a message fragment that must not appear in the surfaced error message.
+   * @return a {@link ThrowingConsumer} that checks error code and that internal details are not leaked.
+   */
+  private static ThrowingConsumer<ExecutionException> restServiceExceptionChecker(RestServiceErrorCode errorCode,
+      String disallowedMessageFragment) {
+    return executionException -> {
+      RestServiceException restServiceException = (RestServiceException) executionException.getCause();
+      assertEquals("Unexpected error code", errorCode, restServiceException.getErrorCode());
+      assertFalse("Unexpected internal details in error message",
+          restServiceException.getMessage().contains(disallowedMessageFragment));
+    };
   }
 
   /**

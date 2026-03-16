@@ -142,6 +142,9 @@ public class RequestPath {
     if (lastSlashOffset > offset) {
       try {
         String[] fields = path.split(PATH_SEPARATOR_STRING);
+        if (fields.length < 2) {
+          throw new RestServiceException("Invalid path format", RestServiceErrorCode.BadRequest);
+        }
         //if subresource is a Segment subresource, it is expected that 'Segment' is followed
         //by a path separator and an integer number indicating the desired blob segment by
         //segment index, e.g. "Segment/32"
@@ -158,10 +161,6 @@ public class RequestPath {
           throw new RestServiceException("Segment index given is not an integer", RestServiceErrorCode.BadRequest);
         }
         //otherwise, nothing to do
-      } catch (ArrayIndexOutOfBoundsException e) {
-        // For eg., errorMessage = "java.lang.ArrayIndexOutOfBoundsException: -1"
-        String errorMessage = e.getClass().getCanonicalName() + ": " + e.getMessage();
-        throw new RestServiceException(errorMessage, RestServiceErrorCode.BadRequest);
       }
     }
 
