@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 // Migration config applicable to accounts and containers used to migrate from one storage backend to another.
@@ -39,6 +40,7 @@ public class MigrationConfig {
   private ListRamp listRamp;
 
   // Write ramp config.
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class WriteRamp {
     @JsonProperty("forceDisableDualWriteAndDelete")
     private boolean forceDisableDualWriteAndDelete;
@@ -118,6 +120,7 @@ public class MigrationConfig {
   }
 
   // Read ramp config
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class ReadRamp {
     @JsonProperty("forceDisableReadFromSecondary")
     private boolean forceDisableReadFromSecondary;
@@ -220,6 +223,7 @@ public class MigrationConfig {
   }
 
   // List ramp config.
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class ListRamp {
     @JsonProperty("forceDisableListFromSecondary")
     private boolean forceDisableListFromSecondary;

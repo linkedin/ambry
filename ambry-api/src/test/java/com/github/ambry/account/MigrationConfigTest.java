@@ -78,6 +78,34 @@ public class MigrationConfigTest {
     assertTrue(readRamp.isDisableFallbackToPrimary());
   }
 
+  /**
+   * Simulates an old consumer deserializing JSON that contains unknown future fields.
+   * Without @JsonIgnoreProperties(ignoreUnknown = true), this throws UnrecognizedPropertyException.
+   */
+  @Test
+  public void testDeserializationIgnoresUnknownFields() throws Exception {
+    // ReadRamp JSON with an unknown field "someNewReadField"
+    String readRampJson = "{\"forceDisableReadFromSecondary\":false,\"shadowReadMetadataPct\":10.0,"
+        + "\"shadowReadMd5Pct\":0.0,\"shadowReadContentPct\":0.0,\"serveReadFromSecondaryPct\":0.0,"
+        + "\"disableFallbackToPrimary\":false,\"dualHeadSyncPct\":5.0,\"someNewReadField\":99.0}";
+    MigrationConfig.ReadRamp readRamp = objectMapper.readValue(readRampJson, MigrationConfig.ReadRamp.class);
+    assertEquals(10.0, readRamp.getShadowReadMetadataPct(), 0.001);
+    assertEquals(5.0, readRamp.getDualHeadSyncPct(), 0.001);
+
+    // WriteRamp JSON with an unknown field "someNewWriteField"
+    String writeRampJson = "{\"forceDisableDualWriteAndDelete\":false,\"dualWriteAndDeleteAsyncPct\":50.0,"
+        + "\"dualWriteAndDeleteSyncPctNonStrict\":0.0,\"dualWriteAndDeleteSyncPctStrict\":0.0,"
+        + "\"writeAndDeleteOnlyToSecondary\":false,\"someNewWriteField\":true}";
+    MigrationConfig.WriteRamp writeRamp = objectMapper.readValue(writeRampJson, MigrationConfig.WriteRamp.class);
+    assertEquals(50.0, writeRamp.getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // ListRamp JSON with an unknown field "someNewListField"
+    String listRampJson = "{\"forceDisableListFromSecondary\":false,\"shadowListPct\":30.0,"
+        + "\"serveListFromSecondaryPct\":0.0,\"disableFallbackToPrimary\":false,\"someNewListField\":\"hello\"}";
+    MigrationConfig.ListRamp listRamp = objectMapper.readValue(listRampJson, MigrationConfig.ListRamp.class);
+    assertEquals(30.0, listRamp.getShadowListPct(), 0.001);
+  }
+
   @Test
   public void testDeserializationWithoutDualHeadSyncPct() throws Exception {
     String json = "{\"overrideAccountMigrationConfig\":false,"
