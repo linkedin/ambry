@@ -115,6 +115,7 @@ public class NettyMetrics {
 
   // NettyResponseChannel
   public final Counter clientEarlyTerminationCount;
+  public final Counter clientChannelClosedOnWriteCount;
   public final Counter acceptedCount;
   public final Counter createdCount;
   public final Counter okCount;
@@ -296,6 +297,8 @@ public class NettyMetrics {
     // NettyResponseChannel
     clientEarlyTerminationCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminationCount"));
+    clientChannelClosedOnWriteCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ClientChannelClosedOnWriteCount"));
     acceptedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "AcceptedCount"));
     createdCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "CreatedCount"));
     okCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "OkCount"));

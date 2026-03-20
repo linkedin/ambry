@@ -709,6 +709,61 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests that writing to an inactive channel for a GET request tags the exception as a client termination,
+   * while writing for a POST request keeps a bare {@link ClosedChannelException}.
+   * This ensures we only reclassify client disconnects for GET streaming and don't mask server-side errors on other methods.
+   */
+  @Test
+  public void channelInactiveWriteTaggingByMethodTest() throws Exception {
+    // GET request should be tagged as client termination
+    {
+      ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+      EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler);
+      VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+      NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+      NettyResponseChannel nettyResponseChannel =
+          new NettyResponseChannel(new MockChannelHandlerContext(channel), nettyMetrics,
+              new PerformanceConfig(verifiableProperties), new NettyConfig(verifiableProperties));
+      HttpRequest getRequest = createRequestWithHeaders(HttpMethod.GET, TestingUri.Close.toString());
+      nettyResponseChannel.setRequest(
+          new NettyRequest(getRequest, channel, nettyMetrics, Collections.emptySet()));
+      channel.disconnect().awaitUninterruptibly();
+      Future<Long> future = nettyResponseChannel.write(Unpooled.buffer(1), null);
+      try {
+        future.get();
+        fail("Future.get() should throw exception.");
+      } catch (InterruptedException | ExecutionException e) {
+        assertTrue("GET write to inactive channel should be tagged as client termination",
+            Utils.isPossibleClientTermination(e.getCause()));
+      }
+    }
+    // POST request should NOT be tagged — keeps bare ClosedChannelException
+    {
+      ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+      EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler);
+      VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+      NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+      NettyResponseChannel nettyResponseChannel =
+          new NettyResponseChannel(new MockChannelHandlerContext(channel), nettyMetrics,
+              new PerformanceConfig(verifiableProperties), new NettyConfig(verifiableProperties));
+      HttpRequest postRequest = createRequestWithHeaders(HttpMethod.POST, TestingUri.Close.toString());
+      nettyResponseChannel.setRequest(
+          new NettyRequest(postRequest, channel, nettyMetrics, Collections.emptySet()));
+      channel.disconnect().awaitUninterruptibly();
+      Future<Long> future = nettyResponseChannel.write(Unpooled.buffer(1), null);
+      try {
+        future.get();
+        fail("Future.get() should throw exception.");
+      } catch (InterruptedException | ExecutionException e) {
+        assertFalse("POST write to inactive channel should NOT be tagged as client termination",
+            Utils.isPossibleClientTermination(e.getCause()));
+        assertTrue("POST write should be bare ClosedChannelException",
+            e.getCause() instanceof ClosedChannelException);
+      }
+    }
+  }
+
+  /**
    * Tests the invocation of DELAYED_CLOSE when post failures happen in {@link NettyResponseChannel}.
    */
   @Test
