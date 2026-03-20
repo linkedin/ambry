@@ -94,12 +94,15 @@ public class NettySslFactory implements SSLFactory {
    * @throws IOException
    */
   private static SslContext getServerSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
-    logger.info("Using {} provider for server SslContext", SslContext.defaultServerProvider());
+    logger.info("Using {} provider for server SslContext with sessionCacheSize={} sessionTimeout={}s",
+        SslContext.defaultServerProvider(), config.sslSessionCacheSize, config.sslSessionTimeoutSec);
     return SslContextBuilder.forServer(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
         .ciphers(getCipherSuites(config))
         .protocols(getEnabledProtocols(config))
         .clientAuth(getClientAuth(config))
+        .sessionCacheSize(config.sslSessionCacheSize)
+        .sessionTimeout(config.sslSessionTimeoutSec)
         .build();
   }
 

@@ -160,6 +160,25 @@ public class SSLConfig {
   @Default("true")
   public final boolean sslHttp2SelfSign;
 
+  /**
+   * The maximum number of SSL sessions to cache. This limits memory growth from accumulated SSL sessions.
+   * Default is 20480, which matches both the OpenSSL default (SSL_SESSION_CACHE_MAX_SIZE_DEFAULT = 1024*20)
+   * and the JDK default. Set to 0 for unlimited (not recommended).
+   */
+  @Config("ssl.session.cache.size")
+  @Default("20480")
+  public final long sslSessionCacheSize;
+
+  /**
+   * The timeout in seconds for cached SSL sessions. After this duration, a cached session is evicted
+   * and new connections from the same client will perform a full SSL handshake. This only affects
+   * session reuse for future connections, not active connections.
+   * Default is 300 seconds (5 minutes).
+   */
+  @Config("ssl.session.timeout.sec")
+  @Default("300")
+  public final long sslSessionTimeoutSec;
+
   public SSLConfig(VerifiableProperties verifiableProperties) {
     sslContextProtocol = verifiableProperties.getString("ssl.context.protocol", "TLS");
     sslContextProvider = verifiableProperties.getString("ssl.context.provider", "");
@@ -180,5 +199,7 @@ public class SSLConfig {
     sslFactory = verifiableProperties.getString("ssl.factory", "com.github.ambry.commons.JdkSslFactory");
     sslHttp2Factory = verifiableProperties.getString("ssl.http2.factory", "com.github.ambry.rest.NettySslHttp2Factory");
     sslHttp2SelfSign = verifiableProperties.getBoolean("ssl.http2.self.sign", true);
+    sslSessionCacheSize = verifiableProperties.getLong("ssl.session.cache.size", 20480);
+    sslSessionTimeoutSec = verifiableProperties.getLong("ssl.session.timeout.sec", 300);
   }
 }
