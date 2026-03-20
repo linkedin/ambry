@@ -290,28 +290,38 @@ public class PostBlobHandlerTest {
     idConverterFactory.translation = CONVERTED_ID;
     // valid request arguments
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs,
-        null, 1);
+        null, null, 1);
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1024, frontendConfig.chunkUploadInitialChunkTtlSecs,
-        null, 2);
+        null, null, 2);
     // blob exceeds max blob size
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1023, 7200,
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1023, 7200, null,
         routerExceptionChecker(RouterErrorCode.BlobTooLarge), 2);
     // no session header
-    doChunkUploadTest(1024, true, null, 1025, 7200, restServiceExceptionChecker(RestServiceErrorCode.MissingArgs), 2);
+    doChunkUploadTest(1024, true, null, 1025, 7200, null,
+        restServiceExceptionChecker(RestServiceErrorCode.MissingArgs), 2);
     // missing max blob size
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), null, 7200,
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), null, 7200, null,
         restServiceExceptionChecker(RestServiceErrorCode.MissingArgs), 2);
     // invalid TTL
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, Utils.Infinite_Time,
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, Utils.Infinite_Time, null,
         restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs), 2);
     // TTL > default chunkUploadInitialChunkTtlSecs
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs + 1,
-        null, 3);
+        null, null, 3);
     // TTL > chunkUploadMaxChunkTtlSecs
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadMaxChunkTtlSecs + 1,
-        restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs), 3);
+        null, restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs), 3);
     // ensure that the chunk upload request requirements are not enforced for non chunk uploads.
-    doChunkUploadTest(1024, false, null, null, Utils.Infinite_Time, null, 4);
+    doChunkUploadTest(1024, false, null, null, Utils.Infinite_Time, null, null, 4);
+    // verify that part number is captured in signed ID metadata when present
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs,
+        3, null, 4);
+    // invalid part number: zero
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs,
+        0, restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs), 4);
+    // invalid part number: negative
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs,
+        -1, restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs), 4);
   }
 
   /**
@@ -486,13 +496,14 @@ public class PostBlobHandlerTest {
    * @param uploadSession the value for the "x-ambry-chunk-upload-session" request header, or null to not set it.
    * @param maxUploadSize the value for the "x-ambry-max-upload-size" request header, or null to not set it.
    * @param blobTtlSecs the blob TTL to use.
+   * @param partNumber the value for the "x-ambry-part-number" request header, or null to not set it.
    * @param errorChecker if non-null, expect an exception to be thrown by the post flow and verify it using this
    *                     {@link ThrowingConsumer}.
    * @param callCount number of times this method is called.
    * @throws Exception
    */
   private void doChunkUploadTest(int contentLength, boolean chunkUpload, String uploadSession, Integer maxUploadSize,
-      long blobTtlSecs, ThrowingConsumer<ExecutionException> errorChecker, int callCount)
+      long blobTtlSecs, Integer partNumber, ThrowingConsumer<ExecutionException> errorChecker, int callCount)
       throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !REF_CONTAINER.isCacheable(), SERVICE_ID,
@@ -505,6 +516,9 @@ public class PostBlobHandlerTest {
     }
     if (maxUploadSize != null) {
       headers.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
+    }
+    if (partNumber != null) {
+      headers.put(RestUtils.Headers.PART_NUMBER, partNumber);
     }
     if (reservedMetadataId != null) {
       headers.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataId);
@@ -522,9 +536,12 @@ public class PostBlobHandlerTest {
       assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       Object metadata = request.getArgs().get(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY);
       if (chunkUpload) {
-        Map<String, String> expectedMetadata = new HashMap<>(3);
+        Map<String, String> expectedMetadata = new HashMap<>(6);
         expectedMetadata.put(RestUtils.Headers.BLOB_SIZE, Integer.toString(contentLength));
         expectedMetadata.put(RestUtils.Headers.SESSION, uploadSession);
+        if (partNumber != null) {
+          expectedMetadata.put(RestUtils.Headers.PART_NUMBER, Integer.toString(partNumber));
+        }
         expectedMetadata.put(PostBlobHandler.EXPIRATION_TIME_MS_KEY,
             Long.toString(Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
         if (reservedMetadataId != null) {
@@ -606,7 +623,7 @@ public class PostBlobHandlerTest {
    * @return the signed ID.
    */
   private String getSignedId(ChunkInfo chunkInfo, String uploadSession) {
-    Map<String, String> metadata = new HashMap<>(3);
+    Map<String, String> metadata = new HashMap<>(5);
     metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(chunkInfo.getChunkSizeInBytes()));
     metadata.put(RestUtils.Headers.SESSION, uploadSession);
     metadata.put(PostBlobHandler.EXPIRATION_TIME_MS_KEY, Long.toString(chunkInfo.getExpirationTimeInMs()));

@@ -327,10 +327,21 @@ class PostBlobHandler {
      */
     private void setSignedIdMetadataAndBlobSize(BlobProperties blobProperties) throws RestServiceException {
       if (RestUtils.isChunkUpload(restRequest.getArgs())) {
-        Map<String, String> metadata = new HashMap<>(2);
+        Map<String, String> metadata = new HashMap<>(6);
         metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
         metadata.put(RestUtils.Headers.SESSION,
             RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
+        Integer partNumber =
+            RestUtils.getNumericalHeader(restRequest.getArgs(), RestUtils.Headers.PART_NUMBER, false,
+                Integer::parseInt);
+        if (partNumber != null) {
+          if (partNumber < 1) {
+            throw new RestServiceException(
+                "Invalid part number: " + partNumber + ". Part number must be >= 1",
+                RestServiceErrorCode.InvalidArgs);
+          }
+          metadata.put(RestUtils.Headers.PART_NUMBER, Integer.toString(partNumber));
+        }
         metadata.put(EXPIRATION_TIME_MS_KEY,
             Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
         if (blobProperties.getReservedMetadataBlobId() != null) {

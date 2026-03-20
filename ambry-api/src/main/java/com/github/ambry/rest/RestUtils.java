@@ -329,6 +329,12 @@ public class RestUtils {
      * chunk upload should be a part of the same session.
      */
     public static final String SESSION = "x-ambry-session";
+    /**
+     * The 1-based part number for a chunk in a stitched upload. When present on a chunk upload request,
+     * this value is captured in the signed chunk ID metadata so that downstream consumers can determine
+     * chunk ordering at upload time rather than waiting for the stitch request.
+     */
+    public static final String PART_NUMBER = "x-ambry-part-number";
 
     /**
      * prefix for any header to be set as user metadata for the given blob
