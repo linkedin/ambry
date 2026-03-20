@@ -47,6 +47,7 @@ import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
@@ -181,17 +182,31 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     if (finalResponseMetadata == null) {
       // If finalResponseMetadata is still null, it indicates channel becomes inactive.
+      Exception writeException;
       if (ctx.channel().isActive()) {
+        // Anomalous: channel is active but response metadata wasn't set. Keep as bare ClosedChannelException
+        // since this is not a confirmed client disconnect.
         logger.warn("Channel should be inactive status. {}", ctx.channel());
         nettyMetrics.channelStatusInconsistentCount.inc();
+        writeException = new ClosedChannelException();
       } else {
+        // Channel is confirmed inactive — client disconnected. Tag with a recognizable message so
+        // isPossibleClientTermination() can identify this, since raw ClosedChannelException has no message.
+        // Only tag GET requests where write() is used to stream blob data back to the client.
+        // For PUT/POST, write failures are already handled by handleChannelWriteFailure().
         logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed.", ctx.channel());
         writeFuture.addListener(new CleanupCallback(new ClosedChannelException()));
+        if (request != null && request.getRestMethod() == RestMethod.GET) {
+          nettyMetrics.clientChannelClosedOnWriteCount.inc();
+          writeException = new IOException(Utils.CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG, new ClosedChannelException());
+        } else {
+          writeException = new ClosedChannelException();
+        }
       }
       FutureResult<Long> future = new FutureResult<Long>();
-      future.done(0L, new ClosedChannelException());
+      future.done(0L, writeException);
       if (callback != null) {
-        callback.onCompletion(0L, new ClosedChannelException());
+        callback.onCompletion(0L, writeException);
       }
       return future;
     }
