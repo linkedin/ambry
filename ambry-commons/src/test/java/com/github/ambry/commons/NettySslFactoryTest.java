@@ -38,6 +38,18 @@ public class NettySslFactoryTest {
   }
 
   /**
+   * Verify that default session cache size (20480) and timeout (300s) are applied when not explicitly configured.
+   */
+  @Test
+  public void testDefaultSessionCacheConfig() throws Exception {
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig sslConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
+    Assert.assertEquals(20480, sslConfig.sslSessionCacheSize);
+    Assert.assertEquals(300, sslConfig.sslSessionTimeoutSec);
+  }
+
+  /**
    * Verify that non-default session cache size and timeout values are applied to the SslContext.
    * @throws Exception
    */
