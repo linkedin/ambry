@@ -199,7 +199,7 @@ public class SSLConfig {
     sslFactory = verifiableProperties.getString("ssl.factory", "com.github.ambry.commons.JdkSslFactory");
     sslHttp2Factory = verifiableProperties.getString("ssl.http2.factory", "com.github.ambry.rest.NettySslHttp2Factory");
     sslHttp2SelfSign = verifiableProperties.getBoolean("ssl.http2.self.sign", true);
-    sslSessionCacheSize = verifiableProperties.getLong("ssl.session.cache.size", 20480);
-    sslSessionTimeoutSec = verifiableProperties.getLong("ssl.session.timeout.sec", 300);
+    sslSessionCacheSize = verifiableProperties.getLongInRange("ssl.session.cache.size", 20480, 0, Long.MAX_VALUE);
+    sslSessionTimeoutSec = verifiableProperties.getLongInRange("ssl.session.timeout.sec", 300, 0, Long.MAX_VALUE);
   }
 }
