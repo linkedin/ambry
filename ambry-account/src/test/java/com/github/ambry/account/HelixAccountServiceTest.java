@@ -704,6 +704,68 @@ public class HelixAccountServiceTest {
   }
 
   /**
+   * Tests that HelixAccountService fails to start when account metadata contains undeserializable JSON.
+   * This covers the version-skew scenario where a newer code version writes fields (e.g.,
+   * MigrationConfig.ReadRamp.dualHeadSyncPct) that the current code can't deserialize. Without fail-fast,
+   * the service silently starts with an empty/partial account cache and returns 400 InvalidAccount for valid blobs.
+   *
+   * Uses invalid JSON (not just unknown fields) because AccountBuilder has @JsonIgnoreProperties(ignoreUnknown=true)
+   * at the top level. The fail-fast behavior is the same regardless of what causes the deserialization failure.
+   */
+  @Test
+  public void testStartupFailsOnUndeserializableAccountMetadata() throws Exception {
+    Map<String, String> accountMap = new HashMap<>();
+    // One valid account and one corrupt account — simulates a single account with incompatible schema
+    accountMap.put(String.valueOf(refAccount.getId()), objectMapper.writeValueAsString(
+        new AccountBuilder(refAccount).snapshotVersion(refAccount.getSnapshotVersion() + 1).build()));
+    accountMap.put(String.valueOf(refAccount.getId() + 1), BAD_ACCOUNT_METADATA_STRING);
+
+    ZNRecord zNRecord;
+    if (useNewZNodePath) {
+      String blobID = RouterStore.writeAccountMapToRouter(accountMap, mockRouter);
+      List<String> list = Collections.singletonList(new RouterStore.BlobIDAndVersion(blobID, 1).toJson());
+      zNRecord = makeZNRecordWithListField(null, RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
+    } else {
+      zNRecord = makeZNRecordWithMapField(null, LegacyMetadataStore.ACCOUNT_METADATA_MAP_KEY, accountMap);
+    }
+    writeZNRecordToHelixPropertyStore(zNRecord, false);
+    try {
+      accountService = mockHelixAccountServiceFactory.getAccountService();
+      fail("HelixAccountService should fail to start when account metadata cannot be deserialized");
+    } catch (IllegalStateException e) {
+      // Expected: fail-fast prevents serving traffic with missing accounts
+    }
+  }
+
+  /**
+   * Tests that background account cache refresh tolerates deserialization errors without crashing
+   * the service. Only the initial startup fetch should be fail-fast.
+   */
+  @Test
+  public void testBackgroundRefreshToleratesDeserializationError() throws Exception {
+    // Start with good data
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    updateAccountsAndAssertAccountExistence(idToRefAccountMap.values(), NUM_REF_ACCOUNT, true);
+
+    // Now write bad data and trigger a background refresh via notification
+    Map<String, String> badAccountMap = new HashMap<>();
+    badAccountMap.put(String.valueOf(refAccount.getId()), BAD_ACCOUNT_METADATA_STRING);
+    ZNRecord badZNRecord;
+    if (useNewZNodePath) {
+      String blobID = RouterStore.writeAccountMapToRouter(badAccountMap, mockRouter);
+      List<String> list = Collections.singletonList(new RouterStore.BlobIDAndVersion(blobID, 1).toJson());
+      badZNRecord = makeZNRecordWithListField(null, RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
+    } else {
+      badZNRecord = makeZNRecordWithMapField(null, LegacyMetadataStore.ACCOUNT_METADATA_MAP_KEY, badAccountMap);
+    }
+    writeZNRecordToHelixPropertyStore(badZNRecord, true);
+
+    // Service should still be running with the old (good) account data
+    assertEquals("Service should retain previous accounts after failed background refresh", NUM_REF_ACCOUNT,
+        accountService.getAllAccounts().size());
+  }
+
+  /**
    * Tests receiving a bad message, it will not be recognized by {@link HelixAccountService}, but will also not
    * crash the service.
    * @throws Exception Any unexpected exception.
@@ -1215,11 +1277,13 @@ public class HelixAccountServiceTest {
    */
   private void readAndUpdateBadRecord(Collection<Account> accounts) throws Exception {
     writeAccountsToHelixPropertyStore(accounts, false);
-    accountService = mockHelixAccountServiceFactory.getAccountService();
-    assertEquals("Wrong number of accounts in helixAccountService", 0, accountService.getAllAccounts().size());
-    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 0, false);
-    writeAccountsToHelixPropertyStore(accounts, true);
-    assertEquals("Number of account is wrong.", 0, accountService.getAllAccounts().size());
+    // Conflicting/corrupt account metadata should prevent service startup (fail-fast)
+    try {
+      accountService = mockHelixAccountServiceFactory.getAccountService();
+      fail("Expected HelixAccountService to fail startup with conflicting account metadata");
+    } catch (IllegalStateException e) {
+      // Expected — service refuses to start with corrupt/conflicting account data
+    }
   }
 
   /**
@@ -1420,15 +1484,21 @@ public class HelixAccountServiceTest {
    */
   private void updateAndWriteZNRecord(ZNRecord zNRecord, boolean isGoodZNRecord) throws Exception {
     writeZNRecordToHelixPropertyStore(zNRecord, false);
-    accountService = mockHelixAccountServiceFactory.getAccountService();
-    assertEquals("Number of account is wrong", 0, accountService.getAllAccounts().size());
-    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), isGoodZNRecord ? 1 : 0,
-        isGoodZNRecord);
-    writeZNRecordToHelixPropertyStore(zNRecord, true);
     if (isGoodZNRecord) {
+      accountService = mockHelixAccountServiceFactory.getAccountService();
+      assertEquals("Number of account is wrong", 0, accountService.getAllAccounts().size());
+      updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 1, true);
+      writeZNRecordToHelixPropertyStore(zNRecord, true);
       assertAccountInAccountService(refAccount, accountService);
     } else {
-      assertEquals("Number of accounts is wrong.", 0, accountService.getAllAccounts().size());
+      // Bad ZNRecord should prevent HelixAccountService from starting — fail-fast on corrupt account metadata
+      // rather than silently serving with an empty/incomplete cache (which causes 400 InvalidAccount for valid blobs).
+      try {
+        accountService = mockHelixAccountServiceFactory.getAccountService();
+        fail("Expected HelixAccountService to fail startup with bad account metadata in ZNRecord");
+      } catch (IllegalStateException e) {
+        // Expected — MockHelixAccountServiceFactory wraps the RuntimeException in IllegalStateException
+      }
     }
   }
 
