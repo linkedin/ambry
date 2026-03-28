@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsStore;
@@ -553,6 +554,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Maintenance record. This is an internal structure in helix. It might be changed with new version of helix controller.
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   static class MaintenanceRecord {
     @JsonProperty("DATE")
     public String date;

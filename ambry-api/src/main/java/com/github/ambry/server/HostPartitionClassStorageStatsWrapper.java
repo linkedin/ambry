@@ -13,12 +13,14 @@
  */
 package com.github.ambry.server;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 
 
 /**
  * A wrapper model object that contains a {@link HostPartitionClassStorageStats} and a {@link StatsHeader} with metadata.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class HostPartitionClassStorageStatsWrapper {
   private final StatsHeader header;
   private final HostPartitionClassStorageStats stats;
