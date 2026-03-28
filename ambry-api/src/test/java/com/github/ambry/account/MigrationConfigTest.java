@@ -106,6 +106,40 @@ public class MigrationConfigTest {
     assertEquals(30.0, listRamp.getShadowListPct(), 0.001);
   }
 
+  /**
+   * Forward compatibility: MigrationConfig (outer class) with unknown fields should deserialize successfully.
+   */
+  @Test
+  public void testMigrationConfigIgnoresUnknownFields() throws Exception {
+    String json = "{\"overrideAccountMigrationConfig\":true,"
+        + "\"writeRamp\":{\"forceDisableDualWriteAndDelete\":false,\"dualWriteAndDeleteAsyncPct\":10.0,"
+        + "\"dualWriteAndDeleteSyncPctNonStrict\":0.0,\"dualWriteAndDeleteSyncPctStrict\":0.0,"
+        + "\"writeAndDeleteOnlyToSecondary\":false},"
+        + "\"readRamp\":{\"forceDisableReadFromSecondary\":false,\"shadowReadMetadataPct\":5.0,"
+        + "\"shadowReadMd5Pct\":0.0,\"shadowReadContentPct\":0.0,\"serveReadFromSecondaryPct\":0.0,"
+        + "\"disableFallbackToPrimary\":false,\"dualHeadSyncPct\":0.0},"
+        + "\"listRamp\":{\"forceDisableListFromSecondary\":false,\"shadowListPct\":0.0,"
+        + "\"serveListFromSecondaryPct\":0.0,\"disableFallbackToPrimary\":false},"
+        + "\"someNewTopLevelField\":\"futureValue\"}";
+    MigrationConfig deserialized = objectMapper.readValue(json, MigrationConfig.class);
+    assertTrue(deserialized.isOverrideAccountMigrationConfig());
+    assertEquals(10.0, deserialized.getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+    assertEquals(5.0, deserialized.getReadRamp().getShadowReadMetadataPct(), 0.001);
+  }
+
+  /**
+   * Backward compatibility: MigrationConfig with missing optional ramps should deserialize with nulls.
+   */
+  @Test
+  public void testMigrationConfigBackwardCompatibility() throws Exception {
+    String json = "{\"overrideAccountMigrationConfig\":false}";
+    MigrationConfig deserialized = objectMapper.readValue(json, MigrationConfig.class);
+    assertFalse(deserialized.isOverrideAccountMigrationConfig());
+    assertNull(deserialized.getWriteRamp());
+    assertNull(deserialized.getReadRamp());
+    assertNull(deserialized.getListRamp());
+  }
+
   @Test
   public void testDeserializationWithoutDualHeadSyncPct() throws Exception {
     String json = "{\"overrideAccountMigrationConfig\":false,"

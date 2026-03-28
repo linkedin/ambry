@@ -17,6 +17,7 @@ package com.github.ambry.server;
 import java.util.ArrayList;
 import java.util.List;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 
@@ -26,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  */
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 @JsonPropertyOrder({"description", "timestamp", "storesContactedCount", "storesRespondedCount", "unreachableStores"})
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class StatsHeader {
   public enum StatsDescription {
     STORED_DATA_SIZE

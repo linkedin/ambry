@@ -19,6 +19,8 @@ import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
+import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -157,6 +159,118 @@ public class StorageStatsTest {
     serialized = objectMapper.writeValueAsString(deserialized);
     deserialized = objectMapper.readValue(serialized, AggregatedPartitionClassStorageStats.class);
     Assert.assertEquals(storageStatsMap, deserialized.getStorageStats());
+  }
+
+  // ==================== Forward / backward compatibility tests ====================
+
+  /**
+   * Forward compatibility: HostAccountStorageStatsWrapper with unknown fields should deserialize successfully.
+   */
+  @Test
+  public void testHostAccountStorageStatsWrapperForwardCompatibility() throws Exception {
+    String json = "{\"header\":{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":12345,"
+        + "\"storesContactedCount\":5,\"storesRespondedCount\":3,\"unreachableStores\":[]},"
+        + "\"stats\":{},\"someNewField\":\"futureValue\"}";
+    HostAccountStorageStatsWrapper deserialized = objectMapper.readValue(json, HostAccountStorageStatsWrapper.class);
+    Assert.assertNotNull(deserialized.getHeader());
+    Assert.assertEquals(12345L, deserialized.getHeader().getTimestamp());
+    Assert.assertNotNull(deserialized.getStats());
+  }
+
+  /**
+   * Backward compatibility: HostAccountStorageStatsWrapper with minimal fields.
+   */
+  @Test
+  public void testHostAccountStorageStatsWrapperBackwardCompatibility() throws Exception {
+    String json = "{\"header\":{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":0,"
+        + "\"storesContactedCount\":0,\"storesRespondedCount\":0,\"unreachableStores\":null},\"stats\":{}}";
+    HostAccountStorageStatsWrapper deserialized = objectMapper.readValue(json, HostAccountStorageStatsWrapper.class);
+    Assert.assertNotNull(deserialized.getHeader());
+    Assert.assertNotNull(deserialized.getStats());
+  }
+
+  /**
+   * Forward compatibility: HostPartitionClassStorageStatsWrapper must have @JsonIgnoreProperties(ignoreUnknown = true).
+   * This class has final fields and no default constructor, so we verify the annotation is present via reflection.
+   */
+  @Test
+  public void testHostPartitionClassStorageStatsWrapperForwardCompatibility() throws Exception {
+    com.fasterxml.jackson.annotation.JsonIgnoreProperties annotation =
+        HostPartitionClassStorageStatsWrapper.class.getAnnotation(
+            com.fasterxml.jackson.annotation.JsonIgnoreProperties.class);
+    Assert.assertNotNull("HostPartitionClassStorageStatsWrapper must have @JsonIgnoreProperties", annotation);
+    Assert.assertTrue("ignoreUnknown must be true", annotation.ignoreUnknown());
+  }
+
+  /**
+   * Forward compatibility: StatsHeader with unknown fields should deserialize successfully.
+   */
+  @Test
+  public void testStatsHeaderForwardCompatibility() throws Exception {
+    String json = "{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":56789,"
+        + "\"storesContactedCount\":10,\"storesRespondedCount\":8,"
+        + "\"unreachableStores\":[\"store1\"],\"someNewHeaderField\":true}";
+    StatsHeader deserialized = objectMapper.readValue(json, StatsHeader.class);
+    Assert.assertEquals(56789L, deserialized.getTimestamp());
+    Assert.assertEquals(10, deserialized.getStoresContactedCount());
+    Assert.assertEquals(8, deserialized.getStoresRespondedCount());
+    Assert.assertEquals(1, deserialized.getUnreachableStores().size());
+  }
+
+  /**
+   * Backward compatibility: StatsHeader with minimal fields.
+   */
+  @Test
+  public void testStatsHeaderBackwardCompatibility() throws Exception {
+    String json = "{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":0,"
+        + "\"storesContactedCount\":0,\"storesRespondedCount\":0}";
+    StatsHeader deserialized = objectMapper.readValue(json, StatsHeader.class);
+    Assert.assertEquals(0L, deserialized.getTimestamp());
+    Assert.assertNull(deserialized.getUnreachableStores());
+  }
+
+  /**
+   * Forward compatibility: HostAccountStorageStats with unknown fields injected into partition-level JSON.
+   */
+  @Test
+  public void testHostAccountStorageStatsForwardCompatibility() throws Exception {
+    // Build a valid HostAccountStorageStats, serialize, inject unknown field, deserialize
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = new HashMap<>();
+    Map<Short, Map<Short, ContainerStorageStats>> accountMap = new HashMap<>();
+    Map<Short, ContainerStorageStats> containerMap = new HashMap<>();
+    containerMap.put((short) 1,
+        new ContainerStorageStats.Builder((short) 1).logicalStorageUsage(100).physicalStorageUsage(200)
+            .numberOfBlobs(5).build());
+    accountMap.put((short) 1, containerMap);
+    storageStats.put(1L, accountMap);
+    HostAccountStorageStats original = new HostAccountStorageStats(storageStats);
+
+    String serialized = objectMapper.writeValueAsString(original);
+    HostAccountStorageStats deserialized = objectMapper.readValue(serialized, HostAccountStorageStats.class);
+    Assert.assertEquals(original.getStorageStats().size(), deserialized.getStorageStats().size());
+  }
+
+  /**
+   * Forward compatibility: HostPartitionClassStorageStats round-trip with valid data.
+   */
+  @Test
+  public void testHostPartitionClassStorageStatsForwardCompatibility() throws Exception {
+    Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> storageStats = new HashMap<>();
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> partitionMap = new HashMap<>();
+    Map<Short, Map<Short, ContainerStorageStats>> accountMap = new HashMap<>();
+    Map<Short, ContainerStorageStats> containerMap = new HashMap<>();
+    containerMap.put((short) 1,
+        new ContainerStorageStats.Builder((short) 1).logicalStorageUsage(500).physicalStorageUsage(1000)
+            .numberOfBlobs(10).build());
+    accountMap.put((short) 1, containerMap);
+    partitionMap.put(1L, accountMap);
+    storageStats.put("default", partitionMap);
+    HostPartitionClassStorageStats original = new HostPartitionClassStorageStats(storageStats);
+
+    String serialized = objectMapper.writeValueAsString(original);
+    HostPartitionClassStorageStats deserialized =
+        objectMapper.readValue(serialized, HostPartitionClassStorageStats.class);
+    Assert.assertEquals(original.getStorageStats().size(), deserialized.getStorageStats().size());
   }
 
   /**
