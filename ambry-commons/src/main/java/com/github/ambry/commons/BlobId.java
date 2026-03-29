@@ -906,7 +906,7 @@ public class BlobId extends StoreKey {
    */
   public static MigrationDestination getMigrationDestination(String idStr) throws IOException {
     BlobIdPreamble blobIdPreamble =
-        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Utils.base64DecodeUrlSafe(idStr)))));
     return blobIdPreamble.migrationDestination;
   }
 
