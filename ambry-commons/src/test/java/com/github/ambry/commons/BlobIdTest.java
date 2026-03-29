@@ -419,7 +419,8 @@ public class BlobIdTest {
     String uuidStr = UUID.randomUUID().toString();
     // create two blobs with different account/container ids but same uuid str
     BlobId blob1 =
-        new BlobId(version, type, datacenterId, accountId1, containerId1, partitionId, isEncrypted, dataType, uuidStr);
+        new BlobId(version, type, datacenterId, accountId1, containerId1, partitionId, isEncrypted, dataType,
+            referenceMigrationDestination, uuidStr);
     BlobId blob2 =
         new BlobId(version, type, datacenterId, accountId2, containerId2, partitionId, isEncrypted, dataType,
             referenceMigrationDestination, uuidStr);

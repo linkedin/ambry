@@ -951,8 +951,11 @@ public class BlobId extends StoreKey {
    * This is intentionally stable metadata and not a dynamic routing role.
    */
   public enum MigrationDestination {
+    /** Blob was written to Ambry's native store. */
     AMBRY,
+    /** Blob was written to a non-Ambry backend. */
     NON_AMBRY,
+    /** Sentinel for pre-V7 blob IDs which predate migration tracking. V7 rejects this value. */
     UNKNOWN
   }
 
