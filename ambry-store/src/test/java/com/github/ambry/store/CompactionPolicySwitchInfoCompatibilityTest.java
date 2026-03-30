@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * Forward and backward compatibility tests for {@link CompactionPolicySwitchInfo}.
+ * Forward and backward compatibility tests for {@link CompactionPolicySwitchInfo} and {@link CompactionPolicyCounter}.
  */
 public class CompactionPolicySwitchInfoCompatibilityTest {
 
@@ -47,5 +47,26 @@ public class CompactionPolicySwitchInfoCompatibilityTest {
     CompactionPolicySwitchInfo deserialized = objectMapper.readValue(json, CompactionPolicySwitchInfo.class);
     assertEquals(0L, deserialized.getLastCompactAllTime());
     assertFalse(deserialized.isNextRoundCompactAllPolicy());
+  }
+
+  /**
+   * Forward compatibility: unknown fields in CompactionPolicyCounter JSON should be ignored.
+   */
+  @Test
+  public void testCompactionPolicyCounterForwardCompatibility() throws Exception {
+    String json = "{\"storeCompactionPolicySwitchCounterDays\":7,\"counter\":3,"
+        + "\"someNewField\":\"futureValue\"}";
+    CompactionPolicyCounter deserialized = objectMapper.readValue(json, CompactionPolicyCounter.class);
+    assertEquals(3, deserialized.getCounter());
+  }
+
+  /**
+   * Backward compatibility: CompactionPolicyCounter with minimal fields.
+   */
+  @Test
+  public void testCompactionPolicyCounterBackwardCompatibility() throws Exception {
+    String json = "{\"storeCompactionPolicySwitchCounterDays\":5,\"counter\":0}";
+    CompactionPolicyCounter deserialized = objectMapper.readValue(json, CompactionPolicyCounter.class);
+    assertEquals(0, deserialized.getCounter());
   }
 }
