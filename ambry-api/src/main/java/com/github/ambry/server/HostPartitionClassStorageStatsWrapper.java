@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 
@@ -20,14 +21,21 @@ import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 /**
  * A wrapper model object that contains a {@link HostPartitionClassStorageStats} and a {@link StatsHeader} with metadata.
  */
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class HostPartitionClassStorageStatsWrapper {
-  private final StatsHeader header;
-  private final HostPartitionClassStorageStats stats;
+  private StatsHeader header;
+  private HostPartitionClassStorageStats stats;
 
   public HostPartitionClassStorageStatsWrapper(StatsHeader header, HostPartitionClassStorageStats stats) {
     this.header = header;
     this.stats = stats;
+  }
+
+  /**
+   * Empty constructor for Jackson
+   */
+  public HostPartitionClassStorageStatsWrapper() {
   }
 
   /**
