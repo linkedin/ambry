@@ -2151,11 +2151,31 @@ public class HelixClusterManager implements ClusterMap {
       if (!instanceName.equals(selfInstanceName)) {
         datanode.setState(HardwareState.UNAVAILABLE);
       }
-      List<ReplicaId> addedReplicas = initializeDisksAndReplicasOnNode(datanode, dataNodeConfig);
-      instanceNameToAmbryDataNode.put(instanceName, datanode);
-      dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> ConcurrentHashMap.newKeySet()).add(datanode);
-      allInstances.add(instanceName);
-      return addedReplicas;
+      try {
+        List<ReplicaId> addedReplicas = initializeDisksAndReplicasOnNode(datanode, dataNodeConfig);
+        instanceNameToAmbryDataNode.put(instanceName, datanode);
+        dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> ConcurrentHashMap.newKeySet()).add(datanode);
+        allInstances.add(instanceName);
+        return addedReplicas;
+      } catch (Exception e) {
+        // Skip this node but allow the rest of the cluster to initialize. This can happen when a node has
+        // invalid metadata (e.g. same partition on two different disks). The skipped node will leave some
+        // orphan state in ambryDataNodeToAmbryReplicas, ambryDataNodeToAmbryDisks, and
+        // ambryPartitionToAmbryReplicas (partially added replicas), but this is harmless:
+        //   - The orphan entries in ambryDataNodeToAmbryReplicas/ambryDataNodeToAmbryDisks are keyed by an
+        //     AmbryDataNode object (identity-based, no equals/hashCode override) that is not registered in
+        //     instanceNameToAmbryDataNode, so no code path can look them up.
+        //   - Orphan replicas in ambryPartitionToAmbryReplicas may cause routing to attempt requests to the
+        //     bad node, but those requests will fail and be retried on healthy replicas.
+        //   - Capacity counters will be slightly inflated — only affects monitoring.
+        // To fully resolve, the operator must fix the root cause (e.g. remove the duplicate replica from
+        // disk and update the DataNodeConfig in Helix), then restart the affected host.
+        logger.error(
+            "Failed to initialize disks and replicas for node {} in datacenter {}, skip adding this node.",
+            instanceName, dataNodeConfig.getDatacenterName(), e);
+        dataNodeInitializationFailureCount.incrementAndGet();
+        return Collections.emptyList();
+      }
     }
 
     /**
