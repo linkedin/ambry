@@ -19,6 +19,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 // Migration config applicable to accounts and containers used to migrate from one storage backend to another.
 // Determines whether an op is sent to primary storage backend only, secondary storage backend only or both.
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class MigrationConfig {
   // Applicable only to container metadata and used to override account level config.
   public static final String OVERRIDE_ACCOUNT_MIGRATION_CONFIG = "overrideAccountMigrationConfig";

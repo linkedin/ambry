@@ -19,6 +19,7 @@ import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
+import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -157,6 +158,117 @@ public class StorageStatsTest {
     serialized = objectMapper.writeValueAsString(deserialized);
     deserialized = objectMapper.readValue(serialized, AggregatedPartitionClassStorageStats.class);
     Assert.assertEquals(storageStatsMap, deserialized.getStorageStats());
+  }
+
+  // ==================== Forward / backward compatibility tests ====================
+
+  /**
+   * Forward compatibility: HostAccountStorageStatsWrapper with unknown fields should deserialize successfully.
+   */
+  @Test
+  public void testHostAccountStorageStatsWrapperForwardCompatibility() throws Exception {
+    String json = "{\"header\":{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":12345,"
+        + "\"storesContactedCount\":5,\"storesRespondedCount\":3,\"unreachableStores\":[]},"
+        + "\"stats\":{},\"someNewField\":\"futureValue\"}";
+    HostAccountStorageStatsWrapper deserialized = objectMapper.readValue(json, HostAccountStorageStatsWrapper.class);
+    Assert.assertNotNull(deserialized.getHeader());
+    Assert.assertEquals(12345L, deserialized.getHeader().getTimestamp());
+    Assert.assertNotNull(deserialized.getStats());
+  }
+
+  /**
+   * Backward compatibility: HostAccountStorageStatsWrapper with minimal fields.
+   */
+  @Test
+  public void testHostAccountStorageStatsWrapperBackwardCompatibility() throws Exception {
+    String json = "{\"header\":{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":0,"
+        + "\"storesContactedCount\":0,\"storesRespondedCount\":0,\"unreachableStores\":null},\"stats\":{}}";
+    HostAccountStorageStatsWrapper deserialized = objectMapper.readValue(json, HostAccountStorageStatsWrapper.class);
+    Assert.assertNotNull(deserialized.getHeader());
+    Assert.assertNotNull(deserialized.getStats());
+  }
+
+  /**
+   * Forward compatibility: HostPartitionClassStorageStatsWrapper with unknown fields should deserialize successfully.
+   */
+  @Test
+  public void testHostPartitionClassStorageStatsWrapperForwardCompatibility() throws Exception {
+    String json = "{\"header\":{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":12345,"
+        + "\"storesContactedCount\":5,\"storesRespondedCount\":3,\"unreachableStores\":[]},"
+        + "\"stats\":{\"storageStats\":{}},\"someNewField\":\"futureValue\"}";
+    HostPartitionClassStorageStatsWrapper deserialized =
+        objectMapper.readValue(json, HostPartitionClassStorageStatsWrapper.class);
+    Assert.assertNotNull(deserialized.getHeader());
+    Assert.assertEquals(12345L, deserialized.getHeader().getTimestamp());
+    Assert.assertNotNull(deserialized.getStats());
+  }
+
+  /**
+   * Forward compatibility: StatsHeader with unknown fields should deserialize successfully.
+   */
+  @Test
+  public void testStatsHeaderForwardCompatibility() throws Exception {
+    String json = "{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":56789,"
+        + "\"storesContactedCount\":10,\"storesRespondedCount\":8,"
+        + "\"unreachableStores\":[\"store1\"],\"someNewHeaderField\":true}";
+    StatsHeader deserialized = objectMapper.readValue(json, StatsHeader.class);
+    Assert.assertEquals(56789L, deserialized.getTimestamp());
+    Assert.assertEquals(10, deserialized.getStoresContactedCount());
+    Assert.assertEquals(8, deserialized.getStoresRespondedCount());
+    Assert.assertEquals(1, deserialized.getUnreachableStores().size());
+  }
+
+  /**
+   * Backward compatibility: StatsHeader with minimal fields.
+   */
+  @Test
+  public void testStatsHeaderBackwardCompatibility() throws Exception {
+    String json = "{\"description\":\"STORED_DATA_SIZE\",\"timestamp\":0,"
+        + "\"storesContactedCount\":0,\"storesRespondedCount\":0}";
+    StatsHeader deserialized = objectMapper.readValue(json, StatsHeader.class);
+    Assert.assertEquals(0L, deserialized.getTimestamp());
+    Assert.assertNull(deserialized.getUnreachableStores());
+  }
+
+  /**
+   * Forward compatibility: HostAccountStorageStats with an extra partition entry injected into the JSON.
+   * Since this class uses @JsonAnySetter, unknown top-level fields are routed to the setter. This test verifies
+   * that additional partition-like entries are handled gracefully during deserialization.
+   */
+  @Test
+  public void testHostAccountStorageStatsForwardCompatibility() throws Exception {
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = new HashMap<>();
+    Map<Short, Map<Short, ContainerStorageStats>> accountMap = new HashMap<>();
+    Map<Short, ContainerStorageStats> containerMap = new HashMap<>();
+    containerMap.put((short) 1,
+        new ContainerStorageStats.Builder((short) 1).logicalStorageUsage(100).physicalStorageUsage(200)
+            .numberOfBlobs(5).build());
+    accountMap.put((short) 1, containerMap);
+    storageStats.put(1L, accountMap);
+    HostAccountStorageStats original = new HostAccountStorageStats(storageStats);
+
+    String serialized = objectMapper.writeValueAsString(original);
+    // Inject an additional partition entry to simulate a newer schema with extra data
+    String injected = serialized.substring(0, serialized.length() - 1)
+        + ",\"999\":{\"1\":{\"1\":{\"containerId\":1,\"logicalStorageUsage\":50,"
+        + "\"physicalStorageUsage\":100,\"numberOfBlobs\":2}}}}";
+    HostAccountStorageStats deserialized = objectMapper.readValue(injected, HostAccountStorageStats.class);
+    Assert.assertEquals(2, deserialized.getStorageStats().size());
+    Assert.assertNotNull(deserialized.getStorageStats().get(1L));
+    Assert.assertNotNull(deserialized.getStorageStats().get(999L));
+  }
+
+  /**
+   * Forward compatibility: HostPartitionClassStorageStats with unknown field injected at the top level.
+   */
+  @Test
+  public void testHostPartitionClassStorageStatsForwardCompatibility() throws Exception {
+    String json = "{\"storageStats\":{\"default\":{\"1\":{\"1\":{\"1\":{\"containerId\":1,\"logicalStorageUsage\":500,"
+        + "\"physicalStorageUsage\":1000,\"numberOfBlobs\":10}}}}},\"someNewField\":\"futureValue\"}";
+    HostPartitionClassStorageStats deserialized =
+        objectMapper.readValue(json, HostPartitionClassStorageStats.class);
+    Assert.assertEquals(1, deserialized.getStorageStats().size());
+    Assert.assertNotNull(deserialized.getStorageStats().get("default"));
   }
 
   /**

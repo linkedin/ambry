@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server.storagestats;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
  *   }
  * }
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class HostPartitionClassStorageStats {
   private Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> storageStats = new HashMap<>();
 
