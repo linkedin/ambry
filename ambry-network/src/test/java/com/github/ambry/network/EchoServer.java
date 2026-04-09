@@ -119,8 +119,20 @@ public class EchoServer extends Thread {
   }
 
   public void closeConnections() throws IOException {
+    IOException first = null;
     for (Socket socket : sockets) {
-      socket.close();
+      try {
+        socket.close();
+      } catch (Exception e) {
+        if (first == null) {
+          first = e;
+        } else {
+          first.addSuppressed(e);
+        }
+      }
+      if (first != null) {
+        return first;
+      }
     }
   }
 
