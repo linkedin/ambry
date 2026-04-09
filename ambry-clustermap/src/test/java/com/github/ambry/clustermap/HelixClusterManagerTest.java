@@ -391,15 +391,21 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    // instantiate HelixClusterManager and its initialization should fail because validation on replica capacity cannot
-    // succeed (The aforementioned replica has larger capacity than its peers)
-    try {
-      new HelixClusterManager(clusterMapConfig, selfInstanceName,
-          new MockHelixManagerFactory(testCluster, null, null, useAggregatedView), metricRegistry);
-      fail("Initialization should fail due to inconsistent replica capacity");
-    } catch (IOException e) {
-      // expected
-    }
+    // instantiate HelixClusterManager — initialization should succeed because the node with inconsistent replica
+    // capacity is skipped instead of failing the entire cluster map.
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName,
+            new MockHelixManagerFactory(testCluster, null, null, useAggregatedView), metricRegistry);
+
+    // Verify the node with bad capacity was skipped
+    assertNull("Node with inconsistent replica capacity should not be in cluster map",
+        helixClusterManager.getDataNodeId(newAddedNode.getHostname(), newAddedNode.getPort()));
+
+    // Verify other nodes are still present (cluster is functional)
+    long totalNodes = helixClusterManager.getDataNodeIds().size();
+    assertTrue("Other nodes should still be present in cluster", totalNodes > 0);
+
+    helixClusterManager.close();
   }
 
   /**
