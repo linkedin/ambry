@@ -1494,6 +1494,8 @@ public class ReplicaThread implements Runnable {
   GetRequest createGetRequest(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       List<ExchangeMetadataResponse> exchangeMetadataResponseList, DataNodeId remoteNode) {
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+    int totalKeys = 0;
+    long totalExpectedBytes = 0;
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
@@ -1502,6 +1504,12 @@ public class ReplicaThread implements Runnable {
         if (missingStoreKeys.size() > 0) {
           if (remoteNode instanceof CloudDataNode && logger.isTraceEnabled()) {
             logger.trace("Replicating blobs from CloudDataNode: {}", missingStoreKeys);
+          }
+          if (logger.isTraceEnabled()) {
+            totalKeys += missingStoreKeys.size();
+            for (MessageInfo msgInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
+              totalExpectedBytes += msgInfo.getSize();
+            }
           }
           ArrayList<BlobId> keysToFetch = new ArrayList<>();
           for (StoreKey storeKey : missingStoreKeys) {
@@ -1514,6 +1522,10 @@ public class ReplicaThread implements Runnable {
       }
     }
     if (!partitionRequestInfoList.isEmpty()) {
+      if (logger.isTraceEnabled()) {
+        logger.trace("Remote node: {} Thread name: {} GetRequest: partitions={}, totalKeys={}, totalExpectedBytes={}",
+            remoteNode, threadName, partitionRequestInfoList.size(), totalKeys, totalExpectedBytes);
+      }
       return new GetRequest(correlationIdGenerator.incrementAndGet(),
           GetRequest.Replication_Client_Id_Prefix + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName()
               + "]", MessageFormatFlags.All, partitionRequestInfoList,
