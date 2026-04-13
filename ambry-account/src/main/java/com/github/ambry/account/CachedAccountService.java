@@ -172,6 +172,7 @@ public class CachedAccountService extends AbstractAccountService {
     try {
       fetchAndUpdateCache();
     } catch (Throwable e) {
+      accountServiceMetrics.fetchAndUpdateCacheErrorCount.inc();
       logger.error("fetchAndUpdateCache failed", e);
     }
   }
