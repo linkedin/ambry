@@ -391,8 +391,29 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    // Capture expected capacity from the healthy cluster (without the bad node) for later comparison.
+    // The testCluster still has the new node's instanceConfig, but the reset hardware/partition layout has only the
+    // original nodes. Build a reference HelixClusterManager from the clean layout to get expected capacity.
+    MetricRegistry refMetricRegistry = new MetricRegistry();
+    // Remove the bad node's instanceConfig from the cluster so we can build a clean reference
+    MockHelixAdmin refAdmin = testCluster.getHelixAdminFromDc(localDc);
+    String badInstanceName = ClusterMapUtils.getInstanceName(newAddedNode.getHostname(), newAddedNode.getPort());
+    InstanceConfig badConfig = refAdmin.getInstanceConfig("AmbryTest-" + staticClusterName, badInstanceName);
+    refAdmin.dropInstance("AmbryTest-" + staticClusterName, badConfig);
+    HelixClusterManager refClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName,
+            new MockHelixManagerFactory(testCluster, null, null, useAggregatedView), refMetricRegistry);
+    long expectedRawCapacity =
+        (long) refMetricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".rawTotalCapacityBytes").getValue();
+    long expectedAllocatedCapacity =
+        (long) refMetricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".allocatedRawCapacityBytes").getValue();
+    refClusterManager.close();
+    // Re-add the bad node's instanceConfig for the actual test
+    refAdmin.addInstance("AmbryTest-" + staticClusterName, badConfig);
+
     // instantiate HelixClusterManager — initialization should succeed because the node with inconsistent replica
-    // capacity is skipped instead of failing the entire cluster map.
+    // capacity is skipped and its partial state is cleaned up.
+    metricRegistry = new MetricRegistry();
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName,
             new MockHelixManagerFactory(testCluster, null, null, useAggregatedView), metricRegistry);
@@ -404,6 +425,25 @@ public class HelixClusterManagerTest {
     // Verify other nodes are still present (cluster is functional)
     long totalNodes = helixClusterManager.getDataNodeIds().size();
     assertTrue("Other nodes should still be present in cluster", totalNodes > 0);
+
+    // Verify no orphan replicas: every replica for every partition should belong to a registered node
+    for (PartitionId partition : helixClusterManager.getAllPartitionIds(null)) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        assertNotNull("Replica's node should be registered in cluster map",
+            helixClusterManager.getDataNodeId(replica.getDataNodeId().getHostname(),
+                replica.getDataNodeId().getPort()));
+      }
+    }
+
+    // Verify capacity counters were cleaned up and match the reference (healthy) cluster
+    long actualRawCapacity =
+        (long) metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".rawTotalCapacityBytes").getValue();
+    long actualAllocatedCapacity =
+        (long) metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".allocatedRawCapacityBytes").getValue();
+    assertEquals("Raw capacity should match healthy cluster (no inflation from skipped node)",
+        expectedRawCapacity, actualRawCapacity);
+    assertEquals("Allocated capacity should match healthy cluster (no inflation from skipped node)",
+        expectedAllocatedCapacity, actualAllocatedCapacity);
 
     helixClusterManager.close();
   }
@@ -492,6 +532,15 @@ public class HelixClusterManagerTest {
     // Verify other nodes are still present (cluster is functional)
     long totalNodes = helixClusterManager.getDataNodeIds().size();
     assertTrue("Other nodes should still be present in cluster", totalNodes > 0);
+
+    // Verify no orphan replicas: every replica for every partition should belong to a registered node
+    for (PartitionId partition : helixClusterManager.getAllPartitionIds(null)) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        assertNotNull("Replica's node should be registered in cluster map",
+            helixClusterManager.getDataNodeId(replica.getDataNodeId().getHostname(),
+                replica.getDataNodeId().getPort()));
+      }
+    }
 
     helixClusterManager.close();
   }

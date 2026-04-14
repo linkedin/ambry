@@ -2159,22 +2159,39 @@ public class HelixClusterManager implements ClusterMap {
         return addedReplicas;
       } catch (Exception e) {
         // Skip this node but allow the rest of the cluster to initialize. This can happen when a node has
-        // invalid metadata (e.g. same partition on two different disks). The skipped node will leave some
-        // orphan state in ambryDataNodeToAmbryReplicas, ambryDataNodeToAmbryDisks, and
-        // ambryPartitionToAmbryReplicas (partially added replicas), but this is harmless:
-        //   - The orphan entries in ambryDataNodeToAmbryReplicas/ambryDataNodeToAmbryDisks are keyed by an
-        //     AmbryDataNode object (identity-based, no equals/hashCode override) that is not registered in
-        //     instanceNameToAmbryDataNode, so no code path can look them up.
-        //   - Orphan replicas in ambryPartitionToAmbryReplicas may cause routing to attempt requests to the
-        //     bad node, but those requests will fail and be retried on healthy replicas.
-        //   - Capacity counters will be slightly inflated — only affects monitoring.
+        // invalid metadata (e.g. same partition on two different disks, or inconsistent replica capacity).
+        // Clean up any partially-added state for this datanode before returning.
         // To fully resolve, the operator must fix the root cause (e.g. remove the duplicate replica from
         // disk and update the DataNodeConfig in Helix), then restart the affected host.
         logger.error(
             "Failed to initialize disks and replicas for node {} in datacenter {}, skip adding this node.",
             instanceName, dataNodeConfig.getDatacenterName(), e);
+        cleanUpPartialDataNode(datanode);
         dataNodeInitializationFailureCount.incrementAndGet();
         return Collections.emptyList();
+      }
+    }
+
+    /**
+     * Clean up any partially-added state for a datanode that failed initialization. This removes orphan replicas
+     * from partition replica sets, removes disk/replica maps for the datanode, and corrects capacity counters.
+     * @param datanode the {@link AmbryDataNode} that failed to initialize.
+     */
+    private void cleanUpPartialDataNode(AmbryDataNode datanode) {
+      // Remove any replicas that were added to partition replica sets
+      Map<String, AmbryReplica> replicaMap = ambryDataNodeToAmbryReplicas.remove(datanode);
+      if (replicaMap != null) {
+        for (AmbryReplica replica : replicaMap.values()) {
+          AmbryPartition partition = replica.getPartitionId();
+          removeReplicasFromPartition(partition, Collections.singletonList(replica));
+        }
+      }
+      // Remove disks and decrement cluster-wide raw capacity
+      Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.remove(datanode);
+      if (disks != null) {
+        for (AmbryDisk disk : disks) {
+          clusterWideRawCapacityBytes.getAndAdd(-1 * disk.getRawCapacityInBytes());
+        }
       }
     }
 
