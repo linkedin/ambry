@@ -2166,7 +2166,11 @@ public class HelixClusterManager implements ClusterMap {
         logger.error(
             "Failed to initialize disks and replicas for node {} in datacenter {}, skip adding this node.",
             instanceName, dataNodeConfig.getDatacenterName(), e);
-        cleanUpPartialDataNode(datanode);
+        try {
+          cleanUpPartialDataNode(datanode);
+        } catch (Exception cleanupEx) {
+          logger.error("Failed to clean up partial state for node {}", instanceName, cleanupEx);
+        }
         dataNodeInitializationFailureCount.incrementAndGet();
         return Collections.emptyList();
       }
