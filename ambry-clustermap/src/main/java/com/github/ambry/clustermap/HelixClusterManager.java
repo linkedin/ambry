@@ -2158,11 +2158,20 @@ public class HelixClusterManager implements ClusterMap {
         allInstances.add(instanceName);
         return addedReplicas;
       } catch (Exception e) {
-        // Skip this node but allow the rest of the cluster to initialize. This can happen when a node has
-        // invalid metadata (e.g. same partition on two different disks, or inconsistent replica capacity).
-        // Clean up any partially-added state for this datanode before returning.
-        // To fully resolve, the operator must fix the root cause (e.g. remove the duplicate replica from
-        // disk and update the DataNodeConfig in Helix), then restart the affected host.
+        // If the current server's own config is bad, fail initialization. A server cannot safely operate
+        // when its own disk/replica layout is inconsistent (e.g. same partition on two disks could cause
+        // split-brain writes). The operator must fix the config and restart this host.
+        if (instanceName.equals(selfInstanceName)) {
+          logger.error(
+              "Failed to initialize disks and replicas for current server node {} in datacenter {}. "
+                  + "Failing initialization since the server cannot operate with a broken local config.",
+              instanceName, dataNodeConfig.getDatacenterName(), e);
+          throw e;
+        }
+        // For other nodes, skip the bad node but allow the rest of the cluster to initialize. This can
+        // happen when a node has invalid metadata (e.g. same partition on two different disks, or
+        // inconsistent replica capacity). Clean up any partially-added state for this datanode.
+        // To fully resolve, the operator must fix the root cause on the affected host.
         logger.error(
             "Failed to initialize disks and replicas for node {} in datacenter {}, skip adding this node.",
             instanceName, dataNodeConfig.getDatacenterName(), e);
