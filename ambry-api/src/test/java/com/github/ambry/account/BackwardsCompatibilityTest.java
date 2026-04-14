@@ -179,6 +179,10 @@ public class BackwardsCompatibilityTest {
       "disableFallbackToPrimary"
   );
 
+  // Note: "secondaryEnabled" is a computed getter (Account#isSecondaryEnabled()) that Jackson serializes
+  // as a top-level property, even though it is derived from rampControl and not independently stored.
+  // It must be in this set because it appears in serialized output, but it is NOT part of the stored
+  // wire format — old snapshot JSONs intentionally omit it since AccountBuilder ignores it on input.
   private static final Set<String> EXPECTED_ACCOUNT_FIELDS = Set.of(
       "accountId", "accountName", "status", "aclInheritedByContainer", "snapshotVersion",
       "lastModifiedTime", "quotaResourceType", "version", "containers",
@@ -452,6 +456,7 @@ public class BackwardsCompatibilityTest {
   // ==================== Helpers ====================
 
   private static Set<String> fieldNames(JsonNode node) {
+    assertNotNull("JSON node is null — the expected object may have been removed or renamed", node);
     Set<String> names = new TreeSet<>();
     Iterator<String> it = node.fieldNames();
     while (it.hasNext()) {
