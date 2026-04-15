@@ -403,6 +403,65 @@ public class BackwardsCompatibilityTest {
   }
 
   /**
+   * Verify that Account-level migrationConfigs (DC-keyed map) with unknown future fields in the
+   * nested MigrationConfig values still deserializes successfully. This simulates a newer server
+   * writing per-DC configs with a field the current code doesn't know about.
+   */
+  @Test
+  public void testMigrationConfigsMapWithUnknownFutureFieldDeserializesSuccessfully() throws Exception {
+    String accountJson = "{"
+        + "\"accountId\":101,"
+        + "\"accountName\":\"TestAccount\","
+        + "\"status\":\"ACTIVE\","
+        + "\"version\":1,"
+        + "\"containers\":[],"
+        + "\"migrationConfigs\":{"
+        + "\"DC-1\":{"
+        + "\"overrideAccountMigrationConfig\":false,"
+        + "\"writeRamp\":{"
+        + "\"forceDisableDualWriteAndDelete\":false,"
+        + "\"dualWriteAndDeleteAsyncPct\":50.0,"
+        + "\"dualWriteAndDeleteSyncPctNonStrict\":0.0,"
+        + "\"dualWriteAndDeleteSyncPctStrict\":0.0,"
+        + "\"writeAndDeleteOnlyToSecondary\":false,"
+        + "\"dualDeleteSyncPct\":75.0"
+        + "},"
+        + "\"readRamp\":{\"forceDisableReadFromSecondary\":false,\"shadowReadMetadataPct\":0.0,"
+        + "\"shadowReadMd5Pct\":0.0,\"shadowReadContentPct\":0.0,\"serveReadFromSecondaryPct\":0.0,"
+        + "\"disableFallbackToPrimary\":false,\"dualHeadSyncPct\":0.0},"
+        + "\"listRamp\":{\"forceDisableListFromSecondary\":false,\"shadowListPct\":0.0,"
+        + "\"serveListFromSecondaryPct\":0.0,\"disableFallbackToPrimary\":false}"
+        + "},"
+        + "\"DC-2\":{"
+        + "\"overrideAccountMigrationConfig\":true,"
+        + "\"writeRamp\":{\"forceDisableDualWriteAndDelete\":false,\"dualWriteAndDeleteAsyncPct\":0.0,"
+        + "\"dualWriteAndDeleteSyncPctNonStrict\":0.0,\"dualWriteAndDeleteSyncPctStrict\":0.0,"
+        + "\"writeAndDeleteOnlyToSecondary\":false},"
+        + "\"readRamp\":{\"forceDisableReadFromSecondary\":false,\"shadowReadMetadataPct\":0.0,"
+        + "\"shadowReadMd5Pct\":0.0,\"shadowReadContentPct\":0.0,\"serveReadFromSecondaryPct\":0.0,"
+        + "\"disableFallbackToPrimary\":false,\"dualHeadSyncPct\":0.0},"
+        + "\"listRamp\":{\"forceDisableListFromSecondary\":false,\"shadowListPct\":0.0,"
+        + "\"serveListFromSecondaryPct\":0.0,\"disableFallbackToPrimary\":false}"
+        + "}"
+        + "}"
+        + "}";
+
+    // Deserializes successfully — unknown "dualDeleteSyncPct" in DC-1's writeRamp is silently ignored
+    Account account = objectMapper.readValue(accountJson, Account.class);
+    assertNotNull("migrationConfigs should not be null", account.getMigrationConfigs());
+    assertEquals(2, account.getMigrationConfigs().size());
+
+    MigrationConfig dc1Config = account.getMigrationConfigs().get("DC-1");
+    assertNotNull("DC-1 config should be present", dc1Config);
+    assertFalse(dc1Config.isOverrideAccountMigrationConfig());
+    assertEquals(50.0, dc1Config.getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    MigrationConfig dc2Config = account.getMigrationConfigs().get("DC-2");
+    assertNotNull("DC-2 config should be present", dc2Config);
+    assertTrue(dc2Config.isOverrideAccountMigrationConfig());
+  }
+
+  /**
    * DEMO: If someone adds "dualDeleteSyncPct" to WriteRamp but doesn't update the expected field set,
    * the field set regression test catches it. This test simulates that by injecting the extra field
    * into serialized JSON and verifying it does NOT match the expected set.
