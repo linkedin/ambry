@@ -2151,11 +2151,61 @@ public class HelixClusterManager implements ClusterMap {
       if (!instanceName.equals(selfInstanceName)) {
         datanode.setState(HardwareState.UNAVAILABLE);
       }
-      List<ReplicaId> addedReplicas = initializeDisksAndReplicasOnNode(datanode, dataNodeConfig);
-      instanceNameToAmbryDataNode.put(instanceName, datanode);
-      dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> ConcurrentHashMap.newKeySet()).add(datanode);
-      allInstances.add(instanceName);
-      return addedReplicas;
+      try {
+        List<ReplicaId> addedReplicas = initializeDisksAndReplicasOnNode(datanode, dataNodeConfig);
+        instanceNameToAmbryDataNode.put(instanceName, datanode);
+        dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> ConcurrentHashMap.newKeySet()).add(datanode);
+        allInstances.add(instanceName);
+        return addedReplicas;
+      } catch (Exception e) {
+        // If the current server's own config is bad, fail initialization. A server cannot safely operate
+        // when its own disk/replica layout is inconsistent (e.g. same partition on two disks could cause
+        // split-brain writes). The operator must fix the config and restart this host.
+        if (instanceName.equals(selfInstanceName)) {
+          logger.error(
+              "Failed to initialize disks and replicas for current server node {} in datacenter {}. "
+                  + "Failing initialization since the server cannot operate with a broken local config.",
+              instanceName, dataNodeConfig.getDatacenterName(), e);
+          throw e;
+        }
+        // For other nodes, skip the bad node but allow the rest of the cluster to initialize. This can
+        // happen when a node has invalid metadata (e.g. same partition on two different disks, or
+        // inconsistent replica capacity). Clean up any partially-added state for this datanode.
+        // To fully resolve, the operator must fix the root cause on the affected host.
+        logger.error(
+            "Failed to initialize disks and replicas for node {} in datacenter {}, skip adding this node.",
+            instanceName, dataNodeConfig.getDatacenterName(), e);
+        try {
+          cleanUpPartialDataNode(datanode);
+        } catch (Exception cleanupEx) {
+          logger.error("Failed to clean up partial state for node {}", instanceName, cleanupEx);
+        }
+        dataNodeInitializationFailureCount.incrementAndGet();
+        return Collections.emptyList();
+      }
+    }
+
+    /**
+     * Clean up any partially-added state for a datanode that failed initialization. This removes orphan replicas
+     * from partition replica sets, removes disk/replica maps for the datanode, and corrects capacity counters.
+     * @param datanode the {@link AmbryDataNode} that failed to initialize.
+     */
+    private void cleanUpPartialDataNode(AmbryDataNode datanode) {
+      // Remove any replicas that were added to partition replica sets
+      Map<String, AmbryReplica> replicaMap = ambryDataNodeToAmbryReplicas.remove(datanode);
+      if (replicaMap != null) {
+        for (AmbryReplica replica : replicaMap.values()) {
+          AmbryPartition partition = replica.getPartitionId();
+          removeReplicasFromPartition(partition, Collections.singletonList(replica));
+        }
+      }
+      // Remove disks and decrement cluster-wide raw capacity
+      Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.remove(datanode);
+      if (disks != null) {
+        for (AmbryDisk disk : disks) {
+          clusterWideRawCapacityBytes.getAndAdd(-1 * disk.getRawCapacityInBytes());
+        }
+      }
     }
 
     /**
