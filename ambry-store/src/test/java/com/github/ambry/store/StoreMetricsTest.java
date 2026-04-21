@@ -77,6 +77,37 @@ public class StoreMetricsTest {
   }
 
   /**
+   * Tests that gauges can be re-registered for the same storeId after deregisterMetrics is called.
+   * This validates the BlobStore.load() retry path: if load() fails after registering gauges, the catch block
+   * must call deregisterMetrics so that a subsequent retry can re-register without hitting
+   * "A metric named X already exists" from MetricRegistry.register().
+   */
+  @Test
+  public void testGaugesCanBeReregisteredAfterDeregister() {
+    MetricRegistry registry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(registry);
+
+    String storeId = "partition_retry";
+    AtomicBoolean inProgress = new AtomicBoolean(false);
+    AtomicReference<CompactionDetails> details = new AtomicReference<>(null);
+
+    // First registration — simulates first load() attempt that partially succeeded
+    metrics.initializeCompactorGauges(storeId, inProgress, details, new AtomicInteger(0), new AtomicInteger(0));
+
+    // Deregister — simulates load() catch block cleanup
+    metrics.deregisterMetrics(storeId);
+
+    // Re-registration — simulates retry load(). Must not throw "A metric named X already exists".
+    metrics.initializeCompactorGauges(storeId, inProgress, details, new AtomicInteger(0), new AtomicInteger(0));
+
+    String prefix = storeId + ".";
+    assertTrue("CompactedLogCount should be registered after retry",
+        registry.getGauges().containsKey(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactedLogCount")));
+    assertTrue("LogSegmentCount should be registered after retry",
+        registry.getGauges().containsKey(MetricRegistry.name(BlobStoreCompactor.class, prefix + "LogSegmentCount")));
+  }
+
+  /**
    * Tests that deregistering gauges for one store does not affect gauges registered for another store.
    * This verifies the per-store prefix isolation.
    */

@@ -370,6 +370,11 @@ public class BlobStore implements Store {
             logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
           }
         }
+        // Deregister any gauges that were successfully registered before the failure. initializeCompactorGauges and
+        // initializeIndexGauges may have been called before the exception. registry.remove() is a no-op for names that
+        // were never registered, so this is safe regardless of how far load() progressed. Without this, a subsequent
+        // retry of load() would fail with "A metric named X already exists" on the registry.register() calls.
+        metrics.deregisterMetrics(storeId);
         initialized = false;
         String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
         throw new StoreException(err, e, StoreErrorCodes.InitializationError);
