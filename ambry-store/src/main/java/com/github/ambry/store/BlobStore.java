@@ -1600,12 +1600,15 @@ public class BlobStore implements Store {
       try {
         checkStarted();
         logger.info("Store : {} shutting down", dataDir);
+        // Deregister metrics before closing sub-components. If index.close() or compactor.close() throws,
+        // deregisterMetrics must still run — otherwise orphaned gauge lambdas accumulate in the MetricRegistry
+        // and JMX MBeanRegistrar, holding strong references to PersistentIndex objects and preventing GC.
+        metrics.deregisterMetrics(storeId);
         blobStoreStats.close();
         compactor.close(30);
         index.close(skipDiskFlush);
         log.close(skipDiskFlush);
         remoteTokenTracker.close();
-        metrics.deregisterMetrics(storeId);
         setCurrentState(ReplicaState.OFFLINE);
         started = false;
       } catch (Exception e) {
