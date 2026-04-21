@@ -420,7 +420,36 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       }
       // We don't need to check if replicas, which have been caught up with, are up or down currently. As long as, the
       // peer replica has been put into catchup set, this means it has been caught up sometime before it went down.
-      return localDcCaughtUpReplicas.size() + remoteDcCaughtUpReplicas.size() >= catchupTarget;
+      int totalCaughtUp = localDcCaughtUpReplicas.size() + remoteDcCaughtUpReplicas.size();
+      if (totalCaughtUp < catchupTarget) {
+        return false;
+      }
+      // When enabled, during bootstrap with no local DC peers in STANDBY/LEADER, require caught-up peers from at least
+      // 2 distinct remote DCs. This prevents completing bootstrap by syncing with a single remote DC that may itself be
+      // recovering with empty data (e.g., multi-fabric crash where lor1 syncs with empty lva1 replicas while ltx1 has
+      // the real data).
+      if (clusterMapConfig.clustermapReplicaCatchupRequireMultiDcForBootstrap
+          && currentState == ReplicaState.BOOTSTRAP
+          && localDcCaughtUpReplicas.isEmpty()) {
+        long distinctRemoteDcsWithPeers = remoteDcPeerReplicaAndLag.keySet().stream()
+            .map(r -> r.getDataNodeId().getDatacenterName())
+            .distinct()
+            .count();
+        // Only enforce multi-DC check when there are at least 2 remote DCs with peers
+        if (distinctRemoteDcsWithPeers >= 2) {
+          long distinctCaughtUpDcs = remoteDcCaughtUpReplicas.stream()
+              .map(r -> r.getDataNodeId().getDatacenterName())
+              .distinct()
+              .count();
+          if (distinctCaughtUpDcs < 2) {
+            logger.info("Partition {} bootstrap sync-up: caught up with {} peers but only from {} distinct remote DC(s),"
+                    + " requiring at least 2. LocalDcPeers: {}, RemoteDcCaughtUp: {}", replicaOnCurrentNode.getPartitionId().toPathString(),
+                totalCaughtUp, distinctCaughtUpDcs, localDcPeerReplicaAndLag.size(), remoteDcCaughtUpReplicas);
+            return false;
+          }
+        }
+      }
+      return true;
     }
 
     @Override
