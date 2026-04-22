@@ -471,8 +471,9 @@ public class AmbryReplicaSyncUpManagerTest {
     assertTrue("Test requires at least 2 peers in " + firstRemoteDc, firstDcPeers.size() >= 2);
 
     // Catch up with 2 peers from a single remote DC — should complete because flag is off
-    testWithoutMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
-        testWithoutMultiDc.currentReplica, firstDcPeers.get(0), 0L, ReplicaState.STANDBY);
+    assertFalse("Should not complete: only 1 peer caught up",
+        testWithoutMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithoutMultiDc.currentReplica, firstDcPeers.get(0), 0L, ReplicaState.STANDBY));
     assertTrue("Should complete with single-DC remote peers when multi-DC check is disabled",
         testWithoutMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
             testWithoutMultiDc.currentReplica, firstDcPeers.get(1), 0L, ReplicaState.STANDBY));
