@@ -386,28 +386,34 @@ public class AmbryReplicaSyncUpManagerTest {
 
     testWithMultiDc.replicaSyncUpService.initiateBootstrap(testWithMultiDc.currentReplica);
 
-    // Separate remote peers by DC
-    List<ReplicaId> dc2Peers = testWithMultiDc.remoteDcPeerReplicas.stream()
-        .filter(r -> r.getDataNodeId().getDatacenterName().equals("DC2"))
+    // Separate remote peers by DC (use actual DC names, not hardcoded, since currentReplica DC varies)
+    List<String> remoteDcNames = testWithMultiDc.remoteDcPeerReplicas.stream()
+        .map(r -> r.getDataNodeId().getDatacenterName())
+        .distinct()
+        .sorted()
         .collect(Collectors.toList());
-    List<ReplicaId> dc3Peers = testWithMultiDc.remoteDcPeerReplicas.stream()
-        .filter(r -> r.getDataNodeId().getDatacenterName().equals("DC3"))
+    assertTrue("Test requires at least 2 remote DCs", remoteDcNames.size() >= 2);
+    String firstRemoteDc = remoteDcNames.get(0);
+    String secondRemoteDc = remoteDcNames.get(1);
+    List<ReplicaId> firstDcPeers = testWithMultiDc.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(firstRemoteDc))
         .collect(Collectors.toList());
-    assertTrue("Test requires peers in DC2", dc2Peers.size() > 0);
-    assertTrue("Test requires peers in DC3", dc3Peers.size() > 0);
+    List<ReplicaId> secondDcPeers = testWithMultiDc.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(secondRemoteDc))
+        .collect(Collectors.toList());
 
-    // Catch up with 2 peers from DC2 only (simulates syncing with a single recovering fabric)
-    assertFalse("Should not complete: caught up with only 1 DC2 peer",
+    // Catch up with 2 peers from first remote DC only (simulates syncing with a single recovering fabric)
+    assertFalse("Should not complete: caught up with only 1 peer from " + firstRemoteDc,
         testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
-            testWithMultiDc.currentReplica, dc2Peers.get(0), 0L, ReplicaState.STANDBY));
-    assertFalse("Should not complete: caught up with 2 DC2 peers but all from same DC",
+            testWithMultiDc.currentReplica, firstDcPeers.get(0), 0L, ReplicaState.STANDBY));
+    assertFalse("Should not complete: caught up with 2 peers but all from same DC " + firstRemoteDc,
         testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
-            testWithMultiDc.currentReplica, dc2Peers.get(1), 0L, ReplicaState.STANDBY));
+            testWithMultiDc.currentReplica, firstDcPeers.get(1), 0L, ReplicaState.STANDBY));
 
-    // Now catch up with 1 peer from DC3 — should complete because we have 2 distinct DCs
+    // Now catch up with 1 peer from second remote DC — should complete because we have 2 distinct DCs
     assertTrue("Should complete: caught up with peers from 2 distinct remote DCs",
         testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
-            testWithMultiDc.currentReplica, dc3Peers.get(0), 0L, ReplicaState.STANDBY));
+            testWithMultiDc.currentReplica, secondDcPeers.get(0), 0L, ReplicaState.STANDBY));
 
     testWithMultiDc.replicaSyncUpService.reset();
   }
@@ -457,18 +463,19 @@ public class AmbryReplicaSyncUpManagerTest {
 
     testWithoutMultiDc.replicaSyncUpService.initiateBootstrap(testWithoutMultiDc.currentReplica);
 
-    // Separate remote peers by DC
-    List<ReplicaId> dc2Peers = testWithoutMultiDc.remoteDcPeerReplicas.stream()
-        .filter(r -> r.getDataNodeId().getDatacenterName().equals("DC2"))
+    // Separate remote peers by DC (use actual DC names, not hardcoded)
+    String firstRemoteDc = testWithoutMultiDc.remoteDcPeerReplicas.get(0).getDataNodeId().getDatacenterName();
+    List<ReplicaId> firstDcPeers = testWithoutMultiDc.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(firstRemoteDc))
         .collect(Collectors.toList());
-    assertTrue("Test requires at least 2 DC2 peers", dc2Peers.size() >= 2);
+    assertTrue("Test requires at least 2 peers in " + firstRemoteDc, firstDcPeers.size() >= 2);
 
-    // Catch up with 2 peers from DC2 only — should complete because flag is off
+    // Catch up with 2 peers from a single remote DC — should complete because flag is off
     testWithoutMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
-        testWithoutMultiDc.currentReplica, dc2Peers.get(0), 0L, ReplicaState.STANDBY);
+        testWithoutMultiDc.currentReplica, firstDcPeers.get(0), 0L, ReplicaState.STANDBY);
     assertTrue("Should complete with single-DC remote peers when multi-DC check is disabled",
         testWithoutMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
-            testWithoutMultiDc.currentReplica, dc2Peers.get(1), 0L, ReplicaState.STANDBY));
+            testWithoutMultiDc.currentReplica, firstDcPeers.get(1), 0L, ReplicaState.STANDBY));
 
     testWithoutMultiDc.replicaSyncUpService.reset();
   }
