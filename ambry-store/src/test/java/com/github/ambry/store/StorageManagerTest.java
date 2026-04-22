@@ -1002,7 +1002,7 @@ public class StorageManagerTest {
     Store storeToWrite = storageManager.getStore(localReplicas.get(1).getPartitionId());
     storeToWrite.put(writeSet);
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(1).getPartitionId().toPathString());
-    assertFalse("There should not be any bootstrap file for existing non-empty store",
+    assertTrue("There should be a bootstrap file for existing non-empty store to ensure sync-up with peers",
         storeToWrite.isBootstrapInProgress());
     assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
         storeToWrite.getCurrentState());
