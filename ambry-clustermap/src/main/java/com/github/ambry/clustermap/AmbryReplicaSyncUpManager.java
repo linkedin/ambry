@@ -411,7 +411,14 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     }
 
     /**
-     * @return whether current replica has caught up with enough peers
+     *
+     * Returns true when this replica has synced up with enough peers to complete its state transition. Specifically, the total number of caught-up peers (local + remote) must meet catchupTarget, AND one of the following must hold:
+     *
+     *  1. At least one local-DC peer has caught up (satisfied by local alone, or local plus remote).
+     *  2. No local-DC peer has caught up, but caught-up peers span at least 2 distinct remote DCs (enforced only when clustermap.replica.catchup.require.multi.dc.for.bootstrap=true and currentState == BOOTSTRAP).
+     *
+     *  Why the asymmetry: Helix's ExternalView for local-DC peers is treated as reliable since same-DC state changes propagate quickly. The view of remote-DC peers can be stale — reporting them as STANDBY/LEADER while they are actually still in
+     *  BOOTSTRAP with empty data. Requiring two distinct remote DCs reduces the chance of completing bootstrap against a single stale view (e.g., during a multi-fabric recovery where empty replicas appear caught-up against each other).
      */
     boolean hasSyncedUpWithEnoughPeers() {
       // If there are no peers at all (single-replica partition), sync-up is trivially complete.
@@ -420,7 +427,39 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       }
       // We don't need to check if replicas, which have been caught up with, are up or down currently. As long as, the
       // peer replica has been put into catchup set, this means it has been caught up sometime before it went down.
-      return localDcCaughtUpReplicas.size() + remoteDcCaughtUpReplicas.size() >= catchupTarget;
+      int totalCaughtUp = localDcCaughtUpReplicas.size() + remoteDcCaughtUpReplicas.size();
+      if (totalCaughtUp < catchupTarget) {
+        return false;
+      }
+      // When enabled, during bootstrap with no local DC peers in STANDBY/LEADER, require caught-up peers from at least
+      // 2 distinct remote DCs. This prevents completing bootstrap by syncing with a single remote DC that may itself be
+      // recovering with empty data (e.g., multi-fabric crash where lor1 syncs with empty lva1 replicas while ltx1 has
+      // the real data).
+      if (clusterMapConfig.clustermapReplicaCatchupRequireMultiDcForBootstrap
+          && currentState == ReplicaState.BOOTSTRAP
+          && localDcCaughtUpReplicas.isEmpty()) {
+        long distinctRemoteDcsWithPeers = remoteDcPeerReplicaAndLag.keySet().stream()
+            .map(r -> r.getDataNodeId().getDatacenterName())
+            .distinct()
+            .count();
+        // Only enforce multi-DC check when there are at least 2 remote DCs with peers
+        if (distinctRemoteDcsWithPeers >= 2) {
+          long distinctCaughtUpDcs = remoteDcCaughtUpReplicas.stream()
+              .map(r -> r.getDataNodeId().getDatacenterName())
+              .distinct()
+              .count();
+          if (distinctCaughtUpDcs < 2) {
+            logger.info("Partition {} bootstrap sync-up: caught up with {} peers but only from {} distinct remote DC(s),"
+                    + " requiring at least 2. LocalDcPeers: {}, RemoteDcCaughtUp: {}", replicaOnCurrentNode.getPartitionId().toPathString(),
+                totalCaughtUp, distinctCaughtUpDcs, localDcPeerReplicaAndLag.size(), remoteDcCaughtUpReplicas);
+            return false;
+          }
+        }
+      }
+      logger.info("Partition {} sync-up complete: state {}, localDcCaughtUp {}, remoteDcCaughtUp {}, catchupTarget {}",
+          replicaOnCurrentNode.getPartitionId().toPathString(), currentState, localDcCaughtUpReplicas,
+          remoteDcCaughtUpReplicas, catchupTarget);
+      return true;
     }
 
     @Override

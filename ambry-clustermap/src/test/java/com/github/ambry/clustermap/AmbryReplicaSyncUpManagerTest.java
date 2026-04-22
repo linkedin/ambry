@@ -53,6 +53,13 @@ public class AmbryReplicaSyncUpManagerTest {
   private Message mockMessage;
 
   public AmbryReplicaSyncUpManagerTest() throws IOException {
+    this(new Properties());
+  }
+
+  /**
+   * Constructor that accepts additional properties for test customization.
+   */
+  AmbryReplicaSyncUpManagerTest(Properties extraProperties) throws IOException {
     clusterMap = new MockClusterMap();
     // clustermap setup: 3 data centers(DC1/DC2/DC3), each data center has 3 replicas
     PartitionId partition = clusterMap.getAllPartitionIds(null).get(0);
@@ -76,6 +83,7 @@ public class AmbryReplicaSyncUpManagerTest {
     properties.setProperty("clustermap.replica.catchup.acceptable.lag.bytes", Long.toString(100L));
     properties.setProperty("clustermap.enable.state.model.listener", Boolean.toString(true));
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    properties.putAll(extraProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
@@ -350,5 +358,126 @@ public class AmbryReplicaSyncUpManagerTest {
     assertTrue("Disconnection should complete immediately for single-replica partition",
         disconnectionLatch.await(1, TimeUnit.SECONDS));
     replicaSyncUpService.reset();
+  }
+
+  /**
+   * Test that when multi-DC bootstrap safety check is enabled and all local DC peers are bootstrapping (not in
+   * STANDBY/LEADER), catching up with peers from only one remote DC is insufficient. The bootstrapping replica must
+   * catch up with peers from at least 2 distinct remote DCs before completing bootstrap.
+   *
+   * This simulates a multi-fabric crash where lor1 and lva1 are both down: a lor1 replica could sync with empty
+   * lva1 replicas (stale ExternalView shows them as STANDBY) and prematurely transition to STANDBY with no data.
+   * Requiring 2 distinct remote DCs ensures at least one healthy fabric contributes to catchup.
+   */
+  @Test
+  public void testMultiDcBootstrapSafetyCheck() throws Exception {
+    // Create a new SyncUpManager with the multi-DC safety check enabled and catchup target=2
+    Properties multiDcProps = new Properties();
+    multiDcProps.setProperty("clustermap.replica.catchup.require.multi.dc.for.bootstrap", "true");
+    multiDcProps.setProperty("clustermap.replica.catchup.target", "2");
+    AmbryReplicaSyncUpManagerTest testWithMultiDc = new AmbryReplicaSyncUpManagerTest(multiDcProps);
+
+    // Simulate: all local DC peers are in BOOTSTRAP (not STANDBY/LEADER), so they won't appear in peer list.
+    // Set local peers' state to BOOTSTRAP so getReplicaIdsByState(STANDBY/LEADER) won't include them.
+    MockPartitionId partition = (MockPartitionId) testWithMultiDc.currentReplica.getPartitionId();
+    for (ReplicaId localPeer : testWithMultiDc.localDcPeerReplicas) {
+      partition.replicaAndState.put(localPeer, ReplicaState.BOOTSTRAP);
+    }
+
+    testWithMultiDc.replicaSyncUpService.initiateBootstrap(testWithMultiDc.currentReplica);
+
+    // Separate remote peers by DC (use actual DC names, not hardcoded, since currentReplica DC varies)
+    List<String> remoteDcNames = testWithMultiDc.remoteDcPeerReplicas.stream()
+        .map(r -> r.getDataNodeId().getDatacenterName())
+        .distinct()
+        .sorted()
+        .collect(Collectors.toList());
+    assertTrue("Test requires at least 2 remote DCs", remoteDcNames.size() >= 2);
+    String firstRemoteDc = remoteDcNames.get(0);
+    String secondRemoteDc = remoteDcNames.get(1);
+    List<ReplicaId> firstDcPeers = testWithMultiDc.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(firstRemoteDc))
+        .collect(Collectors.toList());
+    List<ReplicaId> secondDcPeers = testWithMultiDc.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(secondRemoteDc))
+        .collect(Collectors.toList());
+
+    // Catch up with 2 peers from first remote DC only (simulates syncing with a single recovering fabric)
+    assertFalse("Should not complete: caught up with only 1 peer from " + firstRemoteDc,
+        testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithMultiDc.currentReplica, firstDcPeers.get(0), 0L, ReplicaState.STANDBY));
+    assertFalse("Should not complete: caught up with 2 peers but all from same DC " + firstRemoteDc,
+        testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithMultiDc.currentReplica, firstDcPeers.get(1), 0L, ReplicaState.STANDBY));
+
+    // Now catch up with 1 peer from second remote DC — should complete because we have 2 distinct DCs
+    assertTrue("Should complete: caught up with peers from 2 distinct remote DCs",
+        testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithMultiDc.currentReplica, secondDcPeers.get(0), 0L, ReplicaState.STANDBY));
+
+    testWithMultiDc.replicaSyncUpService.reset();
+  }
+
+  /**
+   * Test that the multi-DC safety check does NOT apply when local DC peers are available (normal case).
+   * Even with the flag enabled, if local peers are caught up, bootstrap should complete normally.
+   */
+  @Test
+  public void testMultiDcCheckSkippedWhenLocalPeersAvailable() throws Exception {
+    Properties multiDcProps = new Properties();
+    multiDcProps.setProperty("clustermap.replica.catchup.require.multi.dc.for.bootstrap", "true");
+    multiDcProps.setProperty("clustermap.replica.catchup.target", "2");
+    AmbryReplicaSyncUpManagerTest testWithMultiDc = new AmbryReplicaSyncUpManagerTest(multiDcProps);
+
+    testWithMultiDc.replicaSyncUpService.initiateBootstrap(testWithMultiDc.currentReplica);
+
+    // Catch up with 2 local DC peers — should complete without needing multi-DC remote peers
+    ReplicaId localPeer1 = testWithMultiDc.localDcPeerReplicas.get(0);
+    ReplicaId localPeer2 = testWithMultiDc.localDcPeerReplicas.get(1);
+    assertFalse("Should not complete: only 1 local peer caught up",
+        testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithMultiDc.currentReplica, localPeer1, 50L, ReplicaState.STANDBY));
+    assertTrue("Should complete: 2 local peers caught up, multi-DC check should not apply",
+        testWithMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithMultiDc.currentReplica, localPeer2, 10L, ReplicaState.STANDBY));
+
+    testWithMultiDc.replicaSyncUpService.reset();
+  }
+
+  /**
+   * Test that the multi-DC safety check is not enforced when the flag is disabled (default behavior).
+   * Catching up with peers from a single remote DC should be sufficient.
+   */
+  @Test
+  public void testMultiDcCheckDisabledByDefault() throws Exception {
+    // Create a SyncUpManager with catchup target=2 but multi-DC check disabled
+    Properties props = new Properties();
+    props.setProperty("clustermap.replica.catchup.target", "2");
+    AmbryReplicaSyncUpManagerTest testWithoutMultiDc = new AmbryReplicaSyncUpManagerTest(props);
+
+    // Simulate: all local DC peers are in BOOTSTRAP
+    MockPartitionId partition = (MockPartitionId) testWithoutMultiDc.currentReplica.getPartitionId();
+    for (ReplicaId localPeer : testWithoutMultiDc.localDcPeerReplicas) {
+      partition.replicaAndState.put(localPeer, ReplicaState.BOOTSTRAP);
+    }
+
+    testWithoutMultiDc.replicaSyncUpService.initiateBootstrap(testWithoutMultiDc.currentReplica);
+
+    // Separate remote peers by DC (use actual DC names, not hardcoded)
+    String firstRemoteDc = testWithoutMultiDc.remoteDcPeerReplicas.get(0).getDataNodeId().getDatacenterName();
+    List<ReplicaId> firstDcPeers = testWithoutMultiDc.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(firstRemoteDc))
+        .collect(Collectors.toList());
+    assertTrue("Test requires at least 2 peers in " + firstRemoteDc, firstDcPeers.size() >= 2);
+
+    // Catch up with 2 peers from a single remote DC — should complete because flag is off
+    assertFalse("Should not complete: only 1 peer caught up",
+        testWithoutMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithoutMultiDc.currentReplica, firstDcPeers.get(0), 0L, ReplicaState.STANDBY));
+    assertTrue("Should complete with single-DC remote peers when multi-DC check is disabled",
+        testWithoutMultiDc.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(
+            testWithoutMultiDc.currentReplica, firstDcPeers.get(1), 0L, ReplicaState.STANDBY));
+
+    testWithoutMultiDc.replicaSyncUpService.reset();
   }
 }

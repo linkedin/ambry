@@ -296,6 +296,17 @@ public class ClusterMapConfig {
   public final int clustermapReplicaCatchupTargetForDownwardTransition;
 
   /**
+   * When enabled and a bootstrapping replica has no local DC peers in STANDBY/LEADER state, require caught-up peers
+   * from at least 2 distinct remote DCs before completing bootstrap. This prevents a replica from transitioning to
+   * STANDBY after syncing with a single remote DC that may itself be recovering with empty/stale data (e.g., during a
+   * multi-fabric crash). Only applies when the number of distinct remote DCs with peers is >= 2. Property key:
+   * {@code clustermap.replica.catchup.require.multi.dc.for.bootstrap}. Default: false.
+   */
+  @Config("clustermap.replica.catchup.require.multi.dc.for.bootstrap")
+  @Default("false")
+  public final boolean clustermapReplicaCatchupRequireMultiDcForBootstrap;
+
+  /**
    * The minimum number of replicas in local datacenter required for a partition to serve PUT request. This is used to
    * get writable partitions for PUT operation. Any partition with replica count larger than or equal to this number is
    * acceptable to be considered as a candidate.
@@ -477,6 +488,8 @@ public class ClusterMapConfig {
     clustermapReplicaCatchupTargetForDownwardTransition =
         verifiableProperties.getIntInRange("clustermap.replica.catchup.target.for.downward.transition", 2, 0,
             Integer.MAX_VALUE);
+    clustermapReplicaCatchupRequireMultiDcForBootstrap =
+        verifiableProperties.getBoolean("clustermap.replica.catchup.require.multi.dc.for.bootstrap", false);
     clustermapWritablePartitionMinReplicaCount =
         verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
     clustermapUpdateDatanodeInfo = verifiableProperties.getBoolean("clustermap.update.datanode.info", false);
