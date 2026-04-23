@@ -84,6 +84,9 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
               : null;
       HelixAccountService helixAccountService =
           new HelixAccountService(helixStore, accountServiceMetrics, notifier, scheduler, accountServiceConfig);
+      // Fail fast if the initial remote load + backup-file fallback produced an empty cache; serving requests
+      // with an empty cache would cause lookups to return null for valid accounts.
+      helixAccountService.failIfCacheIsEmpty();
       long spentTimeMs = System.currentTimeMillis() - startTimeMs;
       logger.info("HelixAccountService started, took {} ms", spentTimeMs);
       accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
