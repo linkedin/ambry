@@ -506,19 +506,21 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * the caller as a {@link RestServiceErrorCode#ServiceUnavailable} so the request fails fast instead of pinning
    * Netty channel and request context in an unbounded queue.
    */
-  static class TransactionExecutor implements Closeable {
+  private static class TransactionExecutor implements Closeable {
     private final String datacenter;
     private final DataSource dataSource;
     private final ThreadPoolExecutor executor;
     private final Metrics metrics;
     private final String queueSizeMetricName;
     private final String activeCountMetricName;
+    private final int maxPendingTransactions;
 
     TransactionExecutor(String datacenter, DataSource dataSource, int numThreads, int maxPendingTransactions,
         Metrics metrics) {
       this.datacenter = datacenter;
       this.dataSource = dataSource;
       this.metrics = metrics;
+      this.maxPendingTransactions = maxPendingTransactions;
       this.executor = new ThreadPoolExecutor(numThreads, numThreads, 0L, TimeUnit.MILLISECONDS,
           new LinkedBlockingQueue<>(maxPendingTransactions),
           new Utils.SchedulerThreadFactory("Thread-" + datacenter, false), new ThreadPoolExecutor.AbortPolicy());
@@ -605,7 +607,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     private <T> void rejectTransaction(Callback<T> callback, RejectedExecutionException cause) {
       metrics.namedBlobTransactionRejectedCount.inc();
       logger.warn("Named blob DB transaction rejected for datacenter {}: queue full (size={}, capacity={})", datacenter,
-          executor.getQueue().size(), executor.getQueue().size() + executor.getQueue().remainingCapacity());
+          executor.getQueue().size(), maxPendingTransactions);
       callback.onCompletion(null,
           new RestServiceException("Named blob DB transaction queue full for datacenter " + datacenter, cause,
               RestServiceErrorCode.ServiceUnavailable));
@@ -613,13 +615,6 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
     public DataSource getDataSource() {
       return dataSource;
-    }
-
-    /**
-     * @return the {@link ThreadPoolExecutor} backing this transaction executor. Visible for tests.
-     */
-    ThreadPoolExecutor getExecutor() {
-      return executor;
     }
 
     @Override
