@@ -27,6 +27,8 @@ public class MySqlNamedBlobDbConfig {
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
+  public static final String MAX_PENDING_TRANSACTIONS_PER_DATACENTER =
+      PREFIX + "max.pending.transactions.per.datacenter";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
@@ -67,6 +69,20 @@ public class MySqlNamedBlobDbConfig {
   @Config(REMOTE_POOL_SIZE)
   @Default("1")
   public final int remotePoolSize;
+
+  /**
+   * Maximum number of in-flight transactions allowed per datacenter (queued plus running). When the per-datacenter
+   * work queue is full, additional submissions are rejected with {@link com.github.ambry.rest.RestServiceErrorCode#ServiceUnavailable}
+   * instead of being enqueued. Bounded admission control protects the JVM from heap exhaustion when the backend
+   * MySQL slows down: each queued task pins a Netty channel and request context, so an unbounded queue can grow
+   * to multi-GB before the kubelet kills the pod.
+   *
+   * <p>The default is conservatively sized for the prior unbounded behavior; raise it together with {@link #localPoolSize}
+   * when intentionally provisioning more capacity. Order-of-magnitude sizing: {@code 4 * localPoolSize * p99_query_latency_seconds}.
+   */
+  @Config(MAX_PENDING_TRANSACTIONS_PER_DATACENTER)
+  @Default("100")
+  public final int maxPendingTransactionsPerDatacenter;
 
   /**
    * The maximum number of entries to return per response page when listing blobs.
@@ -127,6 +143,8 @@ public class MySqlNamedBlobDbConfig {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
+    this.maxPendingTransactionsPerDatacenter =
+        verifiableProperties.getIntInRange(MAX_PENDING_TRANSACTIONS_PER_DATACENTER, 100, 1, Integer.MAX_VALUE);
     this.listMaxResults =
         verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
     this.queryStaleDataMaxResults =

@@ -16,6 +16,8 @@
 package com.github.ambry.named;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -49,7 +51,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -193,6 +197,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     this.LIST_WITH_PREFIX_SQL = getListWithPrefixSQLStatement(config);
     this.localDatacenter = localDatacenter;
     this.retryExecutor = new RetryExecutor(null);
+    this.metricsRecoder = metricRecorder;
     this.transactionExecutors = MySqlUtils.getDbEndpointsPerDC(config.dbInfo)
         .values()
         .stream()
@@ -201,9 +206,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         .collect(Collectors.toMap(DbEndpoint::getDatacenter,
             dbEndpoint -> new TransactionExecutor(dbEndpoint.getDatacenter(),
                 dataSourceFactory.getDataSource(dbEndpoint),
-                localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
+                localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize,
+                config.maxPendingTransactionsPerDatacenter, metricRecorder)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
-    this.metricsRecoder = metricRecorder;
     this.time = time;
   }
 
@@ -492,76 +497,136 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   /**
-   * Execute transaction on datacenter.
+   * Execute transactions for a single datacenter on a bounded thread pool.
+   *
+   * <p>The pool uses a fixed number of worker threads (sized by {@code MySqlNamedBlobDbConfig.localPoolSize} /
+   * {@code remotePoolSize}) and a bounded {@link LinkedBlockingQueue} sized by
+   * {@code MySqlNamedBlobDbConfig.maxPendingTransactionsPerDatacenter}. When the queue is full, additional
+   * submissions are rejected via {@link ThreadPoolExecutor.AbortPolicy} and the rejection is reported back to
+   * the caller as a {@link RestServiceErrorCode#ServiceUnavailable} so the request fails fast instead of pinning
+   * Netty channel and request context in an unbounded queue.
    */
-  private static class TransactionExecutor implements Closeable {
+  static class TransactionExecutor implements Closeable {
+    private final String datacenter;
     private final DataSource dataSource;
-    private final ExecutorService executor;
+    private final ThreadPoolExecutor executor;
+    private final Metrics metrics;
+    private final String queueSizeMetricName;
+    private final String activeCountMetricName;
 
-    TransactionExecutor(String datacenter, DataSource dataSource, int numThreads) {
+    TransactionExecutor(String datacenter, DataSource dataSource, int numThreads, int maxPendingTransactions,
+        Metrics metrics) {
+      this.datacenter = datacenter;
       this.dataSource = dataSource;
-      executor = Utils.newScheduler(numThreads, "Thread-" + datacenter, false);
+      this.metrics = metrics;
+      this.executor = new ThreadPoolExecutor(numThreads, numThreads, 0L, TimeUnit.MILLISECONDS,
+          new LinkedBlockingQueue<>(maxPendingTransactions),
+          new Utils.SchedulerThreadFactory("Thread-" + datacenter, false), new ThreadPoolExecutor.AbortPolicy());
+
+      MetricRegistry registry = metrics.getMetricRegistry();
+      String prefix = metrics.getPrefix();
+      this.queueSizeMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "TransactionExecutorQueueSize." + datacenter);
+      this.activeCountMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "TransactionExecutorActiveCount." + datacenter);
+      // remove() before register() guards against duplicate-key errors when a previous instance
+      // (e.g. a test) registered the same gauge name and was not closed.
+      registry.remove(queueSizeMetricName);
+      registry.remove(activeCountMetricName);
+      registry.register(queueSizeMetricName, (Gauge<Integer>) () -> executor.getQueue().size());
+      registry.register(activeCountMetricName, (Gauge<Integer>) () -> executor.getActiveCount());
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
         Callback<T> callback) {
-      executor.submit(() -> {
-        try (Connection connection = dataSource.getConnection()) {
-          T result;
-          if (autoCommit) {
-            result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-          } else {
-            // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-            connection.setAutoCommit(false);
-            try {
+      final long enqueueTimeMs = System.currentTimeMillis();
+      try {
+        executor.submit(() -> {
+          metrics.namedBlobEnqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
+          try (Connection connection = dataSource.getConnection()) {
+            T result;
+            if (autoCommit) {
               result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-              connection.commit();
-            } catch (Exception e) {
-              connection.rollback();
-              throw e;
-            } finally {
-              connection.setAutoCommit(true);
+            } else {
+              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
+              connection.setAutoCommit(false);
+              try {
+                result = transaction.run(container.getParentAccountId(), container.getId(), connection);
+                connection.commit();
+              } catch (Exception e) {
+                connection.rollback();
+                throw e;
+              } finally {
+                connection.setAutoCommit(true);
+              }
             }
+            callback.onCompletion(result, null);
+          } catch (Exception e) {
+            callback.onCompletion(null, e);
           }
-          callback.onCompletion(result, null);
-        } catch (Exception e) {
-          callback.onCompletion(null, e);
-        }
-      });
+        });
+      } catch (RejectedExecutionException e) {
+        rejectTransaction(callback, e);
+      }
     }
 
     <T> void executeTransactionGeneric(boolean autoCommit, TransactionGeneric<T> transaction, Callback<T> callback) {
-      executor.submit(() -> {
-        try (Connection connection = dataSource.getConnection()) {
-          T result;
-          if (autoCommit) {
-            result = transaction.run(connection);
-          } else {
-            // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-            connection.setAutoCommit(false);
-            try {
+      final long enqueueTimeMs = System.currentTimeMillis();
+      try {
+        executor.submit(() -> {
+          metrics.namedBlobEnqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
+          try (Connection connection = dataSource.getConnection()) {
+            T result;
+            if (autoCommit) {
               result = transaction.run(connection);
-              connection.commit();
-            } catch (Exception e) {
-              connection.rollback();
-              throw e;
-            } finally {
-              connection.setAutoCommit(true);
+            } else {
+              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
+              connection.setAutoCommit(false);
+              try {
+                result = transaction.run(connection);
+                connection.commit();
+              } catch (Exception e) {
+                connection.rollback();
+                throw e;
+              } finally {
+                connection.setAutoCommit(true);
+              }
             }
+            callback.onCompletion(result, null);
+          } catch (Exception e) {
+            callback.onCompletion(null, e);
           }
-          callback.onCompletion(result, null);
-        } catch (Exception e) {
-          callback.onCompletion(null, e);
-        }
-      });
+        });
+      } catch (RejectedExecutionException e) {
+        rejectTransaction(callback, e);
+      }
+    }
+
+    private <T> void rejectTransaction(Callback<T> callback, RejectedExecutionException cause) {
+      metrics.namedBlobTransactionRejectedCount.inc();
+      logger.warn("Named blob DB transaction rejected for datacenter {}: queue full (size={}, capacity={})", datacenter,
+          executor.getQueue().size(), executor.getQueue().size() + executor.getQueue().remainingCapacity());
+      callback.onCompletion(null,
+          new RestServiceException("Named blob DB transaction queue full for datacenter " + datacenter, cause,
+              RestServiceErrorCode.ServiceUnavailable));
     }
 
     public DataSource getDataSource() {
       return dataSource;
     }
 
+    /**
+     * @return the {@link ThreadPoolExecutor} backing this transaction executor. Visible for tests.
+     */
+    ThreadPoolExecutor getExecutor() {
+      return executor;
+    }
+
     @Override
     public void close() {
+      MetricRegistry registry = metrics.getMetricRegistry();
+      registry.remove(queueSizeMetricName);
+      registry.remove(activeCountMetricName);
       if (dataSource instanceof Closeable) {
         try {
           ((Closeable) dataSource).close();

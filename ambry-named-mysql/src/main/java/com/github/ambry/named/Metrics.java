@@ -21,6 +21,9 @@ import com.codahale.metrics.MetricRegistry;
 
 
 public class Metrics {
+  private final MetricRegistry metricRegistry;
+  private final String prefix;
+
   public final Counter namedDataNotFoundGetCount;
   public final Counter namedDataErrorGetCount;
   public final Counter namedDataInconsistentGetCount;
@@ -60,11 +63,19 @@ public class Metrics {
   public final Counter namedBlobDBInsertErrorCount;
   public final Counter namedBlobDBUpdateErrorCount;
 
+  // Bounded-queue admission control metrics. These complement the per-datacenter
+  // TransactionExecutorQueueSize and TransactionExecutorActiveCount gauges registered
+  // dynamically by MySqlNamedBlobDb.TransactionExecutor.
+  public final Counter namedBlobTransactionRejectedCount;
+  public final Histogram namedBlobEnqueueWaitTimeInMs;
+
   /**
    * Constructor to create the Metrics.
    * @param metricRegistry The {@link MetricRegistry}.
    */
   public Metrics(MetricRegistry metricRegistry, String prefix) {
+    this.metricRegistry = metricRegistry;
+    this.prefix = prefix;
     namedDataNotFoundGetCount =
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedDataNotFoundGetCount"));
     namedDataErrorGetCount =
@@ -124,5 +135,26 @@ public class Metrics {
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBInsertErrorCount"));
     namedBlobDBUpdateErrorCount =
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBUpdateErrorCount"));
+
+    namedBlobTransactionRejectedCount = metricRegistry.counter(
+        MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobTransactionRejectedCount"));
+    namedBlobEnqueueWaitTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobEnqueueWaitTimeInMs"));
+  }
+
+  /**
+   * @return the {@link MetricRegistry} backing this {@link Metrics} instance.
+   * Used by {@link MySqlNamedBlobDb.TransactionExecutor} to register per-datacenter gauges.
+   */
+  MetricRegistry getMetricRegistry() {
+    return metricRegistry;
+  }
+
+  /**
+   * @return the metric-name prefix supplied at construction time. Used to keep dynamically
+   * registered gauges in the same namespace as the static counters/histograms above.
+   */
+  String getPrefix() {
+    return prefix;
   }
 }
