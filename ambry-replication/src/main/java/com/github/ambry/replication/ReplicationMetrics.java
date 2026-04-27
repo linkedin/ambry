@@ -184,21 +184,31 @@ public class ReplicationMetrics {
 
   public final Counter backupIntegrityError;
 
-  // Max RemoteReplicaInfo.getLocalLagFromRemoteInBytes() across peers of a partition at the moment it transitions
-  // STANDBY -> LEADER, considering only peers with a known (non-negative) cached lag. A well-caught-up STANDBY
-  // should be ~0; non-zero values indicate the replica was promoted before it was fully synced. If any peer
-  // reports a known lag, unknown peers are ignored since one known data point is enough to assess readiness.
-  public final Histogram standbyToLeaderPromotionLagBytes;
+  // Max RemoteReplicaInfo.getLocalLagFromRemoteInBytes() across LOCAL-DC peers of a partition at the moment it
+  // transitions STANDBY -> LEADER, considering only peers with a known (non-negative) cached lag. Intra-DC
+  // replication is all-to-all in both ALL_TO_ALL and LEADER_BASED modes, so a well-caught-up STANDBY should be
+  // ~0 against its local-DC peers; this is the primary signal for promotion fitness. Unknown (-1) peers are
+  // ignored when at least one local-DC peer has a known lag.
+  public final Histogram standbyToLeaderPromotionLocalDcLagBytes;
 
-  // Incremented once per STANDBY -> LEADER promotion when NO peer of the partition has a known cached lag
-  // (every peer is at the -1 sentinel). The replica was promoted with no attested sync signal from any peer.
+  // Max RemoteReplicaInfo.getLocalLagFromRemoteInBytes() across REMOTE-DC peers of a partition at the moment it
+  // transitions STANDBY -> LEADER, considering only peers with a known (non-negative) cached lag. This reflects
+  // cross-DC propagation delay and is non-zero in steady state by design, so it is reported separately from the
+  // local-DC signal. Unknown (-1) peers are ignored when at least one remote-DC peer has a known lag.
+  public final Histogram standbyToLeaderPromotionRemoteDcLagBytes;
+
+  // Incremented once per STANDBY -> LEADER promotion when NO peer of the partition (local or remote DC) has a
+  // known cached lag (every peer is at the -1 sentinel). The replica was promoted with no attested sync signal
+  // from any peer.
   public final Counter standbyToLeaderPromotionUnknownLagPeerCount;
 
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
     backupIntegrityError =
         registry.counter(MetricRegistry.name(ReplicationMetrics.class, "BackupIntegrityError"));
-    standbyToLeaderPromotionLagBytes =
-        registry.histogram(MetricRegistry.name(ReplicationManager.class, "StandbyToLeaderPromotionLagBytes"));
+    standbyToLeaderPromotionLocalDcLagBytes = registry.histogram(
+        MetricRegistry.name(ReplicationManager.class, "StandbyToLeaderPromotionLocalDcLagBytes"));
+    standbyToLeaderPromotionRemoteDcLagBytes = registry.histogram(
+        MetricRegistry.name(ReplicationManager.class, "StandbyToLeaderPromotionRemoteDcLagBytes"));
     standbyToLeaderPromotionUnknownLagPeerCount =
         registry.counter(MetricRegistry.name(ReplicationManager.class, "StandbyToLeaderPromotionUnknownLagPeerCount"));
     intraColoReplicationBytesRate =

@@ -849,43 +849,60 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
-   * When a replica transitions STANDBY -> LEADER with all peers having known (>= 0) cached lag,
-   * the lag histogram should record the max lag across peers and the unknown-lag counter should not move.
+   * When a replica transitions STANDBY -> LEADER with both local-DC and remote-DC peers having known
+   * (>= 0) cached lag, each histogram should record the max lag over its own peer class and the
+   * unknown-lag counter should not move.
    */
   @Test
   public void standbyToLeaderPromotionMetricsKnownLagTest() throws Exception {
-    runStandbyToLeaderPromotionMetricsTest(new long[]{100L, 150L, 200L}, 1, 200L, 0);
+    runStandbyToLeaderPromotionMetricsTest(100L, 50L, 200L, 250L, 1, 100L, 1, 250L, 0);
   }
 
   /**
-   * When a replica transitions STANDBY -> LEADER with all peers at the -1 sentinel (never synced),
-   * the unknown-lag counter should increment and the lag histogram should not record.
+   * When every peer (local-DC and remote-DC) is at the -1 sentinel, the unknown-lag counter should
+   * increment exactly once and neither histogram should record.
    */
   @Test
   public void standbyToLeaderPromotionMetricsAllUnknownLagTest() throws Exception {
-    runStandbyToLeaderPromotionMetricsTest(new long[]{-1L, -1L, -1L}, 0, -1L, 1);
+    runStandbyToLeaderPromotionMetricsTest(-1L, -1L, -1L, -1L, 0, -1L, 0, -1L, 1);
   }
 
   /**
-   * When peers have a mix of known and unknown lag, the histogram records the max over only the known
-   * values and the unknown-lag counter does not move (a single known peer is enough to attest readiness).
+   * When only local-DC peers have known lag (all remote-DC peers unknown), only the local-DC histogram
+   * records; the unknown-lag counter does not move because at least one peer can attest sync state.
    */
   @Test
-  public void standbyToLeaderPromotionMetricsMixedLagTest() throws Exception {
-    runStandbyToLeaderPromotionMetricsTest(new long[]{250L, -1L, -1L}, 1, 250L, 0);
+  public void standbyToLeaderPromotionMetricsLocalDcOnlyKnownTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(75L, 125L, -1L, -1L, 1, 125L, 0, -1L, 0);
   }
 
   /**
-   * Drives one STANDBY -> LEADER promotion with per-peer cached lags and asserts histogram/counter state.
-   * A {@code peerLag} of -1 leaves the peer at its default (unknown) value; any other value is applied
-   * via {@link RemoteReplicaInfo#setLocalLagFromRemoteInBytes(long)}.
-   * @param peerLags per-peer lag values to assign (in {@link PartitionInfo#getRemoteReplicaInfos()} order)
-   * @param expectedHistogramCount expected observation count on standbyToLeaderPromotionLagBytes
-   * @param expectedHistogramMax expected histogram max; ignored when expectedHistogramCount is 0
+   * When only remote-DC peers have known lag (all local-DC peers unknown), only the remote-DC histogram
+   * records; the unknown-lag counter does not move.
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsRemoteDcOnlyKnownTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(-1L, -1L, 300L, 400L, 0, -1L, 1, 400L, 0);
+  }
+
+  /**
+   * Drives one STANDBY -> LEADER promotion with per-peer-class cached lags and asserts histogram/counter
+   * state. Each {@code lag} value of -1 leaves that peer at its default (unknown) value; any other value
+   * is applied via {@link RemoteReplicaInfo#setLocalLagFromRemoteInBytes(long)}. At most two peers per
+   * class are exercised; this is sufficient to validate per-class max selection.
+   * @param localPeerLag1 lag for the first local-DC peer ({@code -1} leaves it unknown)
+   * @param localPeerLag2 lag for the second local-DC peer ({@code -1} leaves it unknown)
+   * @param remotePeerLag1 lag for the first remote-DC peer ({@code -1} leaves it unknown)
+   * @param remotePeerLag2 lag for the second remote-DC peer ({@code -1} leaves it unknown)
+   * @param expectedLocalHistogramCount expected observation count on standbyToLeaderPromotionLocalDcLagBytes
+   * @param expectedLocalHistogramMax expected local-DC histogram max; ignored when count is 0
+   * @param expectedRemoteHistogramCount expected observation count on standbyToLeaderPromotionRemoteDcLagBytes
+   * @param expectedRemoteHistogramMax expected remote-DC histogram max; ignored when count is 0
    * @param expectedUnknownLagCount expected value of standbyToLeaderPromotionUnknownLagPeerCount
    */
-  private void runStandbyToLeaderPromotionMetricsTest(long[] peerLags, int expectedHistogramCount,
-      long expectedHistogramMax, int expectedUnknownLagCount) throws Exception {
+  private void runStandbyToLeaderPromotionMetricsTest(long localPeerLag1, long localPeerLag2, long remotePeerLag1,
+      long remotePeerLag2, int expectedLocalHistogramCount, long expectedLocalHistogramMax,
+      int expectedRemoteHistogramCount, long expectedRemoteHistogramMax, int expectedUnknownLagCount) throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
@@ -895,25 +912,48 @@ public class ReplicationTest extends ReplicationTestHelper {
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
 
+    String localDc = clusterMap.getDataNodeIds().get(0).getDatacenterName();
     PartitionId partitionId = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
     List<RemoteReplicaInfo> remoteReplicaInfos =
         replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
-    assertTrue("Test requires partition to have at least " + peerLags.length + " peers",
-        remoteReplicaInfos.size() >= peerLags.length);
-    for (int i = 0; i < peerLags.length; i++) {
-      if (peerLags[i] >= 0) {
-        remoteReplicaInfos.get(i).setLocalLagFromRemoteInBytes(peerLags[i]);
+    List<RemoteReplicaInfo> localDcPeers = new ArrayList<>();
+    List<RemoteReplicaInfo> remoteDcPeers = new ArrayList<>();
+    for (RemoteReplicaInfo info : remoteReplicaInfos) {
+      if (localDc.equals(info.getReplicaId().getDataNodeId().getDatacenterName())) {
+        localDcPeers.add(info);
+      } else {
+        remoteDcPeers.add(info);
       }
     }
+    assertTrue("Test requires partition to have at least 2 local-DC peers", localDcPeers.size() >= 2);
+    assertTrue("Test requires partition to have at least 2 remote-DC peers", remoteDcPeers.size() >= 2);
+    if (localPeerLag1 >= 0) {
+      localDcPeers.get(0).setLocalLagFromRemoteInBytes(localPeerLag1);
+    }
+    if (localPeerLag2 >= 0) {
+      localDcPeers.get(1).setLocalLagFromRemoteInBytes(localPeerLag2);
+    }
+    if (remotePeerLag1 >= 0) {
+      remoteDcPeers.get(0).setLocalLagFromRemoteInBytes(remotePeerLag1);
+    }
+    if (remotePeerLag2 >= 0) {
+      remoteDcPeers.get(1).setLocalLagFromRemoteInBytes(remotePeerLag2);
+    }
 
-    Histogram histogram = replicationManager.replicationMetrics.standbyToLeaderPromotionLagBytes;
+    Histogram localDcHistogram = replicationManager.replicationMetrics.standbyToLeaderPromotionLocalDcLagBytes;
+    Histogram remoteDcHistogram = replicationManager.replicationMetrics.standbyToLeaderPromotionRemoteDcLagBytes;
     Counter counter = replicationManager.replicationMetrics.standbyToLeaderPromotionUnknownLagPeerCount;
 
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(partitionId.toPathString());
 
-    assertEquals("Lag histogram observation count", expectedHistogramCount, histogram.getCount());
-    if (expectedHistogramCount > 0) {
-      assertEquals("Lag histogram max", expectedHistogramMax, histogram.getSnapshot().getMax());
+    assertEquals("Local-DC lag histogram observation count", expectedLocalHistogramCount, localDcHistogram.getCount());
+    if (expectedLocalHistogramCount > 0) {
+      assertEquals("Local-DC lag histogram max", expectedLocalHistogramMax, localDcHistogram.getSnapshot().getMax());
+    }
+    assertEquals("Remote-DC lag histogram observation count", expectedRemoteHistogramCount,
+        remoteDcHistogram.getCount());
+    if (expectedRemoteHistogramCount > 0) {
+      assertEquals("Remote-DC lag histogram max", expectedRemoteHistogramMax, remoteDcHistogram.getSnapshot().getMax());
     }
     assertEquals("Unknown-lag counter", expectedUnknownLagCount, counter.getCount());
 
