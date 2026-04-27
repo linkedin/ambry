@@ -17,6 +17,7 @@ package com.github.ambry.named;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
@@ -513,6 +514,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     private final Metrics metrics;
     private final String queueSizeMetricName;
     private final String activeCountMetricName;
+    private final String rejectedCountMetricName;
+    private final String enqueueWaitTimeMetricName;
+    private final Counter rejectedCount;
+    private final Histogram enqueueWaitTimeInMs;
     private final int maxPendingTransactions;
 
     TransactionExecutor(String datacenter, DataSource dataSource, int numThreads, int maxPendingTransactions,
@@ -531,12 +536,20 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "TransactionExecutorQueueSize." + datacenter);
       this.activeCountMetricName =
           MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "TransactionExecutorActiveCount." + datacenter);
+      this.rejectedCountMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobTransactionRejectedCount." + datacenter);
+      this.enqueueWaitTimeMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobEnqueueWaitTimeInMs." + datacenter);
       // remove() before register() guards against duplicate-key errors when a previous instance
-      // (e.g. a test) registered the same gauge name and was not closed.
+      // (e.g. a test) registered the same metric name and was not closed.
       registry.remove(queueSizeMetricName);
       registry.remove(activeCountMetricName);
+      registry.remove(rejectedCountMetricName);
+      registry.remove(enqueueWaitTimeMetricName);
       registry.register(queueSizeMetricName, (Gauge<Integer>) () -> executor.getQueue().size());
       registry.register(activeCountMetricName, (Gauge<Integer>) () -> executor.getActiveCount());
+      this.rejectedCount = registry.counter(rejectedCountMetricName);
+      this.enqueueWaitTimeInMs = registry.histogram(enqueueWaitTimeMetricName);
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
@@ -544,7 +557,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       final long enqueueTimeMs = System.currentTimeMillis();
       try {
         executor.submit(() -> {
-          metrics.namedBlobEnqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
+          enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
           try (Connection connection = dataSource.getConnection()) {
             T result;
             if (autoCommit) {
@@ -576,7 +589,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       final long enqueueTimeMs = System.currentTimeMillis();
       try {
         executor.submit(() -> {
-          metrics.namedBlobEnqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
+          enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
           try (Connection connection = dataSource.getConnection()) {
             T result;
             if (autoCommit) {
@@ -605,9 +618,12 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     }
 
     private <T> void rejectTransaction(Callback<T> callback, RejectedExecutionException cause) {
-      metrics.namedBlobTransactionRejectedCount.inc();
-      logger.warn("Named blob DB transaction rejected for datacenter {}: queue full (size={}, capacity={})", datacenter,
-          executor.getQueue().size(), maxPendingTransactions);
+      // The per-datacenter rejected counter and TransactionExecutorQueueSize.<dc> /
+      // TransactionExecutorActiveCount.<dc> gauges are the operational signal here. Logging at warn
+      // would amplify log volume on the saturated path the bounded queue is designed to shed.
+      rejectedCount.inc();
+      logger.debug("Named blob DB transaction rejected for datacenter {}: queue full (size={}, capacity={})",
+          datacenter, executor.getQueue().size(), maxPendingTransactions);
       callback.onCompletion(null,
           new RestServiceException("Named blob DB transaction queue full for datacenter " + datacenter, cause,
               RestServiceErrorCode.ServiceUnavailable));
@@ -619,9 +635,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
     @Override
     public void close() {
-      MetricRegistry registry = metrics.getMetricRegistry();
-      registry.remove(queueSizeMetricName);
-      registry.remove(activeCountMetricName);
+      // Close datasource and shut down the executor first; only then deregister metrics, so the
+      // per-datacenter gauges and counter remain observable while the executor is still draining
+      // in-flight transactions. A scrape that races with close() should see the drain progress
+      // rather than a hole.
       if (dataSource instanceof Closeable) {
         try {
           ((Closeable) dataSource).close();
@@ -630,6 +647,11 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         }
       }
       Utils.shutDownExecutorService(executor, 1, TimeUnit.MINUTES);
+      MetricRegistry registry = metrics.getMetricRegistry();
+      registry.remove(queueSizeMetricName);
+      registry.remove(activeCountMetricName);
+      registry.remove(rejectedCountMetricName);
+      registry.remove(enqueueWaitTimeMetricName);
     }
   }
 

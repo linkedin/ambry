@@ -15,7 +15,9 @@
 
 package com.github.ambry.named;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
@@ -154,7 +156,8 @@ public class MySqlNamedBlobDbTest {
 
   /**
    * Verify that {@link MySqlNamedBlobDb.TransactionExecutor} registers the per-datacenter queue-size and
-   * active-count gauges, plus the shared rejected-count and enqueue-wait histograms, on construction.
+   * active-count gauges, the per-datacenter rejected-count counter, and the per-datacenter enqueue-wait histogram
+   * on construction.
    */
   @Test
   public void testTransactionExecutorMetricsRegistered() throws Exception {
@@ -169,18 +172,18 @@ public class MySqlNamedBlobDbTest {
             .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorQueueSize." + dc));
         assertTrue("active-count gauge missing for datacenter " + dc, registry.getGauges()
             .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorActiveCount." + dc));
+        assertTrue("rejected counter missing for datacenter " + dc, registry.getCounters()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + dc));
+        assertTrue("enqueue-wait histogram missing for datacenter " + dc, registry.getHistograms()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + dc));
       }
-      assertTrue("rejected counter missing", registry.getCounters()
-          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount"));
-      assertTrue("enqueue-wait histogram missing", registry.getHistograms()
-          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs"));
     } finally {
       db.close();
     }
   }
 
   /**
-   * Verify that {@link MySqlNamedBlobDb.TransactionExecutor#close()} deregisters the per-datacenter gauges so
+   * Verify that {@link MySqlNamedBlobDb.TransactionExecutor#close()} deregisters all per-datacenter metrics so
    * subsequent instantiations do not leak metrics or fail with duplicate-registration errors.
    */
   @Test
@@ -196,6 +199,10 @@ public class MySqlNamedBlobDbTest {
           .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorQueueSize." + dc));
       assertFalse("active-count gauge for " + dc + " should be removed after close", registry.getGauges()
           .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorActiveCount." + dc));
+      assertFalse("rejected counter for " + dc + " should be removed after close", registry.getCounters()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + dc));
+      assertFalse("enqueue-wait histogram for " + dc + " should be removed after close", registry.getHistograms()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + dc));
     }
   }
 
@@ -218,8 +225,10 @@ public class MySqlNamedBlobDbTest {
       } catch (Exception ignored) {
         // We only care that the worker thread ran and recorded the histogram.
       }
-      assertTrue("enqueue-wait histogram should have at least one sample",
-          metrics.namedBlobEnqueueWaitTimeInMs.getCount() >= 1);
+      Histogram enqueueWaitTime = registry.getHistograms()
+          .get("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + localDatacenter);
+      assertNotNull("per-datacenter enqueue-wait histogram missing", enqueueWaitTime);
+      assertTrue("enqueue-wait histogram should have at least one sample", enqueueWaitTime.getCount() >= 1);
     } finally {
       db.close();
     }
@@ -279,8 +288,10 @@ public class MySqlNamedBlobDbTest {
         assertEquals("rejected transaction should surface as ServiceUnavailable",
             RestServiceErrorCode.ServiceUnavailable, rse.getErrorCode());
       });
-      assertEquals("rejected counter should be 1 after one rejection", 1,
-          metrics.namedBlobTransactionRejectedCount.getCount());
+      Counter rejected = registry.getCounters()
+          .get("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + localDatacenter);
+      assertNotNull("per-datacenter rejected counter missing", rejected);
+      assertEquals("rejected counter should be 1 after one rejection", 1, rejected.getCount());
 
       // Confirm gauges reflect the busy/queued state before we drain.
       Gauge<?> queueGauge = registry.getGauges()

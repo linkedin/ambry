@@ -63,12 +63,6 @@ public class Metrics {
   public final Counter namedBlobDBInsertErrorCount;
   public final Counter namedBlobDBUpdateErrorCount;
 
-  // Bounded-queue admission control metrics. These complement the per-datacenter
-  // TransactionExecutorQueueSize and TransactionExecutorActiveCount gauges registered
-  // dynamically by MySqlNamedBlobDb.TransactionExecutor.
-  public final Counter namedBlobTransactionRejectedCount;
-  public final Histogram namedBlobEnqueueWaitTimeInMs;
-
   /**
    * Constructor to create the Metrics.
    * @param metricRegistry The {@link MetricRegistry}.
@@ -135,11 +129,6 @@ public class Metrics {
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBInsertErrorCount"));
     namedBlobDBUpdateErrorCount =
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBUpdateErrorCount"));
-
-    namedBlobTransactionRejectedCount = metricRegistry.counter(
-        MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobTransactionRejectedCount"));
-    namedBlobEnqueueWaitTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobEnqueueWaitTimeInMs"));
   }
 
   /**

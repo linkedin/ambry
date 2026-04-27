@@ -77,11 +77,16 @@ public class MySqlNamedBlobDbConfig {
    * MySQL slows down: each queued task pins a Netty channel and request context, so an unbounded queue can grow
    * to multi-GB before the kubelet kills the pod.
    *
-   * <p>The default is conservatively sized for the prior unbounded behavior; raise it together with {@link #localPoolSize}
-   * when intentionally provisioning more capacity. Order-of-magnitude sizing: {@code 4 * localPoolSize * p99_query_latency_seconds}.
+   * <p><b>Sizing guidance.</b> The pre-bounded behavior was an unbounded {@code DelayedWorkQueue}, so any value
+   * here is more restrictive than what was deployed before. The default of {@code 1000} is intentionally generous
+   * relative to the steady-state heuristic ({@code 4 * localPoolSize * p99_query_latency_seconds}, typically 20-40
+   * for {@code localPoolSize=5}) so that the bounded behavior only kicks in under genuinely pathological load.
+   * Before rolling this out to a new deployment, observe {@code TransactionExecutorQueueSize.<dc>} p99 in
+   * staging/canary and tune the value if the steady-state queue depth approaches the cap. Raise this together
+   * with {@link #localPoolSize} when intentionally provisioning more capacity.
    */
   @Config(MAX_PENDING_TRANSACTIONS_PER_DATACENTER)
-  @Default("100")
+  @Default("1000")
   public final int maxPendingTransactionsPerDatacenter;
 
   /**
