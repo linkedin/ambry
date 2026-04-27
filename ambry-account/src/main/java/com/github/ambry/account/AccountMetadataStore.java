@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.helix.AccessOption;
@@ -82,9 +83,9 @@ abstract class AccountMetadataStore {
   abstract ZKUpdater createNewZKUpdater(Collection<Account> accounts);
 
   /**
-   * fetchAccountMetadata would fetch the latest full set of {@link Account} metadata from the store. It returns null
-   * when there is no {@link Account} created.
-   * @return A collection of {@link Account} metadata.
+   * Fetch the latest full set of {@link Account} metadata from the store.
+   * @return A collection of {@link Account} metadata, empty if ZNRecord exists but contains no account data,
+   *         or {@code null} if no ZNRecord exists.
    */
   Collection<Account> fetchAccountMetadata() {
     long startTimeMs = System.currentTimeMillis();
@@ -99,6 +100,10 @@ abstract class AccountMetadataStore {
       return null;
     }
     Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
+    if (newAccountMap == null) {
+      logger.info("ZNRecord exists on path={} but contains no account metadata map. Returning empty collection.", znRecordPath);
+      return Collections.emptyList();
+    }
     Map<Short, Account> idToAccountMap = new HashMap<>();
     Map<String, Account> nameToAccountMap = new HashMap<>();
     for (Map.Entry<String, String> entry : newAccountMap.entrySet()) {
@@ -129,9 +134,7 @@ abstract class AccountMetadataStore {
       idToAccountMap.put(account.getId(), account);
       nameToAccountMap.put(account.getName(), account);
     }
-    if (newAccountMap != null) {
-      backupFileManager.persistAccountMap(idToAccountMap.values(), stat.getVersion(), stat.getMtime() / 1000);
-    }
+    backupFileManager.persistAccountMap(idToAccountMap.values(), stat.getVersion(), stat.getMtime() / 1000);
     return idToAccountMap.values();
   }
 

@@ -179,6 +179,18 @@ public class HelixAccountService extends AbstractAccountService {
    * at a fixed rate.
    */
   private void initialFetchAndSchedule() {
+    // Initial fetch runs WITHOUT catch-all so deserialization errors (e.g., unrecognized fields from a newer schema)
+    // propagate and prevent the service from starting with a broken/empty account cache. This is intentional:
+    // serving traffic with missing accounts causes silent 400 InvalidAccount errors for valid blobs.
+    try {
+      fetchAndUpdateCache(false);
+    } catch (Exception e) {
+      logger.error("Initial account metadata fetch failed. Service cannot start with an incomplete account cache.", e);
+      accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+      throw e;
+    }
+
+    // Background updater is lenient — it already has the old cache, so swallowing errors is safe.
     Runnable updater = () -> {
       try {
         fetchAndUpdateCache(false);
@@ -187,21 +199,13 @@ public class HelixAccountService extends AbstractAccountService {
         accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
       }
     };
-    updater.run();
 
-    // If fetching account metadata failed, no matter for what reason, we use the data from local backup file.
-    // The local backup should be reasonably up-to-date.
+    // If the initial fetch succeeded but returned no accounts (no data in ZK yet), fall back to local backup.
+    // This does NOT apply when the initial fetch threw — that case is a hard failure above.
     //
     // The caveat is that when a machine used to run ambry-frontend but then got decommissioned for a long time,
     // it will have a very old account metadata in the backup. If we reschedule ambry-frontend process in this particular
-    // machine, and it fails to read the account metadata from AccountMetadataStore, then we would load stale data.
-    //
-    // One way to avoid this problem is to load latest account metadata, but not more than a month, from backup.
-
-    // accountInfoMapRef's reference is empty doesn't mean that fetchAndUpdateCache failed, it would just be that there
-    // is no account metadata for the time being. Theoretically local storage shouldn't have any backup files. So
-    // backup.getLatestAccounts should return null. And in case we have a very old backup file just mentioned above, a threshold
-    // would solve the problem.
+    // machine, it would load stale data. A 30-day threshold mitigates this.
     if (accountInfoMapRef.get().isEmpty() && config.enableServeFromBackup && !backupFileManager.isEmpty()) {
       long aMonthAgo = System.currentTimeMillis() / 1000 - TimeUnit.DAYS.toSeconds(30);
       Collection<Account> accounts = backupFileManager.getLatestAccounts(aMonthAgo);
