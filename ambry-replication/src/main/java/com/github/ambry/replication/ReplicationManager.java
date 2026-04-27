@@ -354,6 +354,46 @@ public class ReplicationManager extends ReplicationEngine {
         // leaderBasedReplicationAdmin. LeaderBasedReplicationAdmin::addLeaderPartition is thread safe.
         leaderBasedReplicationAdmin.addLeaderPartition(partitionName);
       }
+      try {
+        recordStandbyToLeaderPromotionLag(partitionName);
+      } catch (Exception e) {
+        logger.warn("Failed to record lag metric on STANDBY->LEADER promotion for partition {}", partitionName, e);
+      }
+    }
+
+    /**
+     * Detects whether a replica was behind its peers at the moment Helix promoted it STANDBY -> LEADER.
+     * Helix transitions STANDBY -> LEADER without any data-parity check; we emit metrics here so we can
+     * verify in production that promoted leaders are actually caught up (or flag when they aren't).
+     *
+     * Two mutually exclusive signals per promotion:
+     * - {@link ReplicationMetrics#standbyToLeaderPromotionLagBytes}: max cached lag across peers whose lag
+     *   is known (>= 0). A single known peer is enough to attest readiness, so unknown (-1) peers are
+     *   ignored when at least one peer has a known lag.
+     * - {@link ReplicationMetrics#standbyToLeaderPromotionUnknownLagPeerCount}: incremented when every peer
+     *   of the partition has an unknown cached lag — no peer can attest to the replica's sync state.
+     */
+    private void recordStandbyToLeaderPromotionLag(String partitionName) {
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      if (localReplica == null) {
+        return;
+      }
+      PartitionInfo partitionInfo = partitionToPartitionInfo.get(localReplica.getPartitionId());
+      if (partitionInfo == null) {
+        return;
+      }
+      long maxKnownLag = -1L;
+      for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
+        long lag = remoteReplicaInfo.getLocalLagFromRemoteInBytes();
+        if (lag >= 0) {
+          maxKnownLag = Math.max(maxKnownLag, lag);
+        }
+      }
+      if (maxKnownLag >= 0) {
+        replicationMetrics.standbyToLeaderPromotionLagBytes.update(maxKnownLag);
+      } else {
+        replicationMetrics.standbyToLeaderPromotionUnknownLagPeerCount.inc();
+      }
     }
 
     @Override

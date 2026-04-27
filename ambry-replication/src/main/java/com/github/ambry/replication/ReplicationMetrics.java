@@ -184,9 +184,23 @@ public class ReplicationMetrics {
 
   public final Counter backupIntegrityError;
 
+  // Max RemoteReplicaInfo.getLocalLagFromRemoteInBytes() across peers of a partition at the moment it transitions
+  // STANDBY -> LEADER, considering only peers with a known (non-negative) cached lag. A well-caught-up STANDBY
+  // should be ~0; non-zero values indicate the replica was promoted before it was fully synced. If any peer
+  // reports a known lag, unknown peers are ignored since one known data point is enough to assess readiness.
+  public final Histogram standbyToLeaderPromotionLagBytes;
+
+  // Incremented once per STANDBY -> LEADER promotion when NO peer of the partition has a known cached lag
+  // (every peer is at the -1 sentinel). The replica was promoted with no attested sync signal from any peer.
+  public final Counter standbyToLeaderPromotionUnknownLagPeerCount;
+
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
     backupIntegrityError =
         registry.counter(MetricRegistry.name(ReplicationMetrics.class, "BackupIntegrityError"));
+    standbyToLeaderPromotionLagBytes =
+        registry.histogram(MetricRegistry.name(ReplicationManager.class, "StandbyToLeaderPromotionLagBytes"));
+    standbyToLeaderPromotionUnknownLagPeerCount =
+        registry.counter(MetricRegistry.name(ReplicationManager.class, "StandbyToLeaderPromotionUnknownLagPeerCount"));
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
     plainTextIntraColoReplicationBytesRate =

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.replication;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
@@ -844,6 +846,78 @@ public class ReplicationTest extends ReplicationTestHelper {
     storageManager.shutdown();
 
     replicationConfig = initialReplicationConfig;
+  }
+
+  /**
+   * When a replica transitions STANDBY -> LEADER with all peers having known (>= 0) cached lag,
+   * the lag histogram should record the max lag across peers and the unknown-lag counter should not move.
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsKnownLagTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(new long[]{100L, 150L, 200L}, 1, 200L, 0);
+  }
+
+  /**
+   * When a replica transitions STANDBY -> LEADER with all peers at the -1 sentinel (never synced),
+   * the unknown-lag counter should increment and the lag histogram should not record.
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsAllUnknownLagTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(new long[]{-1L, -1L, -1L}, 0, -1L, 1);
+  }
+
+  /**
+   * When peers have a mix of known and unknown lag, the histogram records the max over only the known
+   * values and the unknown-lag counter does not move (a single known peer is enough to attest readiness).
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsMixedLagTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(new long[]{250L, -1L, -1L}, 1, 250L, 0);
+  }
+
+  /**
+   * Drives one STANDBY -> LEADER promotion with per-peer cached lags and asserts histogram/counter state.
+   * A {@code peerLag} of -1 leaves the peer at its default (unknown) value; any other value is applied
+   * via {@link RemoteReplicaInfo#setLocalLagFromRemoteInBytes(long)}.
+   * @param peerLags per-peer lag values to assign (in {@link PartitionInfo#getRemoteReplicaInfos()} order)
+   * @param expectedHistogramCount expected observation count on standbyToLeaderPromotionLagBytes
+   * @param expectedHistogramMax expected histogram max; ignored when expectedHistogramCount is 0
+   * @param expectedUnknownLagCount expected value of standbyToLeaderPromotionUnknownLagPeerCount
+   */
+  private void runStandbyToLeaderPromotionMetricsTest(long[] peerLags, int expectedHistogramCount,
+      long expectedHistogramMax, int expectedUnknownLagCount) throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+
+    PartitionId partitionId = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    List<RemoteReplicaInfo> remoteReplicaInfos =
+        replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
+    assertTrue("Test requires partition to have at least " + peerLags.length + " peers",
+        remoteReplicaInfos.size() >= peerLags.length);
+    for (int i = 0; i < peerLags.length; i++) {
+      if (peerLags[i] >= 0) {
+        remoteReplicaInfos.get(i).setLocalLagFromRemoteInBytes(peerLags[i]);
+      }
+    }
+
+    Histogram histogram = replicationManager.replicationMetrics.standbyToLeaderPromotionLagBytes;
+    Counter counter = replicationManager.replicationMetrics.standbyToLeaderPromotionUnknownLagPeerCount;
+
+    mockHelixParticipant.onPartitionBecomeLeaderFromStandby(partitionId.toPathString());
+
+    assertEquals("Lag histogram observation count", expectedHistogramCount, histogram.getCount());
+    if (expectedHistogramCount > 0) {
+      assertEquals("Lag histogram max", expectedHistogramMax, histogram.getSnapshot().getMax());
+    }
+    assertEquals("Unknown-lag counter", expectedUnknownLagCount, counter.getCount());
+
+    storageManager.shutdown();
   }
 
   /**
