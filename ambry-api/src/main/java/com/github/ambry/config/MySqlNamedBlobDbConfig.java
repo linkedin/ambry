@@ -27,6 +27,8 @@ public class MySqlNamedBlobDbConfig {
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
+  public static final String MAX_PENDING_TRANSACTIONS_PER_DATACENTER =
+      PREFIX + "max.pending.transactions.per.datacenter";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
@@ -67,6 +69,32 @@ public class MySqlNamedBlobDbConfig {
   @Config(REMOTE_POOL_SIZE)
   @Default("1")
   public final int remotePoolSize;
+
+  /**
+   * Maximum number of in-flight transactions allowed per datacenter (queued plus running). When the per-datacenter
+   * work queue is full, additional submissions are rejected with {@link com.github.ambry.rest.RestServiceErrorCode#ServiceUnavailable}
+   * instead of being enqueued. Bounded admission control protects the JVM from heap exhaustion when the backend
+   * MySQL slows down: each queued task pins a Netty channel and request context, so an unbounded queue can grow
+   * to multi-GB before the kubelet kills the pod.
+   *
+   * <p><b>Default is intentionally non-restrictive.</b> The default of {@link Integer#MAX_VALUE} makes this PR a
+   * no-op for existing deployments — the admission machinery and {@code TransactionExecutorQueueSize.<dc>},
+   * {@code TransactionExecutorActiveCount.<dc>}, {@code NamedBlobTransactionRejectedCount.<dc>}, and
+   * {@code NamedBlobEnqueueWaitTimeInMs.<dc>} metrics are wired up, but {@code AbortPolicy} will not fire under
+   * any realistic load. Operators are expected to observe queue-depth p99 in production and tune this value down
+   * to a per-deployment cap. Order-of-magnitude steady-state heuristic:
+   * {@code 4 * localPoolSize * p99_query_latency_seconds} (typically 20-40 for {@code localPoolSize=5}).
+   *
+   * <p>Once a value below {@link Integer#MAX_VALUE} is set, raise it together with {@link #localPoolSize} when
+   * intentionally provisioning more capacity.
+   */
+  // Default Integer.MAX_VALUE: the per-datacenter queue is INITIALLY UNBOUNDED. The admission control
+  // and per-DC metrics (TransactionExecutorQueueSize/ActiveCount/RejectedCount/EnqueueWaitTimeInMs)
+  // ship in a no-op state so operators can measure the steady-state queue depth in production before
+  // tuning this knob down to a real cap. AbortPolicy does not fire until this is reduced.
+  @Config(MAX_PENDING_TRANSACTIONS_PER_DATACENTER)
+  @Default("2147483647")
+  public final int maxPendingTransactionsPerDatacenter;
 
   /**
    * The maximum number of entries to return per response page when listing blobs.
@@ -127,6 +155,9 @@ public class MySqlNamedBlobDbConfig {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
+    this.maxPendingTransactionsPerDatacenter =
+        verifiableProperties.getIntInRange(MAX_PENDING_TRANSACTIONS_PER_DATACENTER, Integer.MAX_VALUE, 1,
+            Integer.MAX_VALUE);
     this.listMaxResults =
         verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
     this.queryStaleDataMaxResults =
