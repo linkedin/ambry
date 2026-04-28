@@ -77,16 +77,19 @@ public class MySqlNamedBlobDbConfig {
    * MySQL slows down: each queued task pins a Netty channel and request context, so an unbounded queue can grow
    * to multi-GB before the kubelet kills the pod.
    *
-   * <p><b>Sizing guidance.</b> The pre-bounded behavior was an unbounded {@code DelayedWorkQueue}, so any value
-   * here is more restrictive than what was deployed before. The default of {@code 1000} is intentionally generous
-   * relative to the steady-state heuristic ({@code 4 * localPoolSize * p99_query_latency_seconds}, typically 20-40
-   * for {@code localPoolSize=5}) so that the bounded behavior only kicks in under genuinely pathological load.
-   * Before rolling this out to a new deployment, observe {@code TransactionExecutorQueueSize.<dc>} p99 in
-   * staging/canary and tune the value if the steady-state queue depth approaches the cap. Raise this together
-   * with {@link #localPoolSize} when intentionally provisioning more capacity.
+   * <p><b>Default is intentionally non-restrictive.</b> The default of {@link Integer#MAX_VALUE} makes this PR a
+   * no-op for existing deployments — the admission machinery and {@code TransactionExecutorQueueSize.<dc>},
+   * {@code TransactionExecutorActiveCount.<dc>}, {@code NamedBlobTransactionRejectedCount.<dc>}, and
+   * {@code NamedBlobEnqueueWaitTimeInMs.<dc>} metrics are wired up, but {@code AbortPolicy} will not fire under
+   * any realistic load. Operators are expected to observe queue-depth p99 in production and tune this value down
+   * to a per-deployment cap. Order-of-magnitude steady-state heuristic:
+   * {@code 4 * localPoolSize * p99_query_latency_seconds} (typically 20-40 for {@code localPoolSize=5}).
+   *
+   * <p>Once a value below {@link Integer#MAX_VALUE} is set, raise it together with {@link #localPoolSize} when
+   * intentionally provisioning more capacity.
    */
   @Config(MAX_PENDING_TRANSACTIONS_PER_DATACENTER)
-  @Default("1000")
+  @Default("2147483647") // Integer.MAX_VALUE — see javadoc; admission control is a no-op until tuned down.
   public final int maxPendingTransactionsPerDatacenter;
 
   /**
@@ -149,7 +152,8 @@ public class MySqlNamedBlobDbConfig {
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
     this.maxPendingTransactionsPerDatacenter =
-        verifiableProperties.getIntInRange(MAX_PENDING_TRANSACTIONS_PER_DATACENTER, 100, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(MAX_PENDING_TRANSACTIONS_PER_DATACENTER, Integer.MAX_VALUE, 1,
+            Integer.MAX_VALUE);
     this.listMaxResults =
         verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
     this.queryStaleDataMaxResults =
