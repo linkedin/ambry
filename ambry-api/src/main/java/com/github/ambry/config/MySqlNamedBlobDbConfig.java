@@ -88,8 +88,12 @@ public class MySqlNamedBlobDbConfig {
    * <p>Once a value below {@link Integer#MAX_VALUE} is set, raise it together with {@link #localPoolSize} when
    * intentionally provisioning more capacity.
    */
+  // Default Integer.MAX_VALUE: the per-datacenter queue is INITIALLY UNBOUNDED. The admission control
+  // and per-DC metrics (TransactionExecutorQueueSize/ActiveCount/RejectedCount/EnqueueWaitTimeInMs)
+  // ship in a no-op state so operators can measure the steady-state queue depth in production before
+  // tuning this knob down to a real cap. AbortPolicy does not fire until this is reduced.
   @Config(MAX_PENDING_TRANSACTIONS_PER_DATACENTER)
-  @Default("2147483647") // Integer.MAX_VALUE — see javadoc; admission control is a no-op until tuned down.
+  @Default("2147483647")
   public final int maxPendingTransactionsPerDatacenter;
 
   /**
