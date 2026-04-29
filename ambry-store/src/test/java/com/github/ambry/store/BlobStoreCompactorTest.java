@@ -31,6 +31,7 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -105,7 +106,7 @@ public class BlobStoreCompactorTest {
   private final StoreConfig config;
   private final Time time = new MockTime();
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   private CuratedLogIndexState state = null;
   private BlobStoreCompactor compactor = null;

@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.MySqlReportAggregatorTask;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.File;
@@ -413,7 +414,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
    * CurrentMonth, in YYYY-MM format, will be used as filename for backup files. It's also the value stored in database.
    */
   static class BackupFileManager {
-    static final ObjectMapper objectMapper = new ObjectMapper();
+    static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     static final String TEMP_FILE_SUFFIX = ".tmp";
     static final Pattern filenamePattern = Pattern.compile("^\\d{4}-\\d{2}$");
     static final Pattern tempFilenamePattern = Pattern.compile("^\\d{4}-\\d{2}" + TEMP_FILE_SUFFIX + "$");

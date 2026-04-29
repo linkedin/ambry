@@ -21,6 +21,7 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -253,7 +254,7 @@ public class AccountUpdateTool {
             .orElseThrow(() -> new IllegalArgumentException("Could not find account: " + accountName)))
         .collect(Collectors.toList());
     try (BufferedWriter writer = Files.newBufferedWriter(accountJsonPath)) {
-      new ObjectMapper().writer(new DefaultPrettyPrinter()).writeValue(writer, accounts);
+      JsonUtil.newObjectMapper().writer(new DefaultPrettyPrinter()).writeValue(writer, accounts);
     }
     ToolUtils.editFile(accountJsonPath);
     System.out.println("The following account metadata will be uploaded:");
@@ -339,7 +340,7 @@ public class AccountUpdateTool {
    * @throws JSONException
    */
   private static Collection<Account> getAccountsFromJson(String accountJsonPath) throws IOException, JSONException {
-    return new ObjectMapper().readValue(Utils.readStringFromFile(accountJsonPath),
+    return JsonUtil.newObjectMapper().readValue(Utils.readStringFromFile(accountJsonPath),
         new TypeReference<Collection<Account>>() {
         });
   }

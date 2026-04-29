@@ -24,6 +24,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.AccountTestUtils;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
@@ -75,7 +76,7 @@ import static org.junit.Assume.*;
  */
 @RunWith(Parameterized.class)
 public class HelixAccountServiceTest {
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
   private static final String ZK_CONNECT_STRING = "dummyHost:dummyPort";

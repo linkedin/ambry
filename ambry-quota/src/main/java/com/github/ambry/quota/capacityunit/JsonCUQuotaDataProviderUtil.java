@@ -26,6 +26,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -47,7 +48,7 @@ public class JsonCUQuotaDataProviderUtil {
   public static Map<String, CapacityUnit> getCUQuotasFromJson(String resourceCUQuotaInJson,
       AccountService accountService) throws IOException {
     Map<String, CapacityUnit> quota = new HashMap<>();
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     if (resourceCUQuotaInJson != null && !resourceCUQuotaInJson.trim().isEmpty()) {
       Map<String, MapOrQuota> tempQuotas =
           objectMapper.readValue(resourceCUQuotaInJson, new TypeReference<Map<String, MapOrQuota>>() {
@@ -89,7 +90,7 @@ public class JsonCUQuotaDataProviderUtil {
    * @throws IOException in case of any exception.
    */
   public static CapacityUnit getFeCUCapacityFromJson(String frontendCUCapacityInJson) throws IOException {
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     return objectMapper.readValue(frontendCUCapacityInJson, CapacityUnit.class);
   }
 

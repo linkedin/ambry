@@ -55,6 +55,7 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -129,7 +130,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.vcrClusterParticipant = vcrClusterParticipant;
     try {
       vcrHelixConfig =
-          new ObjectMapper().readValue(cloudConfig.vcrHelixUpdateConfig, HelixVcrUtil.VcrHelixConfig.class);
+          JsonUtil.newObjectMapper().readValue(cloudConfig.vcrHelixUpdateConfig, HelixVcrUtil.VcrHelixConfig.class);
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }

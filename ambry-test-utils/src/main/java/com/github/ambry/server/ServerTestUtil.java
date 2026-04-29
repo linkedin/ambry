@@ -110,6 +110,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -433,7 +434,7 @@ public final class ServerTestUtil {
       Assert.assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.NoError,
           adminResponseWithContent.getError());
       byte[] jsonBytes = adminResponseWithContent.getContent();
-      ObjectMapper objectMapper = new ObjectMapper();
+      ObjectMapper objectMapper = JsonUtil.newObjectMapper();
       StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
       Map<String, MessageInfo> messages =
           objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
@@ -4776,7 +4777,7 @@ public final class ServerTestUtil {
     Assert.assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.NoError,
         adminResponseWithContent.getError());
     byte[] jsonBytes = adminResponseWithContent.getContent();
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
     Map<String, MessageInfo> messages =
         objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
@@ -4812,7 +4813,7 @@ public final class ServerTestUtil {
     Assert.assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.NoError,
         adminResponseWithContent.getError());
     byte[] jsonBytes = adminResponseWithContent.getContent();
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
     Map<String, MessageInfo> messages =
         objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {

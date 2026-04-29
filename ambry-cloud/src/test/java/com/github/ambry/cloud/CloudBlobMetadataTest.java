@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.utils.JsonUtil;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.ArrayUtils;
@@ -35,7 +36,7 @@ import static org.junit.Assert.*;
 @Ignore
 public class CloudBlobMetadataTest {
 
-  private static final ObjectMapper mapperObj = new ObjectMapper();
+  private static final ObjectMapper mapperObj = JsonUtil.newObjectMapper();
   private final byte dataCenterId = 66;
   private final short accountId = 101;
   private final short containerId = 5;

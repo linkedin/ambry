@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.TestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -93,7 +94,7 @@ public class HelixVcrPopulateToolTest {
   @Before
   public void beforeTest() throws Exception {
     try (InputStream input = new ByteArrayInputStream(configData.getBytes())) {
-      config = new ObjectMapper().readValue(input, HelixVcrUtil.VcrHelixConfig.class);
+      config = JsonUtil.newObjectMapper().readValue(input, HelixVcrUtil.VcrHelixConfig.class);
     } catch (IOException ex) {
       throw new IllegalStateException("Could not load config from config data: " + configData);
     }

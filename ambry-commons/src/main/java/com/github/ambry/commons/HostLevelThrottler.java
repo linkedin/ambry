@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.RejectThrottler;
 import java.io.IOException;
 import java.util.HashMap;
@@ -91,7 +92,7 @@ public class HostLevelThrottler {
     for (HardwareResource hardwareResource : HardwareResource.values()) {
       if (thresholds.has(hardwareResource.name())) {
         String jsonString = thresholds.getJSONObject(hardwareResource.name()).toString();
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = JsonUtil.newObjectMapper();
         try {
           Criteria criteria = objectMapper.readValue(jsonString, Criteria.class);
           hardwareThresholdMap.put(hardwareResource, criteria);

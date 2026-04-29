@@ -30,6 +30,7 @@ import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -55,7 +56,7 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
   public JSONStringStorageQuotaSource(StorageQuotaConfig config, AccountService accountService) throws IOException {
     Map<String, Long> quota = new HashMap<>();
     if (config.storageQuotaInJson != null && !config.storageQuotaInJson.trim().isEmpty()) {
-      ObjectMapper objectMapper = new ObjectMapper();
+      ObjectMapper objectMapper = JsonUtil.newObjectMapper();
       Map<String, MapOrNumber> tempQuotas =
           objectMapper.readValue(config.storageQuotaInJson, new TypeReference<Map<String, MapOrNumber>>() {
           });

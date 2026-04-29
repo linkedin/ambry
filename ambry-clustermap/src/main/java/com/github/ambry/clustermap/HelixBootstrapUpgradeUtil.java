@@ -18,6 +18,7 @@ import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -453,7 +454,7 @@ public class HelixBootstrapUpgradeUtil {
       HelixAdmin admin = helixAdminFactory.getHelixAdmin(zkConnectStrs.get(0));
       info("Migrate to Full-Auto. Cluster {}, dc {}, resources {}, dry run {}", clusterName, dcName, resources, dryRun);
       migrateToFullAuto(dcName, clusterName, admin, zkConnectStrs.get(0), resources,
-          new ObjectMapper().readValue(Utils.readStringFromFile(wagedConfigFilePath), WagedHelixConfig.class),
+          JsonUtil.newObjectMapper().readValue(Utils.readStringFromFile(wagedConfigFilePath), WagedHelixConfig.class),
           setPreferenceList, maxInstancesInOneResourceForFullAuto, dryRun, addConfigs);
     }
   }

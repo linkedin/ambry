@@ -19,6 +19,7 @@ import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -774,7 +775,7 @@ public class MySqlAccountServiceTest {
         "\"status\":\"ACTIVE\"," +
         "\"version\":1," +
         "\"quotaResourceType\":\"CONTAINER\"}";
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     Account legacyAccount = mapper.readValue(legacyJson, Account.class);
     assertNotNull("Legacy account should be deserialized", legacyAccount);
     assertEquals(101, legacyAccount.getId());
@@ -805,7 +806,7 @@ public class MySqlAccountServiceTest {
         "\"replicationPeerName\":\"\"," +
         "\"quotaInBytes\":-1," +
         "\"deleted\":false}";
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     Container legacyContainer = mapper.readValue(legacyJson, Container.class);
     assertNotNull("Legacy container should be deserialized", legacyContainer);
     assertEquals(201, legacyContainer.getId());

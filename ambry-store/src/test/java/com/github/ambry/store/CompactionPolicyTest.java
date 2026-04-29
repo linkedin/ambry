@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -63,7 +64,7 @@ public class CompactionPolicyTest {
   private static final String MOUNT_PATH = "/tmp/";
   private final Path dataDirPath;
   private static final Logger logger = LoggerFactory.getLogger(CompactionPolicyTest.class);
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
 
   // the properties that will used to generate a StoreConfig. Clear before use if required.

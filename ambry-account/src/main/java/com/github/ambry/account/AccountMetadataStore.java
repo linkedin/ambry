@@ -26,6 +26,7 @@ import org.apache.helix.zookeeper.zkclient.DataUpdater;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.github.ambry.utils.JsonUtil;
 
 
 /**
@@ -33,7 +34,7 @@ import org.slf4j.LoggerFactory;
  */
 abstract class AccountMetadataStore {
   private static final Logger logger = LoggerFactory.getLogger(AccountMetadataStore.class);
-  protected final ObjectMapper objectMapper = new ObjectMapper();
+  protected final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   protected final AccountServiceMetrics accountServiceMetrics;
   protected final BackupFileManager backupFileManager;

@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -71,7 +72,7 @@ public class HelixVcrPopulateTool {
     VcrHelixConfig config = null;
     if (options.has(createClusterOpt) || options.has(updateClusterOpt)) {
       try {
-        config = new ObjectMapper().readValue(Utils.readStringFromFile(options.valueOf(configFileOpt)),
+        config = JsonUtil.newObjectMapper().readValue(Utils.readStringFromFile(options.valueOf(configFileOpt)),
             VcrHelixConfig.class);
       } catch (IOException ioEx) {
         errorAndExit("Couldn't read the config file: " + options.valueOf(configFileOpt));

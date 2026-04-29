@@ -42,6 +42,7 @@ import com.github.ambry.store.StoreLogInfo;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Pair;
@@ -1366,7 +1367,7 @@ public class RequestResponseTest {
     Map<String, String> returnedMap = new HashMap<>();
     returnedMap.put("key1", "value1");
     returnedMap.put("key2", "value2");
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     System.out.println(objectMapper.writeValueAsString(returnedMap));
     byte[] content = objectMapper.writeValueAsBytes(returnedMap);
     AdminResponseWithContent response =

@@ -20,6 +20,7 @@ import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -31,7 +32,7 @@ import org.junit.Test;
  * Unit tests for storage stats classes
  */
 public class StorageStatsTest {
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private static final Random random = new Random();
 
   /**

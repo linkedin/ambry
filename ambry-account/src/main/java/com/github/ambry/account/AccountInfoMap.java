@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.utils.JsonUtil;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,7 +40,7 @@ import org.slf4j.LoggerFactory;
  */
 class AccountInfoMap {
   private static final Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private final Map<String, Account> nameToAccountMap;
   private final Map<Short, Account> idToAccountMap;
   // used to track last modified time of the accounts and containers in this cache

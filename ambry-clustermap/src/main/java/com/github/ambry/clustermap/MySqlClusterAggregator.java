@@ -21,6 +21,7 @@ import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.HashMap;
@@ -35,7 +36,7 @@ import org.slf4j.LoggerFactory;
  */
 public class MySqlClusterAggregator {
   private static final Logger logger = LoggerFactory.getLogger(MySqlClusterAggregator.class);
-  private final ObjectMapper mapper = new ObjectMapper();
+  private final ObjectMapper mapper = JsonUtil.newObjectMapper();
   private final long relevantTimePeriodInMs;
 
   /**

@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -54,7 +55,7 @@ public class AccountContainerTest {
   private static final int CONTAINER_COUNT = 10;
   private static final int DATASET_COUNT = 5;
   private static final short LATEST_CONTAINER_JSON_VERSION = Container.JSON_VERSION_2;
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   // Reference Account fields
   private final short refAccountId;
@@ -693,7 +694,7 @@ public class AccountContainerTest {
     @JsonIgnoreProperties({"containers"})
     abstract class AccountMixIn {
     }
-    ObjectMapper newObjectMapper = new ObjectMapper();
+    ObjectMapper newObjectMapper = JsonUtil.newObjectMapper();
     newObjectMapper.addMixIn(Account.class, AccountMixIn.class);
     serializedAccountStr = newObjectMapper.writeValueAsString(origin);
     deserializedAccount = objectMapper.readValue(serializedAccountStr, Account.class);
@@ -793,7 +794,7 @@ public class AccountContainerTest {
 
   @Test
   public void testSecondaryEnabledSerialization() throws IOException {
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     // Account with secondaryEnabled true
     Account accountWithSecondary = new AccountBuilder()
         .id((short) 1)
@@ -832,7 +833,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testAccountWithMigrationConfigSerDe() throws IOException {
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     // Account with dual async write percentage set.
     MigrationConfig migrationConfig = new MigrationConfig(false, new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());
     Account accountWithMigrationConfig = new AccountBuilder(refAccount).migrationConfig(migrationConfig).build();
@@ -853,7 +854,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testAccountWithMigrationConfigsSerDe() throws IOException {
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     // Account with migrationConfigs set.
     Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
     migrationConfigs.put("DC-1", new MigrationConfig(false,
@@ -882,7 +883,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testAccountSerDeWithAllOptionalFields() throws IOException {
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
     migrationConfigs.put("DC-1", new MigrationConfig(false,
         new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false),
@@ -908,7 +909,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testContainerWithMigrationConfigSerDe() throws IOException {
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
 
     // Container with dual async write percentage set.
     MigrationConfig migrationConfig = new MigrationConfig(true, new MigrationConfig.WriteRamp(false, 50.00, 0.0, 0.0, false), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp());

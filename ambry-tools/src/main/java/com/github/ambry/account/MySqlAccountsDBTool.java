@@ -23,6 +23,7 @@ import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -252,7 +253,7 @@ public class MySqlAccountsDBTool {
         zkFetchTimeMs - startTimeMs);
 
     Set<Account> accountSetFromZK = new HashSet<>();
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     try {
       for (String accountJson : accountMapFromZK.values()) {
         accountSetFromZK.add(objectMapper.readValue(accountJson, Account.class));

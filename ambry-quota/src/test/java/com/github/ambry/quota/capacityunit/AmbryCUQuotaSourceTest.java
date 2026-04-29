@@ -32,6 +32,7 @@ import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -114,7 +115,7 @@ public class AmbryCUQuotaSourceTest {
     properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON, DEFAULT_FRONTEND_CAPACITY_JSON);
     quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     inMemAccountService = new InMemAccountService(false, true);
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     testQuotas = objectMapper.readValue(quotaConfig.resourceCUQuotaInJson,
         new TypeReference<Map<String, JsonCUQuotaDataProviderUtil.MapOrQuota>>() {
         });
