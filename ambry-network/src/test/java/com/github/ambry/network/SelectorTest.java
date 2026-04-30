@@ -69,7 +69,9 @@ public class SelectorTest {
 
   @Before
   public void setup() throws Exception {
-    this.server = new EchoServer(18283);
+    // Bind to an OS-assigned port. A hard-coded port triggers Address-already-in-use / TIME_WAIT
+    // stalls when @Before rebinds the same port across parameterized test methods.
+    this.server = new EchoServer(0);
     this.server.start();
     Properties props = new Properties();
     props.setProperty("selector.executor.pool.size", Integer.toString(selectorExecutorPoolSize));

@@ -51,7 +51,6 @@ public class EchoServer extends Thread {
    * Create an EchoServer that supports SSL connections
    */
   public EchoServer(SSLFactory sslFactory, int port) throws Exception {
-    this.port = port;
     if (sslFactory == null) {
       this.serverSocket = new ServerSocket(port);
     } else {
@@ -61,6 +60,8 @@ public class EchoServer extends Thread {
       // enable mutual authentication
       ((SSLServerSocket) this.serverSocket).setNeedClientAuth(true);
     }
+    // Resolve from the bound socket so callers passing 0 get the OS-assigned port.
+    this.port = serverSocket.getLocalPort();
     this.threads = Collections.synchronizedList(new ArrayList<Thread>());
     this.sockets = Collections.synchronizedList(new ArrayList<Socket>());
     this.exceptions = Collections.synchronizedList(new ArrayList<Exception>());
