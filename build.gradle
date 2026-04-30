@@ -248,6 +248,12 @@ subprojects {
                 'com/github/ambry/account/AccountTool.java',
                 'com/github/ambry/account/AccountUpdateTool.java',
                 'com/github/ambry/clustermap/HelixVcrPopulateTool.java',
+                // Tests for the operator-config sites above; kept on master state to
+                // mirror the production file (Cat E — no functional impact either way,
+                // but consistency with the production-side revert keeps the diff cleaner).
+                'com/github/ambry/quota/capacityunit/JsonCUQuotaDataProviderUtilTest.java',
+                'com/github/ambry/account/AccountUpdateToolTest.java',
+                'com/github/ambry/clustermap/HelixVcrPopulateToolTest.java',
             ]
             def violations = []
             fileTree(dir: "${projectDir}/src", includes: ['**/*.java']).each { File f ->

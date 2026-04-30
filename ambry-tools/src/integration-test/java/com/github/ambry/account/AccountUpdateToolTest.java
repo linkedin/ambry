@@ -20,7 +20,6 @@ import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;
@@ -302,7 +301,7 @@ public class AccountUpdateToolTest {
    * @throws Exception Any unexpected exception.
    */
   private static void writeAccountsToFile(Collection<Account> accounts, String filePath) throws Exception {
-    Files.write(Paths.get(filePath), JsonUtil.newObjectMapper().writeValueAsBytes(accounts));
+    Files.write(Paths.get(filePath), new ObjectMapper().writeValueAsBytes(accounts));
   }
 
   /**

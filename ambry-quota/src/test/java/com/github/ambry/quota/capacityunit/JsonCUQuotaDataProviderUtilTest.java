@@ -24,7 +24,6 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.capacityunit.CapacityUnit;
 import com.github.ambry.quota.capacityunit.JsonCUQuotaDataProviderUtil;
-import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -88,7 +87,7 @@ public class JsonCUQuotaDataProviderUtilTest {
   @Test
   public void testGetCUQuotasFromJson() throws IOException, AccountServiceException {
     InMemAccountService accountService = new InMemAccountService(false, false);
-    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
+    ObjectMapper objectMapper = new ObjectMapper();
     Map<String, JsonCUQuotaDataProviderUtil.MapOrQuota> testQuotas = objectMapper.readValue(DEFAULT_CU_QUOTA_IN_JSON,
         new TypeReference<Map<String, JsonCUQuotaDataProviderUtil.MapOrQuota>>() {
         });
@@ -112,7 +111,7 @@ public class JsonCUQuotaDataProviderUtilTest {
   @Test
   public void testGetCUQuotasFromJsonForEmptyJsonString() throws IOException, AccountServiceException {
     InMemAccountService accountService = new InMemAccountService(false, false);
-    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
+    ObjectMapper objectMapper = new ObjectMapper();
     Map<String, JsonCUQuotaDataProviderUtil.MapOrQuota> testQuotas =
         objectMapper.readValue(EMPTY_JSON, new TypeReference<Map<String, JsonCUQuotaDataProviderUtil.MapOrQuota>>() {
         });
