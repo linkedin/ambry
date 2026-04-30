@@ -322,14 +322,47 @@ public class NonBlockingRouter implements Router {
     if (restRequest != null) {
       idConverter.convert(restRequest, blobIdStr).whenComplete((convertedId, exception) -> {
         if (exception != null) {
-          completeOperation(futureResult, callback, null, (Exception) exception);
+          // The operations counter is only incremented inside getBlobHelper; if idConverter
+          // fails we never reached that path, so do not decrement here.
+          completeOperation(futureResult, callback, null, (Exception) exception, false);
         } else {
-          getBlobHelper(convertedId, options, callback, quotaChargeCallback, futureResult);
+          // Named blob metadata was resolved successfully. If the storage layer then
+          // returns BlobDoesNotExist, treat it as transient (replication lag, in-flight
+          // delete race, or replica outage) and translate to AmbryUnavailable so clients
+          // receive a retryable 503 rather than an authoritative 404 — the named blob
+          // metadata says the blob exists, so a missing storage replica response is
+          // inconsistent with metadata and should not be reported as permanent absence.
+          FutureResult<GetBlobResult> innerFuture = new FutureResult<>();
+          Callback<GetBlobResult> wrappedCallback = (result, e) -> {
+            Exception translated = translateNamedBlobMissingInStorage(e);
+            futureResult.done(result, translated);
+            if (callback != null) {
+              callback.onCompletion(result, translated);
+            }
+          };
+          getBlobHelper(convertedId, options, wrappedCallback, quotaChargeCallback, innerFuture);
         }
       });
     }
     // Direct path when blobIdStr is already provided
     return futureResult;
+  }
+
+  /**
+   * If {@code e} is a {@link RouterException} with {@link RouterErrorCode#BlobDoesNotExist}
+   * raised after a successful named-blob metadata lookup, translate it to
+   * {@link RouterErrorCode#AmbryUnavailable} so the response surfaces as a retryable
+   * 503 rather than an authoritative 404. Other exceptions and {@code null} pass through.
+   */
+  private Exception translateNamedBlobMissingInStorage(Exception e) {
+    if (e instanceof RouterException
+        && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
+      routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.inc();
+      return new RouterException(
+          "Named blob metadata exists but storage returned BlobNotFound; treating as transient.",
+          RouterErrorCode.AmbryUnavailable);
+    }
+    return e;
   }
 
   private void getBlobHelper(String blobIdStr, GetBlobOptions options, Callback<GetBlobResult> callback,
