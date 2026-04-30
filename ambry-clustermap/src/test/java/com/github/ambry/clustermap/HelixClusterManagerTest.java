@@ -525,34 +525,46 @@ public class HelixClusterManagerTest {
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
             useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
 
-    // Pick a node in the local DC and inject a duplicate partition across two disks in its InstanceConfig
+    // Pick a node in the local DC that has at least two disks, at least one replica to duplicate,
+    // AND is not the current server (selfInstanceName). With 3 replicas spread across N nodes some
+    // nodes have no replicas, and picking instanceConfigs.get(0) was flaky two ways: it could land
+    // on an empty node, or on the self-instance — either of which flips the test off the
+    // foreign-node skip path it intends to exercise.
     MockHelixAdmin localAdmin = testCluster.getHelixAdminFromDc(localDc);
     List<InstanceConfig> instanceConfigs = localAdmin.getInstanceConfigs("AmbryTest-" + staticClusterName);
-    InstanceConfig targetConfig = instanceConfigs.get(0);
-    String targetInstanceName = targetConfig.getInstanceName();
-
-    // Find two disk mount paths on this node and a partition on the first disk
-    Map<String, Map<String, String>> mapFields = targetConfig.getRecord().getMapFields();
+    InstanceConfig targetConfig = null;
     List<String> diskMountPaths = new ArrayList<>();
     String duplicatePartitionEntry = null;
-    for (Map.Entry<String, Map<String, String>> entry : mapFields.entrySet()) {
-      if (entry.getValue().containsKey(DISK_STATE)) {
-        diskMountPaths.add(entry.getKey());
-        if (duplicatePartitionEntry == null) {
-          String replicasStr = entry.getValue().get(REPLICAS_STR);
-          if (replicasStr != null && !replicasStr.isEmpty()) {
-            // Take the first replica entry (e.g., "0:1073741824:defaultPartitionClass,")
-            duplicatePartitionEntry = replicasStr.split(REPLICAS_DELIM_STR)[0];
+    for (InstanceConfig candidate : instanceConfigs) {
+      if (candidate.getInstanceName().equals(selfInstanceName)) {
+        continue;
+      }
+      List<String> candidateDiskPaths = new ArrayList<>();
+      String candidateReplica = null;
+      for (Map.Entry<String, Map<String, String>> entry : candidate.getRecord().getMapFields().entrySet()) {
+        if (entry.getValue().containsKey(DISK_STATE)) {
+          candidateDiskPaths.add(entry.getKey());
+          if (candidateReplica == null) {
+            String replicasStr = entry.getValue().get(REPLICAS_STR);
+            if (replicasStr != null && !replicasStr.isEmpty()) {
+              candidateReplica = replicasStr.split(REPLICAS_DELIM_STR)[0];
+            }
           }
         }
       }
+      if (candidateDiskPaths.size() >= 2 && candidateReplica != null) {
+        targetConfig = candidate;
+        diskMountPaths = candidateDiskPaths;
+        duplicatePartitionEntry = candidateReplica;
+        break;
+      }
     }
-    assertTrue("Node should have at least 2 disks", diskMountPaths.size() >= 2);
-    assertNotNull("Should find a replica to duplicate", duplicatePartitionEntry);
+    assertNotNull("No non-self instance with >=2 disks and a replica found in localDc", targetConfig);
+    String targetInstanceName = targetConfig.getInstanceName();
 
     // Add the duplicate partition to the second disk
     String secondDisk = diskMountPaths.get(1);
-    Map<String, String> secondDiskProps = mapFields.get(secondDisk);
+    Map<String, String> secondDiskProps = targetConfig.getRecord().getMapFields().get(secondDisk);
     String existingReplicas = secondDiskProps.get(REPLICAS_STR);
     secondDiskProps.put(REPLICAS_STR, existingReplicas + duplicatePartitionEntry + REPLICAS_DELIM_STR);
     localAdmin.setInstanceConfig("AmbryTest-" + staticClusterName, targetInstanceName, targetConfig);

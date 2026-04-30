@@ -1974,9 +1974,31 @@ public class HelixClusterManager implements ClusterMap {
       List<ReplicaId> totalAddedReplicas = new ArrayList<>();
       List<ReplicaId> totalRemovedReplicas = new ArrayList<>();
       for (DataNodeConfig dataNodeConfig : dataNodeConfigs) {
+        String instanceName = dataNodeConfig.getInstanceName();
         Pair<List<ReplicaId>, List<ReplicaId>> addedAndRemovedReplicas;
-        if (instanceNameToAmbryDataNode.containsKey(dataNodeConfig.getInstanceName())) {
-          addedAndRemovedReplicas = updateInstanceInfo(dataNodeConfig, dcName);
+        if (instanceNameToAmbryDataNode.containsKey(instanceName)) {
+          // Update path. Mirrors createNewInstance's skip-foreign / fail-self policy: if validation
+          // throws (e.g. duplicate partition or inconsistent capacity arrived via an update to an
+          // already-known node), drop the bad node from the cluster map instead of leaving stale
+          // state behind. createNewInstance has the same wrapper inline; we keep both surfaces in
+          // sync so the skip path covers both branches uniformly.
+          try {
+            addedAndRemovedReplicas = updateInstanceInfo(dataNodeConfig, dcName);
+          } catch (Exception e) {
+            if (instanceName.equals(selfInstanceName)) {
+              logger.error(
+                  "Failed to update existing node {} (self) in datacenter {}. Failing initialization "
+                      + "since the server cannot operate with a broken local config.",
+                  instanceName, dcName, e);
+              throw e;
+            }
+            logger.error(
+                "Failed to update existing node {} in datacenter {}, removing this node from the cluster map.",
+                instanceName, dcName, e);
+            handleDataNodeDelete(instanceName);
+            dataNodeInitializationFailureCount.incrementAndGet();
+            continue;
+          }
         } else {
           addedAndRemovedReplicas = new Pair<>(createNewInstance(dataNodeConfig, dcName), new ArrayList<>());
         }
