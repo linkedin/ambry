@@ -105,7 +105,9 @@ public class SSLSelectorTest {
     SSLConfig clientSSLConfig = new SSLConfig(new VerifiableProperties(clientProps));
     SSLFactory serverSSLFactory = SSLFactory.getNewInstance(sslConfig);
     clientSSLFactory = SSLFactory.getNewInstance(clientSSLConfig);
-    server = new EchoServer(serverSSLFactory, 18383);
+    // Bind to an OS-assigned port. A hard-coded port triggers Address-already-in-use / TIME_WAIT
+    // stalls when each parameterized run rebinds the same port back-to-back.
+    server = new EchoServer(serverSSLFactory, 0);
     server.start();
     applicationBufferSize = clientSSLFactory.createSSLEngine("localhost", server.port, SSLFactory.Mode.CLIENT)
         .getSession()
