@@ -30,7 +30,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -495,7 +494,7 @@ public class AccountTool {
   public void rollback(int version) throws Exception {
     Collection<String> accountJsons = viewAccountMetadata(version);
     Collection<Account> accounts = new ArrayList<>();
-    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
+    ObjectMapper objectMapper = new ObjectMapper();
     for (String accountJson : accountJsons) {
       accounts.add(objectMapper.readValue(accountJson, Account.class));
     }
@@ -526,7 +525,7 @@ public class AccountTool {
    * @throws JSONException
    */
   private static Collection<Account> getAccountsFromJson(String accountJsonPath) throws IOException {
-    return JsonUtil.newObjectMapper().readValue(Utils.readStringFromFile(accountJsonPath),
+    return new ObjectMapper().readValue(Utils.readStringFromFile(accountJsonPath),
         new TypeReference<Collection<Account>>() {
         });
   }

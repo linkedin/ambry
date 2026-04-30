@@ -219,14 +219,35 @@ subprojects {
             //     ObjectMapper so they can detect a missing class-level
             //     @JsonIgnoreProperties(ignoreUnknown = true) on a DTO. Switching them
             //     to the lenient factory would mask the regression they exist to catch.
+            //   - AccountInfoMap.java: kept on master's strict ObjectMapper. Its
+            //     one-arg constructor is fed an operator-edited JSON file by
+            //     InMemoryAccountService (dev/local mode); strict deserialization
+            //     fails fast on field-name typos at startup. The two-arg constructor's
+            //     Helix-ZK / router-blob path consequently doesn't get the rolling-
+            //     deploy lenient guard from this file's mapper, but other readers of
+            //     the same data (AccountMetadataStore, AccountDao) still use the
+            //     lenient factory. See PR #3232 review thread r3164779558.
+            //   - Operator-supplied config / CLI tool inputs: strict deserialization is
+            //     intentional so a typo in a hand-edited field name fails fast at startup
+            //     rather than silently using a default value (see review thread above).
             def exemptSuffixes = [
                 'com/github/ambry/utils/JsonUtil.java',
+                'com/github/ambry/account/AccountInfoMap.java',
                 'com/github/ambry/account/BackwardsCompatibilityTest.java',
                 'com/github/ambry/account/RampControlCompatibilityTest.java',
                 'com/github/ambry/account/MigrationConfigTest.java',
                 'com/github/ambry/account/DatasetBuilderCompatibilityTest.java',
                 'com/github/ambry/store/CompactionPolicySwitchInfoCompatibilityTest.java',
                 'com/github/ambry/clustermap/MaintenanceRecordCompatibilityTest.java',
+                // Operator-supplied config / CLI tool inputs — see comment above.
+                'com/github/ambry/clustermap/HelixBootstrapUpgradeUtil.java',
+                'com/github/ambry/cloud/VcrReplicationManager.java',
+                'com/github/ambry/commons/HostLevelThrottler.java',
+                'com/github/ambry/quota/capacityunit/JsonCUQuotaDataProviderUtil.java',
+                'com/github/ambry/quota/storage/JSONStringStorageQuotaSource.java',
+                'com/github/ambry/account/AccountTool.java',
+                'com/github/ambry/account/AccountUpdateTool.java',
+                'com/github/ambry/clustermap/HelixVcrPopulateTool.java',
             ]
             def violations = []
             fileTree(dir: "${projectDir}/src", includes: ['**/*.java']).each { File f ->
