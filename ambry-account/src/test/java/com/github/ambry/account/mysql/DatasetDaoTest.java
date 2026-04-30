@@ -26,11 +26,10 @@ import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.util.Properties;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import static com.github.ambry.account.mysql.AccountDaoTest.getDataAccessor;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -39,19 +38,19 @@ import static org.mockito.Mockito.when;
 
 
 /** Unit test for {@link DatasetDao}. */
-@RunWith(MockitoJUnitRunner.class)
 public class DatasetDaoTest {
 
   /**
    * Regression for prod incident on 2026-04-29: a NPE thrown from the MySQL JDBC driver
-   * while reading a dataset row column (ResultSetImpl.findColumn -> getInt) surfaced as
-   * HTTP 500 from {@code GET /named/<account>/<container>/<dataset>}
-   * because the exception bubbled past {@link DatasetDao#executeGetDatasetStatement}
-   * uncaught. Verify the catch translates it into {@link AccountServiceException} with
-   * {@link AccountServiceErrorCode#NotFound} so callers map it to 404.
+   * while reading the {@code versionSchema} column (ResultSetImpl.findColumn -> getInt)
+   * surfaced as HTTP 500 from {@code GET /named/<account>/<container>/<dataset>}
+   * because the exception bubbled past {@link DatasetDao#getDataset} uncaught. Verify the
+   * narrow catch translates it into {@link AccountServiceException} with
+   * {@link AccountServiceErrorCode#NotFound}, increments the operability counter, and
+   * keeps the dataset identifiers in the exception message.
    */
   @Test
-  public void testGetDatasetMapsJdbcNpeToNotFound() throws Exception {
+  public void testGetDatasetMapsJdbcNpeOnVersionSchemaToNotFound() throws Exception {
     Connection mockConnection = mock(Connection.class);
     MySqlMetrics metrics = new MySqlMetrics(DatasetDao.class, new MetricRegistry());
     MySqlDataAccessor dataAccessor = getDataAccessor(mockConnection, metrics);
@@ -61,7 +60,7 @@ public class DatasetDaoTest {
 
     ResultSet mockResultSet = mock(ResultSet.class);
     when(mockResultSet.next()).thenReturn(true);
-    // Future-dated deletion ts so the deleted-check passes and we reach the column reads.
+    // Future-dated deletion ts so the deleted-check passes and we reach the column read.
     when(mockResultSet.getTimestamp(eq(DatasetDao.DELETED_TS))).thenReturn(
         new Timestamp(System.currentTimeMillis() + 60_000L));
     // Reproduce the JDBC driver NPE seen in prod.
@@ -73,11 +72,18 @@ public class DatasetDaoTest {
     MySqlAccountServiceConfig config = new MySqlAccountServiceConfig(new VerifiableProperties(props));
     DatasetDao dao = new DatasetDao(dataAccessor, config, metrics);
 
+    long npeCountBefore = metrics.datasetRowReadNpeCount.getCount();
     try {
       dao.getDataset(1, 2, "acct", "cont", "ds");
       fail("Expected AccountServiceException");
     } catch (AccountServiceException e) {
       assertEquals(AccountServiceErrorCode.NotFound, e.getErrorCode());
+      String message = e.getMessage();
+      assertTrue("message should include accountId, got: " + message, message.contains("1"));
+      assertTrue("message should include containerId, got: " + message, message.contains("2"));
+      assertTrue("message should include datasetName, got: " + message, message.contains("ds"));
     }
+    assertEquals("datasetRowReadNpeCount should increment by 1", npeCountBefore + 1,
+        metrics.datasetRowReadNpeCount.getCount());
   }
 }

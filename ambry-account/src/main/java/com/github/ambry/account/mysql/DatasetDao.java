@@ -38,6 +38,8 @@ import java.util.Map;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Dataset.VersionSchema.*;
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
@@ -45,6 +47,7 @@ import static com.github.ambry.utils.Utils.*;
 
 
 public class DatasetDao {
+  private static final Logger logger = LoggerFactory.getLogger(DatasetDao.class);
   private final MySqlDataAccessor dataAccessor;
   private final MySqlAccountServiceConfig mySqlAccountServiceConfig;
   private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
@@ -1850,31 +1853,36 @@ public class DatasetDao {
             "Dataset expired for account: " + accountId + " container: " + containerId + " dataset: " + datasetName,
             AccountServiceErrorCode.Deleted);
       }
+      int versionSchemaOrdinal;
       try {
-        versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
-        retentionPolicy = resultSet.getObject(RETENTION_POLICY, String.class);
-        retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
-        retentionTimeInSeconds = resultSet.getObject(RETENTION_TIME_IN_SECONDS, Long.class);
-        String userTagsInJson = resultSet.getString(USER_TAGS);
-        if (userTagsInJson != null) {
-          try {
-            userTags = objectMapper.readValue(userTagsInJson, Map.class);
-          } catch (IOException e) {
-            throw new AccountServiceException("Fail to deserialize user tags : " + userTagsInJson,
-                AccountServiceErrorCode.BadRequest);
-          }
-        }
+        versionSchemaOrdinal = resultSet.getInt(VERSION_SCHEMA);
       } catch (NullPointerException e) {
         // mysql-connector-java 8.0.21 (see gradle/dependency-versions.gradle) can throw NPE
         // from ResultSetImpl.findColumn -> getInt when the row state is unexpected. Observed
         // in prod 2026-04-29 on /named/<account>/<container>/<dataset>, where
         // it surfaced as HTTP 500 instead of 404. No fix is called out in the 8.0.x release
-        // notes; revisit when bumping the connector. This path is MySQL-only — Ambry's
+        // notes; revisit when bumping the connector. This path is MySQL-only -- Ambry's
         // dataset metadata does not run against TiDB. Map to NotFound so the frontend
-        // translates it to 404.
+        // translates it to 404, and emit a metric + warn log so on-call still has a signal.
+        metrics.datasetRowReadNpeCount.inc();
+        logger.warn("Dataset row read NPE for account={} container={} dataset={}", accountId, containerId, datasetName,
+            e);
         throw new AccountServiceException(
             "Dataset row could not be read for account: " + accountId + " container: " + containerId + " dataset: "
                 + datasetName, AccountServiceErrorCode.NotFound);
+      }
+      versionSchema = Dataset.VersionSchema.values()[versionSchemaOrdinal];
+      retentionPolicy = resultSet.getObject(RETENTION_POLICY, String.class);
+      retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
+      retentionTimeInSeconds = resultSet.getObject(RETENTION_TIME_IN_SECONDS, Long.class);
+      String userTagsInJson = resultSet.getString(USER_TAGS);
+      if (userTagsInJson != null) {
+        try {
+          userTags = objectMapper.readValue(userTagsInJson, Map.class);
+        } catch (IOException e) {
+          throw new AccountServiceException("Fail to deserialize user tags : " + userTagsInJson,
+              AccountServiceErrorCode.BadRequest);
+        }
       }
     } finally {
       //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
