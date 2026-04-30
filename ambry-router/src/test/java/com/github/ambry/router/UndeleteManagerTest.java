@@ -293,6 +293,30 @@ public class UndeleteManagerTest {
   }
 
   /**
+   * Failure tests when servers return BlobDeletedPermanently because the blob has been compacted.
+   * The router should surface this as RouterErrorCode.BlobDeleted.
+   * @throws Exception
+   */
+  @Test
+  public void blobDeletedPermanentlyTest() throws Exception {
+    HashMap<String, List<MockServer>> dcToMockServers = new HashMap<>();
+    serverLayout.getMockServers()
+        .forEach(server -> dcToMockServers.computeIfAbsent(server.getDataCenter(), k -> new ArrayList()).add(server));
+    String dc = new ArrayList<>(dcToMockServers.keySet()).get(0);
+    List<MockServer> servers = dcToMockServers.get(dc);
+    for (String blobId : blobIds) {
+      deleteBlobInAllServer(blobId);
+
+      for (MockServer server : servers.subList(0, 2)) {
+        server.setServerErrorForAllRequests(ServerErrorCode.BlobDeletedPermanently);
+      }
+
+      executeOpAndVerify(Collections.singleton(blobId), RouterErrorCode.BlobDeleted);
+      serverLayout.getMockServers().forEach(server -> server.resetServerErrors());
+    }
+  }
+
+  /**
    * Failure tests when undelete request is rejected due to quota compliance.
    * @throws Exception
    */

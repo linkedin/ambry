@@ -364,6 +364,8 @@ public class UndeleteOperation {
         return RouterErrorCode.BlobNotDeleted;
       case BlobAlreadyUndeleted:
         return RouterErrorCode.BlobUndeleted;
+      case BlobDeletedPermanently:
+        return RouterErrorCode.BlobDeleted;
       case BlobLifeVersionConflict:
         return RouterErrorCode.LifeVersionConflict;
       default:
