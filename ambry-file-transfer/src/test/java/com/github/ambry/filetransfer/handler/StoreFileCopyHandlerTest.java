@@ -203,6 +203,12 @@ public class StoreFileCopyHandlerTest {
           e.getErrorCode());
       assertTrue(e.getMessage().contains("Thread interrupted while fetching metadata"));
       assertTrue(Thread.currentThread().isInterrupted()); // Ensure the interrupt flag is set
+    } finally {
+      // JUnit reuses the same OS thread across tests in this class. Without clearing the
+      // flag here, every later test in StoreFileCopyHandlerIntegTest fails its setUp() in
+      // DiskSpaceAllocator.initializePool because Utils.preAllocateFileIfNeeded honours
+      // the inherited interrupt and throws IOException.
+      Thread.interrupted();
     }
   }
 
