@@ -528,6 +528,10 @@ public class HelixClusterManagerTest {
   /**
    * Test that a node with duplicate partition (same partition on two different disks) is skipped during initialization
    * instead of failing the entire cluster manager.
+   *
+   * <p>The plant only exercises the duplicate detector if the target disk does NOT already host
+   * the partition; otherwise it's a string no-op. {@link #findDuplicatePlantTarget} picks a
+   * candidate that satisfies that, and {@link #plantDuplicatePartition} writes the duplicate.
    * @throws Exception
    */
   @Test
@@ -536,6 +540,7 @@ public class HelixClusterManagerTest {
     clusterManager.close();
     metricRegistry = new MetricRegistry();
     String staticClusterName = "TestOnly";
+    String fullClusterName = "AmbryTest-" + staticClusterName;
     File tempDir = Files.createTempDirectory("helixClusterManagerTest").toFile();
     tempDir.deleteOnExit();
     String tempDirPath = tempDir.getAbsolutePath();
@@ -553,38 +558,72 @@ public class HelixClusterManagerTest {
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
             useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
 
-    // Pick a non-self node in the local DC and find a (sourceDisk, targetDisk, partitionEntry)
-    // triple where sourceDisk lists the partition and targetDisk does NOT. The earlier version
-    // just appended the first replica to diskMountPaths.get(1) without checking whether that
-    // disk already had the partition — for some param combinations the target disk already
-    // contained that partition, so the "plant" was a string no-op and the cluster manager's
-    // duplicate detector never fired. Params [0] and [7] failed in CI for this exact reason.
     MockHelixAdmin localAdmin = testCluster.getHelixAdminFromDc(localDc);
-    List<InstanceConfig> instanceConfigs = localAdmin.getInstanceConfigs("AmbryTest-" + staticClusterName);
-    InstanceConfig targetConfig = null;
-    String sourceDiskPath = null;
-    String targetDiskPath = null;
-    String duplicatePartitionEntry = null;
-    candidateLoop:
-    for (InstanceConfig candidate : instanceConfigs) {
+    DuplicatePlantTarget plant = findDuplicatePlantTarget(localAdmin, fullClusterName);
+    assertNotNull(
+        "Could not find a non-self instance with two disks where one has a partition the other doesn't", plant);
+    plantDuplicatePartition(plant, localAdmin, fullClusterName);
+
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", fullClusterName);
+    props.setProperty("clustermap.aggregated.view.cluster.name", fullClusterName);
+    props.setProperty("clustermap.use.aggregated.view", Boolean.toString(useAggregatedView));
+    props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(testCluster, null, null, useAggregatedView), metricRegistry);
+
+    // The bad node is skipped, but the cluster manager initializes successfully and other nodes
+    // remain reachable. No replica references the dropped node.
+    InstanceConfig badNode = plant.instance;
+    assertNull("Node with duplicate partition should not be in cluster map",
+        helixClusterManager.getDataNodeId(badNode.getHostName(), Integer.parseInt(badNode.getPort())));
+    assertTrue("Other nodes should still be present in cluster", helixClusterManager.getDataNodeIds().size() > 0);
+    for (PartitionId partition : helixClusterManager.getAllPartitionIds(null)) {
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        assertNotNull("Replica's node should be registered in cluster map",
+            helixClusterManager.getDataNodeId(replica.getDataNodeId().getHostname(),
+                replica.getDataNodeId().getPort()));
+      }
+    }
+
+    helixClusterManager.close();
+  }
+
+  /**
+   * Holder for a duplicate-plant target: the {@link InstanceConfig} to mutate, plus the
+   * source/target disk paths and the partition entry that will be planted on the target.
+   */
+  private static final class DuplicatePlantTarget {
+    final InstanceConfig instance;
+    final String sourceDiskPath;
+    final String targetDiskPath;
+    final String partitionEntry;
+
+    DuplicatePlantTarget(InstanceConfig instance, String sourceDiskPath, String targetDiskPath, String partitionEntry) {
+      this.instance = instance;
+      this.sourceDiskPath = sourceDiskPath;
+      this.targetDiskPath = targetDiskPath;
+      this.partitionEntry = partitionEntry;
+    }
+  }
+
+  /**
+   * Walks instances in {@code clusterName} and returns a non-self candidate that has at least two
+   * disks where one disk lists a partition the other does not. Returns {@code null} if no such
+   * candidate exists. The "target disk does NOT already host the partition" predicate is
+   * load-bearing: planting an entry the target already has is a string no-op.
+   */
+  private DuplicatePlantTarget findDuplicatePlantTarget(MockHelixAdmin admin, String clusterName) {
+    for (InstanceConfig candidate : admin.getInstanceConfigs(clusterName)) {
       if (candidate.getInstanceName().equals(selfInstanceName)) {
         continue;
       }
-      Map<String, List<String>> diskToEntries = new HashMap<>();
-      for (Map.Entry<String, Map<String, String>> entry : candidate.getRecord().getMapFields().entrySet()) {
-        if (entry.getValue().containsKey(DISK_STATE)) {
-          List<String> entries = new ArrayList<>();
-          String rs = entry.getValue().get(REPLICAS_STR);
-          if (rs != null && !rs.isEmpty()) {
-            for (String r : rs.split(REPLICAS_DELIM_STR)) {
-              if (!r.isEmpty()) {
-                entries.add(r);
-              }
-            }
-          }
-          diskToEntries.put(entry.getKey(), entries);
-        }
-      }
+      Map<String, List<String>> diskToEntries = readDiskReplicas(candidate);
       if (diskToEntries.size() < 2) {
         continue;
       }
@@ -601,25 +640,48 @@ public class HelixClusterManagerTest {
           }
           for (String entry : src.getValue()) {
             if (!tgtPartitions.contains(entry.split(":")[0])) {
-              targetConfig = candidate;
-              sourceDiskPath = src.getKey();
-              targetDiskPath = tgt.getKey();
-              duplicatePartitionEntry = entry;
-              break candidateLoop;
+              return new DuplicatePlantTarget(candidate, src.getKey(), tgt.getKey(), entry);
             }
           }
         }
       }
     }
-    assertNotNull(
-        "Could not find a non-self instance with two disks where one has a partition the other doesn't",
-        targetConfig);
-    String targetInstanceName = targetConfig.getInstanceName();
+    return null;
+  }
 
-    // Plant the duplicate. After this both sourceDiskPath and targetDiskPath list the same
-    // partition for this instance — exactly the condition that
-    // ensurePartitionAbsenceOnNodeAndValidateCapacity must catch and reject.
-    Map<String, String> targetDiskProps = targetConfig.getRecord().getMapFields().get(targetDiskPath);
+  /**
+   * Reads each disk's REPLICAS_STR on {@code config}, returning disk-path → entry list. Disks are
+   * identified by the presence of {@code DISK_STATE} in their map-field props; missing/empty
+   * REPLICAS_STR yields an empty list.
+   */
+  private static Map<String, List<String>> readDiskReplicas(InstanceConfig config) {
+    Map<String, List<String>> diskToEntries = new HashMap<>();
+    for (Map.Entry<String, Map<String, String>> entry : config.getRecord().getMapFields().entrySet()) {
+      if (!entry.getValue().containsKey(DISK_STATE)) {
+        continue;
+      }
+      List<String> entries = new ArrayList<>();
+      String rs = entry.getValue().get(REPLICAS_STR);
+      if (rs != null && !rs.isEmpty()) {
+        for (String r : rs.split(REPLICAS_DELIM_STR)) {
+          if (!r.isEmpty()) {
+            entries.add(r);
+          }
+        }
+      }
+      diskToEntries.put(entry.getKey(), entries);
+    }
+    return diskToEntries;
+  }
+
+  /**
+   * Appends {@code plant.partitionEntry} to the target disk's REPLICAS_STR and writes the
+   * mutated InstanceConfig back to Helix. Asserts that both source and target disks list the
+   * partition after the plant — if either fails, the candidate selection or the planting logic
+   * is wrong and the rest of the test is meaningless.
+   */
+  private static void plantDuplicatePartition(DuplicatePlantTarget plant, MockHelixAdmin admin, String clusterName) {
+    Map<String, String> targetDiskProps = plant.instance.getRecord().getMapFields().get(plant.targetDiskPath);
     String existingReplicas = targetDiskProps.get(REPLICAS_STR);
     if (existingReplicas == null) {
       existingReplicas = "";
@@ -627,55 +689,16 @@ public class HelixClusterManagerTest {
     if (!existingReplicas.isEmpty() && !existingReplicas.endsWith(REPLICAS_DELIM_STR)) {
       existingReplicas = existingReplicas + REPLICAS_DELIM_STR;
     }
-    targetDiskProps.put(REPLICAS_STR, existingReplicas + duplicatePartitionEntry + REPLICAS_DELIM_STR);
-    localAdmin.setInstanceConfig("AmbryTest-" + staticClusterName, targetInstanceName, targetConfig);
+    targetDiskProps.put(REPLICAS_STR, existingReplicas + plant.partitionEntry + REPLICAS_DELIM_STR);
+    admin.setInstanceConfig(clusterName, plant.instance.getInstanceName(), plant.instance);
 
-    // Sanity: the in-memory targetConfig must reflect the plant. If this fails, the candidate
-    // selection or the planting logic above is wrong and the rest of the test is meaningless.
-    String plantedReplicas = targetConfig.getRecord().getMapFields().get(targetDiskPath).get(REPLICAS_STR);
+    String plantedReplicas = plant.instance.getRecord().getMapFields().get(plant.targetDiskPath).get(REPLICAS_STR);
     assertNotNull("target disk should still have a REPLICAS_STR after planting", plantedReplicas);
-    assertTrue("target disk should now contain the planted entry: " + duplicatePartitionEntry,
-        plantedReplicas.contains(duplicatePartitionEntry));
-    String sourceReplicas =
-        targetConfig.getRecord().getMapFields().get(sourceDiskPath).get(REPLICAS_STR);
-    assertTrue("source disk should still contain the partition entry: " + duplicatePartitionEntry,
-        sourceReplicas != null && sourceReplicas.contains(duplicatePartitionEntry));
-
-    // Create HelixClusterManager - should succeed despite the bad node
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", hostname);
-    props.setProperty("clustermap.cluster.name", "AmbryTest-" + staticClusterName);
-    props.setProperty("clustermap.aggregated.view.cluster.name", "AmbryTest-" + staticClusterName);
-    props.setProperty("clustermap.use.aggregated.view", Boolean.toString(useAggregatedView));
-    props.setProperty("clustermap.datacenter.name", localDc);
-    props.setProperty("clustermap.port", Integer.toString(portNum));
-    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
-    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-
-    HelixClusterManager helixClusterManager =
-        new HelixClusterManager(clusterMapConfig, selfInstanceName,
-            new MockHelixManagerFactory(testCluster, null, null, useAggregatedView), metricRegistry);
-
-    // Verify the problematic node was skipped
-    assertNull("Node with duplicate partition should not be in cluster map",
-        helixClusterManager.getDataNodeId(targetConfig.getHostName(),
-            Integer.parseInt(targetConfig.getPort())));
-
-    // Verify other nodes are still present (cluster is functional)
-    long totalNodes = helixClusterManager.getDataNodeIds().size();
-    assertTrue("Other nodes should still be present in cluster", totalNodes > 0);
-
-    // Verify no orphan replicas: every replica for every partition should belong to a registered node
-    for (PartitionId partition : helixClusterManager.getAllPartitionIds(null)) {
-      for (ReplicaId replica : partition.getReplicaIds()) {
-        assertNotNull("Replica's node should be registered in cluster map",
-            helixClusterManager.getDataNodeId(replica.getDataNodeId().getHostname(),
-                replica.getDataNodeId().getPort()));
-      }
-    }
-
-    helixClusterManager.close();
+    assertTrue("target disk should now contain the planted entry: " + plant.partitionEntry,
+        plantedReplicas.contains(plant.partitionEntry));
+    String sourceReplicas = plant.instance.getRecord().getMapFields().get(plant.sourceDiskPath).get(REPLICAS_STR);
+    assertTrue("source disk should still contain the partition entry: " + plant.partitionEntry,
+        sourceReplicas != null && sourceReplicas.contains(plant.partitionEntry));
   }
 
   /**
