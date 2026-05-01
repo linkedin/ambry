@@ -26,7 +26,9 @@ jobs:
       # One leg per Gradle module — each runs on its own runner in parallel.
       # Total wall-clock = max(per-module time) instead of sum. ambry-store stays
       # in its own dedicated job below.
-      fail-fast: false
+      # DEBUG BRANCH: fail-fast=true so any other matrix leg (none here, but for consistency)
+      # would cancel on first failure. Restore to false before merging.
+      fail-fast: true
       matrix:
         # DEBUG BRANCH ONLY: scope to ambry-clustermap matrix leg only, and within that
         # to just inconsistentReplicaCapacityTest. Restore full module list before merging.
