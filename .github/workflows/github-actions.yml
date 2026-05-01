@@ -58,10 +58,10 @@ jobs:
         name: Run unit tests excluding ambry-store
         with:
           job-id: jdk11
-          # DEBUG BRANCH ONLY: scope to SSL selector tests so we get diagnostic results in
-          # minutes instead of half an hour. Restore the full `build codeCoverageReport`
-          # invocation before merging anywhere.
-          arguments: --scan :ambry-network:test --tests "*SSLSelectorTest*"
+          # DEBUG BRANCH ONLY: scope to just testSendLargeRequest for fastest diagnostic
+          # iteration. Restore the full `build codeCoverageReport` invocation before
+          # merging anywhere.
+          arguments: --scan :ambry-network:test --tests "*SSLSelectorTest.testSendLargeRequest*"
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov

@@ -350,7 +350,7 @@ public class SSLSelectorTest {
    */
   private String blockingRequest(String connectionId, String s) throws Exception {
     selector.poll(1000L, Collections.singletonList(SelectorTest.createSend(connectionId, s)));
-    long deadline = System.currentTimeMillis() + 30_000L;
+    long deadline = System.currentTimeMillis() + 5_000L;
     while (System.currentTimeMillis() < deadline) {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
@@ -377,7 +377,7 @@ public class SSLSelectorTest {
   private String blockingSSLConnect(int socketBufSize) throws IOException {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
-    long deadline = System.currentTimeMillis() + 30_000L;
+    long deadline = System.currentTimeMillis() + 5_000L;
     while (!selector.connected().contains(connectionId)) {
       if (System.currentTimeMillis() >= deadline) {
         dumpAllThreadsForDiagnostic("blockingSSLConnect 30s timeout on " + connectionId);
