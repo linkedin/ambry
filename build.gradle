@@ -147,7 +147,7 @@ subprojects {
     test {
         testLogging {
             exceptionFormat = 'full'
-            events "PASSED", "SKIPPED", "FAILED"
+            events "STARTED", "PASSED", "SKIPPED", "FAILED"
         }
         // Plugin for retrying flaky tests. Reference: https://github.com/gradle/test-retry-gradle-plugin
         retry {
