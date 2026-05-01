@@ -148,14 +148,21 @@ subprojects {
         testLogging {
             exceptionFormat = 'full'
             // FAILED stays in testLogging for the rich exception-trace format.
-            // SKIPPED kept so ignored tests are still visible in the log.
-            events "SKIPPED", "FAILED"
+            events "FAILED"
         }
         beforeTest { desc ->
             // One line per test with a wall-clock timestamp. Duration of test N is
             // roughly (test N+1 timestamp) - (test N timestamp). For the last test
             // before a hang, the absence of a successor line names the culprit.
             logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} STARTED"
+        }
+        afterTest { desc, result ->
+            // Only emit on failure — passes are implied by the next STARTED line;
+            // skips are counted in the per-suite total below. This adds wall-clock
+            // duration so we can see how long a failing test ran before failing.
+            if (result.resultType.toString() == 'FAILURE') {
+                logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} FAILED (${result.endTime - result.startTime}ms)"
+            }
         }
         afterSuite { desc, result ->
             if (desc.parent == null) {
