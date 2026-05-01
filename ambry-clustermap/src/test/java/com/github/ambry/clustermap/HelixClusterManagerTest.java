@@ -288,7 +288,15 @@ public class HelixClusterManagerTest {
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
-    int port = 2200;
+    // With maxParallelForks > 1 each Gradle fork must bind a distinct ZK port range,
+    // otherwise concurrent forks fight for 2200/2201. Gradle exposes the worker id via
+    // "org.gradle.test.worker" — the value is e.g. "Gradle Test Executor 3", so we
+    // strip everything except trailing digits. Slot size 10 gives plenty of slack
+    // even if helixDcs grows.
+    String workerProp = System.getProperty("org.gradle.test.worker", "0");
+    String workerDigits = workerProp.replaceAll("[^0-9]", "");
+    int workerId = workerDigits.isEmpty() ? 0 : Integer.parseInt(workerDigits);
+    int port = 2200 + workerId * 10;
     byte dcId = (byte) 0;
     for (String dcName : helixDcs) {
       dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port, true));

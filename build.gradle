@@ -381,6 +381,14 @@ project(':ambry-clustermap') {
         testImplementation project(':ambry-mysql')
         testImplementation project(path: ':ambry-api', configuration: 'testArchives')
     }
+
+    // Run up to 4 forks in parallel for ambry-clustermap. HelixClusterManagerTest is
+    // the long pole at ~22 min serial; with per-fork ZK port isolation (see
+    // HelixClusterManagerTest#setupZookeeperServers) each fork stands up an
+    // independent ZK ensemble, so forks don't collide on listener state.
+    test {
+        maxParallelForks = 4
+    }
 }
 
 project(':ambry-network') {

@@ -23,31 +23,14 @@ jobs:
 
     runs-on: ubuntu-latest
     strategy:
-      # One leg per Gradle module — each runs on its own runner in parallel.
-      # Total wall-clock = max(per-module time) instead of sum. ambry-store stays
-      # in its own dedicated job below.
-      fail-fast: false
+      # DEBUG branch (snalli/clustermap-test-speedup): only ambry-clustermap is
+      # under investigation — skip every other module to keep the feedback loop
+      # tight. fail-fast=true so a broken parallel-fork setup surfaces in minutes
+      # rather than after retries chew through the timeout.
+      fail-fast: true
       matrix:
         module:
-          - ambry-account
           - ambry-clustermap
-          - ambry-cloud
-          - ambry-commons
-          - ambry-filesystem
-          - ambry-frontend
-          - ambry-messageformat
-          - ambry-mysql
-          - ambry-named-mysql
-          - ambry-network
-          - ambry-prioritization
-          - ambry-protocol
-          - ambry-quota
-          - ambry-replication
-          - ambry-rest
-          - ambry-router
-          - ambry-tools
-          - ambry-utils
-          - ambry-vcr
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
@@ -97,7 +80,8 @@ jobs:
         timeout-minutes: 2
 
   store-test:
-
+    # Skipped on debug branch — clustermap speedup work doesn't touch ambry-store.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
@@ -126,7 +110,8 @@ jobs:
         timeout-minutes: 2
 
   int-test:
-
+    # Skipped on debug branch — clustermap speedup work is unit-test-only.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
@@ -174,7 +159,8 @@ jobs:
         timeout-minutes: 2
 
   server-int-test:
-
+    # Skipped on debug branch — clustermap speedup work doesn't touch the server.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
