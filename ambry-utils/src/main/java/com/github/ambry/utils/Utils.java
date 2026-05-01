@@ -978,18 +978,36 @@ public class Utils {
       file.createNewFile();
     }
     if (isLinux()) {
-      Runtime runtime = Runtime.getRuntime();
-      Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
+      // Use ProcessBuilder + an explicit arg array so paths containing spaces aren't split
+      // by the legacy Runtime.exec(String) tokeniser. Merge stderr into stdout so a single
+      // stream carries both warnings and errors for the failure-message path below.
+      Process process = new ProcessBuilder(
+          "fallocate", "--keep-size", "-l", Long.toString(capacityBytes), file.getAbsolutePath())
+          .redirectErrorStream(true)
+          .start();
+      boolean exited;
       try {
-        process.waitFor();
+        // Bounded wait: the prior bare waitFor() could pin the caller forever if fallocate
+        // hung, and on InterruptedException the old code fell through to exitValue() which
+        // threw IllegalThreadStateException because the child was still running.
+        exited = process.waitFor(30, TimeUnit.SECONDS);
       } catch (InterruptedException e) {
-        // ignore the interruption and check the exit value to be sure
+        process.destroyForcibly();
+        Thread.currentThread().interrupt();
+        throw new IOException("Interrupted while preallocating file " + file.getAbsolutePath(), e);
+      }
+      if (!exited) {
+        process.destroyForcibly();
+        throw new IOException("fallocate timed out preallocating file " + file.getAbsolutePath());
       }
       if (process.exitValue() != 0) {
+        String errorOutput;
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+          errorOutput = br.lines().collect(Collectors.joining("\n"));
+        }
         throw new IOException(
             "error while trying to preallocate file " + file.getAbsolutePath() + " exitvalue " + process.exitValue()
-                + " error string " + new BufferedReader(new InputStreamReader(process.getErrorStream())).lines()
-                .collect(Collectors.joining("/n")));
+                + " error string " + errorOutput);
       }
     }
   }
