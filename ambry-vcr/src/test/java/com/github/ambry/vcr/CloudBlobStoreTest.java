@@ -128,8 +128,7 @@ import static org.mockito.Mockito.*;
  */
 @Ignore("CosmosDB-backed Azure cloud-tier path is the V1 design; per the comment in this test "
     + "around line 197, V2 doesn't use CosmosDB. Class has 13 references to CosmosChangeFeedFindToken "
-    + "and other Cosmos types. Not on AmbryLI's prod path. Re-enable if the V1/Cosmos path is "
-    + "ever brought back.")
+    + "and other Cosmos types. Re-enable if the V1/Cosmos path is ever revived.")
 public class CloudBlobStoreTest {
   public static final Logger logger = LoggerFactory.getLogger(CloudBlobStoreTest.class);
   private static final int SMALL_BLOB_SIZE = 100;

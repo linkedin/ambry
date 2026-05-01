@@ -51,11 +51,10 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests for {@link StoreFileCopyHandler}.
  */
-@Ignore("File-copy-based replication is plumbed in AmbryLI factories but defaults to off "
-    + "(clustermap.enable.file.copy.protocol = false in ClusterMapConfig) and no checked-in "
-    + "AmbryLI config flips it on. The feature is staged for production, not currently active. "
-    + "These tests are also intermittently flaky on CI (testValidRanges had a fixture-leak "
-    + "assertion mismatch). Re-enable before the flag is flipped to true in any prod fabric.")
+@Ignore("File-copy-based replication defaults to OFF (clustermap.enable.file.copy.protocol = "
+    + "false in ClusterMapConfig). The feature is staged, not enabled by default. These tests "
+    + "are also intermittently flaky on CI (testValidRanges has a fixture-leak assertion "
+    + "mismatch). Re-enable before flipping the flag to true in any deployment.")
 @RunWith(MockitoJUnitRunner.class)
 public class StoreFileCopyHandlerTest {
   @Mock
@@ -209,12 +208,6 @@ public class StoreFileCopyHandlerTest {
           e.getErrorCode());
       assertTrue(e.getMessage().contains("Thread interrupted while fetching metadata"));
       assertTrue(Thread.currentThread().isInterrupted()); // Ensure the interrupt flag is set
-    } finally {
-      // JUnit reuses the same OS thread across tests in this class. Without clearing the
-      // flag here, every later test in StoreFileCopyHandlerIntegTest fails its setUp() in
-      // DiskSpaceAllocator.initializePool because Utils.preAllocateFileIfNeeded honours
-      // the inherited interrupt and throws IOException.
-      Thread.interrupted();
     }
   }
 

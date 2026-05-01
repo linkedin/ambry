@@ -64,8 +64,8 @@ import static org.mockito.Mockito.*;
 /**
  * Integration tests for {@link StoreFileCopyHandler}.
  */
-@Ignore("See StoreFileCopyHandlerTest @Ignore — file-copy-based replication is staged-but-off "
-    + "in AmbryLI prod (clustermap.enable.file.copy.protocol = false). Re-enable before flipping.")
+@Ignore("See StoreFileCopyHandlerTest @Ignore — file-copy-based replication defaults to off "
+    + "(clustermap.enable.file.copy.protocol = false). Re-enable before flipping.")
 @RunWith(MockitoJUnitRunner.class)
 public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   private final Path tempDir;
