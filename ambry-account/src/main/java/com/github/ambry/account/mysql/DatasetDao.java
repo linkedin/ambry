@@ -38,8 +38,6 @@ import java.util.Map;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 import java.util.Set;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Dataset.VersionSchema.*;
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
@@ -47,7 +45,6 @@ import static com.github.ambry.utils.Utils.*;
 
 
 public class DatasetDao {
-  private static final Logger logger = LoggerFactory.getLogger(DatasetDao.class);
   private final MySqlDataAccessor dataAccessor;
   private final MySqlAccountServiceConfig mySqlAccountServiceConfig;
   private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
@@ -1863,10 +1860,9 @@ public class DatasetDao {
         // it surfaced as HTTP 500 instead of 404. No fix is called out in the 8.0.x release
         // notes; revisit when bumping the connector. This path is MySQL-only -- Ambry's
         // dataset metadata does not run against TiDB. Map to NotFound so the frontend
-        // translates it to 404, and emit a metric + warn log so on-call still has a signal.
+        // translates it to 404; the dedicated metric below is the on-call signal (the
+        // existing AccountAndContainerInjector error log already names the dataset).
         metrics.datasetRowReadNpeCount.inc();
-        logger.warn("Dataset row read NPE for account={} container={} dataset={}", accountId, containerId, datasetName,
-            e);
         throw new AccountServiceException(
             "Dataset row could not be read for account: " + accountId + " container: " + containerId + " dataset: "
                 + datasetName, AccountServiceErrorCode.NotFound);
