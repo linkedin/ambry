@@ -11,6 +11,12 @@ on:
   pull_request:
     branches: [ '**' ]
 
+# Cancel a PR's in-progress run when a new commit is pushed to the same PR.
+# Master pushes never cancel each other so every master SHA gets a green build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   unit-test:
