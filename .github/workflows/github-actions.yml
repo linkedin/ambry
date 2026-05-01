@@ -27,7 +27,6 @@ jobs:
           - ambry-clustermap
           - ambry-cloud
           - ambry-commons
-          - ambry-file-transfer
           - ambry-filesystem
           - ambry-frontend
           - ambry-messageformat
