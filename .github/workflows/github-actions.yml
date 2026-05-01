@@ -17,32 +17,40 @@ jobs:
 
     runs-on: ubuntu-latest
     strategy:
-      # One job per Gradle module — each runs on its own runner in parallel.
+      # One leg per Gradle module — each runs on its own runner in parallel.
       # Total wall-clock = max(per-module time) instead of sum. ambry-store stays
       # in its own dedicated job below.
       fail-fast: false
       matrix:
-        module:
-          - ambry-account
-          - ambry-clustermap
-          - ambry-cloud
-          - ambry-commons
-          - ambry-file-transfer
-          - ambry-filesystem
-          - ambry-frontend
-          - ambry-messageformat
-          - ambry-mysql
-          - ambry-named-mysql
-          - ambry-network
-          - ambry-prioritization
-          - ambry-protocol
-          - ambry-quota
-          - ambry-replication
-          - ambry-rest
-          - ambry-router
-          - ambry-tools
-          - ambry-utils
-          - ambry-vcr
+        # Use `include:` so we can give the "flaky" bucket different gradle args and let it
+        # fail without blocking the rest of the matrix. Default `continue-on-error: false` for
+        # all modules unless overridden in the include entry.
+        include:
+          - { module: ambry-account,         args: ":ambry-account:test" }
+          - { module: ambry-clustermap,      args: ":ambry-clustermap:test" }
+          - { module: ambry-cloud,           args: ":ambry-cloud:test" }
+          - { module: ambry-commons,         args: ":ambry-commons:test" }
+          - { module: ambry-file-transfer,   args: ":ambry-file-transfer:test" }
+          - { module: ambry-filesystem,      args: ":ambry-filesystem:test" }
+          - { module: ambry-frontend,        args: ":ambry-frontend:test" }
+          - { module: ambry-messageformat,   args: ":ambry-messageformat:test" }
+          - { module: ambry-mysql,           args: ":ambry-mysql:test" }
+          - { module: ambry-named-mysql,     args: ":ambry-named-mysql:test" }
+          - { module: ambry-network,         args: ":ambry-network:test" }
+          - { module: ambry-prioritization,  args: ":ambry-prioritization:test" }
+          - { module: ambry-protocol,        args: ":ambry-protocol:test" }
+          - { module: ambry-quota,           args: ":ambry-quota:test" }
+          - { module: ambry-replication,     args: ":ambry-replication:test" }
+          - { module: ambry-rest,            args: ":ambry-rest:test" }
+          - { module: ambry-router,          args: ":ambry-router:test" }
+          - { module: ambry-tools,           args: ":ambry-tools:test" }
+          - { module: ambry-utils,           args: ":ambry-utils:test" }
+          - { module: ambry-vcr,             args: ":ambry-vcr:test" }
+          # Bucket for known-flaky / @Ignore'd tests we want visibility on without blocking CI.
+          # Add new test classes here as they're flagged. continue-on-error: true means a
+          # failure in this leg does NOT fail the overall workflow.
+          - { module: flaky-tests, allow-fail: true, args: ":ambry-file-transfer:test :ambry-vcr:test --tests *StoreFileCopyHandlerTest* --tests *StoreFileCopyHandlerIntegTest* --tests *CloudBlobStoreTest*" }
+    continue-on-error: ${{ matrix.allow-fail == true }}
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
@@ -80,7 +88,7 @@ jobs:
         with:
           # Per-module cache key so concurrent jobs don't fight over the same cache.
           job-id: jdk11-${{ matrix.module }}
-          arguments: --scan :${{ matrix.module }}:test
+          arguments: --scan ${{ matrix.args }}
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
