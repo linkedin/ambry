@@ -149,6 +149,14 @@ subprojects {
             exceptionFormat = 'full'
             events "STARTED", "PASSED", "SKIPPED", "FAILED"
         }
+        afterTest { desc, result ->
+            logger.lifecycle "    duration: ${desc.className} > ${desc.name} = ${result.endTime - result.startTime}ms"
+        }
+        afterSuite { desc, result ->
+            if (desc.parent == null) {
+                logger.lifecycle "    suite total: ${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped"
+            }
+        }
         // Plugin for retrying flaky tests. Reference: https://github.com/gradle/test-retry-gradle-plugin
         retry {
             // The maximum number of times to retry an individual test
