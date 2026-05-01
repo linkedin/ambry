@@ -313,12 +313,35 @@ public class HelixClusterManagerTest {
       clusterManager.close();
     }
 
+    // Clean up both the @Before's helixCluster AND any test-specific clusters this class may
+    // have created. Four tests in this file (inconsistentReplicaCapacityTest,
+    // selfNodeBadConfigFailsInitializationTest, duplicatePartitionOnSameNodeSkipsNodeTest, and
+    // one more around line 1416) all use the same "AmbryTest-TestOnly" cluster name. Without
+    // cleaning that namespace, stale ZK state from a prior test causes the next test's
+    // HelixClusterManager init to wait for routing-table notifications that conflict with
+    // leftover state — manifesting as a HANG (passed in isolation, hangs in suite).
     for (int port : zookeeperServerPorts) {
       String addr = "localhost:" + port;
+      cleanupClusterPath(addr, helixCluster.getClusterName());
+      cleanupClusterPath(addr, "AmbryTest-TestOnly");
+    }
+  }
+
+  /**
+   * Best-effort cleanup of a single cluster's ZK property-store data. Swallows exceptions when
+   * the path doesn't exist (some tests don't create the secondary cluster).
+   */
+  private static void cleanupClusterPath(String zkAddr, String clusterName) {
+    try {
       HelixPropertyStore<ZNRecord> propertyStore =
-          CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName(), null);
-      propertyStore.remove("/", AccessOption.PERSISTENT);
-      propertyStore.stop();
+          CommonUtils.createHelixPropertyStore(zkAddr, "/" + clusterName, null);
+      try {
+        propertyStore.remove("/", AccessOption.PERSISTENT);
+      } finally {
+        propertyStore.stop();
+      }
+    } catch (Exception e) {
+      // path likely doesn't exist for this cluster; ignore so the next cleanup still runs
     }
   }
 
