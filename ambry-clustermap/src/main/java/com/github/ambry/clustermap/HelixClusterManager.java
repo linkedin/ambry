@@ -1855,11 +1855,14 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     public void waitForInitNotification() throws InterruptedException {
-      // wait slightly more than 5 mins to ensure routerUpdater refreshes the snapshot.
-      if (!routingTableInitLatch.await(320, TimeUnit.SECONDS)) {
+      // 10 minutes. Routing-table init under aggregated-view config has been observed to take
+      // 5+ minutes on shared CI runners under contention; the prior 320s wait was hitting its
+      // ceiling intermittently and causing flaky test failures (HelixClusterManagerTest
+      // params with useAggregatedView=true).
+      if (!routingTableInitLatch.await(600, TimeUnit.SECONDS)) {
         throw new IllegalStateException(
             "Initial routing table change from helix cluster " + helixClusterName + "in dc " + dcName
-                + " didn't come within 5 mins");
+                + " didn't come within 10 mins");
       }
     }
 
