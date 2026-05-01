@@ -353,6 +353,11 @@ public class SSLSelectorTest {
     long deadline = System.currentTimeMillis() + 5_000L;
     while (System.currentTimeMillis() < deadline) {
       selector.poll(1000L);
+      // Fail-fast if the connection died (server closed, SSL alert, etc.). Without this the
+      // helper would spin to the deadline even when the connection is known-dead.
+      if (selector.disconnected().contains(connectionId)) {
+        throw new IOException("Connection disconnected during blockingRequest: " + connectionId);
+      }
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId().equals(connectionId)) {
           ByteBuf payload = receive.getReceivedBytes().content();
@@ -379,6 +384,11 @@ public class SSLSelectorTest {
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
     long deadline = System.currentTimeMillis() + 5_000L;
     while (!selector.connected().contains(connectionId)) {
+      // Fail-fast if the connection moved to disconnected (handshake failure, server reset, etc.)
+      // instead of spinning until the deadline.
+      if (selector.disconnected().contains(connectionId)) {
+        throw new IOException("Connection disconnected during blockingSSLConnect: " + connectionId);
+      }
       if (System.currentTimeMillis() >= deadline) {
         dumpAllThreadsForDiagnostic("blockingSSLConnect 5s timeout on " + connectionId);
         throw new IOException("blockingSSLConnect timed out after 5s, connectionId=" + connectionId);
