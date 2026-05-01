@@ -27,6 +27,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.JsonUtil;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -46,7 +47,7 @@ public class GetResourceInfoHandler {
   private final boolean isHelixClusterMap;
 
   public static final String RESOURCES_KEY = "resources";
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   /**
    * Constructs a handle for handling requests for getting resource info.

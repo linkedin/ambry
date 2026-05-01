@@ -209,6 +209,70 @@ subprojects {
         options.addStringOption('Xdoclint:none', '-quiet') // Suppress lint warnings
         failOnError = false
     }
+
+    task enforceObjectMapperUsage {
+        description = 'Ensures no raw new ObjectMapper() calls exist outside JsonUtil and audited compatibility tests.'
+        doLast {
+            // Intentional exemptions:
+            //   - JsonUtil.java: the canonical factory.
+            //   - *CompatibilityTest.java files below: deliberately use a strict default
+            //     ObjectMapper so they can detect a missing class-level
+            //     @JsonIgnoreProperties(ignoreUnknown = true) on a DTO. Switching them
+            //     to the lenient factory would mask the regression they exist to catch.
+            //   - AccountInfoMap.java: kept on master's strict ObjectMapper. Its
+            //     one-arg constructor is fed an operator-edited JSON file by
+            //     InMemoryAccountService (dev/local mode); strict deserialization
+            //     fails fast on field-name typos at startup. The two-arg constructor's
+            //     Helix-ZK / router-blob path consequently doesn't get the rolling-
+            //     deploy lenient guard from this file's mapper, but other readers of
+            //     the same data (AccountMetadataStore, AccountDao) still use the
+            //     lenient factory. See PR #3232 review thread r3164779558.
+            //   - Operator-supplied config / CLI tool inputs: strict deserialization is
+            //     intentional so a typo in a hand-edited field name fails fast at startup
+            //     rather than silently using a default value (see review thread above).
+            def exemptSuffixes = [
+                'com/github/ambry/utils/JsonUtil.java',
+                'com/github/ambry/account/AccountInfoMap.java',
+                'com/github/ambry/account/BackwardsCompatibilityTest.java',
+                'com/github/ambry/account/RampControlCompatibilityTest.java',
+                'com/github/ambry/account/MigrationConfigTest.java',
+                'com/github/ambry/account/DatasetBuilderCompatibilityTest.java',
+                'com/github/ambry/store/CompactionPolicySwitchInfoCompatibilityTest.java',
+                'com/github/ambry/clustermap/MaintenanceRecordCompatibilityTest.java',
+                // Operator-supplied config / CLI tool inputs — see comment above.
+                'com/github/ambry/clustermap/HelixBootstrapUpgradeUtil.java',
+                'com/github/ambry/cloud/VcrReplicationManager.java',
+                'com/github/ambry/commons/HostLevelThrottler.java',
+                'com/github/ambry/quota/capacityunit/JsonCUQuotaDataProviderUtil.java',
+                'com/github/ambry/quota/storage/JSONStringStorageQuotaSource.java',
+                'com/github/ambry/account/AccountTool.java',
+                'com/github/ambry/account/AccountUpdateTool.java',
+                'com/github/ambry/clustermap/HelixVcrPopulateTool.java',
+                // Tests for the operator-config sites above; kept on master state to
+                // mirror the production file (Cat E — no functional impact either way,
+                // but consistency with the production-side revert keeps the diff cleaner).
+                'com/github/ambry/quota/capacityunit/JsonCUQuotaDataProviderUtilTest.java',
+                'com/github/ambry/account/AccountUpdateToolTest.java',
+                'com/github/ambry/clustermap/HelixVcrPopulateToolTest.java',
+            ]
+            def violations = []
+            fileTree(dir: "${projectDir}/src", includes: ['**/*.java']).each { File f ->
+                def normalized = f.path.replace(File.separator, '/')
+                if (exemptSuffixes.any { normalized.endsWith(it) }) return
+                f.eachLine { line, lineNum ->
+                    if (line =~ /new\s+ObjectMapper\s*\(/) {
+                        violations << "${f.path}:${lineNum}: ${line.trim()}"
+                    }
+                }
+            }
+            if (!violations.isEmpty()) {
+                throw new GradleException(
+                    "Found raw ObjectMapper construction. Use JsonUtil.newObjectMapper() instead:\n"
+                    + violations.join('\n'))
+            }
+        }
+    }
+    check.dependsOn enforceObjectMapperUsage
 }
 
 project(':ambry-utils') {
@@ -218,6 +282,7 @@ project(':ambry-utils') {
         implementation "org.json:json:$jsonVersion"
         implementation "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         implementation "io.netty:netty-all:$nettyVersion"
+        implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
         testImplementation project(":ambry-test-utils")
         testImplementation "io.netty:netty-transport-native-epoll:$nettyVersion"
         testImplementation "commons-io:commons-io:$commonsIoVersion"

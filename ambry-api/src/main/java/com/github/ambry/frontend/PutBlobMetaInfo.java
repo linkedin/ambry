@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -60,7 +61,7 @@ public class PutBlobMetaInfo {
   // the list of data chunk pairs <blob id, blob size> in order
   private final List<Pair<String, Long>> orderedChunkIdSizeList;
   // TODO [S3] Do we need ttl or sessionId?
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   /**
    * Construct a {@link PutBlobMetaInfo} object.

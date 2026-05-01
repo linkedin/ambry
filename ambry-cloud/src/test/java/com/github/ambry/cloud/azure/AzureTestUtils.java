@@ -27,6 +27,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
@@ -55,7 +56,7 @@ class AzureTestUtils {
   static final short accountId = 101;
   static final short containerId = 5;
   static final long partition = 666;
-  static final ObjectMapper objectMapper = new ObjectMapper();
+  static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   static void setConfigProperties(Properties configProps, int numberStorageAccounts) {
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");

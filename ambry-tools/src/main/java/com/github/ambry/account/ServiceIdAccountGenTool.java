@@ -17,6 +17,7 @@ package com.github.ambry.account;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.JsonUtil;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -101,7 +102,7 @@ public class ServiceIdAccountGenTool {
       curAccountId++;
     }
     try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(outputFile))) {
-      new ObjectMapper().writer(new DefaultPrettyPrinter()).writeValue(writer, accounts);
+      JsonUtil.newObjectMapper().writer(new DefaultPrettyPrinter()).writeValue(writer, accounts);
     }
   }
 }

@@ -117,6 +117,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -158,7 +159,7 @@ public class AmbryRequests implements RequestAPI {
   protected final MetricRegistry metricRegistry;
   protected final ServerConfig serverConfig;
   protected ThreadLocal<Transformer> transformer;
-  private final ObjectMapper objectMapper = new ObjectMapper();
+  private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);

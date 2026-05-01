@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
@@ -37,7 +38,7 @@ public class HybridCompactionPolicy implements CompactionPolicy {
   private final Map<String, CompactionPolicySwitchInfo> blobToCompactionPolicySwitchInfoMap;
   private final StatsBasedCompactionPolicy statsBasedPolicy;
   private final CompactAllPolicy compactAllPolicy;
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private static final String COMPACT_POLICY_INFO_FILE_NAME = "compactionPolicyInfo.json";
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
   private static final long INIT_COMPACT_ALL_TIME = System.currentTimeMillis();

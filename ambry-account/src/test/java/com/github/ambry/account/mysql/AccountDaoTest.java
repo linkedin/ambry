@@ -25,6 +25,7 @@ import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import java.sql.BatchUpdateException;
@@ -50,7 +51,7 @@ import static org.mockito.Mockito.*;
 /** Unit test for AccountDao class */
 @RunWith(MockitoJUnitRunner.class)
 public class AccountDaoTest {
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private final short accountId = 101;
   private final Account testAccount;
   private final Container testContainer;

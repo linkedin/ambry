@@ -22,6 +22,7 @@ import com.github.ambry.cloud.CloudRequestAgent;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
@@ -52,7 +53,7 @@ public class AzureStorageCompactor {
   static final Map<String, Long> emptyCheckpoints;
   static final long DEFAULT_TIME = 0L;
   private static final Logger logger = LoggerFactory.getLogger(AzureStorageCompactor.class);
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private static final int CHECKPOINT_BUFFER_SIZE = 64;
   private static final String[] compactionFields =
       {CloudBlobMetadata.FIELD_DELETION_TIME, CloudBlobMetadata.FIELD_EXPIRATION_TIME};

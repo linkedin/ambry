@@ -22,6 +22,7 @@ import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.PreparedStatement;
@@ -46,7 +47,7 @@ import static com.github.ambry.utils.Utils.*;
 public class DatasetDao {
   private final MySqlDataAccessor dataAccessor;
   private final MySqlAccountServiceConfig mySqlAccountServiceConfig;
-  private final ObjectMapper objectMapper = new ObjectMapper();
+  private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private final MySqlMetrics metrics;
   private static final long MAX_TIMESTAMP_MONOTONIC_VERSION_VALUE = Long.MAX_VALUE;
   private static final long MAX_SEMANTIC_VERSION_PART_VALUE = 999L;

@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.frontend.PutBlobMetaInfo;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -54,7 +55,7 @@ public class S3MultipartETag {
   private final List<Pair<String, Long>> orderedChunkIdSizeList;
   private short version;
 
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   /**
    * Construct S3MultipartETag

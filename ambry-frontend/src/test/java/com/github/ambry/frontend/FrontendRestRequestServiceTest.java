@@ -89,6 +89,7 @@ import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -658,7 +659,7 @@ public class FrontendRestRequestServiceTest {
             .build();
 
     byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     Map<String, Object> map =
         mapper.readValue(new String(datasetsUpdateJson), new TypeReference<Map<String, Object>>() {
         });
@@ -2496,7 +2497,7 @@ public class FrontendRestRequestServiceTest {
         return null;
       }
     }).when(accountStatsStore).queryAggregatedPartitionClassStorageStatsByClusterName(anyString());
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
 
     // construct a request to get account stats
     JSONObject headers = new JSONObject();

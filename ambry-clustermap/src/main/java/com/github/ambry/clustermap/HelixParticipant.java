@@ -25,6 +25,7 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -85,7 +86,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
 
