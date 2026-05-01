@@ -359,7 +359,7 @@ public class NonBlockingRouter implements Router {
         && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
       routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.inc();
       return new RouterException(
-          "Named blob metadata exists but storage returned BlobNotFound; treating as transient.",
+          "Named blob metadata exists but storage returned BlobNotFound for the resolved blob ID.",
           RouterErrorCode.AmbryUnavailable);
     }
     return e;

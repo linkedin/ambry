@@ -1367,6 +1367,83 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Translation must also fire when {@code getBlobHelper}'s notFoundCache short-circuit completes the operation.
+   * That path bypasses the per-replica storage call and synthesises BlobDoesNotExist via {@code completeOperation}
+   * rather than {@code BlobOperationCallbackWrapper}, so we cover it explicitly.
+   */
+  @Test
+  public void testNamedBlobMissingViaNotFoundCacheStillTranslatedToAmbryUnavailable() throws Exception {
+    Properties props = getNonBlockingRouterProperties(localDcName);
+    final AtomicReference<String> storedBlobId = new AtomicReference<>();
+    CountDownLatch putCompletedLatch = new CountDownLatch(1);
+
+    IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
+    IdConverter mockIdConverter = mock(IdConverter.class);
+    when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
+    when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
+      FutureResult<String> futureResult = new FutureResult<>();
+      String blobId = invocation.getArgument(1);
+      Callback<String> callback = invocation.getArgument(3);
+      storedBlobId.set(blobId);
+      if (callback != null) {
+        callback.onCompletion(blobId, null);
+      }
+      futureResult.done(blobId, null);
+      putCompletedLatch.countDown();
+      return futureResult;
+    });
+
+    setRouterWithIdConverterFactory(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem(),
+        mockIdConverterFactory);
+
+    try {
+      final String accountName = "accountName";
+      final String containerName = "containerName";
+      final String blobName = "blobName";
+      setOperationParams();
+      RestRequest putRequest =
+          createNamedBlobRestRequest(RestMethod.PUT, accountName, containerName, blobName, false, false, false, false);
+      router.putBlob(putRequest, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+          null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      putCompletedLatch.await();
+
+      // GET path: idConverter resolves successfully (metadata exists), returning the put blob ID.
+      when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
+        CompletableFuture<String> completableFuture = new CompletableFuture<>();
+        completableFuture.complete(storedBlobId.get());
+        return completableFuture;
+      });
+
+      // Pre-populate the notFoundCache for the resolved blob ID so getBlobHelper short-circuits via
+      // completeOperation(...) rather than going to the storage layer.
+      router.getNotFoundCache().put(storedBlobId.get(), Boolean.TRUE);
+
+      RestRequest getRequest =
+          createNamedBlobRestRequest(RestMethod.GET, accountName, containerName, blobName, false, false, false, true);
+      Future<GetBlobResult> future = router.getBlob(getRequest, (String) getRequest.getArgs().get(BLOB_ID),
+          new GetBlobOptionsBuilder().build(), null, null);
+
+      try {
+        future.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        Assert.fail("Expected RouterException with AmbryUnavailable");
+      } catch (ExecutionException ee) {
+        Assert.assertTrue("Expected RouterException, got " + ee.getCause(),
+            ee.getCause() instanceof RouterException);
+        Assert.assertEquals(
+            "notFoundCache short-circuit must also be translated to AmbryUnavailable when metadata exists",
+            RouterErrorCode.AmbryUnavailable, ((RouterException) ee.getCause()).getErrorCode());
+      }
+      Assert.assertEquals("Translation metric should have incremented exactly once", 1L,
+          routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
+    } finally {
+      if (router != null) {
+        router.close();
+        assertClosed();
+      }
+    }
+  }
+
+  /**
    * Test named blob stitch after we move id converter into router.
    */
   @Test
