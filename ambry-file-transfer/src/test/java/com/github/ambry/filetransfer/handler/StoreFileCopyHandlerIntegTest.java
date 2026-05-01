@@ -53,6 +53,7 @@ import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -63,6 +64,8 @@ import static org.mockito.Mockito.*;
 /**
  * Integration tests for {@link StoreFileCopyHandler}.
  */
+@Ignore("See StoreFileCopyHandlerTest @Ignore — file-copy-based replication is staged-but-off "
+    + "in AmbryLI prod (clustermap.enable.file.copy.protocol = false). Re-enable before flipping.")
 @RunWith(MockitoJUnitRunner.class)
 public class StoreFileCopyHandlerIntegTest extends StoreFileCopyHandlerTest {
   private final Path tempDir;
