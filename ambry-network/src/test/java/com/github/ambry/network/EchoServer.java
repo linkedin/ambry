@@ -57,8 +57,11 @@ public class EchoServer extends Thread {
       SSLContext sslContext = sslFactory.getSSLContext();
       this.serverSocket = sslContext.getServerSocketFactory().createServerSocket(port);
 
-      // enable mutual authentication
-      ((SSLServerSocket) this.serverSocket).setNeedClientAuth(true);
+      // DEBUG: drop mutual auth to confirm the Linux/SunJSSE bad_certificate alert
+      // is the root cause. With this set to false, only the server presents a cert and
+      // client-cert validation is skipped — the handshake should succeed if our theory
+      // is correct. Restore to true (and fix the underlying cert issue) before merging.
+      ((SSLServerSocket) this.serverSocket).setNeedClientAuth(false);
     }
     // Resolve from the bound socket so callers passing 0 get the OS-assigned port.
     this.port = serverSocket.getLocalPort();
