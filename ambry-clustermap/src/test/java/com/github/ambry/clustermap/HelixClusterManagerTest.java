@@ -349,9 +349,7 @@ public class HelixClusterManagerTest {
    * Test the case where replicas from same partition have different capacities (which should block the startup)
    * @throws Exception
    */
-  @Ignore("Intermittent 5-min timeout in HelixAggregatedViewClusterInitializer.waitForInitNotification "
-      + "even with proper @After cleanup. See separate debug branch for short-wait diagnostics. Re-enable "
-      + "once the aggregated-view init flake is root-caused.")
+  // DEBUG BRANCH: @Ignore removed so this test runs. Restore @Ignore before merging anywhere.
   @Test
   public void inconsistentReplicaCapacityTest() throws Exception {
     assumeTrue(listenCrossColo && !fullAutoCompatible);

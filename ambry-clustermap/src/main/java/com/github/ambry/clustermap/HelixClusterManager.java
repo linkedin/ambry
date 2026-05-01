@@ -1855,11 +1855,30 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     public void waitForInitNotification() throws InterruptedException {
-      // wait slightly more than 5 mins to ensure routerUpdater refreshes the snapshot.
-      if (!routingTableInitLatch.await(320, TimeUnit.SECONDS)) {
+      // DEBUG BRANCH: 30s wait + listener-state + thread-dump on timeout. Restore to 320s
+      // before merging anywhere.
+      if (!routingTableInitLatch.await(30, TimeUnit.SECONDS)) {
+        StringBuilder dump = new StringBuilder();
+        dump.append("==== Helix waitForInitNotification 30s timeout (cluster=")
+            .append(helixClusterName).append(" dc=").append(dcName).append(") ====\n");
+        dump.append("instanceNameToAmbryDataNode size=").append(instanceNameToAmbryDataNode.size()).append("\n");
+        dump.append("dataNodeConfigInitialized=").append(dataNodeConfigInitialized).append("\n");
+        dump.append("clusterMapChangeListeners size=").append(clusterMapChangeListeners.size()).append("\n");
+        dump.append("\n---- Thread dump ----\n");
+        Map<Thread, StackTraceElement[]> stacks = Thread.getAllStackTraces();
+        for (Map.Entry<Thread, StackTraceElement[]> e : stacks.entrySet()) {
+          Thread t = e.getKey();
+          dump.append("\"").append(t.getName()).append("\" id=").append(t.getId())
+              .append(" state=").append(t.getState()).append("\n");
+          for (StackTraceElement frame : e.getValue()) {
+            dump.append("    at ").append(frame).append("\n");
+          }
+        }
+        dump.append("==== End dump ====\n");
+        System.err.println(dump);
         throw new IllegalStateException(
             "Initial routing table change from helix cluster " + helixClusterName + "in dc " + dcName
-                + " didn't come within 5 mins");
+                + " didn't come within 30s (debug branch)");
       }
     }
 
