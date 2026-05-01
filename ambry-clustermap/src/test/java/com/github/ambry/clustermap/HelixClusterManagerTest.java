@@ -313,16 +313,21 @@ public class HelixClusterManagerTest {
       clusterManager.close();
     }
 
-    // Clean up both the @Before's helixCluster AND any test-specific clusters this class may
-    // have created. Four tests in this file (inconsistentReplicaCapacityTest,
-    // selfNodeBadConfigFailsInitializationTest, duplicatePartitionOnSameNodeSkipsNodeTest, and
-    // one more around line 1416) all use the same "AmbryTest-TestOnly" cluster name. Without
-    // cleaning that namespace, stale ZK state from a prior test causes the next test's
-    // HelixClusterManager init to wait for routing-table notifications that conflict with
-    // leftover state — manifesting as a HANG (passed in isolation, hangs in suite).
+    // Three distinct cluster paths can hold ZK state to clean between tests:
+    //   1. helixCluster.getClusterName() — the @Before's MockHelixCluster (constructed with
+    //      just the "Ambry-" prefix, so this resolves to "Ambry-").
+    //   2. clusterNamePrefixInHelix + clusterNameStatic — what `clustermap.cluster.name` /
+    //      `clustermap.aggregated.view.cluster.name` resolves to in the test props (e.g.
+    //      "Ambry-HelixClusterManagerTestCluster"). Helix listeners attach to this path;
+    //      without cleanup, stale listener state leaks across tests and makes
+    //      inconsistentReplicaCapacityTest hang in waitForInitNotification.
+    //   3. "AmbryTest-TestOnly" — the test-method-specific testCluster used by
+    //      inconsistentReplicaCapacityTest, duplicatePartitionOnSameNodeSkipsNodeTest, and a
+    //      couple of siblings.
     for (int port : zookeeperServerPorts) {
       String addr = "localhost:" + port;
       cleanupClusterPath(addr, helixCluster.getClusterName());
+      cleanupClusterPath(addr, clusterNamePrefixInHelix + clusterNameStatic);
       cleanupClusterPath(addr, "AmbryTest-TestOnly");
     }
   }
@@ -349,9 +354,6 @@ public class HelixClusterManagerTest {
    * Test the case where replicas from same partition have different capacities (which should block the startup)
    * @throws Exception
    */
-  @Ignore("Intermittent 5-min timeout in HelixAggregatedViewClusterInitializer.waitForInitNotification "
-      + "even with proper @After cleanup. See separate debug branch for short-wait diagnostics. Re-enable "
-      + "once the aggregated-view init flake is root-caused.")
   @Test
   public void inconsistentReplicaCapacityTest() throws Exception {
     assumeTrue(listenCrossColo && !fullAutoCompatible);
