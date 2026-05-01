@@ -346,7 +346,8 @@ public class SSLSelectorTest {
    */
   private String blockingRequest(String connectionId, String s) throws Exception {
     selector.poll(1000L, Collections.singletonList(SelectorTest.createSend(connectionId, s)));
-    while (true) {
+    long deadline = System.currentTimeMillis() + 60_000L;
+    while (System.currentTimeMillis() < deadline) {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId().equals(connectionId)) {
@@ -359,6 +360,7 @@ public class SSLSelectorTest {
         }
       }
     }
+    throw new AssertionError("blockingRequest timed out after 60s on connection " + connectionId);
   }
 
   /**
@@ -370,7 +372,11 @@ public class SSLSelectorTest {
   private String blockingSSLConnect(int socketBufSize) throws IOException {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
+    long deadline = System.currentTimeMillis() + 60_000L;
     while (!selector.connected().contains(connectionId)) {
+      if (System.currentTimeMillis() >= deadline) {
+        throw new IOException("blockingSSLConnect timed out after 60s, connectionId=" + connectionId);
+      }
       selector.poll(10000L);
     }
     return connectionId;

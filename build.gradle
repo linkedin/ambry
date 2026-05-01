@@ -145,6 +145,9 @@ subprojects {
     }
 
     test {
+        // Enforce strictly serial test execution. Defaults already serialize, but being
+        // explicit prevents accidental enablement via --parallel or future config drift.
+        maxParallelForks = 1
         testLogging {
             exceptionFormat = 'full'
             // FAILED stays in testLogging for the rich exception-trace format.
