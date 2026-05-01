@@ -56,7 +56,6 @@ jobs:
 
       - uses: burrunan/gradle-cache-action@v1
         name: Run unit tests excluding ambry-store
-        timeout-minutes: 120
         with:
           job-id: jdk11
           arguments: --scan -x :ambry-store:test build codeCoverageReport
