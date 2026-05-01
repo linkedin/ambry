@@ -147,10 +147,7 @@ subprojects {
     test {
         testLogging {
             exceptionFormat = 'full'
-            events "STARTED", "PASSED", "SKIPPED", "FAILED"
-        }
-        afterTest { desc, result ->
-            logger.lifecycle "    duration: ${desc.className} > ${desc.name} = ${result.endTime - result.startTime}ms"
+            events "STARTED", "SKIPPED", "FAILED"
         }
         afterSuite { desc, result ->
             if (desc.parent == null) {
