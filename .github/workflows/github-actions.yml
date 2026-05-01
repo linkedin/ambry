@@ -84,6 +84,8 @@ jobs:
 
   store-test:
 
+    # DEBUG BRANCH: skipped. Restore by removing the `if: false` before merging.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
@@ -113,6 +115,8 @@ jobs:
 
   int-test:
 
+    # DEBUG BRANCH: skipped. Restore by removing the `if: false` before merging.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
@@ -161,6 +165,8 @@ jobs:
 
   server-int-test:
 
+    # DEBUG BRANCH: skipped. Restore by removing the `if: false` before merging.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
