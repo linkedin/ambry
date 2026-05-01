@@ -525,49 +525,93 @@ public class HelixClusterManagerTest {
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
             useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
 
-    // Pick a node in the local DC that has at least two disks, at least one replica to duplicate,
-    // AND is not the current server (selfInstanceName). With 3 replicas spread across N nodes some
-    // nodes have no replicas, and picking instanceConfigs.get(0) was flaky two ways: it could land
-    // on an empty node, or on the self-instance — either of which flips the test off the
-    // foreign-node skip path it intends to exercise.
+    // Pick a non-self node in the local DC and find a (sourceDisk, targetDisk, partitionEntry)
+    // triple where sourceDisk lists the partition and targetDisk does NOT. The earlier version
+    // just appended the first replica to diskMountPaths.get(1) without checking whether that
+    // disk already had the partition — for some param combinations the target disk already
+    // contained that partition, so the "plant" was a string no-op and the cluster manager's
+    // duplicate detector never fired. Params [0] and [7] failed in CI for this exact reason.
     MockHelixAdmin localAdmin = testCluster.getHelixAdminFromDc(localDc);
     List<InstanceConfig> instanceConfigs = localAdmin.getInstanceConfigs("AmbryTest-" + staticClusterName);
     InstanceConfig targetConfig = null;
-    List<String> diskMountPaths = new ArrayList<>();
+    String sourceDiskPath = null;
+    String targetDiskPath = null;
     String duplicatePartitionEntry = null;
+    candidateLoop:
     for (InstanceConfig candidate : instanceConfigs) {
       if (candidate.getInstanceName().equals(selfInstanceName)) {
         continue;
       }
-      List<String> candidateDiskPaths = new ArrayList<>();
-      String candidateReplica = null;
+      Map<String, List<String>> diskToEntries = new HashMap<>();
       for (Map.Entry<String, Map<String, String>> entry : candidate.getRecord().getMapFields().entrySet()) {
         if (entry.getValue().containsKey(DISK_STATE)) {
-          candidateDiskPaths.add(entry.getKey());
-          if (candidateReplica == null) {
-            String replicasStr = entry.getValue().get(REPLICAS_STR);
-            if (replicasStr != null && !replicasStr.isEmpty()) {
-              candidateReplica = replicasStr.split(REPLICAS_DELIM_STR)[0];
+          List<String> entries = new ArrayList<>();
+          String rs = entry.getValue().get(REPLICAS_STR);
+          if (rs != null && !rs.isEmpty()) {
+            for (String r : rs.split(REPLICAS_DELIM_STR)) {
+              if (!r.isEmpty()) {
+                entries.add(r);
+              }
+            }
+          }
+          diskToEntries.put(entry.getKey(), entries);
+        }
+      }
+      if (diskToEntries.size() < 2) {
+        continue;
+      }
+      for (Map.Entry<String, List<String>> src : diskToEntries.entrySet()) {
+        for (Map.Entry<String, List<String>> tgt : diskToEntries.entrySet()) {
+          if (src.getKey().equals(tgt.getKey())) {
+            continue;
+          }
+          // Partition name is the first colon-separated segment of each entry, e.g. "0" in
+          // "0:1073741824:defaultPartitionClass".
+          Set<String> tgtPartitions = new HashSet<>();
+          for (String e : tgt.getValue()) {
+            tgtPartitions.add(e.split(":")[0]);
+          }
+          for (String entry : src.getValue()) {
+            if (!tgtPartitions.contains(entry.split(":")[0])) {
+              targetConfig = candidate;
+              sourceDiskPath = src.getKey();
+              targetDiskPath = tgt.getKey();
+              duplicatePartitionEntry = entry;
+              break candidateLoop;
             }
           }
         }
       }
-      if (candidateDiskPaths.size() >= 2 && candidateReplica != null) {
-        targetConfig = candidate;
-        diskMountPaths = candidateDiskPaths;
-        duplicatePartitionEntry = candidateReplica;
-        break;
-      }
     }
-    assertNotNull("No non-self instance with >=2 disks and a replica found in localDc", targetConfig);
+    assertNotNull(
+        "Could not find a non-self instance with two disks where one has a partition the other doesn't",
+        targetConfig);
     String targetInstanceName = targetConfig.getInstanceName();
 
-    // Add the duplicate partition to the second disk
-    String secondDisk = diskMountPaths.get(1);
-    Map<String, String> secondDiskProps = targetConfig.getRecord().getMapFields().get(secondDisk);
-    String existingReplicas = secondDiskProps.get(REPLICAS_STR);
-    secondDiskProps.put(REPLICAS_STR, existingReplicas + duplicatePartitionEntry + REPLICAS_DELIM_STR);
+    // Plant the duplicate. After this both sourceDiskPath and targetDiskPath list the same
+    // partition for this instance — exactly the condition that
+    // ensurePartitionAbsenceOnNodeAndValidateCapacity must catch and reject.
+    Map<String, String> targetDiskProps = targetConfig.getRecord().getMapFields().get(targetDiskPath);
+    String existingReplicas = targetDiskProps.get(REPLICAS_STR);
+    if (existingReplicas == null) {
+      existingReplicas = "";
+    }
+    if (!existingReplicas.isEmpty() && !existingReplicas.endsWith(REPLICAS_DELIM_STR)) {
+      existingReplicas = existingReplicas + REPLICAS_DELIM_STR;
+    }
+    targetDiskProps.put(REPLICAS_STR, existingReplicas + duplicatePartitionEntry + REPLICAS_DELIM_STR);
     localAdmin.setInstanceConfig("AmbryTest-" + staticClusterName, targetInstanceName, targetConfig);
+
+    // Sanity: the in-memory targetConfig must reflect the plant. If this fails, the candidate
+    // selection or the planting logic above is wrong and the rest of the test is meaningless.
+    String plantedReplicas = targetConfig.getRecord().getMapFields().get(targetDiskPath).get(REPLICAS_STR);
+    assertNotNull("target disk should still have a REPLICAS_STR after planting", plantedReplicas);
+    assertTrue("target disk should now contain the planted entry: " + duplicatePartitionEntry,
+        plantedReplicas.contains(duplicatePartitionEntry));
+    String sourceReplicas =
+        targetConfig.getRecord().getMapFields().get(sourceDiskPath).get(REPLICAS_STR);
+    assertTrue("source disk should still contain the partition entry: " + duplicatePartitionEntry,
+        sourceReplicas != null && sourceReplicas.contains(duplicatePartitionEntry));
 
     // Create HelixClusterManager - should succeed despite the bad node
     Properties props = new Properties();
