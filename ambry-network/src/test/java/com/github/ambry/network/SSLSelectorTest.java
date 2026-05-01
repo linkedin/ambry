@@ -32,6 +32,7 @@ import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
@@ -248,11 +249,10 @@ public class SSLSelectorTest {
   }
 
   /**
-   * Validate that we can send and receive a message larger than the receive and send buffer size
+   * Validate that we can send and receive a message larger than the receive and send buffer size.
+   * NOTE: this is the deferred SSL handshake test. Un-ignored on this debug branch to reproduce
+   * the Linux CI hang and gather diagnostic information.
    */
-  @Ignore("SSL handshake stalls under SunJSSE on Linux CI: blockingSSLConnect times out before "
-      + "handshake completes for 10x-buffer-size echo with bidirectional flow. Likely a Selector "
-      + "OP_WRITE re-arming issue during handshake wrap/unwrap. Re-enable once tracked-down.")
   @Test
   public void testSendLargeRequest() throws Exception {
     String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
@@ -350,7 +350,8 @@ public class SSLSelectorTest {
    */
   private String blockingRequest(String connectionId, String s) throws Exception {
     selector.poll(1000L, Collections.singletonList(SelectorTest.createSend(connectionId, s)));
-    while (true) {
+    long deadline = System.currentTimeMillis() + 30_000L;
+    while (System.currentTimeMillis() < deadline) {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId().equals(connectionId)) {
@@ -363,6 +364,8 @@ public class SSLSelectorTest {
         }
       }
     }
+    dumpAllThreadsForDiagnostic("blockingRequest 30s timeout on " + connectionId);
+    throw new AssertionError("blockingRequest timed out after 30s on connection " + connectionId);
   }
 
   /**
@@ -374,10 +377,32 @@ public class SSLSelectorTest {
   private String blockingSSLConnect(int socketBufSize) throws IOException {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
+    long deadline = System.currentTimeMillis() + 30_000L;
     while (!selector.connected().contains(connectionId)) {
+      if (System.currentTimeMillis() >= deadline) {
+        dumpAllThreadsForDiagnostic("blockingSSLConnect 30s timeout on " + connectionId);
+        throw new IOException("blockingSSLConnect timed out after 30s, connectionId=" + connectionId);
+      }
       selector.poll(10000L);
     }
     return connectionId;
+  }
+
+  /**
+   * Diagnostic helper: log every live thread's stack trace. Used when an SSL helper hits its
+   * deadline so CI logs include enough information to identify the stalled handshake state.
+   */
+  private static void dumpAllThreadsForDiagnostic(String reason) {
+    System.err.println("==== Thread dump (reason: " + reason + ") ====");
+    Map<Thread, StackTraceElement[]> stacks = Thread.getAllStackTraces();
+    for (Map.Entry<Thread, StackTraceElement[]> e : stacks.entrySet()) {
+      Thread t = e.getKey();
+      System.err.println("\"" + t.getName() + "\" id=" + t.getId() + " state=" + t.getState());
+      for (StackTraceElement frame : e.getValue()) {
+        System.err.println("    at " + frame);
+      }
+    }
+    System.err.println("==== End thread dump ====");
   }
 
   /**

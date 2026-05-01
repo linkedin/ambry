@@ -22,6 +22,9 @@
         <Logger name="org.apache.helix" level="warn" />
         <Logger name="org.apache.zookeeper" level="warn" />
 
+        <!-- Investigation: trace SSL handshake state transitions to diagnose Linux CI hang -->
+        <Logger name="com.github.ambry.network.SSLTransmission" level="trace" />
+
 
         <!-- these three are disabled because MockClusterMap does not currently mark nodes offline
         when requests fail, which happens a lot in the cases that our end to end tests cover. -->
