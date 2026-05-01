@@ -22,6 +22,32 @@ jobs:
   unit-test:
 
     runs-on: ubuntu-latest
+    strategy:
+      # One leg per Gradle module — each runs on its own runner in parallel.
+      # Total wall-clock = max(per-module time) instead of sum. ambry-store stays
+      # in its own dedicated job below.
+      fail-fast: false
+      matrix:
+        module:
+          - ambry-account
+          - ambry-clustermap
+          - ambry-cloud
+          - ambry-commons
+          - ambry-filesystem
+          - ambry-frontend
+          - ambry-messageformat
+          - ambry-mysql
+          - ambry-named-mysql
+          - ambry-network
+          - ambry-prioritization
+          - ambry-protocol
+          - ambry-quota
+          - ambry-replication
+          - ambry-rest
+          - ambry-router
+          - ambry-tools
+          - ambry-utils
+          - ambry-vcr
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
@@ -55,16 +81,19 @@ jobs:
           azurite --silent &
 
       - uses: burrunan/gradle-cache-action@v1
-        name: Run unit tests excluding ambry-store
+        name: Run unit tests for ${{ matrix.module }}
         with:
-          job-id: jdk11
-          arguments: --scan -x :ambry-store:test build codeCoverageReport
+          # Per-module cache key so concurrent jobs don't fight over the same cache.
+          job-id: jdk11-${{ matrix.module }}
+          arguments: --scan :${{ matrix.module }}:test
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: ${{ matrix.module }}
         timeout-minutes: 2
 
   store-test:
