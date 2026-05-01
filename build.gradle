@@ -152,6 +152,10 @@ subprojects {
             exceptionFormat = 'full'
             // FAILED stays in testLogging for the rich exception-trace format.
             events "FAILED"
+            // DEBUG BRANCH ONLY: capture System.err/System.out from the test JVM so any
+            // thread dump or println output is visible in the CI log. Restore to default
+            // (false) before merging anywhere.
+            showStandardStreams = true
         }
         beforeTest { desc ->
             // One line per test with a wall-clock timestamp. Duration of test N is
@@ -174,8 +178,10 @@ subprojects {
         }
         // Plugin for retrying flaky tests. Reference: https://github.com/gradle/test-retry-gradle-plugin
         retry {
-            // The maximum number of times to retry an individual test
-            maxRetries = 3
+            // The maximum number of times to retry an individual test.
+            // DEBUG BRANCH ONLY: 0 so Helix init failure produces a single dump and exits,
+            // rather than re-running 3x. Restore to 3 before merging anywhere.
+            maxRetries = 0
             // The maximum number of test failures that are allowed (per module) before retrying is disabled. The count applies to
             // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
             // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).

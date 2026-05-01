@@ -58,7 +58,10 @@ jobs:
         name: Run unit tests excluding ambry-store
         with:
           job-id: jdk11
-          arguments: --scan -x :ambry-store:test build codeCoverageReport
+          # DEBUG BRANCH ONLY: scope to just inconsistentReplicaCapacityTest for fast
+          # diagnostic iteration. Restore to `--scan -x :ambry-store:test build codeCoverageReport`
+          # before merging anywhere.
+          arguments: --scan :ambry-clustermap:test --tests "*HelixClusterManagerTest.inconsistentReplicaCapacityTest*"
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
