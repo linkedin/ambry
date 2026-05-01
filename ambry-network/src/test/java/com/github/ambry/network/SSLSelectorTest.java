@@ -250,9 +250,6 @@ public class SSLSelectorTest {
   /**
    * Validate that we can send and receive a message larger than the receive and send buffer size
    */
-  @Ignore("SSL handshake stalls under SunJSSE on Linux CI: blockingSSLConnect times out before "
-      + "handshake completes for 10x-buffer-size echo with bidirectional flow. Likely a Selector "
-      + "OP_WRITE re-arming issue during handshake wrap/unwrap. Re-enable once tracked-down.")
   @Test
   public void testSendLargeRequest() throws Exception {
     String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
@@ -352,6 +349,11 @@ public class SSLSelectorTest {
     selector.poll(1000L, Collections.singletonList(SelectorTest.createSend(connectionId, s)));
     while (true) {
       selector.poll(1000L);
+      // Fail-fast if the connection died (server closed, RST, alert, etc.) instead of looping
+      // forever waiting for a response that will never come.
+      if (selector.disconnected().contains(connectionId)) {
+        throw new IOException("Connection disconnected during blockingRequest: " + connectionId);
+      }
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId().equals(connectionId)) {
           ByteBuf payload = receive.getReceivedBytes().content();
@@ -375,6 +377,11 @@ public class SSLSelectorTest {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
     while (!selector.connected().contains(connectionId)) {
+      // Fail-fast on handshake failure / server reset rather than looping until something else
+      // (a deadline or runner timeout) eventually kills the test.
+      if (selector.disconnected().contains(connectionId)) {
+        throw new IOException("Connection disconnected during blockingSSLConnect: " + connectionId);
+      }
       selector.poll(10000L);
     }
     return connectionId;

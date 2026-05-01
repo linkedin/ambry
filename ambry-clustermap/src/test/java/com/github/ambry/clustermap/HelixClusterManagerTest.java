@@ -313,10 +313,15 @@ public class HelixClusterManagerTest {
       clusterManager.close();
     }
 
+    // Wipe ALL property-store data on each ZK server, not just the @Before's helixCluster
+    // namespace. Some tests (e.g. inconsistentReplicaCapacityTest, duplicatePartitionOnSameNodeSkipsNodeTest)
+    // create their own MockHelixCluster with a different cluster name (e.g. "AmbryTest-TestOnly")
+    // — the prior namespace-scoped cleanup left that data behind, causing subsequent tests'
+    // HelixClusterManager init to hang waiting for routing-table notifications that conflict
+    // with stale state. Cleaning at the root namespace removes everything between tests.
     for (int port : zookeeperServerPorts) {
       String addr = "localhost:" + port;
-      HelixPropertyStore<ZNRecord> propertyStore =
-          CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName(), null);
+      HelixPropertyStore<ZNRecord> propertyStore = CommonUtils.createHelixPropertyStore(addr, "/", null);
       propertyStore.remove("/", AccessOption.PERSISTENT);
       propertyStore.stop();
     }
