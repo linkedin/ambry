@@ -274,7 +274,7 @@ public class SSLSelectorTest {
     String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), DEFAULT_SOCKET_BUF_SIZE,
         DEFAULT_SOCKET_BUF_SIZE, PortType.SSL);
     while (!selector.connected().contains(connectionId)) {
-      selector.poll(10000L);
+      selector.poll(500L);
     }
     Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionId));
   }
@@ -364,8 +364,8 @@ public class SSLSelectorTest {
         }
       }
     }
-    dumpAllThreadsForDiagnostic("blockingRequest 30s timeout on " + connectionId);
-    throw new AssertionError("blockingRequest timed out after 30s on connection " + connectionId);
+    dumpAllThreadsForDiagnostic("blockingRequest 5s timeout on " + connectionId);
+    throw new AssertionError("blockingRequest timed out after 5s on connection " + connectionId);
   }
 
   /**
@@ -380,10 +380,10 @@ public class SSLSelectorTest {
     long deadline = System.currentTimeMillis() + 5_000L;
     while (!selector.connected().contains(connectionId)) {
       if (System.currentTimeMillis() >= deadline) {
-        dumpAllThreadsForDiagnostic("blockingSSLConnect 30s timeout on " + connectionId);
-        throw new IOException("blockingSSLConnect timed out after 30s, connectionId=" + connectionId);
+        dumpAllThreadsForDiagnostic("blockingSSLConnect 5s timeout on " + connectionId);
+        throw new IOException("blockingSSLConnect timed out after 5s, connectionId=" + connectionId);
       }
-      selector.poll(10000L);
+      selector.poll(500L);
     }
     return connectionId;
   }

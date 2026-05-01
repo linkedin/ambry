@@ -152,6 +152,10 @@ subprojects {
             exceptionFormat = 'full'
             // FAILED stays in testLogging for the rich exception-trace format.
             events "FAILED"
+            // DEBUG BRANCH ONLY: capture System.err/System.out from the test JVM so the
+            // dumpAllThreadsForDiagnostic helper's output is visible in the CI log.
+            // Restore to default (false) before merging anywhere.
+            showStandardStreams = true
         }
         beforeTest { desc ->
             // One line per test with a wall-clock timestamp. Duration of test N is
