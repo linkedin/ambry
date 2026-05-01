@@ -147,7 +147,15 @@ subprojects {
     test {
         testLogging {
             exceptionFormat = 'full'
-            events "STARTED", "SKIPPED", "FAILED"
+            // FAILED stays in testLogging for the rich exception-trace format.
+            // SKIPPED kept so ignored tests are still visible in the log.
+            events "SKIPPED", "FAILED"
+        }
+        beforeTest { desc ->
+            // One line per test with a wall-clock timestamp. Duration of test N is
+            // roughly (test N+1 timestamp) - (test N timestamp). For the last test
+            // before a hang, the absence of a successor line names the culprit.
+            logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} STARTED"
         }
         afterSuite { desc, result ->
             if (desc.parent == null) {
