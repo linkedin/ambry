@@ -105,7 +105,6 @@ public class HelixClusterManagerTest {
   private final boolean overrideEnabled;
   private final boolean listenCrossColo;
   private final boolean useAggregatedView;
-  private final boolean fullAutoCompatible;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
 
@@ -128,20 +127,22 @@ public class HelixClusterManagerTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
+    // FAR-specific tests (the only consumers of fullAutoCompatible=true) live in
+    // HelixClusterManagerFullAutoTest now, so this matrix drops that column. Rows
+    // [9] and [10] of the historical matrix collapsed to [0] and [6] when fullAuto
+    // was removed, leaving 9 unique combinations across the remaining 4 axes.
     return Arrays.asList(
         // @formatter:off
         new Object[][]{
-            {false, false, true, false, false},
-            {false, true, true, false, false},
-            {true, false, true, false, false},
-            {false, false, false, false, false},
-            {false, true, false, false, false},
-            {true, false, false, false, false},
-            {false, false, true, true, false},
-            {false, true, true, true, false},
-            {true, false, true, true, false},
-            {false, false, true, false, true},
-            {false, false, true, true, true}
+            {false, false, true, false},
+            {false, true, true, false},
+            {true, false, true, false},
+            {false, false, false, false},
+            {false, true, false, false},
+            {true, false, false, false},
+            {false, false, true, true},
+            {false, true, true, true},
+            {true, false, true, true}
         });
         // @formatter:on
   }
@@ -157,12 +158,11 @@ public class HelixClusterManagerTest {
    * @throws Exception
    */
   public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled, boolean listenCrossColo,
-      boolean useAggregatedView, boolean fullAutoCompatible) throws Exception {
+      boolean useAggregatedView) throws Exception {
     this.useComposite = useComposite;
     this.overrideEnabled = overrideEnabled;
     this.listenCrossColo = listenCrossColo;
     this.useAggregatedView = useAggregatedView;
-    this.fullAutoCompatible = fullAutoCompatible;
     MockitoAnnotations.initMocks(this);
     localDc = helixDcs[0];
     remoteDc = helixDcs[1];
@@ -238,7 +238,7 @@ public class HelixClusterManagerTest {
 
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
-            useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
+            useAggregatedView, 100, -1);
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       if (partitionId.getPartitionState().equals(PartitionState.READ_ONLY)) {
         String helixPartitionName = partitionId.toPathString();
@@ -288,15 +288,7 @@ public class HelixClusterManagerTest {
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
-    // With maxParallelForks > 1 each Gradle fork must bind a distinct ZK port range,
-    // otherwise concurrent forks fight for 2200/2201. Gradle exposes the worker id via
-    // "org.gradle.test.worker" — the value is e.g. "Gradle Test Executor 3", so we
-    // strip everything except trailing digits. Slot size 10 gives plenty of slack
-    // even if helixDcs grows.
-    String workerProp = System.getProperty("org.gradle.test.worker", "0");
-    String workerDigits = workerProp.replaceAll("[^0-9]", "");
-    int workerId = workerDigits.isEmpty() ? 0 : Integer.parseInt(workerDigits);
-    int port = 2200 + workerId * 10;
+    int port = 2200;
     byte dcId = (byte) 0;
     for (String dcName : helixDcs) {
       dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port, true));
@@ -364,7 +356,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void inconsistentReplicaCapacityTest() throws Exception {
-    assumeTrue(listenCrossColo && !fullAutoCompatible);
+    assumeTrue(listenCrossColo);
     clusterManager.close();
     metricRegistry = new MetricRegistry();
     String staticClusterName = "TestOnly";
@@ -384,7 +376,7 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
     MockHelixCluster testCluster =
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
-            useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
+            useAggregatedView, 100, -1);
 
     List<DataNode> initialNodes = testHardwareLayout1.getAllExistingDataNodes();
     Partition partitionToTest = (Partition) testPartitionLayout1.getPartitionLayout().getPartitions(null).get(0);
@@ -462,7 +454,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void selfNodeBadConfigFailsInitializationTest() throws Exception {
-    assumeTrue(listenCrossColo && !fullAutoCompatible);
+    assumeTrue(listenCrossColo);
     clusterManager.close();
     metricRegistry = new MetricRegistry();
     String staticClusterName = "TestOnly";
@@ -482,7 +474,7 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
     MockHelixCluster testCluster =
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
-            useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
+            useAggregatedView, 100, -1);
 
     List<DataNode> initialNodes = testHardwareLayout1.getAllExistingDataNodes();
     Partition partitionToTest = (Partition) testPartitionLayout1.getPartitionLayout().getPartitions(null).get(0);
@@ -540,7 +532,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void duplicatePartitionOnSameNodeSkipsNodeTest() throws Exception {
-    assumeTrue(listenCrossColo && !fullAutoCompatible);
+    assumeTrue(listenCrossColo);
     clusterManager.close();
     metricRegistry = new MetricRegistry();
     String staticClusterName = "TestOnly";
@@ -559,7 +551,7 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
     MockHelixCluster testCluster =
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
-            useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
+            useAggregatedView, 100, -1);
 
     // Pick a non-self node in the local DC and find a (sourceDisk, targetDisk, partitionEntry)
     // triple where sourceDisk lists the partition and targetDisk does NOT. The earlier version
@@ -912,198 +904,6 @@ public class HelixClusterManagerTest {
   }
 
   /**
-   * Test getting new replica in full auto.
-   */
-  @Test
-  public void getNewReplicaInFullAutoBasicTest() throws Exception {
-    assumeTrue(!useComposite && fullAutoCompatible);
-    metricRegistry = new MetricRegistry();
-
-    // Set the resource and all data nodes in local dc to FULL_AUTO
-    List<String> resourceNames = helixCluster.getResources(localDc);
-    String resourceName = resourceNames.get(0);
-    String tag = "TAG_100000";
-    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
-    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-    idealState.setInstanceGroupTag(tag);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.addTag(tag);
-    }
-
-    // Create Helix cluster manager
-    Properties props = getProperties(overrideEnabled, listenCrossColo, useAggregatedView);
-    long defaultReplicaCapacity = 50L * 1024 * 1024 * 1024;
-    props.setProperty("clustermap.default.replica.capacity.in.bytes", String.valueOf(defaultReplicaCapacity));
-    MockHelixManagerFactory helixFactory = new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView);
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixClusterManager helixClusterManager =
-        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixFactory, metricRegistry);
-
-    // Case 1. We are creating a bootstrap replica for an exiting partition
-    PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
-    long expectedCapacity = partitionOfNewReplica.getReplicaIds().get(0).getCapacityInBytes();
-    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
-    ReplicaId bootstrapReplica =
-        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
-    assertNotNull("New replica should be created successfully", bootstrapReplica);
-    assertEquals("Bootstrap replica of existing partition should has peers' capacity", expectedCapacity,
-        bootstrapReplica.getCapacityInBytes());
-    assertEquals("There should be exactly one entry in bootstrap replica map", 1,
-        helixClusterManager.getBootstrapReplicaMap().size());
-
-    // Case 2. We are creating a bootstrap replica for a new partition
-    String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
-    bootstrapReplica = helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode);
-    assertNotNull(bootstrapReplica);
-    assertEquals(defaultReplicaCapacity, bootstrapReplica.getCapacityInBytes());
-    assertEquals("There should be 2 entries in bootstrap replica map", 2,
-        helixClusterManager.getBootstrapReplicaMap().size());
-
-    helixClusterManager.close();
-  }
-
-  /**
-   * Test correct disk is used while getting new replica in full auto.
-   */
-  @Test
-  public void getNewReplicaInFullAutoDiskUsageTest() throws Exception {
-    assumeTrue(!useComposite && fullAutoCompatible);
-    metricRegistry = new MetricRegistry();
-    // Set the node to FullAuto
-    List<String> resourceNames = helixCluster.getResources(localDc);
-    String resourceName = resourceNames.get(0);
-    String tag = "TAG_100000";
-    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
-    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-    idealState.setInstanceGroupTag(tag);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.addTag(tag);
-    }
-
-    // Create Helix cluster manager
-    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
-        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
-    // Select a partition for getting the bootstrap replica
-    PartitionId partition = helixClusterManager.getAllPartitionIds(null).get(0);
-    // Get list of disks present on the node
-    HelixClusterManager.HelixClusterManagerQueryHelper clusterManagerCallback =
-        helixClusterManager.getManagerQueryHelper();
-    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
-    List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
-    // Get replica capacity of new replica
-    long replicaCapacity = partition.getReplicaIds().get(0).getCapacityInBytes();
-
-    // 1. Verify all disks are used in round-robin fashion
-    for (AmbryDisk disk : disks) {
-      // Set each disk capacity equal to twice the replica capacity
-      disk.setDiskAvailableSpace(2 * replicaCapacity);
-    }
-    Set<AmbryDisk> potentialDisks = new HashSet<>(disks);
-    for (int i = 0; i < disks.size(); i++) {
-      ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode);
-      assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
-      potentialDisks.remove((AmbryDisk) bootstrapReplica.getDiskId());
-    }
-
-    // 2. Verify bootstrapping fails when disk space is empty
-    for (AmbryDisk disk : disks) {
-      disk.setDiskAvailableSpace(replicaCapacity - 100);
-    }
-    assertNull("Bootstrapping replica should be fail since no disk space is available",
-        helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode));
-
-    // 3. Verify disk with the most space is used
-    AmbryDisk expectedDisk = null;
-    for (int i = 0; i < disks.size(); i++) {
-      AmbryDisk disk = disks.get(i);
-      if (i == 0) {
-        expectedDisk = disk;
-        disk.setDiskAvailableSpace(2 * replicaCapacity);
-      } else {
-        disk.setDiskAvailableSpace(replicaCapacity);
-      }
-    }
-    helixClusterManager.clearBootstrapDiskSelectionMap();
-    ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode);
-    assertEquals("Mismatch in disk used", expectedDisk, bootstrapReplica.getDiskId());
-
-    helixClusterManager.close();
-  }
-
-  /**
-   * Test correct disk is used while getting new replica in full auto.
-   */
-  @Test
-  public void getNewReplicaInFullAutoRaceConditionTest() throws Exception {
-    assumeTrue(!useComposite && fullAutoCompatible);
-    metricRegistry = new MetricRegistry();
-
-    // 1. Set up for test
-    // 1.1 Set the node to FullAuto
-    List<String> resourceNames = helixCluster.getResources(localDc);
-    String resourceName = resourceNames.get(0);
-    String tag = "TAG_100000";
-    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
-    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-    idealState.setInstanceGroupTag(tag);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.addTag(tag);
-    }
-    // 1.2 Create Helix cluster manager
-    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
-        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
-    // 1.3 Get list of disks present on the node
-    HelixClusterManager.HelixClusterManagerQueryHelper clusterManagerCallback =
-        helixClusterManager.getManagerQueryHelper();
-    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
-    List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
-    // 1.4 Select partition for getting the bootstrap replicas
-    PartitionId partition = helixClusterManager.getAllPartitionIds(null).get(0);
-    long replicaCapacity = partition.getReplicaIds().get(0).getCapacityInBytes();
-    // 1.5 Let only 2 disks be available
-    for (int i = 0; i < disks.size(); i++) {
-      AmbryDisk disk = disks.get(i);
-      if (i == 0 || i == 1) {
-        disk.setDiskAvailableSpace(replicaCapacity);
-      } else {
-        disk.setDiskAvailableSpace(0);
-      }
-    }
-
-    // 2. Bootstrap 2 replicas in separate threads
-    final ReplicaId[] bootstrapReplica1 = new ReplicaId[1];
-    final ReplicaId[] bootstrapReplica2 = new ReplicaId[1];
-    Thread t1 = new Thread(
-        () -> bootstrapReplica1[0] = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode));
-    Thread t2 = new Thread(
-        () -> bootstrapReplica2[0] = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode));
-    t1.start();
-    t2.start();
-    t1.join();
-    t2.join();
-
-    // 3. Verify that both bootstrapping of both replicas are successful
-    assertNotNull("Bootstrapping of replica must be successful", bootstrapReplica1[0]);
-    assertNotNull("Bootstrapping of replica must be successful", bootstrapReplica2[0]);
-    // 4. Verify disks for both replicas are different
-    assertNotEquals("Both disks must be different", bootstrapReplica1[0].getDiskId(), bootstrapReplica2[0].getDiskId());
-
-    helixClusterManager.close();
-  }
-
-  /**
    * Tests all the interface methods.
    * @throws Exception
    */
@@ -1321,125 +1121,6 @@ public class HelixClusterManagerTest {
     }
   }
 
-  /**
-   * Test {@link ClusterMap#isDataNodeInFullAutoMode}.
-   * @throws Exception
-   */
-  @Test
-  public void testHostFullAuto() throws Exception {
-    // For aggregated view, it will always return false
-    assumeTrue(!useComposite && !useAggregatedView && fullAutoCompatible);
-    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
-    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
-
-    // By default, all the hosts are not in FULL_AUTO mode.
-    List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("By default, local node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-    List<DataNode> allRemoteDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(remoteDc);
-    for (DataNode dataNode : allRemoteDcDataNodes) {
-      try {
-        helixClusterManager.isDataNodeInFullAutoMode(dataNode);
-        fail("By default, remote node should throw an exception");
-      } catch (IllegalArgumentException e) {
-      }
-    }
-
-    // Should have only one Resource when bootup
-    List<String> resourceNames = helixCluster.getResources(localDc);
-    assertEquals("Should only have one resource when bootup", 1, resourceNames.size());
-    String resourceName = resourceNames.get(0);
-    String totalInstanceMetricName =
-        MetricRegistry.name(HelixClusterManager.class, "Resource_" + resourceName + "_TotalInstanceCount");
-    // Make sure that we don't have any FULL AUTO related metrics
-    MetricRegistry registry = helixClusterManager.getMetricRegistry();
-    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
-
-    // Update the IdealState to CUSTOMIZED mode, this would keep all local data node as they were.
-    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
-    // Update idealState here would impact the IdealState in the helixCluster since they reference to the same object
-    idealState.setRebalanceMode(IdealState.RebalanceMode.CUSTOMIZED);
-    helixCluster.refreshIdealState();
-    allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("Customized mode, local node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
-
-    // Now update resource to have a tag
-    final String instanceGroupTag = "TAG_1000000";
-    idealState.setInstanceGroupTag(instanceGroupTag);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("Should not be in FULL_AUTO since IdealState is not on FULL_AUTO and instances don't have tags",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
-
-    // Now update data node to have the same tag
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.addTag(instanceGroupTag);
-      assertFalse("Should not be in FULL_AUTO since IdealState is not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
-
-    // Now update resource to FULL_AUTO
-    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      assertTrue("Should be in FULL_AUTO mode", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-    assertTrue(registry.getGauges().keySet().contains(totalInstanceMetricName));
-
-    // Now update data node to have another tag
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.addTag(instanceGroupTag + "_another_one");
-      assertFalse("Instance has multiple tags", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-
-    // Now update data node to remove the extra tag
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.removeTag(instanceGroupTag + "_another_one");
-      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-
-    // Now update data node to remove the tag and add a new tag
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.removeTag(instanceGroupTag);
-      instanceConfig.addTag("random_tag");
-      assertFalse("Instance has random tag", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-
-    // Now update data node to has the same tag but switch resource back to semi auto
-    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
-    helixCluster.refreshIdealState();
-    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.removeTag("random_tag");
-      instanceConfig.addTag(instanceGroupTag);
-      assertFalse("Resource is in SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-  }
-
   @Test
   public void testHostFullAutoWithMultipleTags() throws Exception {
     // For aggregated view, it will always return false
@@ -1533,96 +1214,6 @@ public class HelixClusterManagerTest {
       assertTrue("Resource should considered as FULL AUTO while it is rolling back to help with local disk selection",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
       assertFalse("Resource should considered NOT IN FULL AUTO when not checking the property store",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode, false));
-    }
-  }
-
-  /**
-   * Test {@link ClusterMap#isDataNodeInFullAutoMode} when falling back to semi-auto.
-   * @throws Exception
-   */
-  @Test
-  public void testRollBackFromFullAuto() throws Exception {
-    // For aggregated view, it will always return false
-    assumeTrue(!useComposite && !useAggregatedView && fullAutoCompatible);
-    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
-    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
-
-    List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
-    String resourceName = helixCluster.getResources(localDc).get(0);
-    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
-    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-    final String instanceGroupTag = "TAG_1000000";
-    idealState.setInstanceGroupTag(instanceGroupTag);
-    helixCluster.refreshIdealState();
-
-    // 1. Test data node in full auto
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.addTag(instanceGroupTag);
-      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
-    }
-
-    // 2. Test data node rollback for a resource present in /AdminConfigs/FullAutoMigration
-    String addr = "localhost:" + dcsToZkInfo.get(localDc).getPort();
-    HelixPropertyStore<ZNRecord> propertyStore =
-        CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName() + "/" + PROPERTYSTORE_STR, null);
-    ZNRecord zNRecord = new ZNRecord(FULL_AUTO_MIGRATION_STR);
-    zNRecord.setListField(RESOURCES_STR, Collections.singletonList(resourceName));
-    propertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT);
-    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      assertTrue("Resource should considered as FULL AUTO while it is rolling back to help with local disk selection",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
-      assertFalse("Resource should considered NOT IN FULL AUTO when not checking the property store",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode, false));
-    }
-  }
-
-  /**
-   * Test {@link ClusterMap#isDataNodeInFullAutoMode} when falling back to semi-auto.
-   * @throws Exception
-   */
-  @Test
-  public void testRollBackFromFullAutoForDifferentResource() throws Exception {
-    // For aggregated view, it will always return false
-    assumeTrue(!useComposite && !useAggregatedView && fullAutoCompatible);
-    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
-    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
-
-    List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
-    String resourceName = helixCluster.getResources(localDc).get(0);
-    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
-    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-    final String instanceGroupTag = "TAG_1000000";
-    idealState.setInstanceGroupTag(instanceGroupTag);
-    helixCluster.refreshIdealState();
-
-    // 1. Test data node in full auto
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
-      InstanceConfig instanceConfig =
-          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
-      instanceConfig.addTag(instanceGroupTag);
-      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-
-    // 2. Test data node rollback for a resource which is not present in /AdminConfigs/FullAutoMigration
-    String addr = "localhost:" + dcsToZkInfo.get(localDc).getPort();
-    HelixPropertyStore<ZNRecord> propertyStore =
-        CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName() + "/" + PROPERTYSTORE_STR, null);
-    ZNRecord zNRecord = new ZNRecord(FULL_AUTO_MIGRATION_STR);
-    zNRecord.setListField(RESOURCES_STR, Collections.singletonList("random_resource"));
-    propertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT);
-    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("Resource should considered as SEMI AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
-      assertFalse("Resource should considered as SEMI AUTO",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode, false));
     }
   }
