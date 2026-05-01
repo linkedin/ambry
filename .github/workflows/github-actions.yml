@@ -22,11 +22,17 @@ jobs:
   unit-test:
 
     runs-on: ubuntu-latest
+    # Hard cap: any single module leg that exceeds 1h is killed. Prevents the
+    # 4h+ runaway hangs we hit when an SSL handshake or Helix init wedged
+    # without producing output.
+    timeout-minutes: 60
     strategy:
       # One leg per Gradle module — each runs on its own runner in parallel.
       # Total wall-clock = max(per-module time) instead of sum. ambry-store stays
       # in its own dedicated job below.
-      fail-fast: false
+      # fail-fast: a red leg cancels its siblings so we don't spend runner-minutes
+      # finishing 18 other modules when ambry-clustermap (or whichever) has already failed.
+      fail-fast: true
       matrix:
         module:
           - ambry-account
