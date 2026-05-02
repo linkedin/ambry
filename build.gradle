@@ -560,13 +560,6 @@ project(':ambry-store') {
         }
     }
 
-    test {
-        testLogging {
-            exceptionFormat = 'full'
-            events 'started', 'failed', 'passed', 'skipped'
-            showStandardStreams = false
-        }
-    }
 }
 
 
