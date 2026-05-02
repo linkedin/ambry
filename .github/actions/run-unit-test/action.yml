@@ -96,6 +96,86 @@ runs:
         arguments: --scan --warning-mode=summary ${{ steps.build-args.outputs.tasks }}
         gradle-version: wrapper
 
+    # Tier 3 visualization: parse JUnit XML reports gradle generated and post a
+    # Markdown table to the workflow run page (visible above the per-job logs in
+    # the GitHub Actions UI). `if: always()` so the summary lands even when tests
+    # fail — that's actually when you most want a quick overview.
+    - name: Post test summary to GitHub
+      if: always()
+      shell: bash
+      run: |
+        SUMMARY="$GITHUB_STEP_SUMMARY"
+        echo "## ${{ inputs.job-id-suffix }} unit tests" >> "$SUMMARY"
+        echo "" >> "$SUMMARY"
+        echo "| Module | Tests | Passed | Failed | Skipped | Time |" >> "$SUMMARY"
+        echo "|--------|------:|-------:|-------:|--------:|-----:|" >> "$SUMMARY"
+
+        TOTAL_TESTS=0
+        TOTAL_PASSED=0
+        TOTAL_FAILED=0
+        TOTAL_SKIPPED=0
+
+        for MOD in ${{ inputs.modules }}; do
+          XML_DIR="$MOD/build/test-results/test"
+          if [ ! -d "$XML_DIR" ] || ! ls "$XML_DIR"/*.xml >/dev/null 2>&1; then
+            echo "| \`$MOD\` | (no results) | - | - | - | - |" >> "$SUMMARY"
+            continue
+          fi
+
+          # Aggregate the testsuite-level attributes (one <testsuite> per XML file).
+          read TESTS FAILURES ERRORS SKIPPED TIME <<< "$(
+            grep -hoE '<testsuite[^>]*' "$XML_DIR"/*.xml | python3 -c "
+import sys, re
+t=f=e=s=0; tt=0.0
+for line in sys.stdin:
+    m=re.search(r'tests=\"(\d+)\"', line); t += int(m.group(1)) if m else 0
+    m=re.search(r'failures=\"(\d+)\"', line); f += int(m.group(1)) if m else 0
+    m=re.search(r'errors=\"(\d+)\"', line); e += int(m.group(1)) if m else 0
+    m=re.search(r'skipped=\"(\d+)\"', line); s += int(m.group(1)) if m else 0
+    m=re.search(r' time=\"([0-9.]+)\"', line); tt += float(m.group(1)) if m else 0
+print(t, f, e, s, f'{tt:.1f}')
+"
+          )"
+
+          TESTS=${TESTS:-0}; FAILURES=${FAILURES:-0}; ERRORS=${ERRORS:-0}; SKIPPED=${SKIPPED:-0}; TIME=${TIME:-0.0}
+          FAILED=$((FAILURES + ERRORS))
+          PASSED=$((TESTS - FAILED - SKIPPED))
+
+          if [ "$FAILED" -gt 0 ]; then MARK=":x:"; else MARK=":white_check_mark:"; fi
+          echo "| $MARK \`$MOD\` | $TESTS | $PASSED | $FAILED | $SKIPPED | ${TIME}s |" >> "$SUMMARY"
+
+          TOTAL_TESTS=$((TOTAL_TESTS + TESTS))
+          TOTAL_PASSED=$((TOTAL_PASSED + PASSED))
+          TOTAL_FAILED=$((TOTAL_FAILED + FAILED))
+          TOTAL_SKIPPED=$((TOTAL_SKIPPED + SKIPPED))
+        done
+
+        echo "" >> "$SUMMARY"
+        echo "**Total:** $TOTAL_TESTS tests · $TOTAL_PASSED passed · $TOTAL_FAILED failed · $TOTAL_SKIPPED skipped" >> "$SUMMARY"
+
+        # If anything failed, list the failing testcases by classname.method.
+        if [ "$TOTAL_FAILED" -gt 0 ]; then
+          echo "" >> "$SUMMARY"
+          echo "### Failing tests" >> "$SUMMARY"
+          echo "" >> "$SUMMARY"
+          for MOD in ${{ inputs.modules }}; do
+            XML_DIR="$MOD/build/test-results/test"
+            [ -d "$XML_DIR" ] || continue
+            grep -lE '<failure|<error' "$XML_DIR"/*.xml 2>/dev/null | while read F; do
+              python3 -c "
+import re, sys
+content = open('$F').read()
+suite = re.search(r'<testsuite[^>]*name=\"([^\"]+)\"', content)
+suite_name = suite.group(1) if suite else '$F'
+for tc in re.finditer(r'<testcase[^>]*name=\"([^\"]+)\"[^>]*>(.*?)</testcase>', content, re.DOTALL):
+    name, body = tc.group(1), tc.group(2)
+    if '<failure' in body or '<error' in body:
+        print(f'- \`{suite_name}.{name}\`')
+" >> "$SUMMARY"
+            done
+          done
+        fi
+
     # Composite actions don't support per-step timeout-minutes; relying on
     # codecov-action's own timeouts plus the calling job's timeout-minutes.
     - name: Upload coverage to Codecov
