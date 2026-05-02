@@ -106,6 +106,9 @@ jobs:
   store-test:
 
     runs-on: ubuntu-latest
+    # Hard cap matches unit-test's: prevents runaway hangs from consuming
+    # full GitHub-default 6h timeout if a test wedges.
+    timeout-minutes: 60
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
@@ -135,6 +138,9 @@ jobs:
   int-test:
 
     runs-on: ubuntu-latest
+    # Higher cap than unit-test because integration tests legitimately
+    # take longer (full network stacks, MySQL, ZK, etc.).
+    timeout-minutes: 90
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
@@ -183,6 +189,8 @@ jobs:
   server-int-test:
 
     runs-on: ubuntu-latest
+    # Server integration tests are the heaviest leg; cap at 2h.
+    timeout-minutes: 120
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
