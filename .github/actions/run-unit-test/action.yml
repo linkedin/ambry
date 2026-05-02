@@ -31,8 +31,16 @@ inputs:
 runs:
   using: composite
   steps:
-    # First step: dump runner specs so every CI log shows the actual hardware.
-    # Cheap (~1s) and pays back the next time someone has to ask "what runner are we on?".
+    - name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+
+    # Runner-spec diagnostic runs AFTER setup-java so `java -version` reflects the
+    # JDK gradle will actually use (JDK 11), not the runner's pre-installed default
+    # (JDK 17 on ubuntu-24.04). CPU/Memory/Disk are invariant — order doesn't
+    # matter for those.
     - name: Print runner specs
       shell: bash
       run: |
@@ -42,14 +50,8 @@ runs:
         free -h | head -2
         echo "=== Disk ==="
         df -h / | tail -1
-        echo "=== Java ==="
+        echo "=== Java (configured by setup-java) ==="
         java -version 2>&1 || true
-
-    - name: Set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'adopt'
 
     - name: Set up MySQL
       if: inputs.needs-mysql == 'true'
