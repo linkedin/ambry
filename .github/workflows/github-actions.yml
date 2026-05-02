@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 100 }
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-clustermap
@@ -51,7 +51,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 100 }
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-network
@@ -63,7 +63,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 100 }
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-frontend ambry-router
@@ -75,7 +75,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 100 }
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-mysql ambry-named-mysql ambry-account
@@ -88,7 +88,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 100 }
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-cloud ambry-vcr
@@ -101,7 +101,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 100 }
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-replication ambry-protocol ambry-messageformat ambry-rest
@@ -113,7 +113,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 100 }
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-utils ambry-commons ambry-prioritization ambry-quota ambry-tools ambry-filesystem
@@ -135,7 +135,7 @@ jobs:
         uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -167,7 +167,7 @@ jobs:
         uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -217,7 +217,7 @@ jobs:
         uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -280,7 +280,7 @@ jobs:
         uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
