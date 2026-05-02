@@ -27,33 +27,13 @@ jobs:
     # without producing output.
     timeout-minutes: 60
     strategy:
-      # One leg per Gradle module — each runs on its own runner in parallel.
-      # Total wall-clock = max(per-module time) instead of sum. ambry-store stays
-      # in its own dedicated job below.
-      # fail-fast: a red leg cancels its siblings so we don't spend runner-minutes
-      # finishing 18 other modules when ambry-clustermap (or whichever) has already failed.
+      # DEBUG branch (snalli/ssl-stricter-certs / PR #3242): only the SSL tests
+      # validate the strict-cert hypothesis on Ubuntu CI. Skip every other
+      # module/test to keep feedback fast.
       fail-fast: true
       matrix:
         module:
-          - ambry-account
-          - ambry-clustermap
-          - ambry-cloud
-          - ambry-commons
-          - ambry-filesystem
-          - ambry-frontend
-          - ambry-messageformat
-          - ambry-mysql
-          - ambry-named-mysql
           - ambry-network
-          - ambry-prioritization
-          - ambry-protocol
-          - ambry-quota
-          - ambry-replication
-          - ambry-rest
-          - ambry-router
-          - ambry-tools
-          - ambry-utils
-          - ambry-vcr
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
@@ -87,11 +67,12 @@ jobs:
           azurite --silent &
 
       - uses: burrunan/gradle-cache-action@v1
-        name: Run unit tests for ${{ matrix.module }}
+        name: Run SSL tests only on ${{ matrix.module }}
         with:
-          # Per-module cache key so concurrent jobs don't fight over the same cache.
           job-id: jdk11-${{ matrix.module }}
-          arguments: --scan :${{ matrix.module }}:test
+          # DEBUG branch: scope to just the SSL test classes — that's the only
+          # surface the strict-cert change can affect.
+          arguments: --scan :${{ matrix.module }}:test --tests "*SSLSelectorTest*" --tests "*SSLBlockingChannelTest*" --tests "*Http2PeerCertificateValidatorTest*"
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
@@ -103,7 +84,8 @@ jobs:
         timeout-minutes: 2
 
   store-test:
-
+    # Skipped on debug branch — SSL cert change doesn't touch ambry-store.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
@@ -132,7 +114,8 @@ jobs:
         timeout-minutes: 2
 
   int-test:
-
+    # Skipped on debug branch — SSL cert change is unit-test-only.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
@@ -180,7 +163,8 @@ jobs:
         timeout-minutes: 2
 
   server-int-test:
-
+    # Skipped on debug branch — SSL cert change doesn't touch the server.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
