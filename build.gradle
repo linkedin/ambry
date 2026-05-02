@@ -203,17 +203,10 @@ subprojects {
         // bled into the count, e.g. expected:<2> but was:<13>). Keep G1 (the JDK default).
         jvmArgs '-XX:TieredStopAtLevel=1'
 
-        // Per-class JVM isolation. Each test class gets its own JVM, guaranteeing static
-        // state, listener threads, port bindings, and any other JVM-resident resource
-        // cannot survive into the next class.
-        // ambry-store is excluded: StorageManagerTest's compaction-thread-count assertions
-        // started failing with expected:<2> but was:<13> when forkEvery=1 was applied here
-        // (likely a pre-existing intra-class state leak that was masked by JVM-warm-up
-        // ordering in the prior single-fork model). Track-down deferred; restore parity
-        // once the underlying assertion is made order-independent.
-        if (project.name != 'ambry-store') {
-            forkEvery = 1
-        }
+        // Per-class JVM isolation for ALL modules. Each test class gets its own JVM,
+        // guaranteeing static state, listener threads, port bindings, and any other
+        // JVM-resident resource cannot survive into the next class.
+        forkEvery = 1
 
         // Netty leak verification scoped to modules that use Netty. paranoid +
         // disabled allocator caches catches ByteBuf leaks but is 10-100x slower
