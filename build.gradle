@@ -59,6 +59,26 @@ allprojects {
     }
 }
 
+// Modules that use Netty heavily and benefit from paranoid leak detection in tests.
+// Other modules pay zero Netty-test overhead. Add a module here when test code
+// allocates ByteBufs and you want CI to catch leaks.
+def nettyModules = [
+        'ambry-commons', 'ambry-frontend', 'ambry-messageformat',
+        'ambry-network', 'ambry-protocol', 'ambry-replication', 'ambry-rest',
+        'ambry-router', 'ambry-server', 'ambry-store', 'ambry-utils'
+]
+
+// Modules whose tests carry stateful resources (Helix listeners, ZK clients,
+// embedded servers, Netty server threads) across test-class boundaries. For these,
+// forkEvery = 1 gives each test class its own JVM — the only foolproof way to
+// guarantee that test classes cannot affect each other via static singletons,
+// listener threads, port bindings, or any other JVM-resident state. JVM startup
+// (~5-10s per class) is the price for that guarantee. Add a module here when you
+// observe (or want to defensively prevent) cross-class state leak.
+def statefulModules = [
+        'ambry-clustermap', 'ambry-server', 'ambry-replication', 'ambry-network'
+]
+
 subprojects {
     apply plugin: 'java'
 
@@ -185,11 +205,24 @@ subprojects {
             failOnPassedAfterRetry = false
         }
         maxHeapSize = "6g"
-        systemProperty 'io.netty.leakDetection.level', 'paranoid'
-        systemProperty 'io.netty.allocator.tinyCacheSize', '0'
-        systemProperty 'io.netty.allocator.smallCacheSize', '0'
-        systemProperty 'io.netty.allocator.normalCacheSize', '0'
-        systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
+
+        // Per-class JVM isolation for modules with known cross-class state risk.
+        // Each test class gets its own JVM, guaranteeing static state, listener
+        // threads, and port bindings can't survive into the next class.
+        if (project.name in statefulModules) {
+            forkEvery = 1
+        }
+
+        // Netty leak verification scoped to modules that use Netty. paranoid +
+        // disabled allocator caches catches ByteBuf leaks but is 10-100x slower
+        // than defaults; non-Netty modules see zero overhead from this block.
+        if (project.name in nettyModules) {
+            systemProperty 'io.netty.leakDetection.level', 'paranoid'
+            systemProperty 'io.netty.allocator.tinyCacheSize', '0'
+            systemProperty 'io.netty.allocator.smallCacheSize', '0'
+            systemProperty 'io.netty.allocator.normalCacheSize', '0'
+            systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
+        }
     }
 
     task intTest(type: Test) {
