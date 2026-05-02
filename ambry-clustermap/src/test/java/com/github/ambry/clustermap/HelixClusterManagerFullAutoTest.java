@@ -136,7 +136,11 @@ public class HelixClusterManagerFullAutoTest {
     File tempDir = Files.createTempDirectory("helixClusterManagerFullAuto-" + random.nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
-    int port = 2200;
+    // Distinct port range from HelixClusterManagerTest (which uses 2200/2201). Even with
+    // forkEvery = 1 isolating JVMs, using non-overlapping ports is defense-in-depth: it
+    // protects against any future scenario where two clustermap test classes end up sharing
+    // a JVM (e.g. someone disables forkEvery, or a CI runner reuses the JVM).
+    int port = 2210;
     byte dcId = (byte) 0;
     for (String dcName : HELIX_DCS) {
       dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port, true));

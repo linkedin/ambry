@@ -381,6 +381,17 @@ project(':ambry-clustermap') {
         testImplementation project(':ambry-mysql')
         testImplementation project(path: ':ambry-api', configuration: 'testArchives')
     }
+
+    // Test classes in this module use Helix + embedded ZooKeeper extensively. Helix's listener
+    // model and ZK client connections leave JVM-resident state that survives @AfterClass —
+    // running multiple test classes in the same JVM caused HelixClusterManagerTest's tests to
+    // hang for 5 min × 3 retries = 15 min/test after HelixClusterManagerFullAutoTest ran first.
+    // forkEvery = 1 gives every test class its own JVM, guaranteeing zero cross-class state leak
+    // (no shared statics, no lingering listener threads, no port-rebind races). The JVM-startup
+    // overhead per class is the price for that guarantee.
+    test {
+        forkEvery = 1
+    }
 }
 
 project(':ambry-network') {
