@@ -261,8 +261,13 @@ subprojects {
         }
         maxHeapSize = "6g"
 
-        // JVM startup tuning — same as test{} block. C1-only JIT for short-lived JVMs.
-        jvmArgs '-XX:TieredStopAtLevel=1'
+        // Note: TieredStopAtLevel=1 (used in test{}) is deliberately NOT set here.
+        // Integration tests run for seconds-to-minutes per method, hitting hot paths
+        // (SSL crypto, network replication) repeatedly. Skipping C2 optimization saved
+        // ~3-5s per JVM startup but degraded sustained throughput enough that
+        // replication tests exceeded their 2-minute budgets ("Did not verify in 2
+        // minutes" / SocketTimeoutException). Unit tests still get C1-only since
+        // their methods are <100ms.
 
         // Note: forkEvery = 1 is deliberately NOT set for intTest. Integration tests
         // rely on shared external state (MySQL schemas, connection pools, embedded
