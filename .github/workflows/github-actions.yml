@@ -28,10 +28,12 @@ jobs:
   # the per-group setup, gradle invocation, and codecov upload.
   #
   # Groups were chosen to balance per-job wall-clock and shared setup needs:
-  #   - Long poles (clustermap, network, frontend+router) get their own runner
+  #   - clustermap and network (the slowest modules) get their own runner
+  #   - frontend + router share a runner (both Netty/REST stack)
   #   - MySQL-using modules grouped to share a single MySQL setup
   #   - Azurite-using modules grouped to share a single Azurite install
-  #   - Light modules (~1-2 min each) bundled to amortize VM provisioning
+  #   - Utility modules (utils, commons, prioritization, quota, tools, filesystem)
+  #     bundled in one runner to amortize VM provisioning across small modules
   # ============================================================
 
   unit-test-clustermap:
@@ -58,7 +60,7 @@ jobs:
           job-id-suffix: network
           codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
-  unit-test-heavy:
+  unit-test-frontend-router:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -67,7 +69,7 @@ jobs:
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-frontend ambry-router
-          job-id-suffix: heavy
+          job-id-suffix: frontend-router
           codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   unit-test-mysql-stack:
@@ -108,7 +110,7 @@ jobs:
           job-id-suffix: protocols
           codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
-  unit-test-light:
+  unit-test-utility-modules:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -117,7 +119,7 @@ jobs:
       - uses: ./.github/actions/run-unit-test
         with:
           modules: ambry-utils ambry-commons ambry-prioritization ambry-quota ambry-tools ambry-filesystem
-          job-id-suffix: light
+          job-id-suffix: utility-modules
           codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   # NOTE: ambry-file-transfer is intentionally omitted — its tests are @Ignored
@@ -263,11 +265,11 @@ jobs:
     needs:
       - unit-test-clustermap
       - unit-test-network
-      - unit-test-heavy
+      - unit-test-frontend-router
       - unit-test-mysql-stack
       - unit-test-azure-stack
       - unit-test-protocols
-      - unit-test-light
+      - unit-test-utility-modules
       - store-test
       - int-test
       - server-int-test

@@ -94,10 +94,11 @@ runs:
         arguments: --scan ${{ steps.build-args.outputs.tasks }}
         gradle-version: wrapper
 
+    # Composite actions don't support per-step timeout-minutes; relying on
+    # codecov-action's own timeouts plus the calling job's timeout-minutes.
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       env:
         CODECOV_TOKEN: ${{ inputs.codecov-token }}
       with:
         flags: ${{ inputs.job-id-suffix }}
-      timeout-minutes: 2
