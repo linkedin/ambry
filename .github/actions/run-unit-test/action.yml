@@ -93,7 +93,7 @@ runs:
       with:
         # Per-group cache key so concurrent groups don't fight over the same cache.
         job-id: jdk11-${{ inputs.job-id-suffix }}
-        arguments: --scan ${{ steps.build-args.outputs.tasks }}
+        arguments: --scan --warning-mode=summary ${{ steps.build-args.outputs.tasks }}
         gradle-version: wrapper
 
     # Composite actions don't support per-step timeout-minutes; relying on

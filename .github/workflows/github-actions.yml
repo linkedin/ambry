@@ -150,7 +150,7 @@ jobs:
         name: Run unit tests for ambry-store
         with:
           job-id: jdk11
-          arguments: --scan :ambry-store:test codeCoverageReport
+          arguments: --scan --warning-mode=summary :ambry-store:test codeCoverageReport
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
@@ -200,7 +200,7 @@ jobs:
         name: Run integration tests excluding server integration test
         with:
           job-id: jdk11
-          arguments: --scan intTest -x :ambry-server:intTest codeCoverageReport
+          arguments: --scan --warning-mode=summary intTest -x :ambry-server:intTest codeCoverageReport
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
@@ -250,7 +250,7 @@ jobs:
         name: Run integration tests
         with:
           job-id: jdk11
-          arguments: --scan :ambry-server:intTest codeCoverageReport
+          arguments: --scan --warning-mode=summary :ambry-server:intTest codeCoverageReport
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
