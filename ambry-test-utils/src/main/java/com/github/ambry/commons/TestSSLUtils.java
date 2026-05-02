@@ -85,7 +85,7 @@ public class TestSSLUtils {
    * @param dn the X.509 Distinguished Name, eg "CN(commonName)=Test, O(organizationName)=Org"
    * @param pair the KeyPair
    * @param days how many days from now the Certificate is valid for
-   * @param algorithm the signing algorithm, eg "SHA1withRSA"
+   * @param algorithm the signing algorithm, eg "SHA256withRSA"
    * @param subjectAltNames the subject alternative names for which the Certificate is valid for
    * @return the self-signed certificate
    * @throws java.security.cert.CertificateException thrown if a security error or an IO error ocurred.
@@ -122,7 +122,9 @@ public class TestSSLUtils {
 
   public static KeyPair generateKeyPair(String algorithm) throws NoSuchAlgorithmException {
     KeyPairGenerator keyGen = KeyPairGenerator.getInstance(algorithm);
-    keyGen.initialize(1024);
+    // 2048 is the JDK default minimum for TLS RSA keys; 1024 is rejected by SunJSSE
+    // on JDK 8u291+ / 11.0.13+ via jdk.tls.disabledAlgorithms.
+    keyGen.initialize(2048);
     return keyGen.genKeyPair();
   }
 
@@ -233,7 +235,7 @@ public class TestSSLUtils {
       password = "UnitTestClientKeyStorePassword";
       keyStoreFile = File.createTempFile("selfsigned-keystore-client", ".jks");
       KeyPair cKP = generateKeyPair("RSA");
-      X509Certificate cCert = generateCertificate("CN=localhost, O=client", cKP, 30, "SHA1withRSA",
+      X509Certificate cCert = generateCertificate("CN=localhost, O=client", cKP, 30, "SHA256withRSA",
           Optional.empty());
       createKeyStore(keyStoreFile.getPath(), password, password, certAlias, cKP.getPrivate(), cCert);
       certs.put(certAlias, cCert);
@@ -241,7 +243,7 @@ public class TestSSLUtils {
       password = "UnitTestServerKeyStorePassword";
       keyStoreFile = File.createTempFile("selfsigned-keystore-server", ".jks");
       KeyPair sKP = generateKeyPair("RSA");
-      X509Certificate sCert = generateCertificate("CN=localhost, O=server", sKP, 30, "SHA1withRSA",
+      X509Certificate sCert = generateCertificate("CN=localhost, O=server", sKP, 30, "SHA256withRSA",
           Optional.empty());
       createKeyStore(keyStoreFile.getPath(), password, password, certAlias, sKP.getPrivate(), sCert);
       certs.put(certAlias, sCert);

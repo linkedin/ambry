@@ -119,7 +119,7 @@ public class Http2PeerCertificateValidatorTest {
 
     try {
       KeyPair cKP = TestSSLUtils.generateKeyPair("RSA");
-      cert = TestSSLUtils.generateCertificate("CN=localhost, O=client", cKP, 30, "SHA1withRSA",
+      cert = TestSSLUtils.generateCertificate("CN=localhost, O=client", cKP, 30, "SHA256withRSA",
           Optional.of(subjectAltNames));
 
       SelfSignedCertificate localCert = new SelfSignedCertificate();

@@ -57,11 +57,7 @@ public class EchoServer extends Thread {
       SSLContext sslContext = sslFactory.getSSLContext();
       this.serverSocket = sslContext.getServerSocketFactory().createServerSocket(port);
 
-      // TODO: Restore needClientAuth(true) once TestSSLUtils generates certs that pass strict
-      // SunJSSE validation on Linux (OpenJDK 11/Ubuntu rejects them with `bad_certificate`).
-      // These tests exercise Selector/SSLTransmission semantics, not mTLS, so disabling client
-      // auth on the test server is acceptable in the interim.
-      ((SSLServerSocket) this.serverSocket).setNeedClientAuth(false);
+      ((SSLServerSocket) this.serverSocket).setNeedClientAuth(true);
     }
     // Resolve from the bound socket so callers passing 0 get the OS-assigned port.
     this.port = serverSocket.getLocalPort();
