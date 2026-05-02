@@ -1,0 +1,103 @@
+# Composite action used by per-group unit-test jobs in github-actions.yml.
+# Encapsulates: runner-spec diagnostic, JDK setup, optional MySQL/Azurite setup,
+# the gradle test run, and codecov upload.
+#
+# Each top-level unit-test job (one per group of modules) calls this action with
+# its `modules` list and toggles for the heavy services.
+
+name: 'Run unit tests for module(s)'
+description: 'Setup + diagnostics + gradle test for one or more Gradle modules'
+
+inputs:
+  modules:
+    description: 'Space-separated list of Gradle module names (e.g. "ambry-account ambry-utils")'
+    required: true
+  job-id-suffix:
+    description: 'Stable suffix for the gradle-cache-action job-id (typically the group name)'
+    required: true
+  needs-mysql:
+    description: 'true if any module in the group needs MySQL'
+    required: false
+    default: 'false'
+  needs-azurite:
+    description: 'true if any module in the group needs Azurite (Azure Blob Storage emulator)'
+    required: false
+    default: 'false'
+  codecov-token:
+    description: 'Codecov upload token'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # First step: dump runner specs so every CI log shows the actual hardware.
+    # Cheap (~1s) and pays back the next time someone has to ask "what runner are we on?".
+    - name: Print runner specs
+      shell: bash
+      run: |
+        echo "=== CPU ==="
+        lscpu | grep -E "^(CPU\(s\)|Model name|Architecture|Thread\(s\) per core):" || true
+        echo "=== Memory ==="
+        free -h | head -2
+        echo "=== Disk ==="
+        df -h / | tail -1
+        echo "=== Java ==="
+        java -version 2>&1 || true
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v2
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+
+    - name: Set up MySQL
+      if: inputs.needs-mysql == 'true'
+      shell: bash
+      run: |
+        sudo systemctl start mysql.service
+        mysql -e 'CREATE DATABASE AmbryRepairRequests;' -uroot -proot
+        mysql -e 'USE AmbryRepairRequests; SOURCE ./ambry-mysql/src/main/resources/AmbryRepairRequests.ddl;' -uroot -proot
+
+    - name: Add custom MySQL user
+      if: inputs.needs-mysql == 'true'
+      shell: bash
+      run: |
+        mysql -e 'CREATE USER 'travis'@'localhost';' -uroot -proot
+        mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
+        mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
+
+    - name: Install and run Azurite
+      if: inputs.needs-azurite == 'true'
+      shell: bash
+      run: |
+        killall azurite || true
+        npm install -g azurite
+        azurite --silent &
+
+    - name: Build gradle :module:test argument list
+      id: build-args
+      shell: bash
+      run: |
+        # Convert "ambry-account ambry-utils" into ":ambry-account:test :ambry-utils:test"
+        TASKS=""
+        for m in ${{ inputs.modules }}; do
+          TASKS="$TASKS :$m:test"
+        done
+        echo "tasks=$TASKS" >> $GITHUB_OUTPUT
+
+    - uses: burrunan/gradle-cache-action@v1
+      name: Run unit tests
+      with:
+        # Per-group cache key so concurrent groups don't fight over the same cache.
+        job-id: jdk11-${{ inputs.job-id-suffix }}
+        arguments: --scan ${{ steps.build-args.outputs.tasks }}
+        gradle-version: wrapper
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ inputs.codecov-token }}
+      with:
+        flags: ${{ inputs.job-id-suffix }}
+      timeout-minutes: 2
