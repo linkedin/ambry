@@ -39,6 +39,7 @@ jobs:
           - ambry-clustermap
           - ambry-cloud
           - ambry-commons
+          # - ambry-file-transfer  # TODO: re-enable once file-copy replication path is operational; tests are @Ignored today
           - ambry-filesystem
           - ambry-frontend
           - ambry-messageformat
