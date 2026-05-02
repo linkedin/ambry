@@ -1,6 +1,6 @@
 # Composite action used by per-group unit-test jobs in github-actions.yml.
 # Encapsulates: runner-spec diagnostic, JDK setup, optional MySQL/Azurite setup,
-# the gradle test run, and codecov upload.
+# and the gradle test run.
 #
 # Each top-level unit-test job (one per group of modules) calls this action with
 # its `modules` list and toggles for the heavy services.
@@ -23,10 +23,6 @@ inputs:
     description: 'true if any module in the group needs Azurite (Azure Blob Storage emulator)'
     required: false
     default: 'false'
-  codecov-token:
-    description: 'Codecov upload token'
-    required: false
-    default: ''
 
 runs:
   using: composite
@@ -95,21 +91,3 @@ runs:
         job-id: jdk11-${{ inputs.job-id-suffix }}
         arguments: --scan --warning-mode=summary ${{ steps.build-args.outputs.tasks }}
         gradle-version: wrapper
-
-    # Tier 3 visualization: parse JUnit XML reports gradle generated and post a
-    # Markdown table to the workflow run page (visible above the per-job logs in
-    # the GitHub Actions UI). `if: always()` so the summary lands even when tests
-    # fail — that's actually when you most want a quick overview.
-    - name: Post test summary to GitHub
-      if: always()
-      shell: bash
-      run: bash "$GITHUB_ACTION_PATH/post-summary.sh" "${{ inputs.modules }}" "${{ inputs.job-id-suffix }}"
-
-    # Composite actions don't support per-step timeout-minutes; relying on
-    # codecov-action's own timeouts plus the calling job's timeout-minutes.
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      env:
-        CODECOV_TOKEN: ${{ inputs.codecov-token }}
-      with:
-        flags: ${{ inputs.job-id-suffix }}

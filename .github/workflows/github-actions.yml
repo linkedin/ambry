@@ -25,7 +25,7 @@ jobs:
   # Each group is a top-level job — fully independent of every other (no `needs:`,
   # not a matrix). One group failing does NOT cancel any others. Each job calls
   # the composite action at .github/actions/run-unit-test which encapsulates
-  # the per-group setup, gradle invocation, and codecov upload.
+  # the per-group setup and gradle invocation.
   #
   # Groups were chosen to balance per-job wall-clock and shared setup needs:
   #   - clustermap and network (the slowest modules) get their own runner
@@ -46,7 +46,6 @@ jobs:
         with:
           modules: ambry-clustermap
           job-id-suffix: clustermap
-          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   unit-test-network:
     runs-on: ubuntu-latest
@@ -58,7 +57,6 @@ jobs:
         with:
           modules: ambry-network
           job-id-suffix: network
-          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   unit-test-frontend-router:
     runs-on: ubuntu-latest
@@ -70,7 +68,6 @@ jobs:
         with:
           modules: ambry-frontend ambry-router
           job-id-suffix: frontend-router
-          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   unit-test-mysql-stack:
     runs-on: ubuntu-latest
@@ -83,7 +80,6 @@ jobs:
           modules: ambry-mysql ambry-named-mysql ambry-account
           job-id-suffix: mysql-stack
           needs-mysql: 'true'
-          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   unit-test-azure-stack:
     runs-on: ubuntu-latest
@@ -96,7 +92,6 @@ jobs:
           modules: ambry-cloud ambry-vcr
           job-id-suffix: azure-stack
           needs-azurite: 'true'
-          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   unit-test-protocols:
     runs-on: ubuntu-latest
@@ -108,7 +103,6 @@ jobs:
         with:
           modules: ambry-replication ambry-protocol ambry-messageformat ambry-rest
           job-id-suffix: protocols
-          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   unit-test-utility-modules:
     runs-on: ubuntu-latest
@@ -120,7 +114,6 @@ jobs:
         with:
           modules: ambry-utils ambry-commons ambry-prioritization ambry-quota ambry-tools ambry-filesystem
           job-id-suffix: utility-modules
-          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   # NOTE: ambry-file-transfer is intentionally omitted — its tests are @Ignored
   # today (file-copy replication path is staged-not-active in production). Add
