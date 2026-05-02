@@ -161,9 +161,7 @@ jobs:
   int-test:
 
     runs-on: ubuntu-latest
-    # Higher cap than unit-test because integration tests legitimately
-    # take longer (full network stacks, MySQL, ZK, etc.).
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v4
@@ -212,8 +210,7 @@ jobs:
   server-int-test:
 
     runs-on: ubuntu-latest
-    # Server integration tests are the heaviest leg; cap at 2h.
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v4
