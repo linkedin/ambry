@@ -169,11 +169,14 @@ subprojects {
             logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} STARTED"
         }
         afterTest { desc, result ->
-            // Only emit on failure — passes are implied by the next STARTED line;
-            // skips are counted in the per-suite total below. This adds wall-clock
-            // duration so we can see how long a failing test ran before failing.
-            if (result.resultType.toString() == 'FAILURE') {
+            // Passes are implied by the next STARTED line; emit explicit lines only for
+            // FAILED (with wall-clock duration) and SKIPPED (so assumeTrue/@Ignore are
+            // visible inline rather than only in the per-suite total).
+            def status = result.resultType.toString()
+            if (status == 'FAILURE') {
                 logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} FAILED (${result.endTime - result.startTime}ms)"
+            } else if (status == 'SKIPPED') {
+                logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} SKIPPED"
             }
         }
         afterSuite { desc, result ->
@@ -237,9 +240,12 @@ subprojects {
             logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} STARTED"
         }
         afterTest { desc, result ->
-            // Only emit on failure — passes are implied by the next STARTED line.
-            if (result.resultType.toString() == 'FAILURE') {
+            // Passes are implied by the next STARTED line; emit FAILED and SKIPPED.
+            def status = result.resultType.toString()
+            if (status == 'FAILURE') {
                 logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} FAILED (${result.endTime - result.startTime}ms)"
+            } else if (status == 'SKIPPED') {
+                logger.lifecycle "[${new Date().format('HH:mm:ss.SSS')}] ${desc.className} > ${desc.name} SKIPPED"
             }
         }
         afterSuite { desc, result ->
