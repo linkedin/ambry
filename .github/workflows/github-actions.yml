@@ -11,68 +11,133 @@ on:
   pull_request:
     branches: [ '**' ]
 
+# Cancel a PR's in-progress run when a new commit is pushed to the same PR.
+# Master pushes never cancel each other so every master SHA gets a green build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  unit-test:
+  # ============================================================
+  # Per-group unit-test jobs.
+  #
+  # Each group is a top-level job — fully independent of every other (no `needs:`,
+  # not a matrix). One group failing does NOT cancel any others. Each job calls
+  # the composite action at .github/actions/run-unit-test which encapsulates
+  # the per-group setup and gradle invocation.
+  #
+  # Groups were chosen to balance per-job wall-clock and shared setup needs:
+  #   - clustermap and network (the slowest modules) get their own runner
+  #   - frontend gets its own runner (Netty/REST stack)
+  #   - MySQL-using modules grouped to share a single MySQL setup; this includes
+  #     ambry-router because NonBlockingRouterTest needs the AmbryRepairRequests DB
+  #   - Azurite-using modules grouped to share a single Azurite install
+  #   - Utility modules (utils, commons, prioritization, quota, tools, filesystem)
+  #     bundled in one runner to amortize VM provisioning across small modules
+  # ============================================================
 
+  unit-test-clustermap:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - name: Checkout Ambry
-        uses: actions/checkout@v2
-        # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 100, fetch-tags: true }
+      - uses: ./.github/actions/run-unit-test
         with:
-          fetch-depth: 0
+          modules: ambry-clustermap
+          job-id-suffix: clustermap
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v2
+  unit-test-network:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 100, fetch-tags: true }
+      - uses: ./.github/actions/run-unit-test
         with:
-          java-version: '11'
-          distribution: 'adopt'
+          modules: ambry-network
+          job-id-suffix: network
 
-      - name: Set up MySQL
-        run: |
-          sudo systemctl start mysql.service
-          mysql -e 'CREATE DATABASE AmbryRepairRequests;' -uroot -proot
-          mysql -e 'USE AmbryRepairRequests; SOURCE ./ambry-mysql/src/main/resources/AmbryRepairRequests.ddl;' -uroot -proot
-
-      - name: Add custom MySQL user
-        # Temporary settings to use same username and password as travis ci
-        run: |
-          mysql -e 'CREATE USER 'travis'@'localhost';' -uroot -proot
-          mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
-          mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
-
-      - name: Install and run Azurite
-        run: |
-          killall azurite || true
-          npm install -g azurite
-          azurite --silent &
-
-      - uses: burrunan/gradle-cache-action@v1
-        name: Run unit tests excluding ambry-store
+  unit-test-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 100, fetch-tags: true }
+      - uses: ./.github/actions/run-unit-test
         with:
-          job-id: jdk11
-          arguments: --scan -x :ambry-store:test build codeCoverageReport
-          gradle-version: wrapper
+          modules: ambry-frontend
+          job-id-suffix: frontend
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        timeout-minutes: 2
+  unit-test-mysql-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 100, fetch-tags: true }
+      - uses: ./.github/actions/run-unit-test
+        with:
+          # ambry-router is here because NonBlockingRouterTest exercises
+          # MysqlRepairRequestsDbFactory and needs the AmbryRepairRequests DB.
+          modules: ambry-mysql ambry-named-mysql ambry-account ambry-router
+          job-id-suffix: mysql-stack
+          needs-mysql: 'true'
+
+  unit-test-azure-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 100, fetch-tags: true }
+      - uses: ./.github/actions/run-unit-test
+        with:
+          modules: ambry-cloud ambry-vcr
+          job-id-suffix: azure-stack
+          needs-azurite: 'true'
+
+  unit-test-protocols:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 100, fetch-tags: true }
+      - uses: ./.github/actions/run-unit-test
+        with:
+          modules: ambry-replication ambry-protocol ambry-messageformat ambry-rest
+          job-id-suffix: protocols
+
+  unit-test-utility-modules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 100, fetch-tags: true }
+      - uses: ./.github/actions/run-unit-test
+        with:
+          modules: ambry-utils ambry-commons ambry-prioritization ambry-quota ambry-tools ambry-filesystem
+          job-id-suffix: utility-modules
+
+  # NOTE: ambry-file-transfer is intentionally omitted — its tests are @Ignored
+  # today (file-copy replication path is staged-not-active in production). Add
+  # a per-module unit-test-file-transfer job here once the path is operational.
 
   store-test:
 
     runs-on: ubuntu-latest
+    # Hard cap matches unit-test's: prevents runaway hangs from consuming
+    # full GitHub-default 6h timeout if a test wedges.
+    timeout-minutes: 60
     steps:
       - name: Checkout Ambry
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
+          fetch-tags: true
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: '11'
           distribution: 'adopt'
@@ -81,7 +146,7 @@ jobs:
         name: Run unit tests for ambry-store
         with:
           job-id: jdk11
-          arguments: --scan :ambry-store:test codeCoverageReport
+          arguments: --scan --warning-mode=summary :ambry-store:test codeCoverageReport
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
@@ -93,15 +158,17 @@ jobs:
   int-test:
 
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout Ambry
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
+          fetch-tags: true
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: '11'
           distribution: 'adopt'
@@ -129,7 +196,7 @@ jobs:
         name: Run integration tests excluding server integration test
         with:
           job-id: jdk11
-          arguments: --scan intTest -x :ambry-server:intTest codeCoverageReport
+          arguments: --scan --warning-mode=summary intTest -x :ambry-server:intTest codeCoverageReport
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
@@ -141,15 +208,17 @@ jobs:
   server-int-test:
 
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout Ambry
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
+          fetch-tags: true
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: '11'
           distribution: 'adopt'
@@ -177,7 +246,7 @@ jobs:
         name: Run integration tests
         with:
           job-id: jdk11
-          arguments: --scan :ambry-server:intTest codeCoverageReport
+          arguments: --scan --warning-mode=summary :ambry-server:intTest codeCoverageReport
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
@@ -189,20 +258,31 @@ jobs:
   publish:
 
     runs-on: ubuntu-latest
-    needs: [ unit-test, store-test, int-test, server-int-test ]
+    needs:
+      - unit-test-clustermap
+      - unit-test-network
+      - unit-test-frontend
+      - unit-test-mysql-stack
+      - unit-test-azure-stack
+      - unit-test-protocols
+      - unit-test-utility-modules
+      - store-test
+      - int-test
+      - server-int-test
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     env:
       ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
       ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
     steps:
       - name: Checkout Ambry
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
         with:
-          fetch-depth: 0
+          fetch-depth: 100
+          fetch-tags: true
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: '11'
           distribution: 'adopt'

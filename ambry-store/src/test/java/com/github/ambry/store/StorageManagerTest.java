@@ -198,8 +198,6 @@ public class StorageManagerTest {
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     checkStoreAccessibility(replicas, mountPathToDelete, storageManager);
 
-    assertEquals("Compaction thread count is incorrect", mountPaths.size() - 1,
-        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
     verifyCompactionThreadCount(storageManager, mountPaths.size() - 1);
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
@@ -1692,8 +1690,6 @@ public class StorageManagerTest {
         assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
       }
     }
-    assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
-        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
     verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
@@ -1726,8 +1722,6 @@ public class StorageManagerTest {
     assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     checkStoreAccessibility(replicas, badDiskMountPath, storageManager);
-    assertEquals("Compaction thread count is incorrect", mountPaths.size(),
-        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
     verifyCompactionThreadCount(storageManager, mountPaths.size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
@@ -1998,8 +1992,6 @@ public class StorageManagerTest {
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, Collections.emptyList(), 0);
     assertNull("Should not have found a store for an invalid partition.",
         storageManager.getStore(invalidPartition, false));
-    assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
-        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
     verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());

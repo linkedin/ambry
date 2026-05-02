@@ -39,6 +39,7 @@ import org.conscrypt.Conscrypt;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -346,8 +347,14 @@ public class SSLSelectorTest {
    */
   private String blockingRequest(String connectionId, String s) throws Exception {
     selector.poll(1000L, Collections.singletonList(SelectorTest.createSend(connectionId, s)));
-    while (true) {
-      selector.poll(1000L);
+    long deadline = System.currentTimeMillis() + 10_000L;
+    while (System.currentTimeMillis() < deadline) {
+      selector.poll(500L);
+      // Fail-fast if the connection died (server closed, RST, alert, etc.) instead of looping
+      // forever waiting for a response that will never come.
+      if (selector.disconnected().contains(connectionId)) {
+        throw new IOException("Connection disconnected during blockingRequest: " + connectionId);
+      }
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId().equals(connectionId)) {
           ByteBuf payload = receive.getReceivedBytes().content();
@@ -359,6 +366,7 @@ public class SSLSelectorTest {
         }
       }
     }
+    throw new AssertionError("blockingRequest timed out after 10s on connection " + connectionId);
   }
 
   /**
@@ -370,8 +378,17 @@ public class SSLSelectorTest {
   private String blockingSSLConnect(int socketBufSize) throws IOException {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
+    long deadline = System.currentTimeMillis() + 10_000L;
     while (!selector.connected().contains(connectionId)) {
-      selector.poll(10000L);
+      // Fail-fast on handshake failure / server reset rather than looping until something else
+      // (a deadline or runner timeout) eventually kills the test.
+      if (selector.disconnected().contains(connectionId)) {
+        throw new IOException("Connection disconnected during blockingSSLConnect: " + connectionId);
+      }
+      if (System.currentTimeMillis() >= deadline) {
+        throw new IOException("blockingSSLConnect timed out after 10s, connectionId=" + connectionId);
+      }
+      selector.poll(500L);
     }
     return connectionId;
   }
