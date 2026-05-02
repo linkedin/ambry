@@ -264,8 +264,13 @@ subprojects {
         // JVM startup tuning — same as test{} block. C1-only JIT for short-lived JVMs.
         jvmArgs '-XX:TieredStopAtLevel=1'
 
-        // Per-class JVM isolation for ALL modules — same as test{} block.
-        forkEvery = 1
+        // Note: forkEvery = 1 is deliberately NOT set for intTest. Integration tests
+        // rely on shared external state (MySQL schemas, connection pools, embedded
+        // services) that's implicitly initialized across test classes. Per-class JVM
+        // isolation broke MySqlNamedBlobDbIntegrationTest.testPutWithDigest[1] with
+        // a "Blob not found" error after the prior parameter variant succeeded —
+        // classic fresh-JVM-can't-find-warmed-up-state pattern. Unit tests stay with
+        // forkEvery = 1 in test{}; integration tests run in a single JVM per task.
 
         // Netty leak verification scoped to nettyModules (same list as test{}).
         if (project.name in nettyModules) {
