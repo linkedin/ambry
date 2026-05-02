@@ -272,13 +272,14 @@ subprojects {
         // classic fresh-JVM-can't-find-warmed-up-state pattern. Unit tests stay with
         // forkEvery = 1 in test{}; integration tests run in a single JVM per task.
 
-        // Netty leak verification scoped to nettyModules (same list as test{}).
+        // Netty leak verification scoped to nettyModules. Only `paranoid` for intTest;
+        // disabling allocator caches (as test{} does) made server-int-test's
+        // Http2NetworkClientTest.forceDeleteTest fire NettyByteBufLeakHelper assertions
+        // that cascaded into 13 follow-on failures (RouterClosed). Leak detection at
+        // paranoid level catches systemic issues without the false-positive risk of
+        // forcing every ByteBuf through the global allocator under integration load.
         if (project.name in nettyModules) {
             systemProperty 'io.netty.leakDetection.level', 'paranoid'
-            systemProperty 'io.netty.allocator.tinyCacheSize', '0'
-            systemProperty 'io.netty.allocator.smallCacheSize', '0'
-            systemProperty 'io.netty.allocator.normalCacheSize', '0'
-            systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
         }
     }
 
