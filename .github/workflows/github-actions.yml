@@ -29,8 +29,9 @@ jobs:
   #
   # Groups were chosen to balance per-job wall-clock and shared setup needs:
   #   - clustermap and network (the slowest modules) get their own runner
-  #   - frontend + router share a runner (both Netty/REST stack)
-  #   - MySQL-using modules grouped to share a single MySQL setup
+  #   - frontend gets its own runner (Netty/REST stack)
+  #   - MySQL-using modules grouped to share a single MySQL setup; this includes
+  #     ambry-router because NonBlockingRouterTest needs the AmbryRepairRequests DB
   #   - Azurite-using modules grouped to share a single Azurite install
   #   - Utility modules (utils, commons, prioritization, quota, tools, filesystem)
   #     bundled in one runner to amortize VM provisioning across small modules
@@ -58,7 +59,7 @@ jobs:
           modules: ambry-network
           job-id-suffix: network
 
-  unit-test-frontend-router:
+  unit-test-frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -66,8 +67,8 @@ jobs:
         with: { fetch-depth: 100, fetch-tags: true }
       - uses: ./.github/actions/run-unit-test
         with:
-          modules: ambry-frontend ambry-router
-          job-id-suffix: frontend-router
+          modules: ambry-frontend
+          job-id-suffix: frontend
 
   unit-test-mysql-stack:
     runs-on: ubuntu-latest
@@ -77,7 +78,9 @@ jobs:
         with: { fetch-depth: 100, fetch-tags: true }
       - uses: ./.github/actions/run-unit-test
         with:
-          modules: ambry-mysql ambry-named-mysql ambry-account
+          # ambry-router is here because NonBlockingRouterTest exercises
+          # MysqlRepairRequestsDbFactory and needs the AmbryRepairRequests DB.
+          modules: ambry-mysql ambry-named-mysql ambry-account ambry-router
           job-id-suffix: mysql-stack
           needs-mysql: 'true'
 
@@ -258,7 +261,7 @@ jobs:
     needs:
       - unit-test-clustermap
       - unit-test-network
-      - unit-test-frontend-router
+      - unit-test-frontend
       - unit-test-mysql-stack
       - unit-test-azure-stack
       - unit-test-protocols
