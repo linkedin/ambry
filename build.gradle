@@ -198,18 +198,17 @@ subprojects {
         // JVM startup tuning for short-lived test JVMs:
         //   TieredStopAtLevel=1 stops the JIT at C1 (no C2). Test methods average <100ms;
         //     the time saved skipping C2 compilation outweighs the slightly slower bytecode.
-        //   UseSerialGC avoids ParallelGC's worker threads and concurrent overhead — better
-        //     for short-lived JVMs with modest heap.
-        // Together these cut ~3-5s per test JVM startup; with forkEvery=1 on stateful
-        // modules, that's ~10-15 fewer seconds per stateful module.
-        jvmArgs '-XX:TieredStopAtLevel=1', '-XX:+UseSerialGC'
+        // Note: -XX:+UseSerialGC was tried but caused 4 StorageManagerTest assertions to
+        // fail (they count compaction threads using a loose filter; SerialGC's thread set
+        // bled into the count, e.g. expected:<2> but was:<13>). Keep G1 (the JDK default).
+        jvmArgs '-XX:TieredStopAtLevel=1'
 
         // Per-class JVM isolation for ALL modules. Each test class gets its own JVM,
         // guaranteeing static state, listener threads, port bindings, and any other
         // JVM-resident resource cannot survive into the next class. JVM startup cost
-        // (~2-3s with TieredStopAtLevel=1 + SerialGC below) is the price for the
-        // isolation guarantee — no test class can ever depend on or be affected by
-        // another, regardless of test execution order.
+        // (~3-5s with TieredStopAtLevel=1 above) is the price for the isolation
+        // guarantee — no test class can ever depend on or be affected by another,
+        // regardless of test execution order.
         forkEvery = 1
 
         // Netty leak verification scoped to modules that use Netty. paranoid +
