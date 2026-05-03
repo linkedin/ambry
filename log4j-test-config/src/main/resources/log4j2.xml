@@ -11,10 +11,6 @@
         </File>
     </Appenders>
     <Loggers>
-        <!-- DEBUG: replication and HTTP/2 client lifecycle. Goal is to capture
-             where Http2NetworkClientFactory.close() and routers' HTTP/2 clients
-             interleave in RouterServerSSLTest.interleavedOperationsTest, which
-             started failing with RouterClosed after the factory close was added. -->
         <Root level="info">
             <AppenderRef ref="consoleAppender"/>
         </Root>
@@ -26,13 +22,10 @@
         <Logger name="org.apache.helix" level="warn" />
         <Logger name="org.apache.zookeeper" level="warn" />
 
-        <Logger name="com.github.ambry.network.http2" level="debug" />
-        <Logger name="com.github.ambry.replication" level="debug" />
-        <Logger name="com.github.ambry.server.AmbryServer" level="debug" />
-
-        <!-- previously off; re-enabled at warn (not the loud debug they were at) -->
-        <Logger name="com.github.ambry.network.BlockingChannelConnectionPool" level="warn" />
-        <Logger name="com.github.ambry.network.BlockingChannelInfo" level="warn" />
-        <Logger name="com.github.ambry.replication.ReplicThread" level="info" />
+        <!-- these three are disabled because MockClusterMap does not currently mark nodes offline
+        when requests fail, which happens a lot in the cases that our end to end tests cover. -->
+        <Logger name="com.github.ambry.network.BlockingChannelConnectionPool" level="off" />
+        <Logger name="com.github.ambry.network.BlockingChannelInfo" level="off" />
+        <Logger name="com.github.ambry.replication.ReplicThread" level="off" />
     </Loggers>
 </Configuration>

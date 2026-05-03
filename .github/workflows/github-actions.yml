@@ -253,8 +253,8 @@ jobs:
         name: Run integration tests
         with:
           job-id: jdk11
-          # DEBUG: --info logging on full server-int-test (other CI jobs disabled).
-          arguments: --scan --info --warning-mode=summary :ambry-server:intTest
+          # DEBUG branch — only server-int-test runs (other jobs disabled via if: false).
+          arguments: --scan --warning-mode=summary :ambry-server:intTest
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
