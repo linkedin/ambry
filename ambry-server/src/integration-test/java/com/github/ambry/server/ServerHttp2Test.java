@@ -33,9 +33,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -45,27 +43,24 @@ import static org.junit.Assume.*;
 
 @RunWith(Parameterized.class)
 public class ServerHttp2Test {
-  private static Properties routerProps;
-  private static MockNotificationSystem notificationSystem;
-  private static MockCluster http2Cluster;
+  private Properties routerProps;
+  private MockNotificationSystem notificationSystem;
+  private MockCluster http2Cluster;
   private final boolean testEncryption;
-  private static SSLConfig clientSSLConfig1;
-  private static SSLConfig clientSSLConfig2;
-  private static SSLConfig clientSSLConfig3;
+  private SSLConfig clientSSLConfig1;
+  private SSLConfig clientSSLConfig2;
+  private SSLConfig clientSSLConfig3;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
+  // Per-test MockCluster lifecycle (matches ServerPlaintextTest/ServerSSLTest/etc.).
+  // Sharing http2Cluster across tests via @BeforeClass let blob-store, replication-token,
+  // and replica/disk state leak between tests, which surfaced as flaky failures in
+  // replicateBlobV2MultipleCases (e.g. expected:<BlobNotFound> but was:<NoError>,
+  // expected:<NoError> but was:<ReplicaUnavailable>).
   @Before
-  public void before() {
+  public void before() throws Exception {
     nettyByteBufLeakHelper.beforeTest();
-  }
 
-  @After
-  public void after() {
-    nettyByteBufLeakHelper.afterTest();
-  }
-
-  @BeforeClass
-  public static void initializeTests() throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
 
     Properties clientSSLProps = new Properties();
@@ -97,6 +92,19 @@ public class ServerHttp2Test {
     http2Cluster.startServers();
   }
 
+  @After
+  public void after() throws IOException {
+    try {
+      if (http2Cluster != null) {
+        http2Cluster.cleanup();
+      }
+    } finally {
+      // Run leak check AFTER cluster teardown so any ByteBufs released during cleanup
+      // are reflected before NettyByteBufLeakHelper measures pending allocations.
+      nettyByteBufLeakHelper.afterTest();
+    }
+  }
+
   /**
    * Running for both regular and encrypted blobs
    * @return an array with both {@code false} and {@code true}.
@@ -108,13 +116,6 @@ public class ServerHttp2Test {
 
   public ServerHttp2Test(boolean testEncryption) {
     this.testEncryption = testEncryption;
-  }
-
-  @AfterClass
-  public static void cleanup() throws IOException {
-    if (http2Cluster != null) {
-      http2Cluster.cleanup();
-    }
   }
 
   @Test
