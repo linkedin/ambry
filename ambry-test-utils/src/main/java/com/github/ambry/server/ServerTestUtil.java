@@ -4087,16 +4087,6 @@ public final class ServerTestUtil {
       notificationSystem.awaitBlobUpdates(newBlobId1.getID(), UpdateType.TTL_UPDATE);
       notificationSystem.awaitBlobDeletions(newBlobId2.getID());
       notificationSystem.awaitBlobCreations(newBlobId3.getID());
-      // blobId8-13 each receive a delete (some on source, some on target). After regular
-      // replication catches up, every replica — including thirdDataNode — has the delete
-      // record. Without these explicit awaits the assertions raced replication: thirdNode
-      // sometimes had BlobDeleted (catchup done), sometimes BlobNotFound (catchup not yet).
-      notificationSystem.awaitBlobDeletions(blobId8.getID());
-      notificationSystem.awaitBlobDeletions(blobId9.getID());
-      notificationSystem.awaitBlobDeletions(blobId10.getID());
-      notificationSystem.awaitBlobDeletions(blobId11.getID());
-      notificationSystem.awaitBlobDeletions(blobId12.getID());
-      notificationSystem.awaitBlobDeletions(blobId13.getID());
 
       for (int i = 0; i < 3; i++) {
         ConnectedChannel channel;
@@ -4132,14 +4122,19 @@ public final class ServerTestUtil {
             encryptionKey, clusterMap, blobIdFactory, testEncryption);
         checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId7, data, true, Utils.Infinite_Time);
 
+        // For blobId8-13, post-replication state on thirdChannel is "deleted or not_exist" per
+        // the test's table comment. Match either: regular replication may or may not have
+        // caught up by assertion time (replicateDeleteBlob writes a delete on target without
+        // firing onBlobReplicaDeleted, so we can't deterministically await catchup on
+        // thirdNode). Both BlobDeleted (full catchup) and BlobNotFound (partial/no catchup)
+        // are valid post-states.
         if (channel != thirdChannel) {
           getBlobAndVerify(blobId8, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
           getBlobAndVerify(blobId8, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId8, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
+          verifyBlobNotFoundOrDeletedOnThirdChannel(blobId8, channel, clusterMap);
         }
 
         if (channel != thirdChannel) {
@@ -4148,8 +4143,7 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId9, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId9, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
+          verifyBlobNotFoundOrDeletedOnThirdChannel(blobId9, channel, clusterMap);
         }
 
         if (channel != thirdChannel) {
@@ -4158,8 +4152,7 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId10, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId10, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
+          verifyBlobNotFoundOrDeletedOnThirdChannel(blobId10, channel, clusterMap);
         }
 
         if (channel != thirdChannel) {
@@ -4168,8 +4161,7 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId11, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId11, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
+          verifyBlobNotFoundOrDeletedOnThirdChannel(blobId11, channel, clusterMap);
         }
 
         if (channel != thirdChannel) {
@@ -4178,8 +4170,7 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId12, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId12, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
+          verifyBlobNotFoundOrDeletedOnThirdChannel(blobId12, channel, clusterMap);
         }
 
         if (channel != thirdChannel) {
@@ -4188,8 +4179,7 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId13, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId13, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
+          verifyBlobNotFoundOrDeletedOnThirdChannel(blobId13, channel, clusterMap);
         }
 
         if (channel == targetChannel) {
@@ -4335,6 +4325,34 @@ public final class ServerTestUtil {
     releaseNettyBufUnderneathStream(stream);
     Assert.assertEquals("start/Stop store admin request should succeed", ServerErrorCode.NoError,
         adminResponse.getError());
+  }
+
+  /**
+   * Verify that {@code blobId} on {@code channel} (the third channel in replicateBlobV2CaseTest)
+   * is either {@link ServerErrorCode#BlobNotFound} (regular replication hasn't propagated the
+   * delete record yet) or {@link ServerErrorCode#BlobDeleted} (regular replication has caught
+   * up). Both are valid post-states per the test's table comment ("deleted or not_exist").
+   * <p>
+   * Used instead of a strict assertion because we can't deterministically await catchup:
+   * {@code replicateDeleteBlob} (admin path) writes the delete record without firing
+   * {@code onBlobReplicaDeleted}, so {@link MockNotificationSystem#awaitBlobDeletions} would
+   * miss one of the count-downs and time out at 60s.
+   */
+  private static void verifyBlobNotFoundOrDeletedOnThirdChannel(BlobId blobId, ConnectedChannel channel,
+      MockClusterMap clusterMap) throws IOException {
+    ArrayList<BlobId> ids = new ArrayList<>();
+    ids.add(blobId);
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+    partitionRequestInfoList.add(new PartitionRequestInfo(blobId.getPartition(), ids));
+    GetRequest getRequest =
+        new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
+    DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+    GetResponse response = GetResponse.readFrom(stream, clusterMap);
+    Assert.assertEquals(ServerErrorCode.NoError, response.getError());
+    ServerErrorCode actual = response.getPartitionResponseInfoList().get(0).getErrorCode();
+    releaseNettyBufUnderneathStream(stream);
+    assertTrue("blobId " + blobId + " on thirdChannel: expected BlobNotFound or BlobDeleted, got " + actual,
+        actual == ServerErrorCode.BlobNotFound || actual == ServerErrorCode.BlobDeleted);
   }
 
   private static List<PartitionRequestInfo> getPartitionRequestInfoListFromBlobId(BlobId blobId) {
