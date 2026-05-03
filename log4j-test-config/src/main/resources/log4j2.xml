@@ -11,7 +11,12 @@
         </File>
     </Appenders>
     <Loggers>
-        <Root level="info">
+        <!-- DEBUG branch (snalli/debug-replicate-blobv2): root at debug + the three
+             previously-silenced loggers re-enabled. Goal is to capture replication
+             trail when ServerHttp2Test.replicateBlobV2MultipleCases fails with
+             "expected:<BlobNotFound> but was:<NoError>" (and the other ReplicaUnavailable
+             pattern) so we can see what state the test sees vs what it expects. -->
+        <Root level="debug">
             <AppenderRef ref="consoleAppender"/>
         </Root>
 
@@ -22,11 +27,10 @@
         <Logger name="org.apache.helix" level="warn" />
         <Logger name="org.apache.zookeeper" level="warn" />
 
-
-        <!-- these three are disabled because MockClusterMap does not currently mark nodes offline
-        when requests fail, which happens a lot in the cases that our end to end tests cover. -->
-        <Logger name="com.github.ambry.network.BlockingChannelConnectionPool" level="off" />
-        <Logger name="com.github.ambry.network.BlockingChannelInfo" level="off" />
-        <Logger name="com.github.ambry.replication.ReplicThread" level="off" />
+        <!-- Re-enabled for debug — these are the three loggers most relevant to
+             replicateBlobV2 flow. -->
+        <Logger name="com.github.ambry.network.BlockingChannelConnectionPool" level="debug" />
+        <Logger name="com.github.ambry.network.BlockingChannelInfo" level="debug" />
+        <Logger name="com.github.ambry.replication.ReplicThread" level="debug" />
     </Loggers>
 </Configuration>

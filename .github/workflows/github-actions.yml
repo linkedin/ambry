@@ -38,6 +38,7 @@ jobs:
   # ============================================================
 
   unit-test-clustermap:
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -49,6 +50,7 @@ jobs:
           job-id-suffix: clustermap
 
   unit-test-network:
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -60,6 +62,7 @@ jobs:
           job-id-suffix: network
 
   unit-test-frontend:
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -71,6 +74,7 @@ jobs:
           job-id-suffix: frontend
 
   unit-test-mysql-stack:
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -85,6 +89,7 @@ jobs:
           needs-mysql: 'true'
 
   unit-test-azure-stack:
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -97,6 +102,7 @@ jobs:
           needs-azurite: 'true'
 
   unit-test-protocols:
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -108,6 +114,7 @@ jobs:
           job-id-suffix: protocols
 
   unit-test-utility-modules:
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -123,10 +130,8 @@ jobs:
   # a per-module unit-test-file-transfer job here once the path is operational.
 
   store-test:
-
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
-    # Hard cap matches unit-test's: prevents runaway hangs from consuming
-    # full GitHub-default 6h timeout if a test wedges.
     timeout-minutes: 60
     steps:
       - name: Checkout Ambry
@@ -156,7 +161,7 @@ jobs:
         timeout-minutes: 2
 
   int-test:
-
+    if: false  # DEBUG branch — only server-int-test runs
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -246,7 +251,10 @@ jobs:
         name: Run integration tests
         with:
           job-id: jdk11
-          arguments: --scan --warning-mode=summary :ambry-server:intTest codeCoverageReport
+          # DEBUG branch: isolate replicateBlobV2MultipleCases. No codeCoverageReport
+          # (skips coverage build), --info for verbose gradle output, --tests filter
+          # to run only the failing test class+method across all parameter variants.
+          arguments: --scan --info --warning-mode=summary :ambry-server:intTest --tests "com.github.ambry.server.ServerHttp2Test.replicateBlobV2MultipleCases"
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
