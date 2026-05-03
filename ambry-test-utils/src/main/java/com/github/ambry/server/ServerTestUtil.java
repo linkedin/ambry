@@ -4087,6 +4087,16 @@ public final class ServerTestUtil {
       notificationSystem.awaitBlobUpdates(newBlobId1.getID(), UpdateType.TTL_UPDATE);
       notificationSystem.awaitBlobDeletions(newBlobId2.getID());
       notificationSystem.awaitBlobCreations(newBlobId3.getID());
+      // blobId8-13 each receive a delete (some on source, some on target). After regular
+      // replication catches up, every replica — including thirdDataNode — has the delete
+      // record. Without these explicit awaits the assertions raced replication: thirdNode
+      // sometimes had BlobDeleted (catchup done), sometimes BlobNotFound (catchup not yet).
+      notificationSystem.awaitBlobDeletions(blobId8.getID());
+      notificationSystem.awaitBlobDeletions(blobId9.getID());
+      notificationSystem.awaitBlobDeletions(blobId10.getID());
+      notificationSystem.awaitBlobDeletions(blobId11.getID());
+      notificationSystem.awaitBlobDeletions(blobId12.getID());
+      notificationSystem.awaitBlobDeletions(blobId13.getID());
 
       for (int i = 0; i < 3; i++) {
         ConnectedChannel channel;
@@ -4128,8 +4138,8 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId8, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId8, channel, ServerErrorCode.BlobNotFound, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+          getBlobAndVerify(blobId8, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
         }
 
         if (channel != thirdChannel) {
@@ -4138,8 +4148,8 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId9, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId9, channel, ServerErrorCode.BlobNotFound, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+          getBlobAndVerify(blobId9, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
         }
 
         if (channel != thirdChannel) {
@@ -4148,8 +4158,8 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId10, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId10, channel, ServerErrorCode.BlobNotFound, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+          getBlobAndVerify(blobId10, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
         }
 
         if (channel != thirdChannel) {
@@ -4158,8 +4168,8 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId11, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId11, channel, ServerErrorCode.BlobNotFound, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+          getBlobAndVerify(blobId11, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
         }
 
         if (channel != thirdChannel) {
@@ -4168,8 +4178,8 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId12, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId12, channel, ServerErrorCode.BlobNotFound, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+          getBlobAndVerify(blobId12, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
         }
 
         if (channel != thirdChannel) {
@@ -4178,8 +4188,8 @@ public final class ServerTestUtil {
           getBlobAndVerify(blobId13, channel, ServerErrorCode.NoError, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
         } else {
-          getBlobAndVerify(blobId13, channel, ServerErrorCode.BlobNotFound, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+          getBlobAndVerify(blobId13, channel, ServerErrorCode.BlobDeleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
         }
 
         if (channel == targetChannel) {
