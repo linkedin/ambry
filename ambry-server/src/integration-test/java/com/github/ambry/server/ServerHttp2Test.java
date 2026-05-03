@@ -13,34 +13,22 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.BlobType;
-import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.http2.Http2BlockingChannel;
-import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Utils;
-import io.netty.buffer.Unpooled;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -111,54 +99,6 @@ public class ServerHttp2Test {
     notificationSystem = new MockNotificationSystem(http2Cluster.getClusterMap());
     http2Cluster.initializeServers(notificationSystem);
     http2Cluster.startServers();
-
-    // Warm replication: PUT a sentinel blob and wait for it to fully replicate. After this
-    // returns, every replica has confirmed at least one successful poll+fetch cycle, so
-    // subsequent test PUTs replicate within the (small) configured throttle window rather
-    // than waiting for cold-start peer discovery. Converts wall-clock-racey awaits into
-    // semantically deterministic ones.
-    warmUpReplication();
-  }
-
-  /**
-   * PUT a small probe blob to one server and wait for it to fully replicate to all replicas.
-   * Returns once replication is observably alive on every replica of the sentinel partition.
-   */
-  private void warmUpReplication() throws Exception {
-    DataNodeId dataNode = http2Cluster.getGeneralDataNode();
-    Port http2Port = new Port(dataNode.getHttp2Port(), PortType.HTTP2);
-    PartitionId partition =
-        http2Cluster.getClusterMap().getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
-
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    byte[] data = new byte[100];
-    byte[] usermetadata = new byte[100];
-    TestUtils.RANDOM.nextBytes(data);
-    TestUtils.RANDOM.nextBytes(usermetadata);
-
-    BlobProperties props =
-        new BlobProperties(100, "warmup", null, null, false, TestUtils.TTL_SECS, http2Cluster.time.milliseconds(),
-            accountId, containerId, false, null, null, null, null);
-    BlobId blobId =
-        new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
-            containerId, partition, false, BlobId.BlobDataType.DATACHUNK);
-
-    ConnectedChannel channel =
-        ServerTestUtil.getBlockingChannelBasedOnPortType(http2Port, "localhost", null, clientSSLConfig1);
-    channel.connect();
-    try {
-      PutRequest putRequest = new PutRequest(1, "warmup-client", blobId, props, ByteBuffer.wrap(usermetadata),
-          Unpooled.wrappedBuffer(data), props.getBlobSize(), BlobType.DataBlob, null);
-      DataInputStream stream = channel.sendAndReceive(putRequest).getInputStream();
-      PutResponse putResponse = PutResponse.readFrom(stream);
-      ServerTestUtil.releaseNettyBufUnderneathStream(stream);
-      if (putResponse.getError() == ServerErrorCode.NoError) {
-        notificationSystem.awaitBlobCreations(blobId.getID());
-      }
-    } finally {
-      channel.disconnect();
-    }
   }
 
   @After
