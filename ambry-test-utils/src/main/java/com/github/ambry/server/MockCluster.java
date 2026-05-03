@@ -267,8 +267,11 @@ public class MockCluster {
     props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("server.handle.force.delete.request.enabled", "true");
     props.setProperty("server.replicate.tombstone.enabled", "true");
-    props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
-    props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
+    // Match production defaults (0 ms) for replication throttle. The previous 100 ms test-only
+    // override slowed cold-start replication enough that endToEndHttp2Replication... timed out
+    // at awaitBlobCreations (60 s/blob, sequential) on a freshly-bootstrapped cluster.
+    props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
+    props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "0");
     props.setProperty("server.repair.requests.db.factory", "com.github.ambry.repair.MysqlRepairRequestsDbFactory");
     props.setProperty("mysql.repair.requests.db.info",
         "[{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\",\"sslMode\":\"NONE\"}]");

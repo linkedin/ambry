@@ -22,6 +22,7 @@ import com.github.ambry.network.Send;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -47,6 +48,10 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private final ChannelPool channelPool;
   private final Http2ClientConfig http2ClientConfig;
   private final InetSocketAddress inetSocketAddress;
+  // Non-null only when this instance allocated its own pool/event-loop (test constructor).
+  // disconnect() must release them; production callers share these resources externally.
+  private final EventLoopGroup ownedEventLoopGroup;
+  private final boolean ownsChannelPool;
   final static AttributeKey<CompletableFuture<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
   final static AttributeKey<ChannelPool> CHANNEL_POOL_ATTRIBUTE_KEY = AttributeKey.newInstance("ChannelPool");
 
@@ -55,6 +60,8 @@ public class Http2BlockingChannel implements ConnectedChannel {
     this.channelPool = channelPool;
     this.inetSocketAddress = inetSocketAddress;
     this.http2ClientConfig = http2ClientConfig;
+    this.ownedEventLoopGroup = null;
+    this.ownsChannelPool = false;
   }
 
   /**
@@ -70,9 +77,11 @@ public class Http2BlockingChannel implements ConnectedChannel {
     }
     this.http2ClientConfig = http2ClientConfig;
     this.inetSocketAddress = new InetSocketAddress(hostName, port);
+    this.ownedEventLoopGroup = Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup();
     this.channelPool = new Http2MultiplexedChannelPool(this.inetSocketAddress, nettySslHttp2Factory,
-        Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
-        http2ClientMetrics, new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig));
+        this.ownedEventLoopGroup, http2ClientConfig, http2ClientMetrics,
+        new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig));
+    this.ownsChannelPool = true;
   }
 
   @Override
@@ -82,7 +91,33 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public void disconnect() throws IOException {
+    // No-op: existing test code calls connect/disconnect/connect/disconnect on a single
+    // channel instance and depends on the channel remaining usable after disconnect. The
+    // test-constructor's owned EventLoopGroup is a small leak in tests but not test-fatal
+    // once the bigger Http2NetworkClientFactory leak is fixed. To explicitly release this
+    // channel's resources, call close().
+  }
 
+  /**
+   * Release the channel pool and event-loop group this instance owns (test-constructor only).
+   * Safe to call multiple times; subsequent calls are no-ops. Production callers that pass an
+   * external pool need not call this.
+   */
+  public void close() {
+    if (ownsChannelPool && channelPool instanceof Http2MultiplexedChannelPool) {
+      try {
+        ((Http2MultiplexedChannelPool) channelPool).close();
+      } catch (Exception e) {
+        logger.warn("Error closing owned Http2MultiplexedChannelPool for {}", inetSocketAddress, e);
+      }
+    }
+    if (ownedEventLoopGroup != null) {
+      try {
+        ownedEventLoopGroup.shutdownGracefully(0, 100, TimeUnit.MILLISECONDS).await(2, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    }
   }
 
   /**

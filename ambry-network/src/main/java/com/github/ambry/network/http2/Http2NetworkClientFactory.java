@@ -21,7 +21,9 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import java.io.Closeable;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +31,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A factory class used to get new instances of a {@link Http2NetworkClient}
  */
-public class Http2NetworkClientFactory implements NetworkClientFactory {
+public class Http2NetworkClientFactory implements NetworkClientFactory, Closeable {
   private static final Logger logger = LoggerFactory.getLogger(Http2NetworkClientFactory.class);
   private final Http2ClientMetrics http2ClientMetrics;
   private final Http2ClientConfig http2ClientConfig;
@@ -64,6 +66,23 @@ public class Http2NetworkClientFactory implements NetworkClientFactory {
   @Override
   public Http2NetworkClient getNetworkClient() throws IOException {
     return new Http2NetworkClient(http2ClientMetrics, http2ClientConfig, sslFactory, eventLoopGroup);
+  }
+
+  /**
+   * Shut down the {@link EventLoopGroup} owned by this factory. Without this, the event-loop
+   * threads (and their epoll/selector FDs) leak for the lifetime of the JVM. Production servers
+   * never observe the leak because shutdown is followed by JVM exit; tests that bring up many
+   * servers in one JVM exhaust native resources without it.
+   */
+  @Override
+  public void close() {
+    if (eventLoopGroup != null) {
+      try {
+        eventLoopGroup.shutdownGracefully(0, 5, TimeUnit.SECONDS).syncUninterruptibly();
+      } catch (Exception e) {
+        logger.warn("Error shutting down Http2NetworkClientFactory event loop group", e);
+      }
+    }
   }
 }
 

@@ -125,6 +125,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -160,6 +162,7 @@ import javax.sql.DataSource;
 import org.junit.Assert;
 
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 public final class ServerTestUtil {
@@ -4863,6 +4866,14 @@ public final class ServerTestUtil {
    * @param hostName upon which connection has to be established
    * @return ConnectedChannel
    */
+  // Tracks Http2BlockingChannel instances created via this factory. Each instance owns an
+  // EventLoopGroup that disconnect() does NOT release (the ConnectedChannel interface
+  // predates HTTP/2 and disconnect's contract is "close the underlying socket", but
+  // HTTP/2 connections are pool-managed and the EventLoopGroup is per-channel-instance
+  // pool overhead). Tests should call closeRegisteredHttp2Channels() in @After to
+  // release them; otherwise each test method leaks ~16 native threads + epoll FDs.
+  private static final List<Http2BlockingChannel> REGISTERED_HTTP2_CHANNELS = new ArrayList<>();
+
   public static ConnectedChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
       SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     ConnectedChannel channel = null;
@@ -4872,11 +4883,29 @@ public final class ServerTestUtil {
       channel = new SSLBlockingChannel(hostName, targetPort.getPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
           sslSocketFactory, sslConfig);
     } else if (targetPort.getPortType() == PortType.HTTP2) {
-      channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig,
+      Http2BlockingChannel http2Channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig,
           new Http2ClientConfig(new VerifiableProperties(new Properties())),
           new Http2ClientMetrics(new MetricRegistry()));
+      REGISTERED_HTTP2_CHANNELS.add(http2Channel);
+      channel = http2Channel;
     }
     return channel;
+  }
+
+  /**
+   * Close all Http2BlockingChannel instances allocated via getBlockingChannelBasedOnPortType
+   * since the last call to this method. Call from test @After. Safe to call when no channels
+   * were created.
+   */
+  public static void closeRegisteredHttp2Channels() {
+    for (Http2BlockingChannel channel : REGISTERED_HTTP2_CHANNELS) {
+      try {
+        channel.close();
+      } catch (Exception e) {
+        // Best-effort cleanup; one failed close shouldn't stop others.
+      }
+    }
+    REGISTERED_HTTP2_CHANNELS.clear();
   }
 
   /**
@@ -4899,9 +4928,11 @@ public final class ServerTestUtil {
           new SSLBlockingChannel(hostName, dataNodeId.getSSLPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
               sslSocketFactory, sslConfig);
     } else if (portType == PortType.HTTP2) {
-      channel = new Http2BlockingChannel(hostName, dataNodeId.getHttp2Port(), sslConfig,
+      Http2BlockingChannel http2Channel = new Http2BlockingChannel(hostName, dataNodeId.getHttp2Port(), sslConfig,
           new Http2ClientConfig(new VerifiableProperties(new Properties())),
           new Http2ClientMetrics(new MetricRegistry()));
+      REGISTERED_HTTP2_CHANNELS.add(http2Channel);
+      channel = http2Channel;
     }
     return channel;
   }
@@ -4972,10 +5003,26 @@ public final class ServerTestUtil {
   }
 
   /**
+   * Quick TCP probe to detect whether MySQL is listening on the default port. Used by
+   * MySQL-dependent tests to skip cleanly (via assumeTrue) when running locally without
+   * MySQL set up. CI workflows install and start mysqld, so the probe succeeds there.
+   */
+  public static boolean isMysqlAvailable() {
+    try (Socket socket = new Socket()) {
+      socket.connect(new InetSocketAddress("localhost", 3306), 1000);
+      return true;
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
+  /**
    * Test the background RepairRequestsSender and the repair requests handlers.
    */
   static void repairRequestTest(MockCluster cluster, SSLConfig clientSSLConfig, boolean testEncryption,
       MockNotificationSystem notificationSystem) throws Exception {
+    assumeTrue("MySQL not available on localhost:3306; install/start mysqld to run this test",
+        isMysqlAvailable());
     List<MockDataNodeId> allNodes = cluster.getAllDataNodes();
     MockClusterMap clusterMap = cluster.getClusterMap();
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);

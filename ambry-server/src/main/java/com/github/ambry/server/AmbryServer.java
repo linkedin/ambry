@@ -626,6 +626,12 @@ public class AmbryServer {
       if (replicationManager != null) {
         replicationManager.shutdown();
       }
+      // Close after replicationManager so in-flight network clients drain first. Production
+      // servers never reach this on a normal lifecycle (JVM exits first), but per-test cluster
+      // bring-down/up cycles leak the factory's EventLoopGroup without this.
+      if (networkClientFactory instanceof Http2NetworkClientFactory) {
+        ((Http2NetworkClientFactory) networkClientFactory).close();
+      }
       if (storageManager != null) {
         storageManager.shutdown();
       }
