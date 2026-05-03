@@ -4866,13 +4866,28 @@ public final class ServerTestUtil {
    * @param hostName upon which connection has to be established
    * @return ConnectedChannel
    */
-  // Tracks Http2BlockingChannel instances created via this factory. Each instance owns an
-  // EventLoopGroup that disconnect() does NOT release (the ConnectedChannel interface
-  // predates HTTP/2 and disconnect's contract is "close the underlying socket", but
-  // HTTP/2 connections are pool-managed and the EventLoopGroup is per-channel-instance
-  // pool overhead). Tests should call closeRegisteredHttp2Channels() in @After to
-  // release them; otherwise each test method leaks ~16 native threads + epoll FDs.
-  private static final List<Http2BlockingChannel> REGISTERED_HTTP2_CHANNELS = new ArrayList<>();
+  // Per-thread tracker for Http2BlockingChannel instances created by getBlockingChannelBasedOnPortType.
+  // ConnectedChannel.disconnect() is a no-op for HTTP/2 — each Http2BlockingChannel owns an
+  // EventLoopGroup that needs explicit close(). Test classes that want auto-tracking opt in via
+  // enableHttp2ChannelTracking() in @Before and close+disableHttp2ChannelTracking() in @After.
+  // Test classes that don't opt in (e.g., RouterServerSSLTest) are unaffected — their channels
+  // never enter the tracker, so no other class's @After can accidentally close them.
+  // Single-threaded execution per JVM fork makes ThreadLocal safe here.
+  private static final ThreadLocal<List<Http2BlockingChannel>> HTTP2_CHANNEL_TRACKER = new ThreadLocal<>();
+
+  /**
+   * Opt this thread (test class) into Http2BlockingChannel tracking. Subsequent
+   * getBlockingChannelBasedOnPortType(HTTP2) calls append to {@code tracker}. Pair with
+   * disableHttp2ChannelTracking() in @After.
+   */
+  public static void enableHttp2ChannelTracking(List<Http2BlockingChannel> tracker) {
+    HTTP2_CHANNEL_TRACKER.set(tracker);
+  }
+
+  /** Stop tracking on this thread. Caller is responsible for closing channels in the list. */
+  public static void disableHttp2ChannelTracking() {
+    HTTP2_CHANNEL_TRACKER.remove();
+  }
 
   public static ConnectedChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
       SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
@@ -4886,26 +4901,13 @@ public final class ServerTestUtil {
       Http2BlockingChannel http2Channel = new Http2BlockingChannel(hostName, targetPort.getPort(), sslConfig,
           new Http2ClientConfig(new VerifiableProperties(new Properties())),
           new Http2ClientMetrics(new MetricRegistry()));
-      REGISTERED_HTTP2_CHANNELS.add(http2Channel);
+      List<Http2BlockingChannel> tracker = HTTP2_CHANNEL_TRACKER.get();
+      if (tracker != null) {
+        tracker.add(http2Channel);
+      }
       channel = http2Channel;
     }
     return channel;
-  }
-
-  /**
-   * Close all Http2BlockingChannel instances allocated via getBlockingChannelBasedOnPortType
-   * since the last call to this method. Call from test @After. Safe to call when no channels
-   * were created.
-   */
-  public static void closeRegisteredHttp2Channels() {
-    for (Http2BlockingChannel channel : REGISTERED_HTTP2_CHANNELS) {
-      try {
-        channel.close();
-      } catch (Exception e) {
-        // Best-effort cleanup; one failed close shouldn't stop others.
-      }
-    }
-    REGISTERED_HTTP2_CHANNELS.clear();
   }
 
   /**
@@ -4931,7 +4933,10 @@ public final class ServerTestUtil {
       Http2BlockingChannel http2Channel = new Http2BlockingChannel(hostName, dataNodeId.getHttp2Port(), sslConfig,
           new Http2ClientConfig(new VerifiableProperties(new Properties())),
           new Http2ClientMetrics(new MetricRegistry()));
-      REGISTERED_HTTP2_CHANNELS.add(http2Channel);
+      List<Http2BlockingChannel> tracker = HTTP2_CHANNEL_TRACKER.get();
+      if (tracker != null) {
+        tracker.add(http2Channel);
+      }
       channel = http2Channel;
     }
     return channel;

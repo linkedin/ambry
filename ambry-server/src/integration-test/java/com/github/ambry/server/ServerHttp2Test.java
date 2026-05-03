@@ -28,6 +28,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.http2.Http2BlockingChannel;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.MockTime;
@@ -63,6 +64,10 @@ public class ServerHttp2Test {
   private SSLConfig clientSSLConfig2;
   private SSLConfig clientSSLConfig3;
   private File trustStoreFile;
+  // Per-test-instance tracker for Http2BlockingChannels we own. Scoped to this class so
+  // closing it in @After only affects channels we created — channels created by other
+  // test classes (e.g., RouterServerSSLTest) are not registered here.
+  private final List<Http2BlockingChannel> trackedHttp2Channels = new ArrayList<>();
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   // Per-test MockCluster lifecycle (matches ServerPlaintextTest/ServerSSLTest/etc.).
@@ -73,6 +78,9 @@ public class ServerHttp2Test {
   @Before
   public void before() throws Exception {
     nettyByteBufLeakHelper.beforeTest();
+    // Opt this test class into Http2BlockingChannel auto-tracking. Other test classes
+    // that don't call enable... aren't affected.
+    ServerTestUtil.enableHttp2ChannelTracking(trackedHttp2Channels);
 
     trustStoreFile = File.createTempFile("truststore", ".jks");
 
@@ -162,11 +170,18 @@ public class ServerHttp2Test {
       }
     } finally {
       try {
-        // Release Http2BlockingChannel instances allocated during this test. disconnect()
-        // is a no-op for HTTP/2 (the ConnectedChannel interface predates HTTP/2 and assumes
-        // single-socket-per-channel semantics that don't apply here), so without this each
-        // test method leaks its channels' EventLoopGroups for the lifetime of the JVM.
-        ServerTestUtil.closeRegisteredHttp2Channels();
+        // Close only Http2BlockingChannel instances allocated during this test (tracked
+        // via the per-class tracker). Channels created by other test classes are not in
+        // this list, so this @After can't accidentally close them.
+        for (Http2BlockingChannel channel : trackedHttp2Channels) {
+          try {
+            channel.close();
+          } catch (Exception e) {
+            // Best-effort; one failed close shouldn't stop the others.
+          }
+        }
+        trackedHttp2Channels.clear();
+        ServerTestUtil.disableHttp2ChannelTracking();
       } finally {
         try {
           if (trustStoreFile != null && trustStoreFile.exists()) {
