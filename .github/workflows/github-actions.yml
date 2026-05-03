@@ -254,7 +254,7 @@ jobs:
           # DEBUG branch: isolate replicateBlobV2MultipleCases. No codeCoverageReport
           # (skips coverage build), --info for verbose gradle output, --tests filter
           # to run only the failing test class+method across all parameter variants.
-          arguments: --scan --info --warning-mode=summary :ambry-server:intTest --tests "com.github.ambry.server.ServerHttp2Test.replicateBlobV2MultipleCases"
+          arguments: --scan --info --warning-mode=summary :ambry-server:intTest --tests "com.github.ambry.server.ServerHttp2Test.replicateBlobV2MultipleCases*"
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
