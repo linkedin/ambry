@@ -1242,191 +1242,119 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   /** Storage NOT_FOUND after metadata resolves → AmbryUnavailable (retryable 503). */
   @Test
   public void testNamedBlobMissingInStorageTranslatedToAmbryUnavailable() throws Exception {
-    Properties props = getNonBlockingRouterProperties(localDcName);
-    final AtomicReference<String> storedBlobId = new AtomicReference<>();
-    CountDownLatch putCompletedLatch = new CountDownLatch(1);
-
-    IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
-    IdConverter mockIdConverter = mock(IdConverter.class);
-    when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
-    // PUT: capture resolved blob ID for the GET mock.
-    when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
-      FutureResult<String> futureResult = new FutureResult<>();
-      String blobId = invocation.getArgument(1);
-      Callback<String> callback = invocation.getArgument(3);
-      storedBlobId.set(blobId);
-      if (callback != null) {
-        callback.onCompletion(blobId, null);
-      }
-      futureResult.done(blobId, null);
-      putCompletedLatch.countDown();
-      return futureResult;
-    });
-
-    MockServerLayout layout = new MockServerLayout(mockClusterMap);
-    setRouterWithIdConverterFactory(props, layout, new LoggingNotificationSystem(), mockIdConverterFactory);
-
+    AtomicReference<String> storedBlobId = new AtomicReference<>();
+    // PUT a named blob; subsequent GETs will resolve to its blob ID via the mock.
+    MockServerLayout layout = setUpNamedBlobAndPut(storedBlobId);
     try {
-      final String accountName = "accountName";
-      final String containerName = "containerName";
-      final String blobName = "blobName";
-      setOperationParams();
-      RestRequest putRequest =
-          createNamedBlobRestRequest(RestMethod.PUT, accountName, containerName, blobName, false, false, false, false);
-      router.putBlob(putRequest, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-          null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      putCompletedLatch.await();
-
-      // GET: idConverter returns the put blob ID (metadata exists).
-      when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
-        CompletableFuture<String> completableFuture = new CompletableFuture<>();
-        completableFuture.complete(storedBlobId.get());
-        return completableFuture;
-      });
-
-      // All replicas reply BlobNotFound.
-      layout.getMockServers()
-          .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound));
-
-      RestRequest getRequest =
-          createNamedBlobRestRequest(RestMethod.GET, accountName, containerName, blobName, false, false, false, true);
-      Future<GetBlobResult> future = router.getBlob(getRequest, (String) getRequest.getArgs().get(BLOB_ID),
-          new GetBlobOptionsBuilder().build(), null, null);
-
-      try {
-        future.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        Assert.fail("Expected RouterException with AmbryUnavailable");
-      } catch (ExecutionException ee) {
-        Assert.assertTrue("Expected RouterException, got " + ee.getCause(),
-            ee.getCause() instanceof RouterException);
-        Assert.assertEquals("Expected AmbryUnavailable",
-            RouterErrorCode.AmbryUnavailable, ((RouterException) ee.getCause()).getErrorCode());
-      }
-      Assert.assertEquals("Translation metric should be 1", 1L,
-          routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
+      // All replicas reply BlobNotFound to trigger storage-side miss.
+      layout.getMockServers().forEach(s -> s.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound));
+      assertNamedBlobGetTranslatedToAmbryUnavailable("a", "c", "b");
     } finally {
-      if (router != null) {
-        router.close();
-        assertClosed();
-      }
+      if (router != null) { router.close(); assertClosed(); }
     }
   }
 
   /** Regression: idConverter NotFound stays as NotFound (translation only fires after success). */
   @Test
   public void testNamedBlobMetadataNotFoundStillReturnsNotFound() throws Exception {
-    Properties props = getNonBlockingRouterProperties(localDcName);
-
-    IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
-    IdConverter mockIdConverter = mock(IdConverter.class);
-    when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
-    when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
-      CompletableFuture<String> failed = new CompletableFuture<>();
-      failed.completeExceptionally(
-          new RestServiceException("Named blob not found", RestServiceErrorCode.NotFound));
-      return failed;
-    });
-
-    setRouterWithIdConverterFactory(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem(),
-        mockIdConverterFactory);
-
+    // Wire idConverter to fail with NotFound on the GET-path convert.
+    setUpRouterWithFailingIdConverter(
+        new RestServiceException("Named blob not found", RestServiceErrorCode.NotFound));
     try {
-      // tearDown's assertClosed calls putBlob; populate params.
-      setOperationParams();
-      RestRequest getRequest =
-          createNamedBlobRestRequest(RestMethod.GET, "accountName", "containerName", "missingBlob", false, false, false,
-              true);
-      Future<GetBlobResult> future = router.getBlob(getRequest, (String) getRequest.getArgs().get(BLOB_ID),
-          new GetBlobOptionsBuilder().build(), null, null);
-
-      try {
-        future.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        Assert.fail("Expected RestServiceException with NotFound");
-      } catch (ExecutionException ee) {
-        Assert.assertTrue("Expected RestServiceException, got " + ee.getCause(),
-            ee.getCause() instanceof RestServiceException);
-        Assert.assertEquals(RestServiceErrorCode.NotFound,
-            ((RestServiceException) ee.getCause()).getErrorCode());
-      }
-      Assert.assertEquals("Translation metric should be 0", 0L,
-          routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
+      setOperationParams(); // tearDown's assertClosed calls putBlob; populate params.
+      RestServiceException cause = (RestServiceException) expectGetFailure("a", "c", "b").getCause();
+      Assert.assertEquals(RestServiceErrorCode.NotFound, cause.getErrorCode());
+      Assert.assertEquals(0L, routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
     } finally {
-      if (router != null) {
-        router.close();
-        assertClosed();
-      }
+      if (router != null) { router.close(); assertClosed(); }
     }
   }
 
   /** Translation also fires when getBlobHelper short-circuits via the notFoundCache. */
   @Test
   public void testNamedBlobMissingViaNotFoundCacheStillTranslatedToAmbryUnavailable() throws Exception {
-    Properties props = getNonBlockingRouterProperties(localDcName);
-    final AtomicReference<String> storedBlobId = new AtomicReference<>();
-    CountDownLatch putCompletedLatch = new CountDownLatch(1);
-
-    IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
-    IdConverter mockIdConverter = mock(IdConverter.class);
-    when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
-    when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
-      FutureResult<String> futureResult = new FutureResult<>();
-      String blobId = invocation.getArgument(1);
-      Callback<String> callback = invocation.getArgument(3);
-      storedBlobId.set(blobId);
-      if (callback != null) {
-        callback.onCompletion(blobId, null);
-      }
-      futureResult.done(blobId, null);
-      putCompletedLatch.countDown();
-      return futureResult;
-    });
-
-    setRouterWithIdConverterFactory(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem(),
-        mockIdConverterFactory);
-
+    AtomicReference<String> storedBlobId = new AtomicReference<>();
+    // PUT a named blob; subsequent GETs will resolve to its blob ID via the mock.
+    setUpNamedBlobAndPut(storedBlobId);
     try {
-      final String accountName = "accountName";
-      final String containerName = "containerName";
-      final String blobName = "blobName";
-      setOperationParams();
-      RestRequest putRequest =
-          createNamedBlobRestRequest(RestMethod.PUT, accountName, containerName, blobName, false, false, false, false);
-      router.putBlob(putRequest, putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-          null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      putCompletedLatch.await();
-
-      // GET: idConverter returns the put blob ID (metadata exists).
-      when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
-        CompletableFuture<String> completableFuture = new CompletableFuture<>();
-        completableFuture.complete(storedBlobId.get());
-        return completableFuture;
-      });
-
       // Pre-populate notFoundCache so getBlobHelper short-circuits.
       router.getNotFoundCache().put(storedBlobId.get(), Boolean.TRUE);
-
-      RestRequest getRequest =
-          createNamedBlobRestRequest(RestMethod.GET, accountName, containerName, blobName, false, false, false, true);
-      Future<GetBlobResult> future = router.getBlob(getRequest, (String) getRequest.getArgs().get(BLOB_ID),
-          new GetBlobOptionsBuilder().build(), null, null);
-
-      try {
-        future.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        Assert.fail("Expected RouterException with AmbryUnavailable");
-      } catch (ExecutionException ee) {
-        Assert.assertTrue("Expected RouterException, got " + ee.getCause(),
-            ee.getCause() instanceof RouterException);
-        Assert.assertEquals("Expected AmbryUnavailable",
-            RouterErrorCode.AmbryUnavailable, ((RouterException) ee.getCause()).getErrorCode());
-      }
-      Assert.assertEquals("Translation metric should be 1", 1L,
-          routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
+      assertNamedBlobGetTranslatedToAmbryUnavailable("a", "c", "b");
     } finally {
-      if (router != null) {
-        router.close();
-        assertClosed();
-      }
+      if (router != null) { router.close(); assertClosed(); }
     }
+  }
+
+  /** Wire a mock IdConverter, set up the router, PUT a named blob {@code /a/c/b}, and stub the
+   *  GET-path {@code convert(RestRequest, String)} to return the resolved blob ID. */
+  private MockServerLayout setUpNamedBlobAndPut(AtomicReference<String> storedBlobId) throws Exception {
+    CountDownLatch putLatch = new CountDownLatch(1);
+    // Wire a mock IdConverterFactory + IdConverter.
+    IdConverterFactory factory = mock(IdConverterFactory.class);
+    IdConverter mockIdConverter = mock(IdConverter.class);
+    when(factory.getIdConverter()).thenReturn(mockIdConverter);
+    // PUT-path stub: capture the resolved blob ID into storedBlobId and signal the latch.
+    when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(inv -> {
+      FutureResult<String> f = new FutureResult<>();
+      String id = inv.getArgument(1);
+      Callback<String> cb = inv.getArgument(3);
+      storedBlobId.set(id);
+      if (cb != null) {
+        cb.onCompletion(id, null);
+      }
+      f.done(id, null);
+      putLatch.countDown();
+      return f;
+    });
+    // Build the router with the mock factory.
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    setRouterWithIdConverterFactory(getNonBlockingRouterProperties(localDcName), layout,
+        new LoggingNotificationSystem(), factory);
+    // PUT a named blob /a/c/b, then wait for the convert mock to have run.
+    setOperationParams();
+    router.putBlob(createNamedBlobRestRequest(RestMethod.PUT, "a", "c", "b", false, false, false, false),
+        putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), null, null)
+        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    putLatch.await();
+    // GET-path stub: resolve the named blob path back to the captured blob ID.
+    when(mockIdConverter.convert(any(RestRequest.class), anyString()))
+        .thenAnswer(inv -> CompletableFuture.completedFuture(storedBlobId.get()));
+    return layout;
+  }
+
+  /** Set up the router with an IdConverter whose GET-path convert fails with {@code failure}. */
+  private void setUpRouterWithFailingIdConverter(Exception failure) throws Exception {
+    // Wire a mock IdConverterFactory + IdConverter.
+    IdConverterFactory factory = mock(IdConverterFactory.class);
+    IdConverter mockIdConverter = mock(IdConverter.class);
+    when(factory.getIdConverter()).thenReturn(mockIdConverter);
+    // GET-path stub: fail with the given exception.
+    CompletableFuture<String> failed = new CompletableFuture<>();
+    failed.completeExceptionally(failure);
+    when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenReturn(failed);
+    // Build the router with the mock factory.
+    setRouterWithIdConverterFactory(getNonBlockingRouterProperties(localDcName),
+        new MockServerLayout(mockClusterMap), new LoggingNotificationSystem(), factory);
+  }
+
+  /** GET {@code /named/{account}/{container}/{blob}} expecting failure; returns the wrapping ExecutionException. */
+  private ExecutionException expectGetFailure(String account, String container, String blob) throws Exception {
+    RestRequest get = createNamedBlobRestRequest(RestMethod.GET, account, container, blob, false, false, false, true);
+    try {
+      router.getBlob(get, (String) get.getArgs().get(BLOB_ID), new GetBlobOptionsBuilder().build(), null, null)
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      throw new AssertionError("Expected failure");
+    } catch (ExecutionException ee) {
+      return ee;
+    }
+  }
+
+  /** Verify a named-blob GET surfaces as AmbryUnavailable and increments the translation metric. */
+  private void assertNamedBlobGetTranslatedToAmbryUnavailable(String account, String container, String blob)
+      throws Exception {
+    Assert.assertEquals(RouterErrorCode.AmbryUnavailable,
+        ((RouterException) expectGetFailure(account, container, blob).getCause()).getErrorCode());
+    Assert.assertEquals(1L, routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
   }
 
   /**
