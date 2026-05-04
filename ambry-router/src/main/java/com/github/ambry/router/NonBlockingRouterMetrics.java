@@ -138,6 +138,8 @@ public class NonBlockingRouterMetrics {
   public final Counter forceDeleteBlobErrorCount;
   public final Counter backgroundDeleterNotFoundCount;
   public final Counter backgroundDeleterExceptionCount;
+  public final Counter backgroundDeleterSubmitFailureCount;
+  public final Counter backgroundDeleterNullChunkIdCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
 
@@ -513,6 +515,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNotFoundCount"));
     backgroundDeleterExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterExceptionCount"));
+    backgroundDeleterSubmitFailureCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterSubmitFailureCount"));
+    backgroundDeleterNullChunkIdCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNullChunkIdCount"));
     putBlobCRCMismatchCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "PutBlobCRCMismatchCount"));
 

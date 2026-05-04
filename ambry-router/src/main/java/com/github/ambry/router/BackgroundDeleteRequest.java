@@ -16,6 +16,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.store.StoreKey;
+import java.util.Objects;
 
 
 /**
@@ -35,7 +36,7 @@ class BackgroundDeleteRequest {
    */
   BackgroundDeleteRequest(StoreKey storeKey, String serviceIdSuffix, QuotaChargeCallback quotaChargeCallback) {
     this.serviceId = SERVICE_ID_PREFIX + serviceIdSuffix;
-    this.storeKey = storeKey;
+    this.storeKey = Objects.requireNonNull(storeKey, "storeKey must not be null");
     this.quotaChargeCallback = quotaChargeCallback;
   }
 
