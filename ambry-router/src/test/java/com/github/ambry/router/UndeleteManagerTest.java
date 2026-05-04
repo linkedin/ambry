@@ -294,7 +294,7 @@ public class UndeleteManagerTest {
 
   /**
    * Failure tests when servers return BlobDeletedPermanently because the blob has been compacted.
-   * The router should surface this as RouterErrorCode.BlobDeleted.
+   * The router should surface this as RouterErrorCode.BlobDoesNotExist.
    * @throws Exception
    */
   @Test
@@ -311,7 +311,7 @@ public class UndeleteManagerTest {
         server.setServerErrorForAllRequests(ServerErrorCode.BlobDeletedPermanently);
       }
 
-      executeOpAndVerify(Collections.singleton(blobId), RouterErrorCode.BlobDeleted);
+      executeOpAndVerify(Collections.singleton(blobId), RouterErrorCode.BlobDoesNotExist);
       serverLayout.getMockServers().forEach(server -> server.resetServerErrors());
     }
   }
