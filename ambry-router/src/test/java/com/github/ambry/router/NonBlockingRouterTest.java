@@ -1239,11 +1239,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
   }
 
-  /**
-   * When idConverter resolves named blob metadata successfully but the storage layer
-   * returns BlobNotFound, the router translates the response to AmbryUnavailable so
-   * the response surfaces as a retryable 503 rather than an authoritative 404.
-   */
+  /** Storage NOT_FOUND after metadata resolves → AmbryUnavailable (retryable 503). */
   @Test
   public void testNamedBlobMissingInStorageTranslatedToAmbryUnavailable() throws Exception {
     Properties props = getNonBlockingRouterProperties(localDcName);
@@ -1253,7 +1249,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     IdConverterFactory mockIdConverterFactory = mock(IdConverterFactory.class);
     IdConverter mockIdConverter = mock(IdConverter.class);
     when(mockIdConverterFactory.getIdConverter()).thenReturn(mockIdConverter);
-    // PUT path: capture the resolved blob ID so the GET-path mock can return it.
+    // PUT: capture resolved blob ID for the GET mock.
     when(mockIdConverter.convert(any(RestRequest.class), anyString(), any(), any())).thenAnswer(invocation -> {
       FutureResult<String> futureResult = new FutureResult<>();
       String blobId = invocation.getArgument(1);
@@ -1281,14 +1277,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       putCompletedLatch.await();
 
-      // GET path: idConverter resolves successfully (metadata exists), returning the put blob ID.
+      // GET: idConverter returns the put blob ID (metadata exists).
       when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
         CompletableFuture<String> completableFuture = new CompletableFuture<>();
         completableFuture.complete(storedBlobId.get());
         return completableFuture;
       });
 
-      // Force every storage replica to return BlobNotFound so the router resolves to BlobDoesNotExist.
+      // All replicas reply BlobNotFound.
       layout.getMockServers()
           .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound));
 
@@ -1303,10 +1299,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       } catch (ExecutionException ee) {
         Assert.assertTrue("Expected RouterException, got " + ee.getCause(),
             ee.getCause() instanceof RouterException);
-        Assert.assertEquals("Expected AmbryUnavailable after metadata-found-but-storage-NOT_FOUND",
+        Assert.assertEquals("Expected AmbryUnavailable",
             RouterErrorCode.AmbryUnavailable, ((RouterException) ee.getCause()).getErrorCode());
       }
-      Assert.assertEquals("Translation metric should have incremented exactly once", 1L,
+      Assert.assertEquals("Translation metric should be 1", 1L,
           routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
     } finally {
       if (router != null) {
@@ -1316,11 +1312,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
   }
 
-  /**
-   * Regression: when the named blob metadata itself is not found, the response still
-   * surfaces as RestServiceErrorCode.NotFound. The translation must only kick in after
-   * idConverter has resolved metadata successfully.
-   */
+  /** Regression: idConverter NotFound stays as NotFound (translation only fires after success). */
   @Test
   public void testNamedBlobMetadataNotFoundStillReturnsNotFound() throws Exception {
     Properties props = getNonBlockingRouterProperties(localDcName);
@@ -1339,7 +1331,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         mockIdConverterFactory);
 
     try {
-      // assertClosed in tearDown exercises putBlob; ensure operation params are populated.
+      // tearDown's assertClosed calls putBlob; populate params.
       setOperationParams();
       RestRequest getRequest =
           createNamedBlobRestRequest(RestMethod.GET, "accountName", "containerName", "missingBlob", false, false, false,
@@ -1356,7 +1348,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         Assert.assertEquals(RestServiceErrorCode.NotFound,
             ((RestServiceException) ee.getCause()).getErrorCode());
       }
-      Assert.assertEquals("Translation metric must not increment when metadata lookup itself failed", 0L,
+      Assert.assertEquals("Translation metric should be 0", 0L,
           routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
     } finally {
       if (router != null) {
@@ -1366,11 +1358,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
   }
 
-  /**
-   * Translation must also fire when {@code getBlobHelper}'s notFoundCache short-circuit completes the operation.
-   * That path bypasses the per-replica storage call and synthesises BlobDoesNotExist via {@code completeOperation}
-   * rather than {@code BlobOperationCallbackWrapper}, so we cover it explicitly.
-   */
+  /** Translation also fires when getBlobHelper short-circuits via the notFoundCache. */
   @Test
   public void testNamedBlobMissingViaNotFoundCacheStillTranslatedToAmbryUnavailable() throws Exception {
     Properties props = getNonBlockingRouterProperties(localDcName);
@@ -1407,15 +1395,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           null, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       putCompletedLatch.await();
 
-      // GET path: idConverter resolves successfully (metadata exists), returning the put blob ID.
+      // GET: idConverter returns the put blob ID (metadata exists).
       when(mockIdConverter.convert(any(RestRequest.class), anyString())).thenAnswer(invocation -> {
         CompletableFuture<String> completableFuture = new CompletableFuture<>();
         completableFuture.complete(storedBlobId.get());
         return completableFuture;
       });
 
-      // Pre-populate the notFoundCache for the resolved blob ID so getBlobHelper short-circuits via
-      // completeOperation(...) rather than going to the storage layer.
+      // Pre-populate notFoundCache so getBlobHelper short-circuits.
       router.getNotFoundCache().put(storedBlobId.get(), Boolean.TRUE);
 
       RestRequest getRequest =
@@ -1429,11 +1416,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       } catch (ExecutionException ee) {
         Assert.assertTrue("Expected RouterException, got " + ee.getCause(),
             ee.getCause() instanceof RouterException);
-        Assert.assertEquals(
-            "notFoundCache short-circuit must also be translated to AmbryUnavailable when metadata exists",
+        Assert.assertEquals("Expected AmbryUnavailable",
             RouterErrorCode.AmbryUnavailable, ((RouterException) ee.getCause()).getErrorCode());
       }
-      Assert.assertEquals("Translation metric should have incremented exactly once", 1L,
+      Assert.assertEquals("Translation metric should be 1", 1L,
           routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
     } finally {
       if (router != null) {

@@ -322,16 +322,11 @@ public class NonBlockingRouter implements Router {
     if (restRequest != null) {
       idConverter.convert(restRequest, blobIdStr).whenComplete((convertedId, exception) -> {
         if (exception != null) {
-          // The operations counter is only incremented inside getBlobHelper; if idConverter
-          // fails we never reached that path, so do not decrement here.
+          // Skip decrement: only getBlobHelper increments, and we never reached it.
           completeOperation(futureResult, callback, null, (Exception) exception, false);
         } else {
-          // Named blob metadata was resolved successfully. If the storage layer then
-          // returns BlobDoesNotExist, treat it as transient (replication lag, in-flight
-          // delete race, or replica outage) and translate to AmbryUnavailable so clients
-          // receive a retryable 503 rather than an authoritative 404 — the named blob
-          // metadata says the blob exists, so a missing storage replica response is
-          // inconsistent with metadata and should not be reported as permanent absence.
+          // Metadata says the blob exists. Translate storage BlobDoesNotExist to
+          // AmbryUnavailable so clients retry (503) instead of getting 404.
           FutureResult<GetBlobResult> innerFuture = new FutureResult<>();
           Callback<GetBlobResult> wrappedCallback = (result, e) -> {
             Exception translated = translateNamedBlobMissingInStorage(e);
@@ -349,10 +344,8 @@ public class NonBlockingRouter implements Router {
   }
 
   /**
-   * If {@code e} is a {@link RouterException} with {@link RouterErrorCode#BlobDoesNotExist}
-   * raised after a successful named-blob metadata lookup, translate it to
-   * {@link RouterErrorCode#AmbryUnavailable} so the response surfaces as a retryable
-   * 503 rather than an authoritative 404. Other exceptions and {@code null} pass through.
+   * Translate {@link RouterErrorCode#BlobDoesNotExist} to {@link RouterErrorCode#AmbryUnavailable}
+   * (retryable 503, not authoritative 404). Other exceptions pass through.
    */
   private Exception translateNamedBlobMissingInStorage(Exception e) {
     if (e instanceof RouterException

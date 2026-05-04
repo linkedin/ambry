@@ -153,26 +153,19 @@ public interface Router extends Closeable {
   }
 
   /**
-   * Variant of {@link #getBlob(String, GetBlobOptions, Callback, QuotaChargeCallback)} that accepts a
-   * {@link RestRequest} so the router can resolve a named-blob path (e.g. {@code /named/{account}/{container}/{name}})
-   * to a concrete blob ID via the configured {@code IdConverter} before issuing the storage GET. The simpler
-   * {@code String}-based overload should be used when the caller already has a resolved blob ID.
+   * Variant that accepts a {@link RestRequest} so the router can resolve a named-blob path
+   * (e.g. {@code /named/{account}/{container}/{name}}) via {@code IdConverter} before the storage GET.
+   * Use the {@code String}-only overload when the caller already has a resolved blob ID.
    * <p/>
-   * <strong>Named-blob inconsistency translation:</strong> when the {@code IdConverter} successfully resolves
-   * the named-blob metadata but the storage layer subsequently returns
-   * {@link RouterErrorCode#BlobDoesNotExist} on every replica, implementations may translate the failure to
-   * {@link RouterErrorCode#AmbryUnavailable} so the response surfaces as a retryable 503 rather than an
-   * authoritative 404. This is consistent with the contract that named-blob metadata, once resolved, should
-   * be treated as a strong claim that the blob exists; a missing storage replica response is therefore
-   * reported as transient unavailability, not absence.
-   * @param restRequest The {@link RestRequest} associated with the operation; used by the router to invoke
-   *                    the {@code IdConverter} when {@code blobId} is a named-blob path.
-   * @param blobId The ID of the blob for which blob data is requested, or a named-blob path when paired with
-   *               a non-null {@code restRequest}.
-   * @param options The options associated with the request.
-   * @param callback The {@link Callback} which will be invoked on the completion of the request.
-   * @param quotaChargeCallback The {@link QuotaChargeCallback} for accounting against the request's quota.
-   * @return A future that will eventually contain the {@link GetBlobResult} or an exception.
+   * After {@code IdConverter} resolves named-blob metadata, implementations may translate a subsequent
+   * {@link RouterErrorCode#BlobDoesNotExist} from storage to {@link RouterErrorCode#AmbryUnavailable}
+   * (retryable 503) — once metadata says the blob exists, a missing storage response is treated as transient.
+   * @param restRequest used to invoke {@code IdConverter} for named-blob paths.
+   * @param blobId blob ID, or a named-blob path when {@code restRequest} is non-null.
+   * @param options request options.
+   * @param callback invoked on completion.
+   * @param quotaChargeCallback for quota accounting.
+   * @return future containing the {@link GetBlobResult} or an exception.
    */
   default Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
       QuotaChargeCallback quotaChargeCallback) {
