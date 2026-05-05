@@ -1122,6 +1122,13 @@ public class HelixClusterManager implements ClusterMap {
     return result;
   }
 
+  int getResourceExpectedTotalDiskCapacityUsage(String resource) {
+    String dcName = clusterMapConfig.clusterMapDatacenterName;
+    String tag = dcToResourceNameToTag.get(dcName).get(resource);
+    int replicationFactor = dcToTagToResourceProperty.get(dcName).get(tag).replicationFactor;
+    return getResourceExpectedTotalDiskCapacityUsage(resource, replicationFactor);
+  }
+
   int getResourceTotalDiskCapacityUsage(String resource) {
     // call this method to fill up the partition capacity map from resource config
     String dcName = clusterMapConfig.clusterMapDatacenterName;
