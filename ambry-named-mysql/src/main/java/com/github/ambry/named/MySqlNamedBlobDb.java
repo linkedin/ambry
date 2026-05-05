@@ -516,7 +516,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     private final String activeCountMetricName;
     private final String rejectedCountMetricName;
     private final String enqueueWaitTimeMetricName;
+    private final String connectionFailureCountMetricName;
     private final Counter rejectedCount;
+    private final Counter connectionFailureCount;
     private final Histogram enqueueWaitTimeInMs;
     private final int maxPendingTransactions;
 
@@ -540,16 +542,35 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobTransactionRejectedCount." + datacenter);
       this.enqueueWaitTimeMetricName =
           MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobEnqueueWaitTimeInMs." + datacenter);
+      this.connectionFailureCountMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBConnectionFailureCount." + datacenter);
       // remove() before register() guards against duplicate-key errors when a previous instance
       // (e.g. a test) registered the same metric name and was not closed.
       registry.remove(queueSizeMetricName);
       registry.remove(activeCountMetricName);
       registry.remove(rejectedCountMetricName);
       registry.remove(enqueueWaitTimeMetricName);
+      registry.remove(connectionFailureCountMetricName);
       registry.register(queueSizeMetricName, (Gauge<Integer>) () -> executor.getQueue().size());
       registry.register(activeCountMetricName, (Gauge<Integer>) () -> executor.getActiveCount());
       this.rejectedCount = registry.counter(rejectedCountMetricName);
       this.enqueueWaitTimeInMs = registry.histogram(enqueueWaitTimeMetricName);
+      this.connectionFailureCount = registry.counter(connectionFailureCountMetricName);
+    }
+
+    /**
+     * SQLSTATE class "08" is the ISO/SQL "Connection exception" class — it covers
+     * 08001 (unable to establish), 08003 (connection does not exist), 08006 (connection failure),
+     * and 08S01 (MySQL communication link failure / {@code CommunicationsException}).
+     * Checking SQLSTATE rather than {@code instanceof CommunicationsException} keeps this
+     * vendor-neutral and resilient to MySQL connector class-name changes.
+     */
+    private static boolean isConnectionFailure(Throwable t) {
+      if (!(t instanceof SQLException)) {
+        return false;
+      }
+      String state = ((SQLException) t).getSQLState();
+      return state != null && state.startsWith("08");
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
@@ -577,6 +598,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             }
             callback.onCompletion(result, null);
           } catch (Exception e) {
+            if (isConnectionFailure(e)) {
+              connectionFailureCount.inc();
+            }
             callback.onCompletion(null, e);
           }
         });
@@ -609,6 +633,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             }
             callback.onCompletion(result, null);
           } catch (Exception e) {
+            if (isConnectionFailure(e)) {
+              connectionFailureCount.inc();
+            }
             callback.onCompletion(null, e);
           }
         });
@@ -652,6 +679,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       registry.remove(activeCountMetricName);
       registry.remove(rejectedCountMetricName);
       registry.remove(enqueueWaitTimeMetricName);
+      registry.remove(connectionFailureCountMetricName);
     }
   }
 

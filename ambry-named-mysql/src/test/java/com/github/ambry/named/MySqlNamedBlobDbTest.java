@@ -176,7 +176,63 @@ public class MySqlNamedBlobDbTest {
             .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + dc));
         assertTrue("enqueue-wait histogram missing for datacenter " + dc, registry.getHistograms()
             .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + dc));
+        assertTrue("connection-failure counter missing for datacenter " + dc, registry.getCounters()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobDBConnectionFailureCount." + dc));
       }
+    } finally {
+      db.close();
+    }
+  }
+
+  /**
+   * Verify that {@code NamedBlobDBConnectionFailureCount.<dc>} increments when a query fails with a
+   * SQLSTATE 08* exception (connection-class failure, e.g. MySQL CommunicationsException) and does
+   * NOT increment for other SQLException types or non-connection SQLSTATEs.
+   */
+  @Test
+  public void testConnectionFailureCounterIncrementsOnSqlState08() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    Metrics metrics = new Metrics(registry, "");
+    MySqlNamedBlobDb db =
+        new MySqlNamedBlobDb(accountService, buildSmallPoolConfig(1, 1, 100), dataSourceFactory, localDatacenter,
+            metrics);
+    try {
+      String metricName =
+          "com.github.ambry.named.MySqlNamedBlobDb.NamedBlobDBConnectionFailureCount." + localDatacenter;
+      Counter counter = registry.getCounters().get(metricName);
+      assertNotNull("connection-failure counter not registered for " + localDatacenter, counter);
+
+      // SQLSTATE 08S01 — MySQL "Communication link failure" (CommunicationsException).
+      SQLException communicationLinkFailure = new SQLException("Communications link failure", "08S01", 0);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, communicationLinkFailure);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(communicationLinkFailure, e.getCause()));
+      assertEquals("counter should increment on SQLSTATE 08S01", 1L, counter.getCount());
+
+      // SQLSTATE 42000 — syntax-class error. Must not increment.
+      SQLException syntaxError = new SQLException("syntax error", "42000", 1064);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, syntaxError);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(syntaxError, e.getCause()));
+      assertEquals("counter must not increment on non-connection SQLSTATE", 1L, counter.getCount());
+
+      // SQLSTATE 08006 — generic "connection failure", should also count.
+      SQLException connectionFailure = new SQLException("connection failure", "08006", 0);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, connectionFailure);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(connectionFailure, e.getCause()));
+      assertEquals("counter should increment on any SQLSTATE 08*", 2L, counter.getCount());
+
+      // SQLException with null SQLSTATE — must not increment (defensive).
+      SQLException nullState = new SQLException("no state");
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, nullState);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(nullState, e.getCause()));
+      assertEquals("counter must not increment when SQLSTATE is null", 2L, counter.getCount());
     } finally {
       db.close();
     }
@@ -203,6 +259,8 @@ public class MySqlNamedBlobDbTest {
           .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + dc));
       assertFalse("enqueue-wait histogram for " + dc + " should be removed after close", registry.getHistograms()
           .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + dc));
+      assertFalse("connection-failure counter for " + dc + " should be removed after close", registry.getCounters()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobDBConnectionFailureCount." + dc));
     }
   }
 
