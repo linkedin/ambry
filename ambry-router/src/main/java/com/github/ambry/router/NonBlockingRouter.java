@@ -322,14 +322,42 @@ public class NonBlockingRouter implements Router {
     if (restRequest != null) {
       idConverter.convert(restRequest, blobIdStr).whenComplete((convertedId, exception) -> {
         if (exception != null) {
-          completeOperation(futureResult, callback, null, (Exception) exception);
+          // Skip decrement: only getBlobHelper increments, and we never reached it.
+          completeOperation(futureResult, callback, null, (Exception) exception, false);
         } else {
-          getBlobHelper(convertedId, options, callback, quotaChargeCallback, futureResult);
+          // Metadata says the blob exists. Translate storage BlobDoesNotExist to
+          // AmbryUnavailable so clients retry (503) instead of getting 404.
+          FutureResult<GetBlobResult> innerFuture = new FutureResult<>();
+          Callback<GetBlobResult> wrappedCallback = (result, e) -> {
+            Exception translated = translateNamedBlobMissingInStorage(convertedId, e);
+            futureResult.done(result, translated);
+            if (callback != null) {
+              callback.onCompletion(result, translated);
+            }
+          };
+          getBlobHelper(convertedId, options, wrappedCallback, quotaChargeCallback, innerFuture);
         }
       });
     }
     // Direct path when blobIdStr is already provided
     return futureResult;
+  }
+
+  /**
+   * Translate {@link RouterErrorCode#BlobDoesNotExist} to {@link RouterErrorCode#AmbryUnavailable}
+   * (retryable 503, not authoritative 404). Other exceptions pass through.
+   */
+  private Exception translateNamedBlobMissingInStorage(String resolvedBlobId, Exception e) {
+    if (e instanceof RouterException
+        && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
+      routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.inc();
+      logger.warn("Named blob metadata exists but storage returned BlobNotFound for blob {}; "
+          + "translating to AmbryUnavailable (retryable 503)", resolvedBlobId);
+      return new RouterException(
+          "Named blob metadata exists but storage returned BlobNotFound for the resolved blob ID.",
+          RouterErrorCode.AmbryUnavailable);
+    }
+    return e;
   }
 
   private void getBlobHelper(String blobIdStr, GetBlobOptions options, Callback<GetBlobResult> callback,
