@@ -42,11 +42,16 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -559,18 +564,54 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     }
 
     /**
-     * SQLSTATE class "08" is the ISO/SQL "Connection exception" class — it covers
-     * 08001 (unable to establish), 08003 (connection does not exist), 08006 (connection failure),
-     * and 08S01 (MySQL communication link failure / {@code CommunicationsException}).
-     * Checking SQLSTATE rather than {@code instanceof CommunicationsException} keeps this
-     * vendor-neutral and resilient to MySQL connector class-name changes.
+     * Whether the given throwable represents a JDBC connection failure (vs. any other SQL error).
+     *
+     * <p>Three independent positive signals, all spec-defined as connection-class:
+     * <ol>
+     *   <li>{@link SQLNonTransientConnectionException} — JDBC's non-transient connection-failure
+     *       subclass; MySQL {@code CommunicationsException} extends this.</li>
+     *   <li>{@link SQLTransientConnectionException} — JDBC's transient connection-failure subclass;
+     *       HikariCP wraps pool-acquisition timeouts as this.</li>
+     *   <li>{@link SQLException#getSQLState()} starting with {@code "08"} — ISO/SQL "Connection
+     *       exception" class (08001/08003/08004/08006/08007/08S01).</li>
+     * </ol>
+     *
+     * <p>The walk traverses both {@link Throwable#getCause()} and {@link SQLException#getNextException()}
+     * so wrapped/chained variants (e.g. RuntimeException-wrapped, Hikari-wrapped, batch error chains)
+     * are detected. SQLSTATE "40*" (transaction rollback), "57*" (operator intervention), and other
+     * adjacent classes are intentionally NOT counted — those are not connection failures.
      */
     private static boolean isConnectionFailure(Throwable t) {
-      if (!(t instanceof SQLException)) {
+      if (t == null) {
         return false;
       }
-      String state = ((SQLException) t).getSQLState();
-      return state != null && state.startsWith("08");
+      Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+      Deque<Throwable> stack = new ArrayDeque<>();
+      stack.push(t);
+      while (!stack.isEmpty()) {
+        Throwable cur = stack.pop();
+        if (!seen.add(cur)) {
+          continue;
+        }
+        if (cur instanceof SQLNonTransientConnectionException || cur instanceof SQLTransientConnectionException) {
+          return true;
+        }
+        if (cur instanceof SQLException) {
+          String state = ((SQLException) cur).getSQLState();
+          if (state != null && state.startsWith("08")) {
+            return true;
+          }
+          SQLException next = ((SQLException) cur).getNextException();
+          if (next != null) {
+            stack.push(next);
+          }
+        }
+        Throwable cause = cur.getCause();
+        if (cause != null) {
+          stack.push(cause);
+        }
+      }
+      return false;
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,

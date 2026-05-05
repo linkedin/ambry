@@ -39,6 +39,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLTransientConnectionException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -233,6 +235,58 @@ public class MySqlNamedBlobDbTest {
           () -> db.get(account.getName(), container.getName(), "blobName").get(),
           e -> Assert.assertEquals(nullState, e.getCause()));
       assertEquals("counter must not increment when SQLSTATE is null", 2L, counter.getCount());
+
+      // Direct SQLNonTransientConnectionException (mimics MySQL CommunicationsException) — counts via type.
+      SQLException directNonTransient = new SQLNonTransientConnectionException("communications failure");
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, directNonTransient);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(directNonTransient, e.getCause()));
+      assertEquals("counter should increment on SQLNonTransientConnectionException", 3L, counter.getCount());
+
+      // Direct SQLTransientConnectionException (mimics HikariCP pool-timeout shape) — counts via type.
+      SQLException directTransient = new SQLTransientConnectionException("pool timeout");
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, directTransient);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(directTransient, e.getCause()));
+      assertEquals("counter should increment on SQLTransientConnectionException", 4L, counter.getCount());
+
+      // SQLSTATE 40001 (deadlock) — adjacent rollback class, NOT a connection failure.
+      SQLException deadlock = new SQLException("deadlock", "40001", 1213);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, deadlock);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(deadlock, e.getCause()));
+      assertEquals("counter must not increment on SQLSTATE 40001 (deadlock)", 4L, counter.getCount());
+
+      // Outer SQLException with no SQLSTATE, cause = SQLException with 08006 — counts via getCause walk.
+      SQLException wrappedConnFailure = new SQLException("wrapper, no state");
+      wrappedConnFailure.initCause(new SQLException("inner conn failure", "08006"));
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, wrappedConnFailure);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(wrappedConnFailure, e.getCause()));
+      assertEquals("counter should increment when 08* is in cause chain", 5L, counter.getCount());
+
+      // Outer 99999 with getNextException() = 08006 — counts via next-exception chain.
+      SQLException withNext = new SQLException("outer", "99999");
+      withNext.setNextException(new SQLException("next conn failure", "08006"));
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, withNext);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(withNext, e.getCause()));
+      assertEquals("counter should increment when 08* reachable via getNextException", 6L, counter.getCount());
+
+      // Outer SQLException with no SQLSTATE, cause = SQLNonTransientConnectionException — counts via cause walk to type.
+      SQLException wrappedTyped = new SQLException("wrapper, no state");
+      wrappedTyped.initCause(new SQLNonTransientConnectionException("inner typed"));
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, wrappedTyped);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(wrappedTyped, e.getCause()));
+      assertEquals("counter should increment when typed connection exception is in cause chain", 7L,
+          counter.getCount());
     } finally {
       db.close();
     }
