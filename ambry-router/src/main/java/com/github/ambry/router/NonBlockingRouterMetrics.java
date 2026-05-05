@@ -140,6 +140,7 @@ public class NonBlockingRouterMetrics {
   public final Counter backgroundDeleterExceptionCount;
   public final Counter backgroundDeleterSubmitFailureCount;
   public final Counter backgroundDeleterNullChunkIdCount;
+  public final Counter namedBlobMetadataExistsButStorageNotFoundCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
 
@@ -452,6 +453,8 @@ public class NonBlockingRouterMetrics {
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
     routerRequestErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RouterRequestErrorCount"));
+    namedBlobMetadataExistsButStorageNotFoundCount = metricRegistry.counter(
+        MetricRegistry.name(NonBlockingRouter.class, "NamedBlobMetadataExistsButStorageNotFoundCount"));
 
     // Counters for various errors.
     ambryUnavailableErrorCount =
