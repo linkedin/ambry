@@ -1368,9 +1368,12 @@ public class HelixClusterManagerTest {
     String resourceName = resourceNames.get(0);
     String totalInstanceMetricName =
         MetricRegistry.name(HelixClusterManager.class, "Resource_" + resourceName + "_TotalInstanceCount");
+    String expectedCapacityMetricName =
+        MetricRegistry.name(HelixClusterManager.class, "Resource_" + resourceName + "_ExpectedTotalDiskCapacityUsage");
     // Make sure that we don't have any FULL AUTO related metrics
     MetricRegistry registry = helixClusterManager.getMetricRegistry();
     assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
+    assertFalse(registry.getGauges().keySet().contains(expectedCapacityMetricName));
 
     // Update the IdealState to CUSTOMIZED mode, this would keep all local data node as they were.
     IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
@@ -1383,6 +1386,7 @@ public class HelixClusterManagerTest {
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
+    assertFalse(registry.getGauges().keySet().contains(expectedCapacityMetricName));
 
     // Now update resource to have a tag
     final String instanceGroupTag = "TAG_1000000";
@@ -1393,6 +1397,7 @@ public class HelixClusterManagerTest {
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
+    assertFalse(registry.getGauges().keySet().contains(expectedCapacityMetricName));
 
     // Now update data node to have the same tag
     for (DataNode dataNode : allLocalDcDataNodes) {
@@ -1412,6 +1417,7 @@ public class HelixClusterManagerTest {
       assertTrue("Should be in FULL_AUTO mode", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     assertTrue(registry.getGauges().keySet().contains(totalInstanceMetricName));
+    assertTrue(registry.getGauges().keySet().contains(expectedCapacityMetricName));
 
     // Now update data node to have another tag
     for (DataNode dataNode : allLocalDcDataNodes) {
@@ -1445,6 +1451,7 @@ public class HelixClusterManagerTest {
     idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     helixCluster.refreshIdealState();
     assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
+    assertFalse(registry.getGauges().keySet().contains(expectedCapacityMetricName));
     for (DataNode dataNode : allLocalDcDataNodes) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
       InstanceConfig instanceConfig =
