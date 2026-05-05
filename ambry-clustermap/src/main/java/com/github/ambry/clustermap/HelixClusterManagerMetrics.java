@@ -366,6 +366,12 @@ class HelixClusterManagerMetrics {
       registry.gauge(MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_TotalDiskCapacityUsage"),
           () -> resourceTotalDiskCapacityUsage);
 
+      Gauge<Integer> resourceExpectedTotalDiskCapacityUsage =
+          () -> helixClusterManager.getResourceExpectedTotalDiskCapacityUsage(resource);
+      registry.gauge(MetricRegistry.name(HelixClusterManager.class,
+          "Resource_" + resource + "_ExpectedTotalDiskCapacityUsage"),
+          () -> resourceExpectedTotalDiskCapacityUsage);
+
       Gauge<Integer> resourceNumberOfPartitions = () -> helixClusterManager.getNumberOfPartitionsInResource(resource);
       registry.gauge(MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_NumberOfPartitions"),
           () -> resourceNumberOfPartitions);
