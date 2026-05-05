@@ -88,6 +88,8 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
     if (!config.transactionIsolationLevel.equals(TransactionIsolationLevel.TRANSACTION_NONE)) {
       hikariConfig.setTransactionIsolation(config.transactionIsolationLevel.name());
     }
+    hikariConfig.setPoolName(String.format("ambry-named-blob-%s-%04x", dbEndpoint.getDatacenter(),
+        dbEndpoint.getUrl().hashCode() & 0xFFFF));
     hikariConfig.setMetricRegistry(metricRegistry);
     return new HikariDataSource(hikariConfig);
   }

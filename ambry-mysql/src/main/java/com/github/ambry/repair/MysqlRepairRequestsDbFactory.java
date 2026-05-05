@@ -93,6 +93,8 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
     hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
     hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
     hikariConfig.addDataSourceProperty("useServerPrepStmts", "true");
+    hikariConfig.setPoolName(String.format("ambry-repair-requests-%s-%04x", dbEndpoint.getDatacenter(),
+        dbEndpoint.getUrl().hashCode() & 0xFFFF));
     hikariConfig.setMetricRegistry(metrics);
     return new HikariDataSource(hikariConfig);
   }

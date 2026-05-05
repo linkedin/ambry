@@ -98,6 +98,8 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
     hikariConfig.addDataSourceProperty("useServerPrepStmts", "true");
     hikariConfig.addDataSourceProperty(REWRITE_BATCHED_STATEMENTS_LITERAL,
         String.valueOf(accountStatsMySqlConfig.enableRewriteBatchedStatement));
+    hikariConfig.setPoolName(String.format("ambry-account-stats-%s-%04x", dbEndpoint.getDatacenter(),
+        dbEndpoint.getUrl().hashCode() & 0xFFFF));
     hikariConfig.setMetricRegistry(registry);
     return new HikariDataSource(hikariConfig);
   }
