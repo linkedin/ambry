@@ -123,7 +123,8 @@ class AmbrySecurityService implements SecurityService {
                 URLEncoder.encode((String) restRequest.getArgs().get(Headers.BLOB_ID), StandardCharsets.UTF_8.name());
             restRequest.setArg(Headers.BLOB_ID, encodedBlobId);
           } catch (Exception encodingException) {
-            LOGGER.error("Failed to encode blob id signed url: {}", restRequest.getArgs().get(Headers.BLOB_ID), e);
+            LOGGER.error("Failed to encode blob id signed url: {}", restRequest.getArgs().get(Headers.BLOB_ID),
+                encodingException);
           }
         }
         callback.onCompletion(r, e);
