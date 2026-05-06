@@ -3202,6 +3202,17 @@ public class ReplicationTest extends ReplicationTestHelper {
 
     // Unknown DC → -1.
     assertEquals("Unknown DC should return -1", -1L, metrics.getActiveMaxLagFromDc("dc-other"));
+
+    // Cleanup on partition removal: state map entry is removed alongside the gauge so memory does
+    // not leak when partitions move/decommission. After p1 is removed, the per-DC aggregate
+    // ignores p1 (state lookup returns null → filtered out) and the per-partition method returns -1.
+    metrics.removeLagMetricForPartition(p1);
+    assertEquals("After removeLagMetricForPartition, p1 state lookup should return -1", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(p1));
+    assertEquals("After p1 removal, dc-east aggregate equals only p2's lag (300)", 300L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+    assertEquals("After p1 removal, dc-west aggregate equals only p2's lag (400)", 400L,
+        metrics.getActiveMaxLagFromDc("dc-west"));
   }
 
   /** Helper for {@link #perDcActiveMaxLagAggregateTest()}: builds a mocked RemoteReplicaInfo. */

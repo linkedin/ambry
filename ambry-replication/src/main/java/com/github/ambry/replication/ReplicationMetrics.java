@@ -627,6 +627,10 @@ public class ReplicationMetrics {
     if (partitionLags.containsKey(partitionId)) {
       registry.remove(MetricRegistry.name(ReplicaThread.class,
           String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
+      // Clean up the local replica state entry so it does not leak when partitions are moved or
+      // decommissioned. After removal, getActiveMaxLagFromDc will exclude this partition (state
+      // lookup returns null → filtered out) and getMaxLagFromActivePeersForPartition returns -1.
+      localReplicaStateByPartition.remove(partitionId);
     }
   }
 
