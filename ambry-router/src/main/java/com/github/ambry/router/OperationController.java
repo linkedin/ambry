@@ -789,7 +789,7 @@ class BackgroundDeleter extends OperationController {
               // deleteOperations.add, and routerCallback.onPollReady() is non-throwing per the
               // Selector.wakeup() contract — so this rollback is exclusive (the async callback
               // cannot also fire) and underflow is not possible in practice.
-              nonBlockingRouter.rollbackBackgroundDeleteRouterCounters();
+              nonBlockingRouter.decrementBackgroundDeleteRouterCounters();
             }
           }
         } else {

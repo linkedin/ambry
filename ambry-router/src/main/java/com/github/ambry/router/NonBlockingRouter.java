@@ -839,8 +839,7 @@ public class NonBlockingRouter implements Router {
         // is the callback's job. submitted=false means we threw before the callback could ever
         // be reached, so we own the rollback here.
         if (!submitted) {
-          currentOperationsCount.decrementAndGet();
-          currentBackgroundOperationsCount.decrementAndGet();
+          decrementBackgroundDeleteRouterCounters();
         }
       }
     }
@@ -885,8 +884,8 @@ public class NonBlockingRouter implements Router {
       }
       currentBackgroundOperationsCount.decrementAndGet();
     };
-    currentOperationsCount.incrementAndGet();
-    currentBackgroundOperationsCount.incrementAndGet();
+
+    decrementBackgroundDeleteRouterCounters();
     GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .getOption(GetOption.Include_All)
         .build();
@@ -1051,7 +1050,7 @@ public class NonBlockingRouter implements Router {
    * {@code super.deleteBlob} threw before {@code DeleteManager} registered the operation; otherwise
    * the async callback would also fire and the counters would underflow.
    */
-  void rollbackBackgroundDeleteRouterCounters() {
+  void decrementBackgroundDeleteRouterCounters() {
     currentOperationsCount.decrementAndGet();
     currentBackgroundOperationsCount.decrementAndGet();
   }
