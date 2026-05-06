@@ -529,7 +529,7 @@ class FrontendRestRequestService implements RestRequestService {
           responseBody.close();
         } catch (IOException ioe) {
           frontendMetrics.resourceReleaseError.inc();
-          logger.error("Error closing ReadableStreamChannel", e);
+          logger.error("Error closing ReadableStreamChannel", ioe);
         }
       }
     }
