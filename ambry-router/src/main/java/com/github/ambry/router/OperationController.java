@@ -746,8 +746,20 @@ class BackgroundDeleter extends OperationController {
     if (routerConfig.routerBackgroundDeleterMaxConcurrentOperations > 0) {
       deleteOperationQueue.offer(deleteCall);
     } else {
+      // Mirror of initiateBackgroundDeletes counter-rollback pattern. If deleteCall.get() throws a
+      // RuntimeException, the inner callback that decrements concurrentBackgroundDeleteOperationCount
+      // never fires; without the rollback the counter leaks and (when the limit is non-zero) eventually
+      // pins the dispatch gate at its limit, starving the queue.
+      boolean started = false;
       concurrentBackgroundDeleteOperationCount.incrementAndGet();
-      deleteCall.get();
+      try {
+        deleteCall.get();
+        started = true;
+      } finally {
+        if (!started) {
+          concurrentBackgroundDeleteOperationCount.decrementAndGet();
+        }
+      }
     }
   }
 
@@ -760,7 +772,26 @@ class BackgroundDeleter extends OperationController {
       while (!deleteOperationQueue.isEmpty()) {
         if (concurrentBackgroundDeleteOperationCount.incrementAndGet()
             <= routerConfig.routerBackgroundDeleterMaxConcurrentOperations) {
-          deleteOperationQueue.poll().get();
+          boolean started = false;
+          try {
+            deleteOperationQueue.poll().get();
+            started = true;
+          } finally {
+            if (!started) {
+              concurrentBackgroundDeleteOperationCount.decrementAndGet();
+              // Roll back the router-level counters that NonBlockingRouter.initiateBackgroundDeletes
+              // incremented when this request was originally queued (its `submitted=true` path
+              // skipped the per-request rollback because offer() returned cleanly). On the queued
+              // dispatch above, super.deleteBlob threw before registering the DeleteOperation, so
+              // the inline completion callback wired in initiateBackgroundDeletes can never fire
+              // and would otherwise leak both counters. All RuntimeException paths in
+              // super.deleteBlob originate inside DeleteManager.submitDeleteBlobOperation before
+              // deleteOperations.add, and routerCallback.onPollReady() is non-throwing per the
+              // Selector.wakeup() contract — so this rollback is exclusive (the async callback
+              // cannot also fire) and underflow is not possible in practice.
+              nonBlockingRouter.decrementBackgroundDeleteRouterCounters();
+            }
+          }
         } else {
           concurrentBackgroundDeleteOperationCount.decrementAndGet();
           break;
