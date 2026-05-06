@@ -701,6 +701,13 @@ public class ReplicationMetrics {
         };
         registry.gauge(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
             () -> minReplicaLag);
+        // State-aware per-DC aggregate: max lag over peers in this DC, considering only partitions
+        // whose local replica is in STANDBY/LEADER. Companion to Partition-{id}-activeMaxLagFromPeersInBytes,
+        // intended for dashboards/alerts where per-partition cardinality is impractical.
+        Gauge<Long> activeMaxReplicaLag = () -> getActiveMaxLagFromDc(remoteReplicaDc);
+        registry.gauge(MetricRegistry.name(ReplicaThread.class,
+                remoteReplicaDc + "-activeMaxReplicaLagFromLocalInBytes"),
+            () -> activeMaxReplicaLag);
         return ConcurrentHashMap.newKeySet();
       }).add(remoteReplicaInfo);
     }
@@ -1044,6 +1051,30 @@ public class ReplicationMetrics {
       return -1;
     }
     return getMaxLagForPartition(partitionId);
+  }
+
+  /**
+   * Per-DC aggregate companion to {@link #getMaxLagFromActivePeersForPartition(PartitionId)}.
+   * Returns the max lag (in bytes) among peers in {@code dcName}, considering only the partitions
+   * whose local replica is in {@link ReplicaState#STANDBY} or {@link ReplicaState#LEADER}. Returns
+   * -1 when no such peer exists. Intended for dashboards and alerts that need a fixed-cardinality
+   * signal (one gauge per peer DC) instead of one gauge per partition.
+   * @param dcName the peer datacenter to aggregate over
+   * @return the max lag in bytes from peers in {@code dcName} for active local replicas, or -1.
+   */
+  long getActiveMaxLagFromDc(String dcName) {
+    Set<RemoteReplicaInfo> replicaInfos = remoteReplicaInfosByDc.get(dcName);
+    if (replicaInfos == null || replicaInfos.isEmpty()) {
+      return -1;
+    }
+    return replicaInfos.stream()
+        .filter(info -> {
+          ReplicaState state = localReplicaStateByPartition.get(info.getReplicaId().getPartitionId());
+          return state == ReplicaState.STANDBY || state == ReplicaState.LEADER;
+        })
+        .mapToLong(RemoteReplicaInfo::getRemoteLagFromLocalInBytes)
+        .max()
+        .orElse(-1);
   }
 
   /**

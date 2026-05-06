@@ -3127,6 +3127,98 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Tests {@link ReplicationMetrics#getActiveMaxLagFromDc(String)} — the per-peer-DC active
+   * aggregate that complements the per-partition state-aware gauge with a fixed-cardinality
+   * signal (one gauge per peer DC) suitable for dashboards and alerts.
+   */
+  @Test
+  public void perDcActiveMaxLagAggregateTest() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    ReplicationMetrics metrics = new ReplicationMetrics(metricRegistry, Collections.emptyList());
+
+    // Two peer DCs (dc-east, dc-west). Two partitions (p1, p2). Each partition has a peer in each DC.
+    Store localStore1 = mock(Store.class);
+    Store localStore2 = mock(Store.class);
+    PartitionId p1 = mock(PartitionId.class);
+    when(p1.toPathString()).thenReturn("p1");
+    when(p1.toString()).thenReturn("p1");
+    PartitionId p2 = mock(PartitionId.class);
+    when(p2.toPathString()).thenReturn("p2");
+    when(p2.toString()).thenReturn("p2");
+    RemoteReplicaInfo p1East = makeMockRemoteReplica(p1, "dc-east", "h1e", localStore1);
+    RemoteReplicaInfo p1West = makeMockRemoteReplica(p1, "dc-west", "h1w", localStore1);
+    RemoteReplicaInfo p2East = makeMockRemoteReplica(p2, "dc-east", "h2e", localStore2);
+    RemoteReplicaInfo p2West = makeMockRemoteReplica(p2, "dc-west", "h2w", localStore2);
+
+    // Register per-partition + per-DC gauges. trackPerDatacenterLag=true so the per-DC aggregates
+    // (avg/max/min/active-max) are wired up.
+    metrics.addLagMetricForPartition(p1, true);
+    metrics.addLagMetricForPartition(p2, true);
+    metrics.addMetricsForRemoteReplicaInfo(p1East, true, false);
+    metrics.addMetricsForRemoteReplicaInfo(p1West, true, false);
+    metrics.addMetricsForRemoteReplicaInfo(p2East, true, false);
+    metrics.addMetricsForRemoteReplicaInfo(p2West, true, false);
+
+    // Verify per-DC active gauge registers alongside the existing avg/max/min per-DC gauges.
+    assertTrue("dc-east active gauge should register",
+        metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
+            "dc-east-activeMaxReplicaLagFromLocalInBytes")));
+    assertTrue("dc-west active gauge should register",
+        metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
+            "dc-west-activeMaxReplicaLagFromLocalInBytes")));
+
+    // No state recorded yet → both partitions filtered out → -1.
+    assertEquals("With no state recorded, dc-east aggregate should be -1", -1L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+
+    // p1 STANDBY (lags 100 east / 200 west); p2 BOOTSTRAP (lags 300 east / 400 west).
+    when(localStore1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(localStore2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(p1East.getRemoteLagFromLocalInBytes()).thenReturn(100L);
+    when(p1West.getRemoteLagFromLocalInBytes()).thenReturn(200L);
+    when(p2East.getRemoteLagFromLocalInBytes()).thenReturn(300L);
+    when(p2West.getRemoteLagFromLocalInBytes()).thenReturn(400L);
+    metrics.updateLagMetricForRemoteReplica(p1East, 100L);
+    metrics.updateLagMetricForRemoteReplica(p1West, 200L);
+    metrics.updateLagMetricForRemoteReplica(p2East, 300L);
+    metrics.updateLagMetricForRemoteReplica(p2West, 400L);
+
+    // Only p1 (STANDBY) counts → aggregate excludes p2's higher BOOTSTRAP lag.
+    assertEquals("dc-east aggregate should only see p1's east lag (excludes BOOTSTRAP p2)", 100L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+    assertEquals("dc-west aggregate should only see p1's west lag (excludes BOOTSTRAP p2)", 200L,
+        metrics.getActiveMaxLagFromDc("dc-west"));
+
+    // p2 transitions to LEADER → its larger lag now dominates.
+    when(localStore2.getCurrentState()).thenReturn(ReplicaState.LEADER);
+    metrics.updateLagMetricForRemoteReplica(p2East, 300L);
+    metrics.updateLagMetricForRemoteReplica(p2West, 400L);
+    assertEquals("dc-east aggregate is max(p1=100, p2=300) = 300", 300L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+    assertEquals("dc-west aggregate is max(p1=200, p2=400) = 400", 400L,
+        metrics.getActiveMaxLagFromDc("dc-west"));
+
+    // Unknown DC → -1.
+    assertEquals("Unknown DC should return -1", -1L, metrics.getActiveMaxLagFromDc("dc-other"));
+  }
+
+  /** Helper for {@link #perDcActiveMaxLagAggregateTest()}: builds a mocked RemoteReplicaInfo. */
+  private static RemoteReplicaInfo makeMockRemoteReplica(PartitionId partition, String dcName, String host,
+      Store localStore) {
+    DataNodeId node = mock(DataNodeId.class);
+    when(node.getDatacenterName()).thenReturn(dcName);
+    when(node.getHostname()).thenReturn(host);
+    when(node.getPort()).thenReturn(6667);
+    ReplicaId replicaId = mock(ReplicaId.class);
+    when(replicaId.getPartitionId()).thenReturn(partition);
+    when(replicaId.getDataNodeId()).thenReturn(node);
+    RemoteReplicaInfo info = mock(RemoteReplicaInfo.class);
+    when(info.getReplicaId()).thenReturn(replicaId);
+    when(info.getLocalStore()).thenReturn(localStore);
+    return info;
+  }
+
+  /**
    * Tests that replica tokens are set correctly and go through different stages correctly.
    * @throws InterruptedException
    */
