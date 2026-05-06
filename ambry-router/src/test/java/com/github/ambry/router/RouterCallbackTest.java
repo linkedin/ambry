@@ -28,9 +28,12 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for {@link RouterCallback#scheduleDeletes(List, String, QuotaChargeCallback)}.
- * Null-storeKey enforcement lives at {@link BackgroundDeleteRequest}'s constructor; this class
- * verifies the happy path and that an NPE from the constructor surfaces (rather than being
- * silently skipped, which would hide an internal bug).
+ *
+ * scheduleDeletes runs from {@code PutManager.onComplete} on every put completion (success and
+ * failure). The next line after this method is {@code nonBlockingRouter.completeOperation}, so
+ * an NPE escaping here would skip the customer's PUT callback and hang the request until timeout.
+ * The skip-and-count pattern below preserves operational availability and surfaces the internal
+ * bug via metric for investigation.
  */
 public class RouterCallbackTest {
 
@@ -51,33 +54,41 @@ public class RouterCallbackTest {
     assertEquals("c", queue.get(2).getBlobId());
     assertEquals(BackgroundDeleteRequest.SERVICE_ID_PREFIX + "svc", queue.get(0).getServiceId());
   }
-
+  
   /**
-   * Empty list is a no-op.
+   * A null entry must be skipped without throwing, so the put-completion path in
+   * {@code PutManager.onComplete} can reach {@code completeOperation} and fire the customer
+   * callback. Valid sibling entries must still be enqueued. Internal-bug nulls are surfaced via
+   * the error log; no metric is added because production callers source IDs from local
+   * PutOperation state — null here is a deterministic code bug, not a rate-driven external signal.
    */
   @Test
-  public void testScheduleDeletesEmptyList() {
-    List<BackgroundDeleteRequest> queue = new ArrayList<>();
-    RouterCallback routerCallback = new RouterCallback(mock(NetworkClient.class), queue);
-
-    routerCallback.scheduleDeletes(Collections.emptyList(), "suffix", mock(QuotaChargeCallback.class));
-
-    assertTrue(queue.isEmpty());
-  }
-
-  /**
-   * A null entry surfaces as NPE from BackgroundDeleteRequest's constructor — the data-class
-   * boundary is the single enforcement point for the non-null invariant. Production callers source
-   * IDs from local PutOperation state, so a null here is an internal bug we want to fail loudly on
-   * rather than silently skip.
-   */
-  @Test(expected = NullPointerException.class)
-  public void testScheduleDeletesNullStoreKeyThrows() {
+  public void testScheduleDeletesNullStoreKeyIsSkipped() {
     List<BackgroundDeleteRequest> queue = new ArrayList<>();
     RouterCallback routerCallback = new RouterCallback(mock(NetworkClient.class), queue);
 
     routerCallback.scheduleDeletes(Arrays.asList(mockKey("a"), null, mockKey("c")), "suffix",
         mock(QuotaChargeCallback.class));
+
+    assertEquals("Two valid entries should be enqueued; null skipped", 2, queue.size());
+    assertEquals("a", queue.get(0).getBlobId());
+    assertEquals("c", queue.get(1).getBlobId());
+  }
+
+  /**
+   * Multiple null entries are each skipped without throwing.
+   */
+  @Test
+  public void testScheduleDeletesMultipleNullsSkipped() {
+    List<BackgroundDeleteRequest> queue = new ArrayList<>();
+    RouterCallback routerCallback = new RouterCallback(mock(NetworkClient.class), queue);
+
+    routerCallback.scheduleDeletes(Arrays.asList(null, mockKey("a"), null, null, mockKey("b")), "suffix",
+        mock(QuotaChargeCallback.class));
+
+    assertEquals(2, queue.size());
+    assertEquals("a", queue.get(0).getBlobId());
+    assertEquals("b", queue.get(1).getBlobId());
   }
 
   private static StoreKey mockKey(String id) {

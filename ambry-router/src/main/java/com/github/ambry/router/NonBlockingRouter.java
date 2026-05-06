@@ -885,7 +885,8 @@ public class NonBlockingRouter implements Router {
       currentBackgroundOperationsCount.decrementAndGet();
     };
 
-    decrementBackgroundDeleteRouterCounters();
+    currentOperationsCount.incrementAndGet();
+    currentBackgroundOperationsCount.incrementAndGet();
     GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .getOption(GetOption.Include_All)
         .build();
