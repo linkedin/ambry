@@ -3055,6 +3055,78 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Tests {@link ReplicationMetrics#getMaxLagFromActivePeersForPartition(PartitionId)} — verifies
+   * the gauge returns -1 unless the local replica's {@link ReplicaState} is STANDBY or LEADER.
+   * Filters out partitions whose local replica is legitimately catching up (BOOTSTRAP), being
+   * decommissioned (INACTIVE), or otherwise not expected to be in sync (OFFLINE/ERROR/DROPPED).
+   */
+  @Test
+  public void replicationLagActiveStateAwareGaugeTest() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    ReplicationMetrics metrics = new ReplicationMetrics(metricRegistry, Collections.emptyList());
+
+    PartitionId partitionId = mock(PartitionId.class);
+    when(partitionId.toPathString()).thenReturn("42");
+    DataNodeId peerNode = mock(DataNodeId.class);
+    ReplicaId peerReplicaId = mock(ReplicaId.class);
+    when(peerReplicaId.getPartitionId()).thenReturn(partitionId);
+    when(peerReplicaId.getDataNodeId()).thenReturn(peerNode);
+    Store localStore = mock(Store.class);
+    RemoteReplicaInfo info = mock(RemoteReplicaInfo.class);
+    when(info.getReplicaId()).thenReturn(peerReplicaId);
+    when(info.getLocalStore()).thenReturn(localStore);
+
+    // Register both gauges. Verify the new state-aware gauge is registered alongside the existing one.
+    metrics.addLagMetricForPartition(partitionId, true);
+    String maxLagName = MetricRegistry.name(ReplicaThread.class, "Partition-42-maxLagFromPeersInBytes");
+    String activeMaxLagName = MetricRegistry.name(ReplicaThread.class, "Partition-42-activeMaxLagFromPeersInBytes");
+    assertTrue("Existing gauge should be registered", metricRegistry.getGauges().containsKey(maxLagName));
+    assertTrue("State-aware gauge should be registered", metricRegistry.getGauges().containsKey(activeMaxLagName));
+
+    // Unregistered partition: returns -1 regardless of state.
+    PartitionId unknownPartition = mock(PartitionId.class);
+    assertEquals("Unregistered partition should return -1", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(unknownPartition));
+
+    // Registered partition with no updates yet: state map is empty, so -1.
+    assertEquals("Registered partition with no updates should return -1", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // BOOTSTRAP: state-blind gauge reflects the lag, state-aware gauge returns -1.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    metrics.updateLagMetricForRemoteReplica(info, 100L);
+    assertEquals("State-blind gauge should report the lag", 100L, metrics.getMaxLagForPartition(partitionId));
+    assertEquals("State-aware gauge should suppress lag during local BOOTSTRAP", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // STANDBY: both gauges report the lag.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    metrics.updateLagMetricForRemoteReplica(info, 200L);
+    assertEquals("State-blind gauge should report the lag", 200L, metrics.getMaxLagForPartition(partitionId));
+    assertEquals("State-aware gauge should report the lag when local is STANDBY", 200L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // LEADER: state-aware gauge still reports the lag (LEADER is functionally equivalent for catch-up).
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.LEADER);
+    metrics.updateLagMetricForRemoteReplica(info, 300L);
+    assertEquals("State-aware gauge should report the lag when local is LEADER", 300L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // INACTIVE (decommissioning): state-aware gauge suppresses; state-blind gauge keeps reporting.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.INACTIVE);
+    metrics.updateLagMetricForRemoteReplica(info, 400L);
+    assertEquals("State-blind gauge should still report the lag", 400L, metrics.getMaxLagForPartition(partitionId));
+    assertEquals("State-aware gauge should suppress lag during local INACTIVE", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // OFFLINE: same — suppressed.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.OFFLINE);
+    metrics.updateLagMetricForRemoteReplica(info, 500L);
+    assertEquals("State-aware gauge should suppress lag during local OFFLINE", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+  }
+
+  /**
    * Tests that replica tokens are set correctly and go through different stages correctly.
    * @throws InterruptedException
    */

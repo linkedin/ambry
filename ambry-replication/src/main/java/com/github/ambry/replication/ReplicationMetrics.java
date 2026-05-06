@@ -22,6 +22,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -38,6 +39,9 @@ import java.util.stream.Collectors;
 public class ReplicationMetrics {
 
   private final static String MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE = "Partition-%s-maxLagFromPeersInBytes";
+
+  private final static String ACTIVE_MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE =
+      "Partition-%s-activeMaxLagFromPeersInBytes";
 
   private final static String REPLICATION_FETCH_BYTES_RATE_SUFFIX = "-replicationFetchBytesRate";
 
@@ -147,6 +151,11 @@ public class ReplicationMetrics {
   private final Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
   // ConcurrentHashMap is used to avoid cache incoherence.
   private final Map<PartitionId, Map<DataNodeId, Long>> partitionLags = new ConcurrentHashMap<>();
+  // Local replica's current Helix state per partition. Refreshed on each replication cycle by
+  // updateLagMetricForRemoteReplica. Consulted by getMaxLagFromActivePeersForPartition to skip
+  // partitions whose local replica is not in STANDBY/LEADER (e.g., BOOTSTRAP, where huge lag is
+  // expected as the replica catches up and does not indicate a problem).
+  private final Map<PartitionId, ReplicaState> localReplicaStateByPartition = new ConcurrentHashMap<>();
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
   private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
 
@@ -608,6 +617,14 @@ public class ReplicationMetrics {
         registry.gauge(MetricRegistry.name(ReplicaThread.class,
                 String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())),
             () -> replicaLag);
+        // State-aware variant: same lag value, but reports -1 unless the local replica is in
+        // STANDBY/LEADER. Lets alerts ignore partitions whose local replica is legitimately
+        // behind (e.g., BOOTSTRAP/INACTIVE) without time-based hysteresis sized for hours-long
+        // bootstraps.
+        Gauge<Long> activeReplicaLag = () -> getMaxLagFromActivePeersForPartition(partitionId);
+        registry.gauge(MetricRegistry.name(ReplicaThread.class,
+                String.format(ACTIVE_MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())),
+            () -> activeReplicaLag);
       }
     }
   }
@@ -620,6 +637,8 @@ public class ReplicationMetrics {
     if (partitionLags.containsKey(partitionId)) {
       registry.remove(MetricRegistry.name(ReplicaThread.class,
           String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
+      registry.remove(MetricRegistry.name(ReplicaThread.class,
+          String.format(ACTIVE_MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
     }
   }
 
@@ -987,6 +1006,11 @@ public class ReplicationMetrics {
     // update the partition's lag if and only if it was tracked.
     partitionLags.computeIfPresent(replicaId.getPartitionId(), (k, v) -> {
       v.put(replicaId.getDataNodeId(), lag);
+      // Refresh the local replica's state alongside the lag update. Kept inside computeIfPresent
+      // so we only track state for partitions whose lag is being tracked, and so the two writes
+      // happen together for the same partition.
+      localReplicaStateByPartition.put(replicaId.getPartitionId(),
+          remoteReplicaInfo.getLocalStore().getCurrentState());
       return v;
     });
   }
@@ -1003,6 +1027,23 @@ public class ReplicationMetrics {
     }
     Map.Entry<DataNodeId, Long> maxEntry = perDataNodeLag.entrySet().stream().max(Map.Entry.comparingByValue()).get();
     return maxEntry.getValue();
+  }
+
+  /**
+   * Same as {@link #getMaxLagForPartition(PartitionId)} but returns -1 unless the local replica for
+   * this partition is in {@link ReplicaState#STANDBY} or {@link ReplicaState#LEADER}. Filters out
+   * partitions whose local replica is legitimately behind its peers (e.g., BOOTSTRAP, INACTIVE),
+   * so an alert built on this gauge does not need time-based hysteresis sized for the longest
+   * possible bootstrap.
+   * @param partitionId the partition to check
+   * @return the max lag in bytes from peers if local replica is STANDBY/LEADER, otherwise -1.
+   */
+  public long getMaxLagFromActivePeersForPartition(PartitionId partitionId) {
+    ReplicaState localState = localReplicaStateByPartition.get(partitionId);
+    if (localState != ReplicaState.STANDBY && localState != ReplicaState.LEADER) {
+      return -1;
+    }
+    return getMaxLagForPartition(partitionId);
   }
 
   /**
