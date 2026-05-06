@@ -3076,12 +3076,14 @@ public class ReplicationTest extends ReplicationTestHelper {
     when(info.getReplicaId()).thenReturn(peerReplicaId);
     when(info.getLocalStore()).thenReturn(localStore);
 
-    // Register both gauges. Verify the new state-aware gauge is registered alongside the existing one.
+    // Register the per-partition state-blind gauge. The state-aware lookup is exposed only as a
+    // public method (for admin tooling), not as a per-partition gauge — per-partition cardinality
+    // is impractical for dashboards, so the dashboard signal is the per-DC aggregate registered
+    // by addMetricsForRemoteReplicaInfo.
     metrics.addLagMetricForPartition(partitionId, true);
     String maxLagName = MetricRegistry.name(ReplicaThread.class, "Partition-42-maxLagFromPeersInBytes");
-    String activeMaxLagName = MetricRegistry.name(ReplicaThread.class, "Partition-42-activeMaxLagFromPeersInBytes");
-    assertTrue("Existing gauge should be registered", metricRegistry.getGauges().containsKey(maxLagName));
-    assertTrue("State-aware gauge should be registered", metricRegistry.getGauges().containsKey(activeMaxLagName));
+    assertTrue("Existing per-partition gauge should be registered",
+        metricRegistry.getGauges().containsKey(maxLagName));
 
     // Unregistered partition: returns -1 regardless of state.
     PartitionId unknownPartition = mock(PartitionId.class);

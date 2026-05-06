@@ -40,9 +40,6 @@ public class ReplicationMetrics {
 
   private final static String MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE = "Partition-%s-maxLagFromPeersInBytes";
 
-  private final static String ACTIVE_MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE =
-      "Partition-%s-activeMaxLagFromPeersInBytes";
-
   private final static String REPLICATION_FETCH_BYTES_RATE_SUFFIX = "-replicationFetchBytesRate";
 
   public final Map<String, Meter> interColoReplicationBytesRate = new HashMap<String, Meter>();
@@ -152,9 +149,10 @@ public class ReplicationMetrics {
   // ConcurrentHashMap is used to avoid cache incoherence.
   private final Map<PartitionId, Map<DataNodeId, Long>> partitionLags = new ConcurrentHashMap<>();
   // Local replica's current Helix state per partition. Refreshed on each replication cycle by
-  // updateLagMetricForRemoteReplica. Consulted by getMaxLagFromActivePeersForPartition to skip
-  // partitions whose local replica is not in STANDBY/LEADER (e.g., BOOTSTRAP, where huge lag is
-  // expected as the replica catches up and does not indicate a problem).
+  // updateLagMetricForRemoteReplica. Consulted by getActiveMaxLagFromDc (the per-DC active aggregate
+  // gauge) and by getMaxLagFromActivePeersForPartition (a public hook intended for admin tooling)
+  // to skip partitions whose local replica is not in STANDBY/LEADER — e.g., BOOTSTRAP, where huge
+  // lag is expected as the replica catches up and does not indicate a problem.
   private final Map<PartitionId, ReplicaState> localReplicaStateByPartition = new ConcurrentHashMap<>();
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
   private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
@@ -617,14 +615,6 @@ public class ReplicationMetrics {
         registry.gauge(MetricRegistry.name(ReplicaThread.class,
                 String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())),
             () -> replicaLag);
-        // State-aware variant: same lag value, but reports -1 unless the local replica is in
-        // STANDBY/LEADER. Lets alerts ignore partitions whose local replica is legitimately
-        // behind (e.g., BOOTSTRAP/INACTIVE) without time-based hysteresis sized for hours-long
-        // bootstraps.
-        Gauge<Long> activeReplicaLag = () -> getMaxLagFromActivePeersForPartition(partitionId);
-        registry.gauge(MetricRegistry.name(ReplicaThread.class,
-                String.format(ACTIVE_MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())),
-            () -> activeReplicaLag);
       }
     }
   }
@@ -637,8 +627,6 @@ public class ReplicationMetrics {
     if (partitionLags.containsKey(partitionId)) {
       registry.remove(MetricRegistry.name(ReplicaThread.class,
           String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
-      registry.remove(MetricRegistry.name(ReplicaThread.class,
-          String.format(ACTIVE_MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())));
     }
   }
 
