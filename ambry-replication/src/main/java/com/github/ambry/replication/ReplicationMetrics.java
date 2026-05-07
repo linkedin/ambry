@@ -156,6 +156,10 @@ public class ReplicationMetrics {
   private final Map<PartitionId, ReplicaState> localReplicaStateByPartition = new ConcurrentHashMap<>();
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
   private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
+  // Parallel to dcToReplicaLagStats but only counts partitions whose local replica is in
+  // STANDBY/LEADER. Populated alongside dcToReplicaLagStats inside getAvgLagFromDc so a single
+  // pass over the DC's replicas produces both summaries; getActiveMaxLagFromDc reads from this.
+  private final Map<String, LongSummaryStatistics> dcToActiveReplicaLagStats = new ConcurrentHashMap<>();
 
   // A map from dcname to a histogram. This histogram records the replication lag in seconds for PUT records.
   private final Map<String, Histogram> dcToReplicaLagInSecondsForBlob = new ConcurrentHashMap<>();
@@ -1051,22 +1055,19 @@ public class ReplicationMetrics {
    * whose local replica is in {@link ReplicaState#STANDBY} or {@link ReplicaState#LEADER}. Returns
    * -1 when no such peer exists. Intended for dashboards and alerts that need a fixed-cardinality
    * signal (one gauge per peer DC) instead of one gauge per partition.
+   * <p>
+   * O(1) read against {@code dcToActiveReplicaLagStats}, which is refreshed by
+   * {@link #getAvgLagFromDc(String)} on each metrics scrape — same staleness model as the existing
+   * {@code maxReplicaLagFromLocalInBytes} / {@code minReplicaLagFromLocalInBytes} gauges.
    * @param dcName the peer datacenter to aggregate over
    * @return the max lag in bytes from peers in {@code dcName} for active local replicas, or -1.
    */
   long getActiveMaxLagFromDc(String dcName) {
-    Set<RemoteReplicaInfo> replicaInfos = remoteReplicaInfosByDc.get(dcName);
-    if (replicaInfos == null || replicaInfos.isEmpty()) {
-      return -1;
-    }
-    return replicaInfos.stream()
-        .filter(info -> {
-          ReplicaState state = localReplicaStateByPartition.get(info.getReplicaId().getPartitionId());
-          return state == ReplicaState.STANDBY || state == ReplicaState.LEADER;
-        })
-        .mapToLong(RemoteReplicaInfo::getRemoteLagFromLocalInBytes)
-        .max()
-        .orElse(-1);
+    LongSummaryStatistics statistics =
+        dcToActiveReplicaLagStats.getOrDefault(dcName, new LongSummaryStatistics());
+    // Long.MIN_VALUE is the sentinel returned by an empty LongSummaryStatistics; map it to -1
+    // so callers see "no data" consistent with getMaxLagForPartition / getAvgLagFromDc.
+    return statistics.getMax() == Long.MIN_VALUE ? -1 : statistics.getMax();
   }
 
   /**
@@ -1090,10 +1091,23 @@ public class ReplicationMetrics {
     if (replicaInfos == null || replicaInfos.isEmpty()) {
       return -1.0;
     }
-    LongSummaryStatistics longSummaryStatistics =
-        replicaInfos.stream().collect(Collectors.summarizingLong(RemoteReplicaInfo::getRemoteLagFromLocalInBytes));
-    dcToReplicaLagStats.put(dcName, longSummaryStatistics);
-    return longSummaryStatistics.getAverage();
+    // Single pass produces two summaries: the existing all-replica stats (read by the
+    // {dc}-avgReplicaLagFromLocalInBytes / maxReplicaLagFromLocalInBytes / minReplicaLagFromLocalInBytes
+    // gauges) and a state-filtered variant covering only STANDBY/LEADER local replicas (read by
+    // the {dc}-activeMaxReplicaLagFromLocalInBytes gauge via getActiveMaxLagFromDc).
+    LongSummaryStatistics allStats = new LongSummaryStatistics();
+    LongSummaryStatistics activeStats = new LongSummaryStatistics();
+    for (RemoteReplicaInfo info : replicaInfos) {
+      long lag = info.getRemoteLagFromLocalInBytes();
+      allStats.accept(lag);
+      ReplicaState state = localReplicaStateByPartition.get(info.getReplicaId().getPartitionId());
+      if (state == ReplicaState.STANDBY || state == ReplicaState.LEADER) {
+        activeStats.accept(lag);
+      }
+    }
+    dcToReplicaLagStats.put(dcName, allStats);
+    dcToActiveReplicaLagStats.put(dcName, activeStats);
+    return allStats.getAverage();
   }
 
   private String generateRemoteReplicaMetricPrefix(RemoteReplicaInfo remoteReplicaInfo) {
