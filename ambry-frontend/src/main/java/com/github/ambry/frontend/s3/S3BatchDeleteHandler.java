@@ -148,14 +148,16 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
 
         // Handle the delete operation using the deleteBlobHandler
         deleteBlobHandler.handle(singleDeleteRequest, noOpResponseChannel, (result, exception) -> {
-          // Call our custom onDeleteCompletion to track success/failure
           if (exception == null) {
             deleted.add(new S3MessagePayload.S3DeletedObject(object.getKey()));
-          } else if (exception instanceof RestServiceException) {
-            RestServiceException restServiceException = (RestServiceException) exception;
-            errors.add((new S3MessagePayload.S3ErrorObject(object.getKey(), restServiceException.getErrorCode().toString())));
           } else {
-            errors.add((new S3MessagePayload.S3ErrorObject(object.getKey(), RestServiceErrorCode.InternalServerError.toString())));
+            String errorCode = (exception instanceof RestServiceException)
+                ? ((RestServiceException) exception).getErrorCode().toString()
+                : RestServiceErrorCode.InternalServerError.toString();
+            errors.add(new S3MessagePayload.S3ErrorObject(object.getKey(), errorCode));
+            metrics.s3BatchDeleteSubOpFailureCount.inc();
+            logger.warn("S3 batch delete sub-op failed: key={} errorCode={} requestUri={}",
+                object.getKey(), errorCode, restRequest.getUri(), exception);
           }
           future.complete(null);
         });
