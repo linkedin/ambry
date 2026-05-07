@@ -1175,9 +1175,11 @@ public class AmbryRequests implements RequestAPI {
           // Blob might have been replicated while we were force deleting it. Try normal delete now
           store.delete(Collections.singletonList(info));
         } catch (StoreException ex) {
+          logger.error("Force-delete fallback delete failed for blob {}", info.getStoreKey().getID(), ex);
           serverErrorCode = ErrorMapping.getStoreErrorMapping(ex.getErrorCode());
         }
       } else {
+        logger.error("Force-delete failed for blob {}", info.getStoreKey().getID(), e);
         serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
     }
