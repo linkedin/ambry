@@ -86,4 +86,45 @@ public class DatasetDaoTest {
     assertEquals("datasetRowReadNpeCount should increment by 1", npeCountBefore + 1,
         metrics.datasetRowReadNpeCount.getCount());
   }
+
+  /**
+   * Same JDBC NPE class as {@link #testGetDatasetMapsJdbcNpeOnVersionSchemaToNotFound}, but
+   * exercising the {@code executeGetVersionSchema} path used by version-mutation flows
+   * (delete/list/ttl-update). Not observed in prod, but the call shape is identical so the
+   * mapping should be symmetric.
+   */
+  @Test
+  public void testDeleteDatasetVersionMapsJdbcNpeOnVersionSchemaToNotFound() throws Exception {
+    Connection mockConnection = mock(Connection.class);
+    MySqlMetrics metrics = new MySqlMetrics(DatasetDao.class, new MetricRegistry());
+    MySqlDataAccessor dataAccessor = getDataAccessor(mockConnection, metrics);
+    PreparedStatement mockGetVersionSchemaStatement = mock(PreparedStatement.class);
+    // getVersionSchemaSql is "select versionSchema from Datasets where ..." -- match on the table.
+    when(mockConnection.prepareStatement(contains("from " + DatasetDao.DATASET_TABLE))).thenReturn(
+        mockGetVersionSchemaStatement);
+
+    ResultSet mockResultSet = mock(ResultSet.class);
+    when(mockResultSet.next()).thenReturn(true);
+    when(mockResultSet.getInt(eq(DatasetDao.VERSION_SCHEMA))).thenThrow(new NullPointerException());
+    when(mockGetVersionSchemaStatement.executeQuery()).thenReturn(mockResultSet);
+
+    Properties props = new Properties();
+    props.setProperty(MySqlAccountServiceConfig.DB_INFO, "");
+    MySqlAccountServiceConfig config = new MySqlAccountServiceConfig(new VerifiableProperties(props));
+    DatasetDao dao = new DatasetDao(dataAccessor, config, metrics);
+
+    long npeCountBefore = metrics.datasetRowReadNpeCount.getCount();
+    try {
+      dao.deleteDatasetVersion(1, 2, "ds", "v1");
+      fail("Expected AccountServiceException");
+    } catch (AccountServiceException e) {
+      assertEquals(AccountServiceErrorCode.NotFound, e.getErrorCode());
+      String message = e.getMessage();
+      assertTrue("message should include accountId, got: " + message, message.contains("account: 1"));
+      assertTrue("message should include containerId, got: " + message, message.contains("container: 2"));
+      assertTrue("message should include datasetName, got: " + message, message.contains("dataset: ds"));
+    }
+    assertEquals("datasetRowReadNpeCount should increment by 1", npeCountBefore + 1,
+        metrics.datasetRowReadNpeCount.getCount());
+  }
 }

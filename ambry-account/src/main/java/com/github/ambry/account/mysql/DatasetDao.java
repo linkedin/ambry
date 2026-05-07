@@ -1931,7 +1931,18 @@ public class DatasetDao {
             "Version Schema not found for account: " + accountId + " container: " + containerId + " dataset: "
                 + datasetName, AccountServiceErrorCode.NotFound);
       }
-      versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
+      int versionSchemaOrdinal;
+      try {
+        versionSchemaOrdinal = resultSet.getInt(VERSION_SCHEMA);
+      } catch (NullPointerException e) {
+        // Same JDBC driver bug as executeGetDatasetStatement -- see comment there for details.
+        // Not observed on this path in prod, but the call shape is identical so guard symmetrically.
+        metrics.datasetRowReadNpeCount.inc();
+        throw new AccountServiceException(
+            "Version Schema row could not be read for account: " + accountId + " container: " + containerId
+                + " dataset: " + datasetName, AccountServiceErrorCode.NotFound);
+      }
+      versionSchema = Dataset.VersionSchema.values()[versionSchemaOrdinal];
     } finally {
       //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
       closeQuietly(resultSet);
