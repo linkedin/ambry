@@ -46,6 +46,8 @@ public class MySqlNamedBlobDbListOperationIntegrationTest extends MySqlNamedBlob
     return Arrays.asList(new Object[][]{
         {false, MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION},
         {true, MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION},
+        {false, 3},
+        {true, 3},
         {false, MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION},
         {true, MySqlNamedBlobDbConfig.MAX_LIST_NAMED_BLOBS_SQL_OPTION}
       });

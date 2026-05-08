@@ -293,6 +293,43 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "    ) "
             + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
       // @formatter:on
+      case 4:
+        /**
+         * List named-blobs query, given a prefix.
+         * Equivalent semantics to options 2 and 3, but the per-blob latest-version computation is done in
+         * a single PK range scan via MAX(version) OVER (PARTITION BY blob_name) instead of an INNER JOIN
+         * (option 2) or a correlated subquery (option 3). This avoids the per-outer-row inner probe that
+         * options 2/3 incur and is cheaper on TiDB and MySQL 8.0+.
+         *
+         * Correctness invariant — same as options 2 and 3:
+         * 1. The windowed MAX(version) is computed over all blob_state=READY rows for a given blob_name,
+         *    INCLUDING rows with a non-null deleted_ts.
+         * 2. The deleted_ts predicate is applied only on the OUTER select after the window operator
+         *    computes max_version. This means: if the latest READY version of a blob has expired or been
+         *    soft-deleted, the blob is hidden entirely; we do NOT surface a stale older version.
+         *    Putting the deleted_ts filter inside the inner scan would silently violate this invariant.
+         *
+         * Requires MySQL 8.0+ or TiDB (window functions are unavailable in MySQL 5.7). Default remains
+         * option 2; operators must opt in per fabric.
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
+            + "FROM ( "
+            + "  SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts, "
+            + "         MAX(version) OVER (PARTITION BY blob_name) AS max_version "
+            + "  FROM named_blobs_v2 "
+            + "  WHERE account_id = ? " // 1
+            + "    AND container_id = ? " // 2
+            + "    AND %1$s " // blob_state = x
+            + "    AND blob_name LIKE ? " // 3
+            + "    AND blob_name >= ? " // 4
+            + ") t "
+            + "WHERE version = max_version "
+            + "  AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
+            + "ORDER BY blob_name "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME); // 5
+        // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
     }
@@ -776,10 +813,19 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       if (blobNamePrefix == null) {
         constructListAllQuery(statement, accountId, containerId, pageToken, maxKeysValue);
       } else {
-        if (config.listNamedBlobsSQLOption == MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION) {
-          constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
-        } else {
-          constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+        switch (config.listNamedBlobsSQLOption) {
+          case 2:
+            constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          case 3:
+            constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          case 4:
+            constructListQueryWithPrefixV4(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          default:
+            throw new IllegalStateException(
+                "Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
         }
       }
       query = statement.toString();
@@ -873,6 +919,27 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     statement.setInt(5, accountId);
     statement.setInt(6, containerId);
     statement.setInt(7, maxKeysValue + 1);
+  }
+
+  /**
+   * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 4.
+   * Option 4 uses a window function (MAX(version) OVER (PARTITION BY blob_name)) and binds five parameters:
+   * (account_id, container_id, blob_name LIKE prefix%, blob_name >= cursor, LIMIT).
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param blobNamePrefix The blobname prefix
+   * @param pageToken The page token
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListQueryWithPrefixV4(PreparedStatement statement, short accountId, short containerId,
+      String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, blobNamePrefix + "%");
+    statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+    statement.setInt(5, maxKeysValue + 1);
   }
 
   private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId,
