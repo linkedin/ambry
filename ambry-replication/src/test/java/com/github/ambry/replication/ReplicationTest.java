@@ -3259,6 +3259,47 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Regression guard for the per-DC gauge wiring. A previous iteration of these gauges had max/min
+   * read from a cache populated only as a side effect of {@link ReplicationMetrics#getAvgLagFromDc};
+   * polling max without first polling avg returned a stale value (or -1). The current
+   * implementation routes each gauge through {@code computeActiveDcLagStats} so each is
+   * self-contained. This test polls max and min directly via the metric registry without ever
+   * calling {@code getAvgLagFromDc} or reading the avg gauge — if a future refactor reintroduces
+   * the cross-gauge dependency, this assertion fails.
+   */
+  @Test
+  public void perDcGaugesAreSelfContainedTest() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    ReplicationMetrics metrics = new ReplicationMetrics(metricRegistry, Collections.emptyList());
+
+    Store localStore = mock(Store.class);
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    PartitionId partition = mock(PartitionId.class);
+    when(partition.toPathString()).thenReturn("p1");
+    when(partition.toString()).thenReturn("p1");
+    RemoteReplicaInfo peer = makeMockRemoteReplica(partition, "dc-east", "h1", localStore);
+    when(peer.getRemoteLagFromLocalInBytes()).thenReturn(500L);
+
+    metrics.addLagMetricForPartition(partition, true);
+    metrics.addMetricsForRemoteReplicaInfo(peer, true, false);
+    metrics.updateLagMetricForRemoteReplica(peer, 500L);
+
+    // Critical: never call getAvgLagFromDc or read the avg gauge. Read max/min directly via the
+    // registry. If they secretly require avg to have populated some shared state, these assertions
+    // fail.
+    Object maxGaugeValue = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-maxReplicaLagFromLocalInBytes"))
+        .getValue();
+    assertEquals("max gauge must be self-contained (no implicit dependency on avg being polled)",
+        500L, ((Long) maxGaugeValue).longValue());
+    Object minGaugeValue = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-minReplicaLagFromLocalInBytes"))
+        .getValue();
+    assertEquals("min gauge must be self-contained (no implicit dependency on avg being polled)",
+        500L, ((Long) minGaugeValue).longValue());
+  }
+
+  /**
    * Tests that replica tokens are set correctly and go through different stages correctly.
    * @throws InterruptedException
    */
