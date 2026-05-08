@@ -3186,10 +3186,9 @@ public class ReplicationTest extends ReplicationTestHelper {
             "dc-east-minReplicaLagFromLocalInBytes")));
 
     // No state recorded yet → no active partitions → -1 from all per-DC accessors.
-    // getAvgLagFromDc is the canonical refresh path for dcToActiveReplicaLagStats; the max/min
-    // gauges read from that cache, so they need a getAvgLagFromDc call to see fresh values.
-    metrics.getAvgLagFromDc("dc-east");
-    metrics.getAvgLagFromDc("dc-west");
+    // Each per-DC accessor (avg/max/min/getActiveMaxLagFromDc) computes fresh stats on every
+    // call via computeActiveDcLagStats, so callers don't need to invoke getAvgLagFromDc first
+    // to "refresh" anything — each is self-contained.
     assertEquals("With no state recorded, dc-east aggregate should be -1", -1L,
         metrics.getActiveMaxLagFromDc("dc-east"));
 
@@ -3204,8 +3203,6 @@ public class ReplicationTest extends ReplicationTestHelper {
     metrics.updateLagMetricForRemoteReplica(p1West, 200L);
     metrics.updateLagMetricForRemoteReplica(p2East, 300L);
     metrics.updateLagMetricForRemoteReplica(p2West, 400L);
-    metrics.getAvgLagFromDc("dc-east");
-    metrics.getAvgLagFromDc("dc-west");
 
     // Only p1 (STANDBY) counts → aggregate excludes p2's higher BOOTSTRAP lag.
     assertEquals("dc-east aggregate should only see p1's east lag (excludes BOOTSTRAP p2)", 100L,
@@ -3225,8 +3222,6 @@ public class ReplicationTest extends ReplicationTestHelper {
     when(localStore2.getCurrentState()).thenReturn(ReplicaState.LEADER);
     metrics.updateLagMetricForRemoteReplica(p2East, 300L);
     metrics.updateLagMetricForRemoteReplica(p2West, 400L);
-    metrics.getAvgLagFromDc("dc-east");
-    metrics.getAvgLagFromDc("dc-west");
     assertEquals("dc-east aggregate is max(p1=100, p2=300) = 300", 300L,
         metrics.getActiveMaxLagFromDc("dc-east"));
     assertEquals("dc-west aggregate is max(p1=200, p2=400) = 400", 400L,
@@ -3239,8 +3234,6 @@ public class ReplicationTest extends ReplicationTestHelper {
     // not leak when partitions move/decommission. After p1 is removed, the per-DC aggregate
     // ignores p1 (state lookup returns null → filtered out) and the per-partition method returns -1.
     metrics.removeLagMetricForPartition(p1);
-    metrics.getAvgLagFromDc("dc-east");
-    metrics.getAvgLagFromDc("dc-west");
     assertEquals("After removeLagMetricForPartition, p1 state lookup should return -1", -1L,
         metrics.getMaxLagFromActivePeersForPartition(p1));
     assertEquals("After p1 removal, dc-east aggregate equals only p2's lag (300)", 300L,
