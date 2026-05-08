@@ -2934,6 +2934,18 @@ public class ReplicationTest extends ReplicationTestHelper {
     String localDcName = clusterMap.getDataNodeIds().get(0).getDatacenterName();
     remoteDcNames.remove(localDcName);
 
+    // The per-DC avg/max/min gauges filter to STANDBY/LEADER local replicas. BlobStore defaults
+    // to OFFLINE, so transition every local replica to STANDBY (mirroring what production does
+    // via Helix once BOOTSTRAP completes) and trigger one updateLagMetricForRemoteReplica per
+    // (partition, peer) to seed localReplicaStateByPartition before the gauge assertions run.
+    for (PartitionInfo partitionInfo : replicationManager.partitionToPartitionInfo.values()) {
+      for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfos()) {
+        info.getLocalStore().setCurrentState(ReplicaState.STANDBY);
+        replicationManager.replicationMetrics.updateLagMetricForRemoteReplica(info,
+            info.getRemoteLagFromLocalInBytes());
+      }
+    }
+
     // before updating replication lag, make sure avg lag in each dc is 0
     MetricRegistry metricRegistry = replicationManager.getMetricRegistry();
     String prefix = ReplicaThread.class.getName() + ".";
