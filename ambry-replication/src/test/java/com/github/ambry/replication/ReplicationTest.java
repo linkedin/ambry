@@ -3186,9 +3186,11 @@ public class ReplicationTest extends ReplicationTestHelper {
             "dc-east-minReplicaLagFromLocalInBytes")));
 
     // No state recorded yet → no active partitions → -1 from all per-DC accessors.
-    // Each per-DC accessor (avg/max/min/getActiveMaxLagFromDc) computes fresh stats on every
-    // call via computeActiveDcLagStats, so callers don't need to invoke getAvgLagFromDc first
-    // to "refresh" anything — each is self-contained.
+    // getAvgLagFromDc is the canonical refresh path for dcToActiveReplicaLagStats; the max/min
+    // gauges and getActiveMaxLagFromDc read from that cache, so they need a getAvgLagFromDc call
+    // to see fresh values.
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
     assertEquals("With no state recorded, dc-east aggregate should be -1", -1L,
         metrics.getActiveMaxLagFromDc("dc-east"));
 
@@ -3203,6 +3205,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     metrics.updateLagMetricForRemoteReplica(p1West, 200L);
     metrics.updateLagMetricForRemoteReplica(p2East, 300L);
     metrics.updateLagMetricForRemoteReplica(p2West, 400L);
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
 
     // Only p1 (STANDBY) counts → aggregate excludes p2's higher BOOTSTRAP lag.
     assertEquals("dc-east aggregate should only see p1's east lag (excludes BOOTSTRAP p2)", 100L,
@@ -3222,6 +3226,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     when(localStore2.getCurrentState()).thenReturn(ReplicaState.LEADER);
     metrics.updateLagMetricForRemoteReplica(p2East, 300L);
     metrics.updateLagMetricForRemoteReplica(p2West, 400L);
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
     assertEquals("dc-east aggregate is max(p1=100, p2=300) = 300", 300L,
         metrics.getActiveMaxLagFromDc("dc-east"));
     assertEquals("dc-west aggregate is max(p1=200, p2=400) = 400", 400L,
@@ -3234,6 +3240,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     // not leak when partitions move/decommission. After p1 is removed, the per-DC aggregate
     // ignores p1 (state lookup returns null → filtered out) and the per-partition method returns -1.
     metrics.removeLagMetricForPartition(p1);
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
     assertEquals("After removeLagMetricForPartition, p1 state lookup should return -1", -1L,
         metrics.getMaxLagFromActivePeersForPartition(p1));
     assertEquals("After p1 removal, dc-east aggregate equals only p2's lag (300)", 300L,
@@ -3259,16 +3267,21 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
-   * Regression guard for the per-DC gauge wiring. A previous iteration of these gauges had max/min
-   * read from a cache populated only as a side effect of {@link ReplicationMetrics#getAvgLagFromDc};
-   * polling max without first polling avg returned a stale value (or -1). The current
-   * implementation routes each gauge through {@code computeActiveDcLagStats} so each is
-   * self-contained. This test polls max and min directly via the metric registry without ever
-   * calling {@code getAvgLagFromDc} or reading the avg gauge — if a future refactor reintroduces
-   * the cross-gauge dependency, this assertion fails.
+   * Documents and guards the per-DC gauge wiring contract: the avg gauge is the single iteration
+   * point per scrape, and the max/min gauges read from a cache that the avg gauge populates as a
+   * side effect. So callers must poll the avg gauge in every scrape to keep max/min fresh.
+   * <p>
+   * This test enforces both halves of the contract:
+   * <ul>
+   *   <li>If max/min are polled without polling avg first, they return -1 (cache empty).</li>
+   *   <li>After polling the avg gauge, the cache is populated and max/min return the expected
+   *       value on the next read.</li>
+   * </ul>
+   * If a future change either (a) decouples max/min from the cache or (b) removes the cache.put
+   * inside {@link ReplicationMetrics#getAvgLagFromDc}, one half of the assertions fails.
    */
   @Test
-  public void perDcGaugesAreSelfContainedTest() {
+  public void perDcGaugeWiringRequiresAvgPollTest() {
     MetricRegistry metricRegistry = new MetricRegistry();
     ReplicationMetrics metrics = new ReplicationMetrics(metricRegistry, Collections.emptyList());
 
@@ -3284,19 +3297,25 @@ public class ReplicationTest extends ReplicationTestHelper {
     metrics.addMetricsForRemoteReplicaInfo(peer, true, false);
     metrics.updateLagMetricForRemoteReplica(peer, 500L);
 
-    // Critical: never call getAvgLagFromDc or read the avg gauge. Read max/min directly via the
-    // registry. If they secretly require avg to have populated some shared state, these assertions
-    // fail.
-    Object maxGaugeValue = metricRegistry.getGauges()
-        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-maxReplicaLagFromLocalInBytes"))
-        .getValue();
-    assertEquals("max gauge must be self-contained (no implicit dependency on avg being polled)",
-        500L, ((Long) maxGaugeValue).longValue());
-    Object minGaugeValue = metricRegistry.getGauges()
-        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-minReplicaLagFromLocalInBytes"))
-        .getValue();
-    assertEquals("min gauge must be self-contained (no implicit dependency on avg being polled)",
-        500L, ((Long) minGaugeValue).longValue());
+    com.codahale.metrics.Gauge<?> avgGauge = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-avgReplicaLagFromLocalInBytes"));
+    com.codahale.metrics.Gauge<?> maxGauge = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-maxReplicaLagFromLocalInBytes"));
+    com.codahale.metrics.Gauge<?> minGauge = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-minReplicaLagFromLocalInBytes"));
+
+    // (1) Before avg is polled, the cache is empty and max/min return -1.
+    assertEquals("max gauge should return -1 before avg has populated the cache", -1L,
+        ((Long) maxGauge.getValue()).longValue());
+    assertEquals("min gauge should return -1 before avg has populated the cache", -1L,
+        ((Long) minGauge.getValue()).longValue());
+
+    // (2) Polling avg refreshes dcToActiveReplicaLagStats — max/min now return the expected lag.
+    avgGauge.getValue();
+    assertEquals("max gauge should return the active lag after avg poll refreshes cache", 500L,
+        ((Long) maxGauge.getValue()).longValue());
+    assertEquals("min gauge should return the active lag after avg poll refreshes cache", 500L,
+        ((Long) minGauge.getValue()).longValue());
   }
 
   /**
