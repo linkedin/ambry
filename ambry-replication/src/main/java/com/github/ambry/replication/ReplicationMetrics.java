@@ -155,10 +155,9 @@ public class ReplicationMetrics {
   // lag is expected as the replica catches up and does not indicate a problem.
   private final Map<PartitionId, ReplicaState> localReplicaStateByPartition = new ConcurrentHashMap<>();
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
-  private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
-  // Parallel to dcToReplicaLagStats but only counts partitions whose local replica is in
-  // STANDBY/LEADER. Populated alongside dcToReplicaLagStats inside getAvgLagFromDc so a single
-  // pass over the DC's replicas produces both summaries; getActiveMaxLagFromDc reads from this.
+  // Per-DC LongSummaryStatistics covering only partitions whose local replica is in STANDBY/LEADER.
+  // Populated by getAvgLagFromDc on each scrape and read by the per-DC avg/max/min gauges, so all
+  // three gauges report values over a consistent (state-filtered) population.
   private final Map<String, LongSummaryStatistics> dcToActiveReplicaLagStats = new ConcurrentHashMap<>();
 
   // A map from dcname to a histogram. This histogram records the replication lag in seconds for PUT records.
@@ -683,27 +682,24 @@ public class ReplicationMetrics {
         Gauge<Double> avgReplicaLag = () -> getAvgLagFromDc(remoteReplicaDc);
         registry.gauge(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-avgReplicaLagFromLocalInBytes"),
             () -> avgReplicaLag);
+        // All three per-DC gauges (avg/max/min) read from dcToActiveReplicaLagStats, so they
+        // share a single state-filtered population (STANDBY/LEADER local replicas only). Without
+        // this filter, BOOTSTRAP and INACTIVE replicas would inflate the values for hours during
+        // legitimate replica adds/decommissions, making the metrics impractical to alert on.
         Gauge<Long> maxReplicaLag = () -> {
           LongSummaryStatistics statistics =
-              dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
+              dcToActiveReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
           return statistics.getMax() == Long.MIN_VALUE ? -1 : statistics.getMax();
         };
         registry.gauge(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-maxReplicaLagFromLocalInBytes"),
             () -> maxReplicaLag);
         Gauge<Long> minReplicaLag = () -> {
           LongSummaryStatistics statistics =
-              dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
+              dcToActiveReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
           return statistics.getMin() == Long.MAX_VALUE ? -1 : statistics.getMin();
         };
         registry.gauge(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
             () -> minReplicaLag);
-        // State-aware per-DC aggregate: max lag over peers in this DC, considering only partitions
-        // whose local replica is in STANDBY/LEADER. Companion to Partition-{id}-activeMaxLagFromPeersInBytes,
-        // intended for dashboards/alerts where per-partition cardinality is impractical.
-        Gauge<Long> activeMaxReplicaLag = () -> getActiveMaxLagFromDc(remoteReplicaDc);
-        registry.gauge(MetricRegistry.name(ReplicaThread.class,
-                remoteReplicaDc + "-activeMaxReplicaLagFromLocalInBytes"),
-            () -> activeMaxReplicaLag);
         return ConcurrentHashMap.newKeySet();
       }).add(remoteReplicaInfo);
     }
@@ -1082,32 +1078,32 @@ public class ReplicationMetrics {
   }
 
   /**
-   * Get tha average replication lag of remote replicas in given datacenter
+   * Returns the average replication lag (in bytes) of remote replicas in the given datacenter,
+   * counting only partitions whose local replica is in {@link ReplicaState#STANDBY} or
+   * {@link ReplicaState#LEADER}. Bootstrap, decommissioning, offline and other non-active local
+   * replicas are excluded so the returned average reflects the lag of replicas that are
+   * <i>expected</i> to be caught up.
+   * <p>
+   * As a side effect, this method refreshes {@code dcToActiveReplicaLagStats} which is the source
+   * read by the per-DC {@code max/min ReplicaLagFromLocalInBytes} gauges — all three per-DC
+   * gauges therefore share a single state-filtered population.
    * @param dcName the name of dc where remote replicas sit
-   * @return the average replication lag
+   * @return the average replication lag among active local replicas, or -1 when none.
    */
   double getAvgLagFromDc(String dcName) {
     Set<RemoteReplicaInfo> replicaInfos = remoteReplicaInfosByDc.get(dcName);
     if (replicaInfos == null || replicaInfos.isEmpty()) {
       return -1.0;
     }
-    // Single pass produces two summaries: the existing all-replica stats (read by the
-    // {dc}-avgReplicaLagFromLocalInBytes / maxReplicaLagFromLocalInBytes / minReplicaLagFromLocalInBytes
-    // gauges) and a state-filtered variant covering only STANDBY/LEADER local replicas (read by
-    // the {dc}-activeMaxReplicaLagFromLocalInBytes gauge via getActiveMaxLagFromDc).
-    LongSummaryStatistics allStats = new LongSummaryStatistics();
     LongSummaryStatistics activeStats = new LongSummaryStatistics();
     for (RemoteReplicaInfo info : replicaInfos) {
-      long lag = info.getRemoteLagFromLocalInBytes();
-      allStats.accept(lag);
       ReplicaState state = localReplicaStateByPartition.get(info.getReplicaId().getPartitionId());
       if (state == ReplicaState.STANDBY || state == ReplicaState.LEADER) {
-        activeStats.accept(lag);
+        activeStats.accept(info.getRemoteLagFromLocalInBytes());
       }
     }
-    dcToReplicaLagStats.put(dcName, allStats);
     dcToActiveReplicaLagStats.put(dcName, activeStats);
-    return allStats.getAverage();
+    return activeStats.getCount() == 0 ? -1.0 : activeStats.getAverage();
   }
 
   private String generateRemoteReplicaMetricPrefix(RemoteReplicaInfo remoteReplicaInfo) {

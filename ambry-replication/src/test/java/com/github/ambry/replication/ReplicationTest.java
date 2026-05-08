@@ -3152,8 +3152,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     RemoteReplicaInfo p2East = makeMockRemoteReplica(p2, "dc-east", "h2e", localStore2);
     RemoteReplicaInfo p2West = makeMockRemoteReplica(p2, "dc-west", "h2w", localStore2);
 
-    // Register per-partition + per-DC gauges. trackPerDatacenterLag=true so the per-DC aggregates
-    // (avg/max/min/active-max) are wired up.
+    // Register per-DC gauges. trackPerDatacenterLag=true wires up avg/max/min, all of which now
+    // share the state-filtered (STANDBY/LEADER) population via dcToActiveReplicaLagStats.
     metrics.addLagMetricForPartition(p1, true);
     metrics.addLagMetricForPartition(p2, true);
     metrics.addMetricsForRemoteReplicaInfo(p1East, true, false);
@@ -3161,17 +3161,21 @@ public class ReplicationTest extends ReplicationTestHelper {
     metrics.addMetricsForRemoteReplicaInfo(p2East, true, false);
     metrics.addMetricsForRemoteReplicaInfo(p2West, true, false);
 
-    // Verify per-DC active gauge registers alongside the existing avg/max/min per-DC gauges.
-    assertTrue("dc-east active gauge should register",
+    // Verify the existing avg/max/min per-DC gauges register (no separate "active" gauge — the
+    // existing names now carry the state-filtered semantics).
+    assertTrue("dc-east avg gauge should register",
         metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
-            "dc-east-activeMaxReplicaLagFromLocalInBytes")));
-    assertTrue("dc-west active gauge should register",
+            "dc-east-avgReplicaLagFromLocalInBytes")));
+    assertTrue("dc-east max gauge should register",
         metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
-            "dc-west-activeMaxReplicaLagFromLocalInBytes")));
+            "dc-east-maxReplicaLagFromLocalInBytes")));
+    assertTrue("dc-east min gauge should register",
+        metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
+            "dc-east-minReplicaLagFromLocalInBytes")));
 
-    // No state recorded yet → both partitions filtered out → -1.
-    // getAvgLagFromDc is the canonical refresh path for the per-DC stat caches; the active-max
-    // gauge reads from dcToActiveReplicaLagStats, which getAvgLagFromDc populates.
+    // No state recorded yet → no active partitions → -1 from all per-DC accessors.
+    // getAvgLagFromDc is the canonical refresh path for dcToActiveReplicaLagStats; the max/min
+    // gauges read from that cache, so they need a getAvgLagFromDc call to see fresh values.
     metrics.getAvgLagFromDc("dc-east");
     metrics.getAvgLagFromDc("dc-west");
     assertEquals("With no state recorded, dc-east aggregate should be -1", -1L,
@@ -3196,6 +3200,14 @@ public class ReplicationTest extends ReplicationTestHelper {
         metrics.getActiveMaxLagFromDc("dc-east"));
     assertEquals("dc-west aggregate should only see p1's west lag (excludes BOOTSTRAP p2)", 200L,
         metrics.getActiveMaxLagFromDc("dc-west"));
+
+    // The existing per-DC avg gauge now also filters: dc-east avg over active partitions = 100
+    // (just p1=100), not (100 + 300) / 2 = 200. Confirms avg/max share the same population.
+    Object avgGaugeValue = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-avgReplicaLagFromLocalInBytes"))
+        .getValue();
+    assertEquals("dc-east avg gauge should reflect active-only filter (excludes BOOTSTRAP p2)", 100.0,
+        ((Double) avgGaugeValue).doubleValue(), 0.0);
 
     // p2 transitions to LEADER → its larger lag now dominates.
     when(localStore2.getCurrentState()).thenReturn(ReplicaState.LEADER);
