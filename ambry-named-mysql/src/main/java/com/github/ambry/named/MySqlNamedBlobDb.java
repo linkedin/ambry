@@ -42,11 +42,16 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -516,7 +521,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     private final String activeCountMetricName;
     private final String rejectedCountMetricName;
     private final String enqueueWaitTimeMetricName;
+    private final String connectionFailureCountMetricName;
     private final Counter rejectedCount;
+    private final Counter connectionFailureCount;
     private final Histogram enqueueWaitTimeInMs;
     private final int maxPendingTransactions;
 
@@ -540,16 +547,71 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobTransactionRejectedCount." + datacenter);
       this.enqueueWaitTimeMetricName =
           MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobEnqueueWaitTimeInMs." + datacenter);
+      this.connectionFailureCountMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBConnectionFailureCount." + datacenter);
       // remove() before register() guards against duplicate-key errors when a previous instance
       // (e.g. a test) registered the same metric name and was not closed.
       registry.remove(queueSizeMetricName);
       registry.remove(activeCountMetricName);
       registry.remove(rejectedCountMetricName);
       registry.remove(enqueueWaitTimeMetricName);
+      registry.remove(connectionFailureCountMetricName);
       registry.register(queueSizeMetricName, (Gauge<Integer>) () -> executor.getQueue().size());
       registry.register(activeCountMetricName, (Gauge<Integer>) () -> executor.getActiveCount());
       this.rejectedCount = registry.counter(rejectedCountMetricName);
       this.enqueueWaitTimeInMs = registry.histogram(enqueueWaitTimeMetricName);
+      this.connectionFailureCount = registry.counter(connectionFailureCountMetricName);
+    }
+
+    /**
+     * Whether the given throwable represents a JDBC connection failure (vs. any other SQL error).
+     *
+     * <p>Three independent positive signals, all spec-defined as connection-class:
+     * <ol>
+     *   <li>{@link SQLNonTransientConnectionException} — JDBC's non-transient connection-failure
+     *       subclass; MySQL {@code CommunicationsException} extends this.</li>
+     *   <li>{@link SQLTransientConnectionException} — JDBC's transient connection-failure subclass;
+     *       HikariCP wraps pool-acquisition timeouts as this.</li>
+     *   <li>{@link SQLException#getSQLState()} starting with {@code "08"} — ISO/SQL "Connection
+     *       exception" class (08001/08003/08004/08006/08007/08S01).</li>
+     * </ol>
+     *
+     * <p>The walk traverses both {@link Throwable#getCause()} and {@link SQLException#getNextException()}
+     * so wrapped/chained variants (e.g. RuntimeException-wrapped, Hikari-wrapped, batch error chains)
+     * are detected. SQLSTATE "40*" (transaction rollback), "57*" (operator intervention), and other
+     * adjacent classes are intentionally NOT counted — those are not connection failures.
+     */
+    private static boolean isConnectionFailure(Throwable t) {
+      if (t == null) {
+        return false;
+      }
+      Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+      Deque<Throwable> stack = new ArrayDeque<>();
+      stack.push(t);
+      while (!stack.isEmpty()) {
+        Throwable cur = stack.pop();
+        if (!seen.add(cur)) {
+          continue;
+        }
+        if (cur instanceof SQLNonTransientConnectionException || cur instanceof SQLTransientConnectionException) {
+          return true;
+        }
+        if (cur instanceof SQLException) {
+          String state = ((SQLException) cur).getSQLState();
+          if (state != null && state.startsWith("08")) {
+            return true;
+          }
+          SQLException next = ((SQLException) cur).getNextException();
+          if (next != null) {
+            stack.push(next);
+          }
+        }
+        Throwable cause = cur.getCause();
+        if (cause != null) {
+          stack.push(cause);
+        }
+      }
+      return false;
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
@@ -577,6 +639,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             }
             callback.onCompletion(result, null);
           } catch (Exception e) {
+            if (isConnectionFailure(e)) {
+              connectionFailureCount.inc();
+            }
             callback.onCompletion(null, e);
           }
         });
@@ -609,6 +674,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             }
             callback.onCompletion(result, null);
           } catch (Exception e) {
+            if (isConnectionFailure(e)) {
+              connectionFailureCount.inc();
+            }
             callback.onCompletion(null, e);
           }
         });
@@ -652,6 +720,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       registry.remove(activeCountMetricName);
       registry.remove(rejectedCountMetricName);
       registry.remove(enqueueWaitTimeMetricName);
+      registry.remove(connectionFailureCountMetricName);
     }
   }
 

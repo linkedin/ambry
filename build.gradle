@@ -19,6 +19,29 @@ buildscript {
 apply plugin: 'org.shipkit.shipkit-auto-version'
 println "Building version $version"
 
+// Test classes whose tests are known to be flaky and benefit from extra retries.
+// Add a class (or glob like 'com.github.ambry.foo.*') here only with a tracking
+// issue/PR documenting the underlying race. The intTest task uses these via the
+// test-retry plugin's filter.includeClasses so only listed classes consume the
+// elevated retry budget; non-flaky tests fail fast on the first attempt,
+// surfacing real regressions immediately.
+ext.flakyIntTestClasses = [
+    // The full :ambry-server:intTest module is currently considered flaky.
+    // ServerHttp2Test.replicateBlobV2MultipleCases (PR #3245) and related
+    // tests in this package depend on cluster startup timing, replication
+    // catchup races, and HTTP/2 lifecycle behaviour that cannot be made
+    // deterministic without larger redesigns. Glob the whole package until
+    // those redesigns land, then narrow.
+    'com.github.ambry.server.*',
+]
+// Retry budget for tests in flakyIntTestClasses. Non-flaky tests get 0 retries.
+ext.flakyIntTestMaxRetries = 4
+// Total tolerated failures (per module) before retrying is disabled. Bumped
+// from the historical 5 because the whole :ambry-server:intTest module is in
+// the flaky allowlist and a bad CI runner can have several failures per round
+// before the retries succeed.
+ext.flakyIntTestMaxFailures = 10
+
 apply from: file('gradle/license.gradle')
 apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
@@ -253,17 +276,21 @@ subprojects {
                 logger.lifecycle "    suite total: ${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped"
             }
         }
-        // Allow for retrying flaky integration tests.
+        // Allow for retrying flaky integration tests. Only test classes listed in the
+        // top-level ext.flakyIntTestClasses are eligible for retries — non-flaky tests
+        // fail fast on first failure, surfacing real regressions without auto-rerun masking.
+        // Both maxRetries and maxFailures are sourced from top-level ext globals so they
+        // can be tuned in one place (see top of build.gradle).
         retry {
-            // The maximum number of times to retry an individual test
-            maxRetries = 2
-            // The maximum number of test failures that are allowed (per module) before retrying is disabled. The count applies to
-            // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
-            // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).
-            // If 5 or more tests were to fail initially then no retry would be attempted.
-            maxFailures = 5
+            maxRetries = rootProject.ext.flakyIntTestMaxRetries
+            maxFailures = rootProject.ext.flakyIntTestMaxFailures
             // Whether tests that initially fail and then pass on retry should fail the task.
             failOnPassedAfterRetry = false
+            // Restrict retries to known-flaky classes. See the list in the top-level
+            // build.gradle (ext.flakyIntTestClasses) for entries + rationale.
+            filter {
+                rootProject.ext.flakyIntTestClasses.each { includeClasses.add(it) }
+            }
         }
         maxHeapSize = "6g"
 

@@ -17,6 +17,9 @@ package com.github.ambry.router;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.store.StoreKey;
 
+import javax.annotation.Nonnull;
+import java.util.Objects;
+
 
 /**
  * This class contains the request parameters for a background delete operation.
@@ -33,9 +36,9 @@ class BackgroundDeleteRequest {
    *                        the the delete requester.
    * @param quotaChargeCallback {@link QuotaChargeCallback} object for quota compliance checks.
    */
-  BackgroundDeleteRequest(StoreKey storeKey, String serviceIdSuffix, QuotaChargeCallback quotaChargeCallback) {
+  BackgroundDeleteRequest(@Nonnull StoreKey storeKey, String serviceIdSuffix, QuotaChargeCallback quotaChargeCallback) {
     this.serviceId = SERVICE_ID_PREFIX + serviceIdSuffix;
-    this.storeKey = storeKey;
+    this.storeKey = Objects.requireNonNull(storeKey, "storeKey must not be null");
     this.quotaChargeCallback = quotaChargeCallback;
   }
 
