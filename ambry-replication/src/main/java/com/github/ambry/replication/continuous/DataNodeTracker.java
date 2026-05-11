@@ -21,7 +21,10 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 
 
@@ -46,9 +49,17 @@ public class DataNodeTracker {
    * @param startGroupId group id from which we can start and increment and generate unique group id for each group
    * @param time Ambry time
    * @param replicaThrottleDurationMs throttle duration for replicas
+   * @param spreadLaggersAcrossChunks if true, sort by remote lag DESC and round-robin distribute into chunks
+   *                                  instead of sequential slicing, so the top laggers do not co-locate in
+   *                                  one chunk. See
+   *                                  {@link com.github.ambry.config.ReplicationConfig#REPLICATION_SPREAD_LAGGERS_ACROSS_CHUNKS}.
+   * @param lagExtractor function that returns a replica's remote-lag-in-bytes; used as the sort key when
+   *                    {@code spreadLaggersAcrossChunks} is true. Supplied by the caller so the chunking
+   *                    helper does not need access to package-private state on {@link RemoteReplicaInfo}.
    */
   public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int maxActiveGroupSize,
-      int startGroupId, Time time, long replicaThrottleDurationMs) {
+      int startGroupId, Time time, long replicaThrottleDurationMs, boolean spreadLaggersAcrossChunks,
+      ToLongFunction<RemoteReplicaInfo> lagExtractor) {
     this.dataNodeId = dataNodeId;
     this.activeGroupTrackers = new ArrayList<>();
 
@@ -56,8 +67,7 @@ public class DataNodeTracker {
 
     // for this data node break a larger array of remote replicas to smaller multiple arrays of maxActiveGroupSize
     List<List<RemoteReplicaInfo>> remoteReplicaSegregatedList =
-        maxActiveGroupSize > 0 ? Utils.partitionList(remoteReplicas, maxActiveGroupSize)
-            : Collections.singletonList(remoteReplicas);
+        chunkReplicas(remoteReplicas, maxActiveGroupSize, spreadLaggersAcrossChunks, lagExtractor);
 
     // for each of smaller array of remote replicas create active group trackers with consecutive group ids
     for (List<RemoteReplicaInfo> remoteReplicaList : remoteReplicaSegregatedList) {
@@ -146,5 +156,43 @@ public class DataNodeTracker {
   public String toString() {
     return "DataNodeTracker :[" + dataNodeId.toString() + " " + activeGroupTrackers.toString() + " "
         + standByGroupTracker.toString() + "]";
+  }
+
+  /**
+   * Splits {@code remoteReplicas} into chunks of at most {@code maxActiveGroupSize}. When {@code spread}
+   * is false, replicas are sliced sequentially via {@link Utils#partitionList}. When true, replicas are
+   * first sorted by {@code lagExtractor} descending, then round-robin distributed across chunks so that
+   * the top laggers land in different chunks. When {@code maxActiveGroupSize <= 0}, returns a single
+   * chunk containing all replicas.
+   *
+   * Package-private for test access; do not call from outside {@link DataNodeTracker}.
+   */
+  static List<List<RemoteReplicaInfo>> chunkReplicas(List<RemoteReplicaInfo> remoteReplicas, int maxActiveGroupSize,
+      boolean spread, ToLongFunction<RemoteReplicaInfo> lagExtractor) {
+    if (maxActiveGroupSize <= 0) {
+      return Collections.singletonList(remoteReplicas);
+    }
+    if (!spread || remoteReplicas.isEmpty()) {
+      return Utils.partitionList(remoteReplicas, maxActiveGroupSize);
+    }
+    List<RemoteReplicaInfo> sorted = new ArrayList<>(remoteReplicas);
+    // Snapshot lag once per replica before sorting. Re-reading inside the comparator is unsafe:
+    // the underlying field is mutated by other threads and can trip TimSort's contract check.
+    // IdentityHashMap because RemoteReplicaInfo overrides equals() without hashCode().
+    Map<RemoteReplicaInfo, Long> lagSnapshot = new IdentityHashMap<>(sorted.size());
+    for (RemoteReplicaInfo r : sorted) {
+      lagSnapshot.put(r, lagExtractor.applyAsLong(r));
+    }
+    sorted.sort((a, b) -> Long.compare(lagSnapshot.get(b), lagSnapshot.get(a)));
+    int chunkCount = (sorted.size() + maxActiveGroupSize - 1) / maxActiveGroupSize;
+    List<List<RemoteReplicaInfo>> chunks = new ArrayList<>(chunkCount);
+    for (int chunk = 0; chunk < chunkCount; chunk++) {
+      List<RemoteReplicaInfo> bucket = new ArrayList<>(maxActiveGroupSize);
+      for (int j = chunk; j < sorted.size(); j += chunkCount) {
+        bucket.add(sorted.get(j));
+      }
+      chunks.add(bucket);
+    }
+    return chunks;
   }
 }

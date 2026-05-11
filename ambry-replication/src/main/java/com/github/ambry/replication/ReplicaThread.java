@@ -2319,7 +2319,8 @@ public class ReplicaThread implements Runnable {
 
         DataNodeTracker dataNodeTracker =
             new DataNodeTracker(remoteHost, remoteReplicasPerNode, maxReplicaCountPerRequest, currentStartGroupId, time,
-                threadThrottleDurationMs);
+                threadThrottleDurationMs, replicationConfig.replicationSpreadLaggersAcrossChunks,
+                RemoteReplicaInfo::getRemoteLagFromLocalInBytes);
         logger.trace("Thread name: {} for datanode {} create datanode tracker {}", threadName, remoteHost,
             dataNodeTracker);
 
