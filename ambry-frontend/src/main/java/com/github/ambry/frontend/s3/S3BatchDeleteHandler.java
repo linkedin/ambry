@@ -116,6 +116,8 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
           throw new RestServiceException(batchSizeErrorMessage, RestServiceErrorCode.BadRequest);
         }
       } catch (Exception e) {
+        metrics.s3BatchDeleteRequestParseError.inc();
+        logger.warn("Failed to parse S3 batch-delete request body, returning malformed-body error", e);
         S3MessagePayload.Error response = new S3MessagePayload.Error();
         response.setCode(ERR_MALFORMED_REQUEST_BODY_CODE);
         response.setMessage(ERR_MALFORMED_REQUEST_BODY_MESSAGE);

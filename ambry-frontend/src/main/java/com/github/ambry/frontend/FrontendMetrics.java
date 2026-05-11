@@ -265,6 +265,8 @@ public class FrontendMetrics {
   // GetReplicasHandler
   public final Counter invalidBlobIdError;
   public final Counter responseConstructionError;
+  // S3BatchDeleteHandler
+  public final Counter s3BatchDeleteRequestParseError;
   // Other
   // FrontendRestRequestService
   public final Histogram restRequestServiceStartupTimeInMs;
@@ -721,6 +723,9 @@ public class FrontendMetrics {
     invalidBlobIdError = metricRegistry.counter(MetricRegistry.name(GetReplicasHandler.class, "InvalidBlobIdError"));
     responseConstructionError =
         metricRegistry.counter(MetricRegistry.name(GetReplicasHandler.class, "ResponseConstructionError"));
+    // S3BatchDeleteHandler
+    s3BatchDeleteRequestParseError =
+        metricRegistry.counter(MetricRegistry.name(S3BatchDeleteHandler.class, "RequestParseError"));
 
     // Other
     restRequestServiceStartupTimeInMs =
