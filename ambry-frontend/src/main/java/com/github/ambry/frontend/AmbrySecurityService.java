@@ -123,7 +123,14 @@ class AmbrySecurityService implements SecurityService {
                 URLEncoder.encode((String) restRequest.getArgs().get(Headers.BLOB_ID), StandardCharsets.UTF_8.name());
             restRequest.setArg(Headers.BLOB_ID, encodedBlobId);
           } catch (Exception encodingException) {
-            LOGGER.error("Failed to encode blob id signed url: {}", restRequest.getArgs().get(Headers.BLOB_ID), e);
+            LOGGER.error("Failed to encode blob id signed url: {}", restRequest.getArgs().get(Headers.BLOB_ID),
+                encodingException);
+            // Also log the outer verifySignedRequest exception if there was one, so both
+            // are visible at this site. Null-guarded — `e` is null on the verification-
+            // succeeded path (encoding can still fail there for malformed input).
+            if (e != null) {
+              LOGGER.error("verifySignedRequest also reported an exception", e);
+            }
           }
         }
         callback.onCompletion(r, e);
