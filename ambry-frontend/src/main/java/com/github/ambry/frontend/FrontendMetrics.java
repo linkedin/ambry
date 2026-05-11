@@ -175,6 +175,11 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics s3PutHandleMetrics;
   public final AsyncOperationTracker.Metrics s3GetHandleMetrics;
 
+  // Counts every per-object delete failure inside an S3 batch-delete request. Surfaces partial
+  // failures that S3 DeleteObjects returns inside the (HTTP 200) response body, which were
+  // previously invisible to operators without parsing every response payload.
+  public final Counter s3BatchDeleteSubOpFailureCount;
+
   // Rates
   // AmbrySecurityService
   public final Meter securityServicePreProcessRequestRate;
@@ -533,6 +538,8 @@ public class FrontendMetrics {
     s3DeleteHandleMetrics = new AsyncOperationTracker.Metrics(S3DeleteHandler.class, "S3Handle", metricRegistry);
     s3BatchDeleteHandleMetrics =
         new AsyncOperationTracker.Metrics(S3BatchDeleteHandler.class, "S3Handle", metricRegistry);
+    s3BatchDeleteSubOpFailureCount =
+        metricRegistry.counter(MetricRegistry.name(S3BatchDeleteHandler.class, "SubOpFailureCount"));
     s3ListHandleMetrics = new AsyncOperationTracker.Metrics(S3ListHandler.class, "S3Handle", metricRegistry);
     s3PutHandleMetrics = new AsyncOperationTracker.Metrics(S3PutHandler.class, "S3Handle", metricRegistry);
     s3GetHandleMetrics = new AsyncOperationTracker.Metrics(S3GetHandler.class, "S3Handle", metricRegistry);
