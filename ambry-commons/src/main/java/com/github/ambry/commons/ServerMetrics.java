@@ -211,6 +211,18 @@ public class ServerMetrics {
   public final Histogram forceDeleteResponseSendTimeInMs;
   public final Histogram forceDeleteRequestTotalTimeInMs;
 
+  public final Histogram setReplicationPriorityRequestQueueTimeInMs;
+  public final Histogram setReplicationPriorityRequestProcessingTimeInMs;
+  public final Histogram setReplicationPriorityResponseQueueTimeInMs;
+  public final Histogram setReplicationPriorityResponseSendTimeInMs;
+  public final Histogram setReplicationPriorityRequestTotalTimeInMs;
+
+  public final Histogram listReplicationPriorityRequestQueueTimeInMs;
+  public final Histogram listReplicationPriorityRequestProcessingTimeInMs;
+  public final Histogram listReplicationPriorityResponseQueueTimeInMs;
+  public final Histogram listReplicationPriorityResponseSendTimeInMs;
+  public final Histogram listReplicationPriorityRequestTotalTimeInMs;
+
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
@@ -244,6 +256,8 @@ public class ServerMetrics {
   public final Meter healthCheckRequestRate;
   public final Meter blobIndexRequestRate;
   public final Meter forceDeleteRequestRate;
+  public final Meter setReplicationPriorityRequestRate;
+  public final Meter listReplicationPriorityRequestRate;
 
   public final Meter putBlobDroppedRate;
   public final Meter getBlobDroppedRate;
@@ -265,6 +279,8 @@ public class ServerMetrics {
   public final Meter healthCheckDroppedRate;
   public final Meter blobIndexDroppedRate;
   public final Meter forceDeleteDroppedRate;
+  public final Meter setReplicationPriorityDroppedRate;
+  public final Meter listReplicationPriorityDroppedRate;
 
   public final Meter totalRequestDroppedRate;
 
@@ -630,6 +646,28 @@ public class ServerMetrics {
     forceDeleteRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "ForceDeleteRequestTotalTimeInMs"));
 
+    setReplicationPriorityRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "SetReplicationPriorityRequestQueueTimeInMs"));
+    setReplicationPriorityRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "SetReplicationPriorityRequestProcessingTimeInMs"));
+    setReplicationPriorityResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "SetReplicationPriorityResponseQueueTimeInMs"));
+    setReplicationPriorityResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "SetReplicationPriorityResponseSendTimeInMs"));
+    setReplicationPriorityRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "SetReplicationPriorityRequestTotalTimeInMs"));
+
+    listReplicationPriorityRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ListReplicationPriorityRequestQueueTimeInMs"));
+    listReplicationPriorityRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ListReplicationPriorityRequestProcessingTimeInMs"));
+    listReplicationPriorityResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ListReplicationPriorityResponseQueueTimeInMs"));
+    listReplicationPriorityResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ListReplicationPriorityResponseSendTimeInMs"));
+    listReplicationPriorityRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ListReplicationPriorityRequestTotalTimeInMs"));
+
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));
 
@@ -671,6 +709,10 @@ public class ServerMetrics {
     healthCheckRequestRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckRequestRate"));
     blobIndexRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobIndexRequestRate"));
     forceDeleteRequestRate = registry.meter(MetricRegistry.name(requestClass, "ForceDeleteRequestRate"));
+    setReplicationPriorityRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "SetReplicationPriorityRequestRate"));
+    listReplicationPriorityRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "ListReplicationPriorityRequestRate"));
 
     putBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobDroppedRate"));
     getBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobDroppedRate"));
@@ -694,6 +736,10 @@ public class ServerMetrics {
     healthCheckDroppedRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckDroppedRate"));
     blobIndexDroppedRate = registry.meter(MetricRegistry.name(requestClass, "BlobIndexDroppedRate"));
     forceDeleteDroppedRate = registry.meter(MetricRegistry.name(requestClass, "ForceDeleteDroppedRate"));
+    setReplicationPriorityDroppedRate =
+        registry.meter(MetricRegistry.name(requestClass, "SetReplicationPriorityDroppedRate"));
+    listReplicationPriorityDroppedRate =
+        registry.meter(MetricRegistry.name(requestClass, "ListReplicationPriorityDroppedRate"));
 
     totalRequestDroppedRate = registry.meter(MetricRegistry.name(requestClass, "TotalRequestDroppedRate"));
 

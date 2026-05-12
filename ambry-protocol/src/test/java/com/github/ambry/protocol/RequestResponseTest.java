@@ -70,6 +70,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -1486,6 +1487,110 @@ public class RequestResponseTest {
     doReplicationControlAdminRequestTest(origins, true);
     doReplicationControlAdminRequestTest(origins, false);
     doReplicationControlAdminRequestTest(Collections.emptyList(), true);
+  }
+
+  /**
+   * Tests the ser/de of {@link SetReplicationPriorityAdminRequest} across set, clear-list, and
+   * clear-all wire shapes; verifies fields round-trip intact.
+   */
+  @Test
+  public void setReplicationPriorityAdminRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    List<PartitionId> partitions = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    // Set: non-empty partition list, boost > 1, clear=false
+    doSetReplicationPriorityAdminRequestTest(clusterMap, partitions.subList(0, Math.min(3, partitions.size())), 8, false);
+    // Clear targeted: non-empty list, clear=true
+    doSetReplicationPriorityAdminRequestTest(clusterMap, partitions.subList(0, Math.min(2, partitions.size())), 1, true);
+    // Clear-all: empty list, clear=true
+    doSetReplicationPriorityAdminRequestTest(clusterMap, Collections.emptyList(), 1, true);
+  }
+
+  /**
+   * Tests the ser/de of {@link ListReplicationPriorityAdminRequest} — body-less, just the marker.
+   */
+  @Test
+  public void listReplicationPriorityAdminRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    int correlationId = 4321;
+    String clientId = "list-client";
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.ListReplicationPriority, null, correlationId, clientId);
+    ListReplicationPriorityAdminRequest listRequest = new ListReplicationPriorityAdminRequest(adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(listRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.ListReplicationPriority, null);
+    ListReplicationPriorityAdminRequest deserialized =
+        ListReplicationPriorityAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+    Assert.assertNotNull(deserialized);
+    listRequest.release();
+  }
+
+  /**
+   * Tests the ser/de of {@link ListReplicationPriorityAdminResponse} across empty, intra-colo only,
+   * and mixed intra/inter-colo entry lists.
+   */
+  @Test
+  public void listReplicationPriorityAdminResponseTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    List<PartitionId> partitions = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    Assume.assumeTrue("Need at least 3 partitions for this test", partitions.size() >= 3);
+    // Empty entries
+    doListReplicationPriorityAdminResponseTest(clusterMap, Collections.emptyList());
+    // Single entry
+    doListReplicationPriorityAdminResponseTest(clusterMap, Collections.singletonList(
+        new ListReplicationPriorityAdminResponse.PriorityEntry(partitions.get(0), 4, false)));
+    // Mixed intra/inter-colo, multiple entries
+    List<ListReplicationPriorityAdminResponse.PriorityEntry> entries = new ArrayList<>();
+    entries.add(new ListReplicationPriorityAdminResponse.PriorityEntry(partitions.get(0), 8, false));
+    entries.add(new ListReplicationPriorityAdminResponse.PriorityEntry(partitions.get(1), 16, true));
+    entries.add(new ListReplicationPriorityAdminResponse.PriorityEntry(partitions.get(2), 1, false));
+    doListReplicationPriorityAdminResponseTest(clusterMap, entries);
+  }
+
+  private void doSetReplicationPriorityAdminRequestTest(MockClusterMap clusterMap, List<PartitionId> partitions,
+      int boost, boolean clear) throws IOException {
+    int correlationId = 1234;
+    String clientId = "set-priority-client";
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.SetReplicationPriority, null, correlationId, clientId);
+    SetReplicationPriorityAdminRequest setRequest =
+        new SetReplicationPriorityAdminRequest(partitions, boost, clear, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(setRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.SetReplicationPriority, null);
+    SetReplicationPriorityAdminRequest deserialized =
+        SetReplicationPriorityAdminRequest.readFrom(requestStream, clusterMap, deserializedAdminRequest);
+    Assert.assertEquals("clear flag", clear, deserialized.shouldClear());
+    Assert.assertEquals("boost", boost, deserialized.getBoost());
+    Assert.assertEquals("partition count", partitions.size(), deserialized.getPartitionIds().size());
+    for (int i = 0; i < partitions.size(); i++) {
+      Assert.assertEquals("partition[" + i + "]", partitions.get(i), deserialized.getPartitionIds().get(i));
+    }
+    setRequest.release();
+  }
+
+  private void doListReplicationPriorityAdminResponseTest(MockClusterMap clusterMap,
+      List<ListReplicationPriorityAdminResponse.PriorityEntry> entries) throws IOException {
+    int correlationId = 4242;
+    String clientId = "list-priority-client";
+    AdminResponse baseResponse = new AdminResponse(correlationId, clientId, ServerErrorCode.NoError);
+    ListReplicationPriorityAdminResponse response = new ListReplicationPriorityAdminResponse(entries, baseResponse);
+    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
+    ListReplicationPriorityAdminResponse deserialized =
+        ListReplicationPriorityAdminResponse.readFrom(responseStream, clusterMap);
+    Assert.assertEquals("correlationId", correlationId, deserialized.getCorrelationId());
+    Assert.assertEquals("clientId", clientId, deserialized.getClientId());
+    Assert.assertEquals("entry count", entries.size(), deserialized.getEntries().size());
+    for (int i = 0; i < entries.size(); i++) {
+      ListReplicationPriorityAdminResponse.PriorityEntry expected = entries.get(i);
+      ListReplicationPriorityAdminResponse.PriorityEntry actual = deserialized.getEntries().get(i);
+      Assert.assertEquals("entry[" + i + "].partition", expected.getPartitionId(), actual.getPartitionId());
+      Assert.assertEquals("entry[" + i + "].boost", expected.getBoost(), actual.getBoost());
+      Assert.assertEquals("entry[" + i + "].isInterColo", expected.isInterColo(), actual.isInterColo());
+    }
+    response.release();
   }
 
   @Test

@@ -29,6 +29,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.ListReplicationPriorityAdminResponse;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
@@ -176,6 +177,53 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @throws ReplicationException
    */
   public abstract void start() throws ReplicationException;
+
+  /**
+   * Fans out a priority-set call to every {@link ReplicaThread} pool on this node. Each
+   * {@code ReplicaThread} that holds replicas of any listed partition will treat them as priority;
+   * threads without those replicas pass them through but they have no effect there.
+   *
+   * <p>The per-thread auto-prune in {@code fillDataNodeTrackers} removes entries once their
+   * partitions catch up.
+   */
+  public void prioritizePartitions(List<PartitionId> partitions, int boost) {
+    for (List<ReplicaThread> pool : replicaThreadPoolByDc.values()) {
+      for (ReplicaThread replicaThread : pool) {
+        replicaThread.prioritizePartitions(partitions, boost);
+      }
+    }
+  }
+
+  /**
+   * Fans out a priority-clear call to every {@link ReplicaThread} pool. An empty {@code partitions}
+   * list clears all priorities on this host — only reachable when the frontend explicitly sent
+   * {@code clear=true} with no partition list.
+   */
+  public void clearPriorityPartitions(List<PartitionId> partitions) {
+    for (List<ReplicaThread> pool : replicaThreadPoolByDc.values()) {
+      for (ReplicaThread replicaThread : pool) {
+        replicaThread.clearPriorityPartitions(partitions);
+      }
+    }
+  }
+
+  /**
+   * Snapshot priority entries across every {@link ReplicaThread} on this node. A partition that is
+   * prioritized on multiple threads (typical, since priorities are mirrored across pools) appears
+   * once per thread, each entry tagged with its {@code isInterColo} flag.
+   */
+  public List<ListReplicationPriorityAdminResponse.PriorityEntry> listAllPriorityPartitions() {
+    List<ListReplicationPriorityAdminResponse.PriorityEntry> entries = new ArrayList<>();
+    for (List<ReplicaThread> pool : replicaThreadPoolByDc.values()) {
+      for (ReplicaThread thread : pool) {
+        boolean isInterColo = thread.isReplicatingFromRemoteColo();
+        for (Map.Entry<PartitionId, Integer> e : thread.listPriorityPartitions().entrySet()) {
+          entries.add(new ListReplicationPriorityAdminResponse.PriorityEntry(e.getKey(), e.getValue(), isInterColo));
+        }
+      }
+    }
+    return entries;
+  }
 
   /**
    * Enable/Disable replication for given partitions if all origins are involved,

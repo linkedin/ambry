@@ -65,6 +65,7 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.ListReplicationPriorityAdminResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.PutRequest;
@@ -80,6 +81,7 @@ import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
+import com.github.ambry.protocol.SetReplicationPriorityAdminRequest;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.replication.BackupCheckerThread;
@@ -442,6 +444,113 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     sendAndVerifyReplicationControlRequest(Collections.emptyList(), false,
         clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0), ServerErrorCode.UnknownError);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
+  }
+
+  /**
+   * Boundary validation: {@link AdminRequestOrResponseType#SetReplicationPriority} with
+   * {@code clear=false} and {@code boost < 1} must be rejected with
+   * {@link ServerErrorCode#BadRequest} before reaching the {@code ReplicationEngine}.
+   */
+  @Test
+  public void setReplicationPriorityRejectsBoostBelowOne() throws InterruptedException, IOException {
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.SetReplicationPriority, null, correlationId, clientId);
+    SetReplicationPriorityAdminRequest setRequest =
+        new SetReplicationPriorityAdminRequest(Collections.singletonList(id), /*boost*/ 0, /*clear*/ false, adminRequest);
+    Response response = sendRequestGetResponse(setRequest, ServerErrorCode.BadRequest);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+  }
+
+  /**
+   * Boundary validation: when {@code clear=true}, the {@code boost} field is ignored, so
+   * {@code boost=0} should NOT trigger the BadRequest path. The request reaches the engine and
+   * succeeds (no priorities to clear in the mock setup).
+   */
+  @Test
+  public void setReplicationPriorityClearIgnoresBoost() throws InterruptedException, IOException {
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.SetReplicationPriority, null, correlationId, clientId);
+    SetReplicationPriorityAdminRequest clearRequest =
+        new SetReplicationPriorityAdminRequest(Collections.singletonList(id), /*boost*/ 0, /*clear*/ true, adminRequest);
+    Response response = sendRequestGetResponse(clearRequest, ServerErrorCode.NoError);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+  }
+
+  /**
+   * Bulk set + engine aggregation: {@link ReplicationEngine#prioritizePartitions(List, int)}
+   * persists every listed partition on every {@link ReplicaThread}, and
+   * {@link ReplicationEngine#listAllPriorityPartitions()} walks every thread and surfaces them.
+   * Also pins the per-partition entry cardinality and the {@code isInterColo} tagging path.
+   */
+  @Test
+  public void prioritizePartitionsBulkPersistsAndListAggregates() {
+    List<? extends PartitionId> writable = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+    assertTrue("Need >= 2 partitions for this test", writable.size() >= 2);
+    PartitionId p1 = writable.get(0);
+    PartitionId p2 = writable.get(1);
+    int boost = 4;
+    // Probe each partition's fan-out separately — placement could be asymmetric in principle.
+    int expectedP1 = probePartitionFanOut(p1, boost);
+    int expectedP2 = probePartitionFanOut(p2, boost);
+    assertTrue("p1 probe should produce at least one entry", expectedP1 >= 1);
+    assertTrue("p2 probe should produce at least one entry", expectedP2 >= 1);
+    try {
+      replicationManager.prioritizePartitions(Arrays.asList(p1, p2), boost);
+      List<ListReplicationPriorityAdminResponse.PriorityEntry> entries =
+          replicationManager.listAllPriorityPartitions();
+      // Bulk set on both partitions should produce the sum of each probe's count (priorities
+      // mirror across every thread that has the partition's replicas, so a regression that
+      // silently dropped one thread's entries would show up here).
+      assertEquals("entry cardinality should be sum of per-partition probes", expectedP1 + expectedP2, entries.size());
+      long p1Count = entries.stream().filter(e -> e.getPartitionId().equals(p1)).count();
+      long p2Count = entries.stream().filter(e -> e.getPartitionId().equals(p2)).count();
+      assertEquals("p1 entry count", expectedP1, p1Count);
+      assertEquals("p2 entry count", expectedP2, p2Count);
+      for (ListReplicationPriorityAdminResponse.PriorityEntry entry : entries) {
+        assertEquals("boost mismatch for " + entry, boost, entry.getBoost());
+      }
+      // Sanity: both isInterColo branches should be exercised because the engine mirrors priorities
+      // across intra-colo AND inter-colo thread pools.
+      boolean sawIntra = entries.stream().anyMatch(e -> !e.isInterColo());
+      boolean sawInter = entries.stream().anyMatch(ListReplicationPriorityAdminResponse.PriorityEntry::isInterColo);
+      assertTrue("expected at least one intra-colo entry", sawIntra);
+      assertTrue("expected at least one inter-colo entry", sawInter);
+    } finally {
+      replicationManager.clearPriorityPartitions(Collections.emptyList());
+    }
+    assertTrue("List should be empty after clear-all", replicationManager.listAllPriorityPartitions().isEmpty());
+  }
+
+  /**
+   * Empty partition list is a no-op: no entries get written and the LIST output stays empty.
+   */
+  @Test
+  public void prioritizePartitionsEmptyListIsNoOp() {
+    replicationManager.prioritizePartitions(Collections.emptyList(), 4);
+    assertTrue("Empty bulk set should not create entries",
+        replicationManager.listAllPriorityPartitions().isEmpty());
+  }
+
+  /**
+   * Set priority on a single partition, observe the resulting entry count (= number of threads
+   * holding the partition), then clear. Used to derive the expected fan-out without depending on
+   * cluster-map placement details.
+   */
+  private int probePartitionFanOut(PartitionId partition, int boost) {
+    try {
+      replicationManager.prioritizePartitions(Collections.singletonList(partition), boost);
+      return replicationManager.listAllPriorityPartitions().size();
+    } finally {
+      replicationManager.clearPriorityPartitions(Collections.emptyList());
+    }
   }
 
   /**
