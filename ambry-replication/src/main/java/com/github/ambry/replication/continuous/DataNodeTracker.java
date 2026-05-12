@@ -14,6 +14,7 @@
 package com.github.ambry.replication.continuous;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.utils.Time;
@@ -45,29 +46,33 @@ public class DataNodeTracker {
    * All group trackers have consecutive group id.
    * @param dataNodeId remote host for which to create datanode tracker
    * @param remoteReplicas remote replicas for this data node
-   * @param maxActiveGroupSize maximum count of replicas in active groups
    * @param startGroupId group id from which we can start and increment and generate unique group id for each group
    * @param time Ambry time
-   * @param replicaThrottleDurationMs throttle duration for replicas
-   * @param spreadLaggersAcrossChunks if true, sort by remote lag DESC and round-robin distribute into chunks
-   *                                  instead of sequential slicing, so the top laggers do not co-locate in
-   *                                  one chunk. See
-   *                                  {@link com.github.ambry.config.ReplicationConfig#REPLICATION_SPREAD_LAGGERS_ACROSS_CHUNKS}.
+   * @param replicaThrottleDurationMs throttle duration for replicas. Lane-specific
+   *                                  (inter vs intra DC); resolved once by the owning {@link ReplicaThread}
+   *                                  and passed in as a primitive so lane logic doesn't leak into this class.
+   * @param replicationConfig replication config. Reads
+   *                          {@link ReplicationConfig#replicationMaxPartitionCountPerRequest} for the
+   *                          per-chunk replica cap and
+   *                          {@link ReplicationConfig#replicationSpreadLaggersAcrossChunks} for whether
+   *                          the chunking pass sorts and round-robins instead of slicing sequentially.
    * @param lagExtractor function that returns a replica's remote-lag-in-bytes; used as the sort key when
-   *                    {@code spreadLaggersAcrossChunks} is true. Supplied by the caller so the chunking
-   *                    helper does not need access to package-private state on {@link RemoteReplicaInfo}.
+   *                    {@link ReplicationConfig#replicationSpreadLaggersAcrossChunks} is true. Supplied by the
+   *                    caller so the chunking helper does not need access to package-private state on
+   *                    {@link RemoteReplicaInfo}.
    */
-  public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int maxActiveGroupSize,
-      int startGroupId, Time time, long replicaThrottleDurationMs, boolean spreadLaggersAcrossChunks,
+  public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int startGroupId, Time time,
+      long replicaThrottleDurationMs, ReplicationConfig replicationConfig,
       ToLongFunction<RemoteReplicaInfo> lagExtractor) {
     this.dataNodeId = dataNodeId;
     this.activeGroupTrackers = new ArrayList<>();
 
     int currentGroupId = startGroupId;
 
-    // for this data node break a larger array of remote replicas to smaller multiple arrays of maxActiveGroupSize
+    // for this data node break a larger array of remote replicas to smaller multiple arrays
     List<List<RemoteReplicaInfo>> remoteReplicaSegregatedList =
-        chunkReplicas(remoteReplicas, maxActiveGroupSize, spreadLaggersAcrossChunks, lagExtractor);
+        chunkReplicas(remoteReplicas, replicationConfig.replicationMaxPartitionCountPerRequest,
+            replicationConfig.replicationSpreadLaggersAcrossChunks, lagExtractor);
 
     // for each of smaller array of remote replicas create active group trackers with consecutive group ids
     for (List<RemoteReplicaInfo> remoteReplicaList : remoteReplicaSegregatedList) {
