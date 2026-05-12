@@ -183,6 +183,48 @@ public class MySqlNamedBlobDbListOperationIntegrationTest extends MySqlNamedBlob
   }
 
   /**
+   * Verifies the deleted_ts placement invariant shared by every LIST SQL option:
+   * when the latest version of a blob is expired (or otherwise has a deleted_ts in the past),
+   * LIST must hide the blob entirely — it must NOT surface an older, non-expired version.
+   *
+   * This guards against the optimization footgun where a "faster" rewrite of the windowed/grouped
+   * MAX(version) query pushes the deleted_ts predicate into the inner scan. That placement makes
+   * the per-blob max_version be computed over only the non-expired rows, so an older version
+   * would resurface for a blob whose latest version is expired. An empirical run of such a form
+   * against a production prefix surfaced 4 stale rows that this contract forbids.
+   *
+   * Parametrized over options 2, 3, and 4 via {@link #data()}.
+   */
+  @Test
+  public void testListHidesBlobWhenLatestVersionIsExpired() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    final String blobName = "testListHidesBlobWhenLatestVersionIsExpired";
+
+    // v1 (older version): expires far in the future — by itself, would be surfaced by LIST.
+    NamedBlobRecord v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+
+    // Advance the mock clock so v2's generated version is strictly greater than v1's,
+    // making v2 the latest version per the SQL's MAX(version) per blob_name.
+    time.sleep(100);
+
+    // v2 (latest version): already expired at LIST time.
+    NamedBlobRecord v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() - TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v2, NamedBlobState.READY, true).get();
+
+    Page<NamedBlobRecord> page =
+        namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
+    assertEquals("Latest version expired; blob must be hidden entirely (no older-version leak). Got "
+        + page.getEntries(), 0, page.getEntries().size());
+  }
+
+  /**
    * Test case for list named blobs with prefix.
    * @throws Exception
    */
