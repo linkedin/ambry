@@ -29,6 +29,7 @@ public class ReplicationConfig {
   public static final String REPLICATION_MODEL_ACROSS_DATACENTERS = "replication.model.across.datacenters";
   public static final String REPLICATION_ENABLE_CONTINUOUS_REPLICATION = "replication.enable.continuous.replication";
   public static final String REPLICATION_GROUP_ITERATION_LIMIT = "replication.group.iteration.limit";
+  public static final String REPLICATION_SPREAD_LAGGERS_ACROSS_CHUNKS = "replication.spread.laggers.across.chunks";
   public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
       "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
 
@@ -69,6 +70,16 @@ public class ReplicationConfig {
   @Config(REPLICATION_GROUP_ITERATION_LIMIT)
   @Default("1")
   public final int replicationGroupIterationLimit;
+
+  /**
+   * Continuous replication only — no-op when {@code replication.enable.continuous.replication=false}.
+   * When true, replicas within each per-remote-DataNode chunking pass are sorted by remote lag in bytes
+   * (descending), then round-robin distributed into chunks of at most
+   * {@code replicationMaxPartitionCountPerRequest}. When false, replicas are sliced sequentially.
+   */
+  @Config(REPLICATION_SPREAD_LAGGERS_ACROSS_CHUNKS)
+  @Default("false")
+  public final boolean replicationSpreadLaggersAcrossChunks;
 
   /**
    * The number of replica threads on each server that runs the replication protocol for intra dc replication
@@ -407,6 +418,8 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(REPLICATION_ENABLE_CONTINUOUS_REPLICATION, false);
     replicationGroupIterationLimit =
         verifiableProperties.getIntInRange(REPLICATION_GROUP_ITERATION_LIMIT, 1, 1, 10000000);
+    replicationSpreadLaggersAcrossChunks =
+        verifiableProperties.getBoolean(REPLICATION_SPREAD_LAGGERS_ACROSS_CHUNKS, false);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =
