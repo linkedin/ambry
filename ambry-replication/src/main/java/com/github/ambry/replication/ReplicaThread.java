@@ -140,11 +140,10 @@ public class ReplicaThread implements Runnable {
   /**
    * Per-thread map of partitions whose replicas are currently boosted in the per-cycle fetch-budget
    * distribution. Mutated by admin handler threads (via {@link #prioritizePartitions} /
-   * {@link #clearPriorityPartitions}) and read by the replication thread once per cycle in
-   * {@link RemoteReplicaGroupPoller#fillDataNodeTrackers()} (which snapshots before use).
+   * {@link #unsetPriorityPartitions}) and read by the replication thread in
+   * {@link RemoteReplicaGroupPoller#fillDataNodeTrackers()}.
    *
    * Concurrent because admin threads can mutate while the replication thread is iterating.
-   * Snapshot-then-use means the replication thread never observes a partial mutation.
    *
    * The map is empty by default — its absence is a no-op for chunking behavior.
    */
@@ -308,7 +307,7 @@ public class ReplicaThread implements Runnable {
    * budget after redistribution. Repeated calls overwrite previous boosts; the per-thread map is
    * bounded by partition count.
    *
-   * <p>Callers MUST validate that the chosen boost will not exceed the HTTP/2 max-content-length
+   * <p>Callers MUST validate that the chosen boost will not exceed the wire-layer max-content-length
    * cap given the current fetch-size baseline and max blob size. The check lives in the admin
    * handler so this method does not need {@code RouterConfig} / {@code NetworkConfig} dependencies.
    *
@@ -329,21 +328,21 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Clear replication priority on this thread. When {@code partitions} is empty, removes ALL priority
-   * entries on this thread (per-host clear-all). When non-empty, removes only the listed partitions.
-   * Frontend-layer guards ensure the "empty list" case is only reachable when the operator
-   * explicitly sent {@code clear=true} with no partition list.
+   * Unset replication priority on this thread. When {@code partitions} is empty, removes ALL priority
+   * entries on this thread (per-host wipe-all). When non-empty, removes only the listed partitions.
+   * Admin-handler guards ensure the empty-list case is only reachable when the operator explicitly
+   * sent {@code unsetAll=true} on the wire — never from an unset request with an empty partition list.
    *
-   * @param partitions partitions to clear; empty list ⇒ clear all
+   * @param partitions partitions to unset; empty list ⇒ wipe all on this thread
    */
-  public void clearPriorityPartitions(List<PartitionId> partitions) {
+  public void unsetPriorityPartitions(List<PartitionId> partitions) {
     if (partitions.isEmpty()) {
-      int cleared = priorityPartitions.size();
+      int unsetCount = priorityPartitions.size();
       priorityPartitions.clear();
-      logger.info("Cleared all {} replication priorities on thread {}", cleared, getName());
+      logger.info("Unset all {} replication priorities on thread {}", unsetCount, getName());
     } else {
       partitions.forEach(priorityPartitions::remove);
-      logger.info("Cleared replication priorities for {} partitions on thread {}", partitions.size(), getName());
+      logger.info("Unset replication priorities for {} partitions on thread {}", partitions.size(), getName());
     }
     terminateCycleAndWake();
   }
@@ -1339,17 +1338,17 @@ public class ReplicaThread implements Runnable {
     if (allLocalStoreInBootstrap && !replicatingFromRemoteColo) {
       baseline = replicationConfig.replicationFetchSizeInBytesForBootstrapIntraColo;
       logger.trace(
-          "All local stores are at bootstrap mode, and this is intro colo replication, set the fetch size baseline to {}",
+          "All local stores are at bootstrap mode, and this is intra colo replication, set the fetch size baseline to {}",
           baseline);
     } else if (baseFetchSize > 0) {
       baseline = baseFetchSize;
     } else {
       baseline = replicationConfig.replicationFetchSizeInBytes;
     }
-    long fetchSize = (long) weight * baseline;
+    long perReplicaFetchSize = (long) weight * baseline;
     return new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
-        replicaMetadataRequestInfoList, fetchSize, replicationConfig.replicaMetadataRequestVersion);
+        replicaMetadataRequestInfoList, perReplicaFetchSize, replicationConfig.replicaMetadataRequestVersion);
   }
 
   /**

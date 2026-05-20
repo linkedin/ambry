@@ -15,6 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.replication.PriorityEntry;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -34,8 +35,11 @@ import java.util.List;
  */
 public class ListReplicationPriorityAdminResponse extends AdminResponse {
   private static final short VERSION_V1 = 1;
+  // Wire-level sanity bound; the operator-facing cap is enforced at the handler.
+  private static final int MAX_ENTRIES_ON_WIRE = 10000;
 
   private final List<PriorityEntry> entries;
+  private final byte[][] partitionIdBytes;
   private final long sizeInBytes;
 
   public static ListReplicationPriorityAdminResponse readFrom(DataInputStream stream, ClusterMap clusterMap)
@@ -46,6 +50,9 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
       throw new IllegalStateException("Unrecognized version for ListReplicationPriorityAdminResponse: " + versionId);
     }
     int numEntries = stream.readInt();
+    if (numEntries < 0 || numEntries > MAX_ENTRIES_ON_WIRE) {
+      throw new IOException("ListReplicationPriorityAdminResponse numEntries out of range: " + numEntries);
+    }
     List<PriorityEntry> entries = new ArrayList<>(numEntries);
     for (int i = 0; i < numEntries; i++) {
       PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
@@ -59,6 +66,10 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
   public ListReplicationPriorityAdminResponse(List<PriorityEntry> entries, AdminResponse adminResponse) {
     super(adminResponse.getCorrelationId(), adminResponse.getClientId(), adminResponse.getError());
     this.entries = Collections.unmodifiableList(new ArrayList<>(entries));
+    this.partitionIdBytes = new byte[this.entries.size()][];
+    for (int i = 0; i < this.entries.size(); i++) {
+      this.partitionIdBytes[i] = this.entries.get(i).getPartitionId().getBytes();
+    }
     this.sizeInBytes = computeSizeInBytes();
   }
 
@@ -82,8 +93,9 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
     super.prepareBuffer();
     bufferToSend.writeShort(VERSION_V1);
     bufferToSend.writeInt(entries.size());
-    for (PriorityEntry entry : entries) {
-      bufferToSend.writeBytes(entry.getPartitionId().getBytes());
+    for (int i = 0; i < entries.size(); i++) {
+      PriorityEntry entry = entries.get(i);
+      bufferToSend.writeBytes(partitionIdBytes[i]);
       bufferToSend.writeInt(entry.getBoost());
       bufferToSend.writeByte(entry.isInterColo() ? (byte) 1 : (byte) 0);
     }
@@ -92,49 +104,10 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
   private long computeSizeInBytes() {
     // parent + version + num-entries
     long size = super.sizeInBytes() + Short.BYTES + Integer.BYTES;
-    for (PriorityEntry entry : entries) {
-      size += entry.getPartitionId().getBytes().length;  // partition id
-      size += Integer.BYTES;                              // boost
-      size += Byte.BYTES;                                 // isInterColo flag
+    for (int i = 0; i < entries.size(); i++) {
+      // partition id + boost + isInterColo flag
+      size += partitionIdBytes[i].length + Integer.BYTES + Byte.BYTES;
     }
     return size;
-  }
-
-  /**
-   * A single (partition, boost, isInterColo) entry in the priority snapshot.
-   *
-   * <p>{@code boost} is the fetchSize weight currently applied to this partition: each cycle the
-   * thread divides its total fetch budget in proportion to per-replica weights, so a partition
-   * with {@code boost=N} gets roughly {@code N}× the per-cycle bytes of a normal replica
-   * (implicit weight {@code 1}). {@code isInterColo=true} means the entry came from a
-   * cross-datacenter ReplicaThread pool; {@code false} means the intra-datacenter pool.
-   */
-  public static class PriorityEntry {
-    private final PartitionId partitionId;
-    private final int boost;
-    private final boolean isInterColo;
-
-    public PriorityEntry(PartitionId partitionId, int boost, boolean isInterColo) {
-      this.partitionId = partitionId;
-      this.boost = boost;
-      this.isInterColo = isInterColo;
-    }
-
-    public PartitionId getPartitionId() {
-      return partitionId;
-    }
-
-    public int getBoost() {
-      return boost;
-    }
-
-    public boolean isInterColo() {
-      return isInterColo;
-    }
-
-    @Override
-    public String toString() {
-      return "PriorityEntry[" + partitionId + ", boost=" + boost + ", isInterColo=" + isInterColo + "]";
-    }
   }
 }

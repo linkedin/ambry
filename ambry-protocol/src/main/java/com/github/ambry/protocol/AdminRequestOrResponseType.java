@@ -21,5 +21,5 @@ package com.github.ambry.protocol;
  */
 public enum AdminRequestOrResponseType {
   TriggerCompaction, RequestControl, ReplicationControl, CatchupStatus, BlobStoreControl, HealthCheck, BlobIndex, ForceDelete,
-  SetReplicationPriority, ListReplicationPriority
+  UpdateReplicationPriority, ListReplicationPriority
 }

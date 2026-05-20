@@ -2524,15 +2524,15 @@ public class AmbryRequests implements RequestAPI {
             metrics.totalRequestDroppedRate.mark();
           }
           break;
-        case SetReplicationPriority:
-          metrics.setReplicationPriorityRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.setReplicationPriorityRequestRate.mark();
-          metrics.setReplicationPriorityRequestProcessingTimeInMs.update(requestProcessingTime);
-          responseQueueTimeHistogram = metrics.setReplicationPriorityResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.setReplicationPriorityResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.setReplicationPriorityRequestTotalTimeInMs;
+        case UpdateReplicationPriority:
+          metrics.updateReplicationPriorityRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.updateReplicationPriorityRequestRate.mark();
+          metrics.updateReplicationPriorityRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.updateReplicationPriorityResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.updateReplicationPriorityResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.updateReplicationPriorityRequestTotalTimeInMs;
           if (isRequestDropped) {
-            metrics.setReplicationPriorityDroppedRate.mark();
+            metrics.updateReplicationPriorityDroppedRate.mark();
             metrics.totalRequestDroppedRate.mark();
           }
           break;

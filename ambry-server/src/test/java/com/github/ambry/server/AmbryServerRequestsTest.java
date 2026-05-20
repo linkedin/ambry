@@ -65,7 +65,6 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.ListReplicationPriorityAdminResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.PutRequest;
@@ -81,11 +80,12 @@ import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
-import com.github.ambry.protocol.SetReplicationPriorityAdminRequest;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.protocol.UpdateReplicationPriorityAdminRequest;
 import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.PriorityEntry;
 import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockHost;
@@ -447,39 +447,61 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   }
 
   /**
-   * Boundary validation: {@link AdminRequestOrResponseType#SetReplicationPriority} with
-   * {@code clear=false} and {@code boost < 1} must be rejected with
-   * {@link ServerErrorCode#BadRequest} before reaching the {@code ReplicationEngine}.
+   * Boundary validation: {@link AdminRequestOrResponseType#UpdateReplicationPriority} on the SET path
+   * with {@code boost < 1} must be rejected with {@link ServerErrorCode#BadRequest} before
+   * reaching the {@code ReplicationEngine}.
    */
   @Test
-  public void setReplicationPriorityRejectsBoostBelowOne() throws InterruptedException, IOException {
+  public void updateReplicationPriorityRejectsBoostBelowOne() throws InterruptedException, IOException {
     PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
     AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.SetReplicationPriority, null, correlationId, clientId);
-    SetReplicationPriorityAdminRequest setRequest =
-        new SetReplicationPriorityAdminRequest(Collections.singletonList(id), /*boost*/ 0, /*clear*/ false, adminRequest);
-    Response response = sendRequestGetResponse(setRequest, ServerErrorCode.BadRequest);
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest updateRequest =
+        new UpdateReplicationPriorityAdminRequest(Collections.singletonList(id), /*boost*/ 0,
+            UpdateReplicationPriorityAdminRequest.Action.SET, adminRequest);
+    Response response = sendRequestGetResponse(updateRequest, ServerErrorCode.BadRequest);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     response.release();
   }
 
   /**
-   * Boundary validation: when {@code clear=true}, the {@code boost} field is ignored, so
-   * {@code boost=0} should NOT trigger the BadRequest path. The request reaches the engine and
-   * succeeds (no priorities to clear in the mock setup).
+   * Boundary validation: reject Set requests whose boost exceeds the HTTP/2 admission cap.
+   * Mirrors the below-one test — a typed BadRequest instead of letting the request reach
+   * ReplicaThread.
    */
   @Test
-  public void setReplicationPriorityClearIgnoresBoost() throws InterruptedException, IOException {
+  public void updateReplicationPriorityRejectsBoostAboveCap() throws InterruptedException, IOException {
     PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
     AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.SetReplicationPriority, null, correlationId, clientId);
-    SetReplicationPriorityAdminRequest clearRequest =
-        new SetReplicationPriorityAdminRequest(Collections.singletonList(id), /*boost*/ 0, /*clear*/ true, adminRequest);
-    Response response = sendRequestGetResponse(clearRequest, ServerErrorCode.NoError);
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest updateRequest =
+        new UpdateReplicationPriorityAdminRequest(Collections.singletonList(id), Integer.MAX_VALUE,
+            UpdateReplicationPriorityAdminRequest.Action.SET, adminRequest);
+    Response response = sendRequestGetResponse(updateRequest, ServerErrorCode.BadRequest);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+  }
+
+  /**
+   * Boundary validation: on the UNSET path, the {@code boost} field is ignored, so {@code boost=0}
+   * should NOT trigger the BadRequest path. The request reaches the engine and succeeds (no
+   * priorities to unset in the mock setup; unset of an unknown-to-engine partition is a no-op).
+   */
+  @Test
+  public void updateReplicationPriorityUnsetIgnoresBoost() throws InterruptedException, IOException {
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest unsetRequest =
+        new UpdateReplicationPriorityAdminRequest(Collections.singletonList(id), /*boost*/ 0,
+            UpdateReplicationPriorityAdminRequest.Action.UNSET, adminRequest);
+    Response response = sendRequestGetResponse(unsetRequest, ServerErrorCode.NoError);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     response.release();
   }
@@ -504,7 +526,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     assertTrue("p2 probe should produce at least one entry", expectedP2 >= 1);
     try {
       replicationManager.prioritizePartitions(Arrays.asList(p1, p2), boost);
-      List<ListReplicationPriorityAdminResponse.PriorityEntry> entries =
+      List<PriorityEntry> entries =
           replicationManager.listAllPriorityPartitions();
       // Bulk set on both partitions should produce the sum of each probe's count (priorities
       // mirror across every thread that has the partition's replicas, so a regression that
@@ -514,17 +536,17 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
       long p2Count = entries.stream().filter(e -> e.getPartitionId().equals(p2)).count();
       assertEquals("p1 entry count", expectedP1, p1Count);
       assertEquals("p2 entry count", expectedP2, p2Count);
-      for (ListReplicationPriorityAdminResponse.PriorityEntry entry : entries) {
+      for (PriorityEntry entry : entries) {
         assertEquals("boost mismatch for " + entry, boost, entry.getBoost());
       }
       // Sanity: both isInterColo branches should be exercised because the engine mirrors priorities
       // across intra-colo AND inter-colo thread pools.
       boolean sawIntra = entries.stream().anyMatch(e -> !e.isInterColo());
-      boolean sawInter = entries.stream().anyMatch(ListReplicationPriorityAdminResponse.PriorityEntry::isInterColo);
+      boolean sawInter = entries.stream().anyMatch(PriorityEntry::isInterColo);
       assertTrue("expected at least one intra-colo entry", sawIntra);
       assertTrue("expected at least one inter-colo entry", sawInter);
     } finally {
-      replicationManager.clearPriorityPartitions(Collections.emptyList());
+      replicationManager.unsetPriorityPartitions(Collections.emptyList());
     }
     assertTrue("List should be empty after clear-all", replicationManager.listAllPriorityPartitions().isEmpty());
   }
@@ -540,6 +562,199 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   }
 
   /**
+   * {@link ReplicationEngine#listAllPriorityPartitions()} must return entries in a deterministic
+   * order so operators diffing successive list outputs don't see false-positive reorderings driven
+   * by HashMap / pool-iteration order. Order is (partitionPathString asc, isInterColo asc).
+   */
+  @Test
+  public void listAllPriorityPartitionsResultsAreOrderedDeterministically() {
+    List<? extends PartitionId> writable = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+    assertTrue("Need >= 3 partitions for this test", writable.size() >= 3);
+    // Set in arbitrary order (reverse of natural sort) to make sure the ordering comes from the
+    // sort step, not insertion order.
+    PartitionId p0 = writable.get(0);
+    PartitionId p1 = writable.get(1);
+    PartitionId p2 = writable.get(2);
+    try {
+      replicationManager.prioritizePartitions(Collections.singletonList(p2), 7);
+      replicationManager.prioritizePartitions(Collections.singletonList(p0), 3);
+      replicationManager.prioritizePartitions(Collections.singletonList(p1), 5);
+      // Compare by (path, isInterColo, boost) triples — PriorityEntry doesn't override equals().
+      List<String> first = serializeKeys(replicationManager.listAllPriorityPartitions());
+      List<String> second = serializeKeys(replicationManager.listAllPriorityPartitions());
+      // Round-trip property: two consecutive list calls produce equal sequences.
+      assertEquals("consecutive list calls must produce equal sequences", first, second);
+      // Sort property: entries are sorted by partition path string (then isInterColo).
+      List<String> expectedSorted = new ArrayList<>(first);
+      Collections.sort(expectedSorted);
+      assertEquals("list output must be sorted by (partition path, isInterColo)", expectedSorted, first);
+    } finally {
+      replicationManager.unsetPriorityPartitions(Collections.emptyList());
+    }
+  }
+
+  private static List<String> serializeKeys(List<PriorityEntry> entries) {
+    List<String> out = new ArrayList<>(entries.size());
+    for (PriorityEntry e : entries) {
+      // Path first, then isInterColo flag, then boost — keyed in the same precedence order the
+      // engine sorts on so a naive String.sort() produces the same order as the engine.
+      out.add(e.getPartitionId().toPathString() + "|" + e.isInterColo() + "|" + e.getBoost());
+    }
+    return out;
+  }
+
+  /**
+   * Boundary validation building block: {@link ReplicationEngine#hostsPartition} must
+   * report true for a partition the cluster map says belongs here, and false for a fabricated
+   * partition for which no PartitionInfo is registered. The admin handler uses this to reject
+   * {@link AdminRequestOrResponseType#UpdateReplicationPriority} requests for partitions not on this
+   * server (operator-typo guard).
+   */
+  @Test
+  public void updateReplicationPriorityRejectsUnknownPartition() {
+    PartitionId known = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    PartitionId unknown = new MockPartitionId(Long.MAX_VALUE, DEFAULT_PARTITION_CLASS);
+    assertTrue("Known partition should be registered with a PartitionInfo",
+        replicationManager.hostsPartition(known));
+    assertFalse("Fabricated partition must NOT be registered",
+        replicationManager.hostsPartition(unknown));
+    // No priority entries should have been created merely by checking presence.
+    assertTrue("hostsPartition must not mutate state",
+        replicationManager.listAllPriorityPartitions().isEmpty());
+  }
+
+  /**
+   * Unset path is unchanged: unsetting a partition that no {@link ReplicaThread} hosts is a no-op
+   * at the engine level — no exception, no state changes. Pins the invariant that the admin
+   * handler validates partition existence ONLY on the set path: a future refactor that starts
+   * rejecting unsets with unknown partitions would break the operator mental model (unsetting
+   * nonexistent state is harmless).
+   */
+  @Test
+  public void updateReplicationPriorityUnsetAcceptsUnknownPartition() {
+    PartitionId unknown = new MockPartitionId(Long.MAX_VALUE, DEFAULT_PARTITION_CLASS);
+    assertFalse("Test setup: unknown partition should not be hosted on any thread",
+        replicationManager.hostsPartition(unknown));
+    // No-op unset on an unknown partition must not throw, must not change state.
+    replicationManager.unsetPriorityPartitions(Collections.singletonList(unknown));
+    assertTrue("Unset-of-unknown should not produce any priority entries",
+        replicationManager.listAllPriorityPartitions().isEmpty());
+  }
+
+  /**
+   * Defensive cap: an UpdateReplicationPriority request whose partition-list size exceeds
+   * {@code MAX_PRIORITY_PARTITIONS_PER_REQUEST} must be rejected with {@link ServerErrorCode#BadRequest}
+   * before any further validation runs.
+   */
+  @Test
+  public void updateReplicationPriorityRejectsOversizedPartitionList() throws InterruptedException, IOException {
+    // Cap is 256; produce 257 distinct (and intentionally fabricated) partitions to exceed it. We
+    // fabricate so the test does not depend on the mock cluster map containing 257 partitions.
+    final int oversized = 257;
+    List<PartitionId> partitions = new ArrayList<>(oversized);
+    for (int i = 0; i < oversized; i++) {
+      partitions.add(new MockPartitionId(i, DEFAULT_PARTITION_CLASS));
+    }
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest updateRequest =
+        new UpdateReplicationPriorityAdminRequest(partitions, /*boost*/ 4,
+            UpdateReplicationPriorityAdminRequest.Action.SET, adminRequest);
+    Response response = sendRequestGetResponse(updateRequest, ServerErrorCode.BadRequest);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+  }
+
+  /**
+   * Strict action validation: {@link UpdateReplicationPriorityAdminRequest.Action#UNSET} with an
+   * empty partition list is malformed — operators must use
+   * {@link UpdateReplicationPriorityAdminRequest.Action#UNSET_ALL} to wipe all priorities. Rejected
+   * with BadRequest.
+   */
+  @Test
+  public void updateReplicationPriorityRejectsUnsetWithEmptyList() throws InterruptedException, IOException {
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest updateRequest =
+        new UpdateReplicationPriorityAdminRequest(Collections.emptyList(), /*boost*/ 1,
+            UpdateReplicationPriorityAdminRequest.Action.UNSET, adminRequest);
+    Response response = sendRequestGetResponse(updateRequest, ServerErrorCode.BadRequest);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+  }
+
+  /**
+   * Strict action validation: {@link UpdateReplicationPriorityAdminRequest.Action#UNSET_ALL} with a
+   * non-empty partition list is malformed — operators must use
+   * {@link UpdateReplicationPriorityAdminRequest.Action#UNSET} for specific partitions. Rejected
+   * with BadRequest.
+   */
+  @Test
+  public void updateReplicationPriorityRejectsUnsetAllWithNonEmptyList() throws InterruptedException, IOException {
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest updateRequest =
+        new UpdateReplicationPriorityAdminRequest(Collections.singletonList(id), /*boost*/ 1,
+            UpdateReplicationPriorityAdminRequest.Action.UNSET_ALL, adminRequest);
+    Response response = sendRequestGetResponse(updateRequest, ServerErrorCode.BadRequest);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+  }
+
+  /**
+   * Strict action validation: {@link UpdateReplicationPriorityAdminRequest.Action#SET} with an empty
+   * partition list is malformed — SET must target at least one partition. Rejected with
+   * BadRequest. Also subsumes the old "no action specified, empty list" malformed case, which
+   * under the enum encoding collapses to SET-with-empty-list.
+   */
+  @Test
+  public void updateReplicationPriorityRejectsSetWithEmptyList() throws InterruptedException, IOException {
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest updateRequest =
+        new UpdateReplicationPriorityAdminRequest(Collections.emptyList(), /*boost*/ 1,
+            UpdateReplicationPriorityAdminRequest.Action.SET, adminRequest);
+    Response response = sendRequestGetResponse(updateRequest, ServerErrorCode.BadRequest);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+  }
+
+  /**
+   * Positive: {@link UpdateReplicationPriorityAdminRequest.Action#UNSET_ALL} with empty partition
+   * list dispatches to engine wipe-all. The pre-populated priorities are wiped after the request
+   * completes successfully.
+   */
+  @Test
+  public void updateReplicationPriorityAcceptsUnsetAll() throws InterruptedException, IOException {
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    // Seed a priority so the wipe-all path has something observable to wipe.
+    replicationManager.prioritizePartitions(Collections.singletonList(id), /*boost*/ 4);
+    assertFalse("Test setup: priority should be present before wipe-all",
+        replicationManager.listAllPriorityPartitions().isEmpty());
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.UpdateReplicationPriority, null, correlationId, clientId);
+    UpdateReplicationPriorityAdminRequest updateRequest =
+        new UpdateReplicationPriorityAdminRequest(Collections.emptyList(), /*boost*/ 1,
+            UpdateReplicationPriorityAdminRequest.Action.UNSET_ALL, adminRequest);
+    Response response = sendRequestGetResponse(updateRequest, ServerErrorCode.NoError);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    response.release();
+    assertTrue("After UNSET_ALL, listAllPriorityPartitions should be empty",
+        replicationManager.listAllPriorityPartitions().isEmpty());
+  }
+
+  /**
    * Set priority on a single partition, observe the resulting entry count (= number of threads
    * holding the partition), then clear. Used to derive the expected fan-out without depending on
    * cluster-map placement details.
@@ -549,7 +764,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
       replicationManager.prioritizePartitions(Collections.singletonList(partition), boost);
       return replicationManager.listAllPriorityPartitions().size();
     } finally {
-      replicationManager.clearPriorityPartitions(Collections.emptyList());
+      replicationManager.unsetPriorityPartitions(Collections.emptyList());
     }
   }
 
