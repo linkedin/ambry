@@ -108,8 +108,6 @@ public class AmbryServerRequests extends AmbryRequests {
   private final ClusterParticipant clusterParticipant;
   // Defensive cap; the precise wire-layer limit is enforced on the frontend.
   private static final int MAX_PRIORITY_BOOST = 1024;
-  // Defensive cap; realistic priority lists are dozens, not hundreds.
-  private static final int MAX_PRIORITY_PARTITIONS_PER_REQUEST = 256;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
@@ -645,9 +643,9 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.error("Failed to deserialize UpdateReplicationPriorityAdminRequest", e);
       return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
     }
-    if (updateRequest.getPartitionIds().size() > MAX_PRIORITY_PARTITIONS_PER_REQUEST) {
+    if (updateRequest.getPartitionIds().size() > UpdateReplicationPriorityAdminRequest.MAX_PARTITIONS_PER_REQUEST) {
       logger.warn("Rejecting UpdateReplicationPriority clientId={} — partition list size {} exceeds cap {}",
-          clientId, updateRequest.getPartitionIds().size(), MAX_PRIORITY_PARTITIONS_PER_REQUEST);
+          clientId, updateRequest.getPartitionIds().size(), UpdateReplicationPriorityAdminRequest.MAX_PARTITIONS_PER_REQUEST);
       return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
     }
     final UpdateReplicationPriorityAdminRequest.Action action = updateRequest.getAction();

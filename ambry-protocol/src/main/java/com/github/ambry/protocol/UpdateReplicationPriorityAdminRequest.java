@@ -46,8 +46,8 @@ import java.util.List;
  */
 public class UpdateReplicationPriorityAdminRequest extends AdminRequest {
   private static final short VERSION_V1 = 1;
-  // Wire-level sanity bound; handler enforces a tighter operator-facing cap.
-  private static final int MAX_PARTITIONS_ON_WIRE = 10000;
+  // Realistic priority lists are dozens, not hundreds.
+  public static final int MAX_PARTITIONS_PER_REQUEST = 256;
 
   /** The action this request performs. Append only — wire encoding is ordinal-based. */
   public enum Action {
@@ -76,7 +76,7 @@ public class UpdateReplicationPriorityAdminRequest extends AdminRequest {
     Action action = Action.values()[stream.readShort()];
     int boost = stream.readInt();
     int numPartitions = stream.readInt();
-    if (numPartitions < 0 || numPartitions > MAX_PARTITIONS_ON_WIRE) {
+    if (numPartitions < 0 || numPartitions > MAX_PARTITIONS_PER_REQUEST) {
       throw new IOException("UpdateReplicationPriorityAdminRequest numPartitions out of range: " + numPartitions);
     }
     List<PartitionId> partitionIds = new ArrayList<>(numPartitions);
