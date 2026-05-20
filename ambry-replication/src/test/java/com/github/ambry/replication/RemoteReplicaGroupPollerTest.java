@@ -590,20 +590,17 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
     }
 
     // ---- Case 3: zero-replica edge case (no replicas → no weighted denominator → fall back to fetchConfig). ----
+    // No fixture restore: @Before rebuilds the storageManager + replicaThread between runs.
     Map<DataNodeId, List<RemoteReplicaInfo>> snapshot = replicaThread.getRemoteReplicaInfos();
     List<RemoteReplicaInfo> allReplicas = snapshot.values().stream()
         .flatMap(Collection::stream)
         .collect(Collectors.toList());
-    try {
-      allReplicas.forEach(replicaThread::removeRemoteReplicaInfo);
-      Assert.assertTrue("after removal, thread has no replicas",
-          replicaThread.getRemoteReplicaInfos().values().stream().allMatch(List::isEmpty));
-      RemoteReplicaGroupPoller emptyPoller = replicaThread.new RemoteReplicaGroupPoller();
-      Assert.assertEquals("baseFetchSize falls back to fetchConfig when totalWeightedReplicas == 0",
-          fetchConfig, emptyPoller.getCurrentCycleBaseFetchSize());
-    } finally {
-      allReplicas.forEach(replicaThread::addRemoteReplicaInfo);
-    }
+    allReplicas.forEach(replicaThread::removeRemoteReplicaInfo);
+    Assert.assertTrue("after removal, thread has no replicas",
+        replicaThread.getRemoteReplicaInfos().values().stream().allMatch(List::isEmpty));
+    RemoteReplicaGroupPoller emptyPoller = replicaThread.new RemoteReplicaGroupPoller();
+    Assert.assertEquals("baseFetchSize falls back to fetchConfig when totalWeightedReplicas == 0",
+        fetchConfig, emptyPoller.getCurrentCycleBaseFetchSize());
   }
 
   /**

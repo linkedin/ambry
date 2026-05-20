@@ -1510,6 +1510,23 @@ public class RequestResponseTest {
   }
 
   /**
+   * Pins {@link UpdateReplicationPriorityAdminRequest.Action#fromWireValue} on bad inputs: every
+   * non-mapped short throws {@link IOException} rather than silently aliasing to a wrong action or
+   * crashing with {@code ArrayIndexOutOfBoundsException}.
+   */
+  @Test
+  public void updateReplicationPriorityActionWireValueRejectsUnknown() {
+    for (short bad : new short[]{(short) -1, (short) 3, Short.MAX_VALUE, Short.MIN_VALUE}) {
+      try {
+        UpdateReplicationPriorityAdminRequest.Action.fromWireValue(bad);
+        Assert.fail("fromWireValue(" + bad + ") should have thrown IOException");
+      } catch (IOException expected) {
+        // expected
+      }
+    }
+  }
+
+  /**
    * Tests the ser/de of {@link ListReplicationPriorityAdminRequest} — body-less, just the marker.
    */
   @Test
