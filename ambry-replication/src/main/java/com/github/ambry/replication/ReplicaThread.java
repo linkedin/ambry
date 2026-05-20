@@ -2444,6 +2444,14 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
+     * Package-private accessor for tests pinning the per-cycle budget math
+     * (see {@code RemoteReplicaGroupPollerTest.baseFetchSizeBudgetConservation}).
+     */
+    long getCurrentCycleBaseFetchSize() {
+      return currentCycleBaseFetchSize;
+    }
+
+    /**
      * Creates Data node trackers for every data node
      * Every datanode tracker has active groups and standby group
      * For each data node tracker, only one stand by group is present to reduce cross colo requests

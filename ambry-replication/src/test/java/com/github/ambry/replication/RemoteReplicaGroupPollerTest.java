@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -37,6 +38,7 @@ import com.github.ambry.store.Store;
 import com.github.ambry.utils.Pair;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -486,5 +488,206 @@ public class RemoteReplicaGroupPollerTest extends ReplicationTestHelper {
 
     Assert.assertTrue("There should be no inflight groups", inflightGroups.isEmpty());
     Assert.assertFalse("All replicas haven't caught up early", poller.allReplicasCaughtUpEarly());
+  }
+
+  /**
+   * Pins the per-cycle budget math in {@code fillDataNodeTrackers}:
+   * <pre>
+   *   totalBudget   = replicasInThread * replicationFetchSizeInBytes
+   *   baseFetchSize = totalWeightedReplicas > 0
+   *                       ? totalBudget / totalWeightedReplicas
+   *                       : replicationFetchSizeInBytes
+   * </pre>
+   * Covers three cases on the same intra-colo thread:
+   * <ol>
+   *   <li>no priorities ⇒ baseFetchSize == replicationFetchSizeInBytes,
+   *       total bytes-in-flight == replicasInThread × replicationFetchSizeInBytes</li>
+   *   <li>one priority with boost=B ⇒ baseFetchSize == (N × config) / (1×B + (N-1)×1);
+   *       priority chunk requests B × baseFetchSize, normal chunks request 1 × baseFetchSize each;
+   *       total bytes-in-flight stays bounded by the no-priority budget (allow rounding)</li>
+   *   <li>zero weighted replicas (replicasInThread == 0) ⇒ baseFetchSize falls back to
+   *       replicationFetchSizeInBytes</li>
+   * </ol>
+   * Verified through the package-private accessor on {@code RemoteReplicaGroupPoller} plus
+   * {@code ActiveGroupTracker.getWeight()/getReplicaCount()}.
+   */
+  @Test
+  public void baseFetchSizeBudgetConservation() {
+    ReplicaThread replicaThread = intraColoReplicaThread;
+    long fetchConfig = replicationConfig.replicationFetchSizeInBytes;
+
+    // ---- Case 1: pure normal case (no priorities). ----
+    RemoteReplicaGroupPoller pollerNoPriority = replicaThread.new RemoteReplicaGroupPoller();
+    long replicasInThread = pollerNoPriority.getDataNodeTrackers().stream()
+        .flatMap(t -> t.getActiveGroupTrackers().stream())
+        .mapToLong(ActiveGroupTracker::getReplicaCount)
+        .sum();
+    Assert.assertTrue("test setup must have at least one replica", replicasInThread > 0);
+    Assert.assertEquals("baseFetchSize equals fetchConfig when no priorities", fetchConfig,
+        pollerNoPriority.getCurrentCycleBaseFetchSize());
+    long totalNoPriorityBytes = sumChunkFetchBytes(pollerNoPriority, fetchConfig);
+    Assert.assertEquals("no-priority total bytes = replicasInThread × fetchConfig",
+        replicasInThread * fetchConfig, totalNoPriorityBytes);
+
+    // ---- Case 2: one priority with boost=B. ----
+    // Pick the first replica's partition as the priority target. To defeat the auto-prune predicate
+    // (which fires when every priority replica is ACTIVE AND lag < threshold), put the replica in
+    // backoff so getReplicaStatus returns OFFLINE. The priority entry then survives into chunking.
+    int boost = 4;
+    RemoteReplicaInfo priorityReplica = replicaThread.getRemoteReplicaInfos().values().stream()
+        .flatMap(Collection::stream)
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no replicas to prioritize"));
+    PartitionId priorityPartition = priorityReplica.getReplicaId().getPartitionId();
+    long savedBackoff = priorityReplica.getReEnableReplicationTime();
+    priorityReplica.setReEnableReplicationTime(time.milliseconds() + 60_000L);
+    try {
+      replicaThread.prioritizePartitions(Collections.singletonList(priorityPartition), boost);
+
+      RemoteReplicaGroupPoller pollerWithPriority = replicaThread.new RemoteReplicaGroupPoller();
+      long priorityReplicaCount = pollerWithPriority.getDataNodeTrackers().stream()
+          .flatMap(t -> t.getActiveGroupTrackers().stream())
+          .filter(ActiveGroupTracker::isPriority)
+          .mapToLong(ActiveGroupTracker::getReplicaCount)
+          .sum();
+      long normalReplicaCount = pollerWithPriority.getDataNodeTrackers().stream()
+          .flatMap(t -> t.getActiveGroupTrackers().stream())
+          .filter(g -> !g.isPriority())
+          .mapToLong(ActiveGroupTracker::getReplicaCount)
+          .sum();
+      Assert.assertTrue("priority partition should produce at least one priority chunk",
+          priorityReplicaCount >= 1);
+      Assert.assertEquals("priority + normal replicas == replicasInThread",
+          replicasInThread, priorityReplicaCount + normalReplicaCount);
+
+      long totalWeighted = priorityReplicaCount * boost + normalReplicaCount;
+      long expectedBase = (replicasInThread * fetchConfig) / totalWeighted;
+      Assert.assertEquals("baseFetchSize = totalBudget / totalWeightedReplicas",
+          expectedBase, pollerWithPriority.getCurrentCycleBaseFetchSize());
+
+      // Per-chunk fetchSize from poller's view: weight × baseFetchSize. Verify priority chunks get
+      // boost×base and normal chunks get base. Use that to assert budget conservation.
+      long totalPriorityBytes = pollerWithPriority.getDataNodeTrackers().stream()
+          .flatMap(t -> t.getActiveGroupTrackers().stream())
+          .filter(ActiveGroupTracker::isPriority)
+          .mapToLong(g -> (long) g.getReplicaCount() * g.getWeight() * expectedBase)
+          .sum();
+      long totalNormalBytes = pollerWithPriority.getDataNodeTrackers().stream()
+          .flatMap(t -> t.getActiveGroupTrackers().stream())
+          .filter(g -> !g.isPriority())
+          .mapToLong(g -> (long) g.getReplicaCount() * g.getWeight() * expectedBase)
+          .sum();
+      long totalPriorityCycleBytes = totalPriorityBytes + totalNormalBytes;
+      Assert.assertTrue("priority-cycle total bytes (" + totalPriorityCycleBytes
+              + ") must be bounded by no-priority budget (" + totalNoPriorityBytes + "); diff is integer-division slack",
+          totalPriorityCycleBytes <= totalNoPriorityBytes);
+      // Slack must be strictly less than one fully weighted unit (integer-division floor).
+      Assert.assertTrue("slack < totalWeighted (one floor unit)",
+          totalNoPriorityBytes - totalPriorityCycleBytes < totalWeighted);
+    } finally {
+      replicaThread.unsetPriorityPartitions(Collections.emptyList()); // wipe all on this thread
+      priorityReplica.setReEnableReplicationTime(savedBackoff);
+    }
+
+    // ---- Case 3: zero-replica edge case (no replicas → no weighted denominator → fall back to fetchConfig). ----
+    Map<DataNodeId, List<RemoteReplicaInfo>> snapshot = replicaThread.getRemoteReplicaInfos();
+    List<RemoteReplicaInfo> allReplicas = snapshot.values().stream()
+        .flatMap(Collection::stream)
+        .collect(Collectors.toList());
+    try {
+      allReplicas.forEach(replicaThread::removeRemoteReplicaInfo);
+      Assert.assertTrue("after removal, thread has no replicas",
+          replicaThread.getRemoteReplicaInfos().values().stream().allMatch(List::isEmpty));
+      RemoteReplicaGroupPoller emptyPoller = replicaThread.new RemoteReplicaGroupPoller();
+      Assert.assertEquals("baseFetchSize falls back to fetchConfig when totalWeightedReplicas == 0",
+          fetchConfig, emptyPoller.getCurrentCycleBaseFetchSize());
+    } finally {
+      allReplicas.forEach(replicaThread::addRemoteReplicaInfo);
+    }
+  }
+
+  /**
+   * Pins the per-replica fetchSize selection in {@code createReplicaMetadataRequest(replicas, node, weight, base)}.
+   * Four cases pulled apart from the chunking path:
+   * <ol>
+   *   <li>{@code weight=1, baseFetchSize=0} ⇒ no priority redistribution active, falls back to
+   *       {@code replicationFetchSizeInBytes}</li>
+   *   <li>{@code weight=1, baseFetchSize=X} ⇒ {@code X}</li>
+   *   <li>{@code weight=B, baseFetchSize=X} ⇒ {@code B * X} (boost multiplies through)</li>
+   *   <li>Bootstrap intra-colo path: all local stores in BOOTSTRAP, intra-colo thread ⇒ baseline
+   *       switches to {@code replicationFetchSizeInBytesForBootstrapIntraColo} regardless of
+   *       {@code baseFetchSize}; weight still multiplies through</li>
+   * </ol>
+   */
+  @Test
+  public void createReplicaMetadataRequestFetchSizeMath() {
+    ReplicaThread replicaThread = intraColoReplicaThread;
+    long fetchConfig = replicationConfig.replicationFetchSizeInBytes;
+    long bootstrapFetchConfig = replicationConfig.replicationFetchSizeInBytesForBootstrapIntraColo;
+
+    Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry =
+        replicaThread.getRemoteReplicaInfos().entrySet().iterator().next();
+    DataNodeId remoteNode = entry.getKey();
+    List<RemoteReplicaInfo> replicas = entry.getValue();
+    Assert.assertFalse("test setup must give us replicas", replicas.isEmpty());
+
+    // Snapshot starting states so we can restore after the bootstrap-case test.
+    Map<RemoteReplicaInfo, ReplicaState> originalStates = new HashMap<>();
+    for (RemoteReplicaInfo r : replicas) {
+      originalStates.put(r, r.getLocalStore().getCurrentState());
+    }
+    // Force at least one local store out of BOOTSTRAP so the non-bootstrap cases hit the
+    // baseFetchSize / fallback branches (the bootstrap branch fires only when *all* are BOOTSTRAP).
+    replicas.get(0).getLocalStore().setCurrentState(ReplicaState.STANDBY);
+    try {
+      // Case 1: weight=1, baseFetchSize=0 ⇒ fallback to fetchConfig.
+      Assert.assertEquals("weight=1, base=0 ⇒ fetchConfig", fetchConfig,
+          replicaThread.createReplicaMetadataRequest(replicas, remoteNode, /*weight*/ 1, /*baseFetchSize*/ 0L)
+              .getMaxTotalSizeOfEntriesInBytes());
+
+      // Case 2: weight=1, baseFetchSize=X ⇒ X.
+      long base = 4096L;
+      Assert.assertEquals("weight=1, base=X ⇒ X", base,
+          replicaThread.createReplicaMetadataRequest(replicas, remoteNode, /*weight*/ 1, base)
+              .getMaxTotalSizeOfEntriesInBytes());
+
+      // Case 3: weight=B, baseFetchSize=X ⇒ B × X.
+      int boost = 7;
+      Assert.assertEquals("weight=B, base=X ⇒ B × X", boost * base,
+          replicaThread.createReplicaMetadataRequest(replicas, remoteNode, boost, base)
+              .getMaxTotalSizeOfEntriesInBytes());
+
+      // Case 4: bootstrap intra-colo path: all local stores in BOOTSTRAP, baseline switches to
+      // bootstrap baseline regardless of baseFetchSize; weight still multiplies through.
+      // The intra-colo thread satisfies !replicatingFromRemoteColo.
+      for (RemoteReplicaInfo r : replicas) {
+        r.getLocalStore().setCurrentState(ReplicaState.BOOTSTRAP);
+      }
+      Assert.assertEquals("bootstrap intra-colo: weight=1 ⇒ bootstrap baseline (baseFetchSize ignored)",
+          bootstrapFetchConfig,
+          replicaThread.createReplicaMetadataRequest(replicas, remoteNode, /*weight*/ 1, base)
+              .getMaxTotalSizeOfEntriesInBytes());
+      Assert.assertEquals("bootstrap intra-colo: weight=B ⇒ B × bootstrap baseline",
+          boost * bootstrapFetchConfig,
+          replicaThread.createReplicaMetadataRequest(replicas, remoteNode, boost, base)
+              .getMaxTotalSizeOfEntriesInBytes());
+    } finally {
+      // Restore original local store states so other parameterized runs are unaffected.
+      originalStates.forEach((r, s) -> r.getLocalStore().setCurrentState(s));
+    }
+  }
+
+  /**
+   * Sums per-cycle bytes-in-flight: for each chunk, {@code replicaCount × weight × baseFetchSize}
+   * where the baseline equals {@code fetchConfig} when no priorities are active (case-1 invariant).
+   */
+  private static long sumChunkFetchBytes(RemoteReplicaGroupPoller poller, long baseline) {
+    long bytes = 0;
+    for (DataNodeTracker t : poller.getDataNodeTrackers()) {
+      for (ActiveGroupTracker g : t.getActiveGroupTrackers()) {
+        bytes += (long) g.getReplicaCount() * g.getWeight() * baseline;
+      }
+    }
+    return bytes;
   }
 }

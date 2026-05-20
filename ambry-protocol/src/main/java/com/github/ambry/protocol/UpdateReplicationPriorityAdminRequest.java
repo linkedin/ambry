@@ -49,9 +49,30 @@ public class UpdateReplicationPriorityAdminRequest extends AdminRequest {
   // Realistic priority lists are dozens, not hundreds.
   public static final int MAX_PARTITIONS_PER_REQUEST = 256;
 
-  /** The action this request performs. Append only — wire encoding is ordinal-based. */
+  /** The action this request performs. Wire values are explicit so reordering enum constants in code does not silently break the wire format. */
   public enum Action {
-    SET, UNSET, UNSET_ALL
+    SET((short) 0),
+    UNSET((short) 1),
+    UNSET_ALL((short) 2);
+
+    private final short wireValue;
+
+    Action(short wireValue) {
+      this.wireValue = wireValue;
+    }
+
+    public short getWireValue() {
+      return wireValue;
+    }
+
+    public static Action fromWireValue(short v) throws IOException {
+      for (Action a : values()) {
+        if (a.wireValue == v) {
+          return a;
+        }
+      }
+      throw new IOException("Unknown Action wire value: " + v);
+    }
   }
 
   private final List<PartitionId> partitionIds;
@@ -73,7 +94,7 @@ public class UpdateReplicationPriorityAdminRequest extends AdminRequest {
     if (!versionId.equals(VERSION_V1)) {
       throw new IllegalStateException("Unrecognized version for UpdateReplicationPriorityAdminRequest: " + versionId);
     }
-    Action action = Action.values()[stream.readShort()];
+    Action action = Action.fromWireValue(stream.readShort());
     int boost = stream.readInt();
     int numPartitions = stream.readInt();
     if (numPartitions < 0 || numPartitions > MAX_PARTITIONS_PER_REQUEST) {
@@ -136,7 +157,7 @@ public class UpdateReplicationPriorityAdminRequest extends AdminRequest {
   protected void prepareBuffer() {
     super.prepareBuffer();
     bufferToSend.writeShort(VERSION_V1);
-    bufferToSend.writeShort((short) action.ordinal());
+    bufferToSend.writeShort(action.getWireValue());
     bufferToSend.writeInt(boost);
     bufferToSend.writeInt(partitionIds.size());
     for (PartitionId partitionId : partitionIds) {
