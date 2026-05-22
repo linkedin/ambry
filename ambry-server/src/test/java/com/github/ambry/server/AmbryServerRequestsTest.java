@@ -243,6 +243,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     properties.setProperty("server.validate.request.based.on.store.state",
         Boolean.toString(validateRequestOnStoreState));
     properties.setProperty("server.handle.undelete.request.enabled", Boolean.toString(handleUndeleteRequestEnabled));
+    properties.setProperty("server.handle.replication.priority.request.enabled", "true");
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     properties.setProperty("num.io.threads", "1");
     properties.setProperty("queued.max.requests", "1");

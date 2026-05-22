@@ -636,6 +636,10 @@ public class AmbryServerRequests extends AmbryRequests {
       AdminRequest adminRequest) {
     final int correlationId = adminRequest.getCorrelationId();
     final String clientId = adminRequest.getClientId();
+    if (!serverConfig.serverHandleReplicationPriorityRequestEnabled) {
+      logger.warn("UpdateReplicationPriority request is disabled");
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+    }
     UpdateReplicationPriorityAdminRequest updateRequest;
     try {
       updateRequest = UpdateReplicationPriorityAdminRequest.readFrom(requestStream, clusterMap, adminRequest);
@@ -735,6 +739,11 @@ public class AmbryServerRequests extends AmbryRequests {
   private AdminResponse handleListReplicationPriorityRequest(DataInputStream requestStream, AdminRequest adminRequest) {
     final int correlationId = adminRequest.getCorrelationId();
     final String clientId = adminRequest.getClientId();
+    if (!serverConfig.serverHandleReplicationPriorityRequestEnabled) {
+      logger.warn("ListReplicationPriority request is disabled");
+      AdminResponse base = new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+      return new ListReplicationPriorityAdminResponse(Collections.emptyList(), base);
+    }
     try {
       ListReplicationPriorityAdminRequest.readFrom(requestStream, adminRequest);
     } catch (Exception e) {
