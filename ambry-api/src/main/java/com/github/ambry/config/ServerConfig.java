@@ -96,6 +96,13 @@ public class ServerConfig {
   public final boolean serverHandleForceDeleteRequestEnabled;
 
   /**
+   * True to enable ambry server handling UpdateReplicationPriority and ListReplicationPriority admin requests.
+   */
+  @Config("server.handle.replication.priority.request.enabled")
+  @Default("false")
+  public final boolean serverHandleReplicationPriorityRequestEnabled;
+
+  /**
    * True to enable replicateBlob to replicate tombstone
    */
   @Config("server.replicate.tombstone.enabled")
@@ -183,6 +190,8 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
     serverHandleForceDeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.force.delete.request.enabled", false);
+    serverHandleReplicationPriorityRequestEnabled =
+        verifiableProperties.getBoolean("server.handle.replication.priority.request.enabled", false);
     serverReplicateTombstoneEnabled = verifiableProperties.getBoolean("server.replicate.tombstone.enabled", false);
     serverEnableBlobPartitionJourneyLogs =
         verifiableProperties.getBoolean("server.enable.blob.partition.journey.logs", false);

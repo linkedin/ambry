@@ -80,12 +80,15 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -134,6 +137,17 @@ public class ReplicaThread implements Runnable {
   private final Predicate<MessageInfo> skipPredicate;
   private final int continuousReplicationGroupIterationLimit;
   private volatile boolean terminateCurrentContinuousReplicationCycle = false;
+  /**
+   * Per-thread map of partitions whose replicas are currently boosted in the per-cycle fetch-budget
+   * distribution. Mutated by admin handler threads (via {@link #prioritizePartitions} /
+   * {@link #unsetPriorityPartitions}) and read by the replication thread in
+   * {@link RemoteReplicaGroupPoller#fillDataNodeTrackers()}.
+   *
+   * Concurrent because admin threads can mutate while the replication thread is iterating.
+   *
+   * The map is empty by default — its absence is a no-op for chunking behavior.
+   */
+  private final ConcurrentHashMap<PartitionId, Integer> priorityPartitions = new ConcurrentHashMap<>();
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
   protected Thread thread;
@@ -266,6 +280,105 @@ public class ReplicaThread implements Runnable {
       terminateCurrentContinuousReplicationCycle = true;
       lock.unlock();
     }
+  }
+
+  /**
+   * Returns true when {@code infos} is non-empty AND every replica is {@link ReplicaStatus#ACTIVE}
+   * AND has remote lag strictly less than {@code syncedLagThreshold}. Empty {@code infos} returns
+   * false so a priority partition with no replicas in this thread is never auto-pruned here.
+   */
+  static boolean shouldAutoPrunePriority(List<RemoteReplicaInfo> infos, long syncedLagThreshold,
+      Function<RemoteReplicaInfo, ReplicaStatus> statusFn, ToLongFunction<RemoteReplicaInfo> lagFn) {
+    if (infos.isEmpty()) {
+      return false;
+    }
+    for (RemoteReplicaInfo r : infos) {
+      if (statusFn.apply(r) != ReplicaStatus.ACTIVE || lagFn.applyAsLong(r) >= syncedLagThreshold) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Boost the per-cycle fetch budget for the listed partitions by {@code boost}. Each priority
+   * partition is segregated into its own singleton chunk; the chunk's per-iteration metadata
+   * fetchSize is {@code boost × baseFetchSize}, where {@code baseFetchSize} is the per-replica
+   * budget after redistribution. Repeated calls overwrite previous boosts; the per-thread map is
+   * bounded by partition count.
+   *
+   * <p>Callers MUST validate that the chosen boost will not exceed the wire-layer max-content-length
+   * cap given the current fetch-size baseline and max blob size. The check lives in the admin
+   * handler so this method does not need {@code RouterConfig} / {@code NetworkConfig} dependencies.
+   *
+   * @param partitions partitions to prioritize; empty list is a no-op
+   * @param boost weight applied on top of the per-replica budget. Must be {@code >= 1}; the admin
+   *              handler rejects smaller values at the boundary, so this method does not re-validate.
+   */
+  public void prioritizePartitions(List<PartitionId> partitions, int boost) {
+    if (partitions.isEmpty()) {
+      return;
+    }
+    for (PartitionId id : partitions) {
+      priorityPartitions.put(id, boost);
+    }
+    terminateCycleAndWake();
+    logger.info("Set replication priority for {} partitions on thread {} to boost {}",
+        partitions.size(), getName(), boost);
+  }
+
+  /**
+   * Unset replication priority on this thread. When {@code partitions} is empty, removes ALL priority
+   * entries on this thread (per-host wipe-all). When non-empty, removes only the listed partitions.
+   * Admin-handler guards ensure the empty-list case is only reachable when the operator explicitly
+   * sent {@code unsetAll=true} on the wire — never from an unset request with an empty partition list.
+   *
+   * @param partitions partitions to unset; empty list ⇒ wipe all on this thread
+   */
+  public void unsetPriorityPartitions(List<PartitionId> partitions) {
+    if (partitions.isEmpty()) {
+      int unsetCount = priorityPartitions.size();
+      priorityPartitions.clear();
+      logger.info("Unset all {} replication priorities on thread {}", unsetCount, getName());
+    } else {
+      partitions.forEach(priorityPartitions::remove);
+      logger.info("Unset replication priorities for {} partitions on thread {}", partitions.size(), getName());
+    }
+    terminateCycleAndWake();
+  }
+
+  /**
+   * End any in-flight continuous replication cycle and wake the thread if it is parked, so an
+   * operator-driven priority change takes effect this round instead of waiting for a natural cycle
+   * boundary. Signal is unconditional — cheap, and robust against future additions to the
+   * park-condition set.
+   */
+  private void terminateCycleAndWake() {
+    lock.lock();
+    try {
+      terminateCurrentContinuousReplicationCycle = true;
+      pauseCondition.signal();
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /**
+   * @return a snapshot of {@code (partitionId, boost)} entries held in this thread's priority map.
+   *         The snapshot may briefly include entries that an admin handler is concurrently removing;
+   *         that is fine for the operator list view (best-effort, weakly consistent).
+   */
+  public Map<PartitionId, Integer> listPriorityPartitions() {
+    // ConcurrentHashMap.entrySet() is weakly consistent — safe to iterate without external sync.
+    return new HashMap<>(priorityPartitions);
+  }
+
+  /**
+   * @return true if this thread replicates from a remote datacenter (inter-colo), false if intra-colo.
+   *         Used to tag {@link #listPriorityPartitions} entries with their {@code isInterColo} flag.
+   */
+  public boolean isReplicatingFromRemoteColo() {
+    return replicatingFromRemoteColo;
   }
 
   /**
@@ -1187,6 +1300,26 @@ public class ReplicaThread implements Runnable {
    */
   ReplicaMetadataRequest createReplicaMetadataRequest(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       DataNodeId remoteNode) {
+    return createReplicaMetadataRequest(replicasToReplicatePerNode, remoteNode, /*weight*/ 1, /*baseFetchSize*/ 0L);
+  }
+
+  /**
+   * Variant that takes the per-chunk {@code weight} and {@code baseFetchSize} computed in
+   * {@code fillDataNodeTrackers} when continuous replication is enabled. Used so priority chunks
+   * (with their boost) get a correspondingly larger per-iteration fetchSize.
+   *
+   * fetchSize selection (in this order):
+   * <ul>
+   *   <li>If the call is intra-colo bootstrap, the bootstrap baseline replaces the per-cycle
+   *       baseline (preserves existing bootstrap behavior).</li>
+   *   <li>Otherwise, if {@code baseFetchSize > 0}, use that (continuous-mode per-cycle budget).</li>
+   *   <li>Otherwise, fall back to {@code replicationConfig.replicationFetchSizeInBytes} (legacy
+   *       and non-continuous path).</li>
+   * </ul>
+   * The chosen baseline is then multiplied by {@code weight}.
+   */
+  ReplicaMetadataRequest createReplicaMetadataRequest(List<RemoteReplicaInfo> replicasToReplicatePerNode,
+      DataNodeId remoteNode, int weight, long baseFetchSize) {
     boolean allLocalStoreInBootstrap = true;
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<>();
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
@@ -1201,16 +1334,21 @@ public class ReplicaThread implements Runnable {
         allLocalStoreInBootstrap = false;
       }
     }
-    long fetchSize = replicationConfig.replicationFetchSizeInBytes;
+    long baseline;
     if (allLocalStoreInBootstrap && !replicatingFromRemoteColo) {
-      fetchSize = replicationConfig.replicationFetchSizeInBytesForBootstrapIntraColo;
+      baseline = replicationConfig.replicationFetchSizeInBytesForBootstrapIntraColo;
       logger.trace(
-          "All local stores are at bootstrap mode, and this is intro colo replication, set the fetch size to {}",
-          fetchSize);
+          "All local stores are at bootstrap mode, and this is intra colo replication, set the fetch size baseline to {}",
+          baseline);
+    } else if (baseFetchSize > 0) {
+      baseline = baseFetchSize;
+    } else {
+      baseline = replicationConfig.replicationFetchSizeInBytes;
     }
+    long perReplicaFetchSize = (long) weight * baseline;
     return new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
-        replicaMetadataRequestInfoList, fetchSize, replicationConfig.replicaMetadataRequestVersion);
+        replicaMetadataRequestInfoList, perReplicaFetchSize, replicationConfig.replicaMetadataRequestVersion);
   }
 
   /**
@@ -2286,6 +2424,10 @@ public class ReplicaThread implements Runnable {
   class RemoteReplicaGroupPoller {
     private final List<DataNodeTracker> dataNodeTrackers;
     private boolean allReplicasCaughtUpEarly;
+    // Per-cycle base fetch size. Computed once at the end of fillDataNodeTrackers and read in
+    // fillActiveGroups when constructing each RemoteReplicaGroup; identical for every chunk in the
+    // cycle, so a single scalar on the poller is the single source of truth.
+    private long currentCycleBaseFetchSize;
 
     RemoteReplicaGroupPoller() {
       dataNodeTrackers = new ArrayList<>();
@@ -2302,30 +2444,88 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
+     * Package-private accessor for tests pinning the per-cycle budget math
+     * (see {@code RemoteReplicaGroupPollerTest.baseFetchSizeBudgetConservation}).
+     */
+    long getCurrentCycleBaseFetchSize() {
+      return currentCycleBaseFetchSize;
+    }
+
+    /**
      * Creates Data node trackers for every data node
      * Every datanode tracker has active groups and standby group
      * For each data node tracker, only one stand by group is present to reduce cross colo requests
      * Active groups have maximum {@link #maxReplicaCountPerRequest}  preassigned replicas
      * Across all datanode tracker group ids are unique
+     *
+     * Priority handling:
+     * <ol>
+     *   <li>Auto-prune priority entries whose replicas in this thread are all caught up. Pruning is
+     *       thread-scope; entries whose replicas live in other threads are left alone.</li>
+     *   <li>Snapshot the pruned priority map for use during chunking.</li>
+     *   <li>Per DataNode: priority replicas become singleton {@code ActiveGroupTracker}s
+     *       (weight = boost); remaining replicas go through normal chunking.</li>
+     *   <li>Compute the per-cycle {@code baseFetchSize} so total budget matches the legacy
+     *       {@code replicasInThread × replicationFetchSizeInBytes}.</li>
+     * </ol>
+     *
+     * <p>Priorities on cross-colo follower replicas never auto-prune and must be cleared
+     * explicitly: under leader-based replication these replicas stay STANDBY (waiting on intra-colo
+     * delivery from the local leader) and never reach ACTIVE, so the auto-prune predicate never
+     * fires for them.
      */
     private void fillDataNodeTrackers() {
       Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
 
-      int currentStartGroupId = 0;
+      // Auto-prune caught-up priority entries.
+      if (!priorityPartitions.isEmpty()) {
+        Map<PartitionId, List<RemoteReplicaInfo>> byPartition = dataNodeToRemoteReplicaInfo.values().stream()
+            .flatMap(List::stream)
+            .collect(Collectors.groupingBy(r -> r.getReplicaId().getPartitionId()));
+        // If remaining lag is below the per-iteration budget, the next ACTIVE iteration closes the
+        // gap. Strict lag == 0 would rarely fire on write-active partitions.
+        long syncedLagThreshold = replicationConfig.replicationFetchSizeInBytes;
+        priorityPartitions.entrySet().removeIf(e -> {
+          List<RemoteReplicaInfo> infos = byPartition.getOrDefault(e.getKey(), Collections.emptyList());
+          if (!shouldAutoPrunePriority(infos, syncedLagThreshold, ReplicaThread.this::getReplicaStatus,
+              RemoteReplicaInfo::getRemoteLagFromLocalInBytes)) {
+            return false;
+          }
+          logger.info("Auto-pruning priority for partition {} on thread {}: all {} replicas caught up",
+              e.getKey(), threadName, infos.size());
+          return true;
+        });
+      }
 
+      Map<PartitionId, Integer> prioritySnapshot = priorityPartitions.isEmpty() ? null : new HashMap<>(priorityPartitions);
+
+      int currentStartGroupId = 0;
+      long replicasInThread = 0;
+      long totalWeightedReplicas = 0;
       for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
         DataNodeId remoteHost = entry.getKey();
         List<RemoteReplicaInfo> remoteReplicasPerNode = entry.getValue();
 
         DataNodeTracker dataNodeTracker =
             new DataNodeTracker(remoteHost, remoteReplicasPerNode, currentStartGroupId, time, threadThrottleDurationMs,
-                replicationConfig, RemoteReplicaInfo::getRemoteLagFromLocalInBytes);
+                replicationConfig, RemoteReplicaInfo::getRemoteLagFromLocalInBytes, prioritySnapshot);
         logger.trace("Thread name: {} for datanode {} create datanode tracker {}", threadName, remoteHost,
             dataNodeTracker);
 
         dataNodeTrackers.add(dataNodeTracker);
         currentStartGroupId = dataNodeTracker.getMaxGroupId() + 1;
+        replicasInThread += remoteReplicasPerNode.size();
+        for (ActiveGroupTracker g : dataNodeTracker.getActiveGroupTrackers()) {
+          totalWeightedReplicas += (long) g.getReplicaCount() * g.getWeight();
+        }
       }
+
+      // baseFetchSize divides total budget across all weighted replicas; fall back to the per-replica
+      // baseline when the thread has no replicas.
+      long totalBudget = replicasInThread * replicationConfig.replicationFetchSizeInBytes;
+      currentCycleBaseFetchSize = totalWeightedReplicas > 0
+          ? totalBudget / totalWeightedReplicas
+          : replicationConfig.replicationFetchSizeInBytes;
     }
 
     /**
@@ -2464,7 +2664,8 @@ public class ReplicaThread implements Runnable {
 
           RemoteReplicaGroup remoteReplicaGroup = new RemoteReplicaGroup(
               activeReplicaTrackers.stream().map(ReplicaTracker::getRemoteReplicaInfo).collect(Collectors.toList()),
-              dataNodeTracker.getDataNodeId(), false, activeGroupTracker.getGroupId());
+              dataNodeTracker.getDataNodeId(), false, activeGroupTracker.getGroupId(),
+              activeGroupTracker.getWeight(), currentCycleBaseFetchSize);
 
           activeGroupTracker.startIteration(remoteReplicaGroup, activeReplicaTrackers);
           logger.trace("Thread name: {} Created active remote replica group for group tracker {} ", threadName,
@@ -2602,6 +2803,17 @@ public class ReplicaThread implements Runnable {
     private final DataNodeId remoteDataNode;
     private final boolean isNonProgressStandbyReplicaGroup;
     private final int id;
+    /**
+     * Fetch-size weight inherited from the originating {@link ActiveGroupTracker}. 1 for normal
+     * chunks and the non-continuous path; equal to the operator-supplied boost for priority chunks.
+     */
+    private final int weight;
+    /**
+     * Per-cycle base fetch-size inherited from the originating {@link ActiveGroupTracker}. 0 means
+     * "fall back to replicationFetchSizeInBytes" — used by the non-continuous path and standby
+     * groups (which don't carry a per-cycle budget).
+     */
+    private final long baseFetchSize;
     private ReplicaGroupReplicationState state;
     private Exception exception = null;
     private long replicaMetadataRequestStartTimeMs;
@@ -2622,10 +2834,23 @@ public class ReplicaThread implements Runnable {
      */
     public RemoteReplicaGroup(List<RemoteReplicaInfo> remoteReplicaInfos, DataNodeId dataNodeId,
         boolean isNonProgressStandbyReplicaGroup, int id) {
+      this(remoteReplicaInfos, dataNodeId, isNonProgressStandbyReplicaGroup, id, /*weight*/ 1, /*baseFetchSize*/ 0L);
+    }
+
+    /**
+     * Constructor variant that carries the originating chunk's {@code weight} and
+     * {@code baseFetchSize}. Used by the continuous-replication active-chunk path so the per-cycle
+     * fetch-budget split (including priority boosts) is honored when this group's metadata request
+     * is built.
+     */
+    public RemoteReplicaGroup(List<RemoteReplicaInfo> remoteReplicaInfos, DataNodeId dataNodeId,
+        boolean isNonProgressStandbyReplicaGroup, int id, int weight, long baseFetchSize) {
       this.remoteReplicaInfos = remoteReplicaInfos;
       this.remoteDataNode = dataNodeId;
       this.isNonProgressStandbyReplicaGroup = isNonProgressStandbyReplicaGroup;
       this.id = id;
+      this.weight = weight;
+      this.baseFetchSize = baseFetchSize;
       storeKeysConversionLog = new ArrayList<>();
       finishTime = 0;
       if (isNonProgressStandbyReplicaGroup) {
@@ -2711,7 +2936,8 @@ public class ReplicaThread implements Runnable {
         // When the state is STARTED, we will send the ReplicaMetadataRequest out.
         replicaMetadataRequestStartTimeMs = time.milliseconds();
         exchangeMetadataStartTimeInMs = replicaMetadataRequestStartTimeMs;
-        ReplicaMetadataRequest request = createReplicaMetadataRequest(remoteReplicaInfos, remoteDataNode);
+        ReplicaMetadataRequest request = createReplicaMetadataRequest(remoteReplicaInfos, remoteDataNode, weight,
+            baseFetchSize);
         RequestInfo requestInfo =
             new RequestInfo(remoteDataNode.getHostname(), port, request, remoteReplicaInfos.get(0).getReplicaId(), null,
                 time.milliseconds(), timeout, timeout);

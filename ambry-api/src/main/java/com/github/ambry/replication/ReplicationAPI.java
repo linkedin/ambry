@@ -55,4 +55,48 @@ public interface ReplicationAPI {
    * @return The lag in bytes that the remote replica is behind the local store
    */
   long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath);
+
+  /**
+   * Boost the per-cycle fetch budget for the listed partitions by {@code boost} on every replica
+   * thread on this server. Implementations that do not support a priority API should leave the
+   * default that throws {@link UnsupportedOperationException}.
+   * @param partitions partitions to prioritize
+   * @param boost positive boost factor
+   */
+  default void prioritizePartitions(List<PartitionId> partitions, int boost) {
+    throw new UnsupportedOperationException(
+        "Priority API not supported on " + getClass().getName());
+  }
+
+  /**
+   * Remove priority entries for the listed partitions on every replica thread on this server.
+   * An empty list wipes ALL priority entries — that branch is only reachable from a handler
+   * that has explicitly validated the operator's wipe-all intent (otherwise we'd risk silent
+   * wipe-all from an operator typo).
+   * @param partitions partitions to unset; empty list ⇒ wipe all
+   */
+  default void unsetPriorityPartitions(List<PartitionId> partitions) {
+    throw new UnsupportedOperationException(
+        "Priority API not supported on " + getClass().getName());
+  }
+
+  /**
+   * @param partition the partition to look up
+   * @return true if this server is registered to replicate {@code partition}.
+   */
+  default boolean hostsPartition(PartitionId partition) {
+    throw new UnsupportedOperationException(
+        "Priority API not supported on " + getClass().getName());
+  }
+
+  /**
+   * @return a deterministically-ordered snapshot of priority entries across every
+   *         {@code ReplicaThread} on this server, one entry per (partition, thread) pair, tagged
+   *         with the thread's {@code isInterColo} flag. Implementations without a priority API
+   *         leave the default that throws {@link UnsupportedOperationException}.
+   */
+  default List<PriorityEntry> listAllPriorityPartitions() {
+    throw new UnsupportedOperationException(
+        "Priority API not supported on " + getClass().getName());
+  }
 }

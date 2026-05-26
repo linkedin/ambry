@@ -14,6 +14,7 @@
 package com.github.ambry.replication.continuous;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
@@ -60,18 +61,41 @@ public class DataNodeTracker {
    *                    {@link ReplicationConfig#replicationSpreadLaggersAcrossChunks} is true. Supplied by the
    *                    caller so the chunking helper does not need access to package-private state on
    *                    {@link RemoteReplicaInfo}.
+   * @param prioritySnapshot a per-cycle snapshot of priority entries (partition id → boost). Replicas
+   *                        for partitions in this map are segregated into singleton chunks tagged
+   *                        {@code isPriority=true, weight=boost}; the remaining replicas go through
+   *                        normal chunking. {@code null} or empty disables priority segregation.
    */
   public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int startGroupId, Time time,
       long replicaThrottleDurationMs, ReplicationConfig replicationConfig,
-      ToLongFunction<RemoteReplicaInfo> lagExtractor) {
+      ToLongFunction<RemoteReplicaInfo> lagExtractor, Map<PartitionId, Integer> prioritySnapshot) {
     this.dataNodeId = dataNodeId;
     this.activeGroupTrackers = new ArrayList<>();
 
     int currentGroupId = startGroupId;
 
-    // for this data node break a larger array of remote replicas to smaller multiple arrays
+    // Split priority replicas (those whose partition is in prioritySnapshot) from the rest.
+    // Each priority replica becomes its own singleton chunk with weight = boost.
+    List<RemoteReplicaInfo> nonPriorityReplicas;
+    if (prioritySnapshot == null || prioritySnapshot.isEmpty()) {
+      nonPriorityReplicas = remoteReplicas;
+    } else {
+      nonPriorityReplicas = new ArrayList<>(remoteReplicas.size());
+      for (RemoteReplicaInfo r : remoteReplicas) {
+        Integer boost = prioritySnapshot.get(r.getReplicaId().getPartitionId());
+        if (boost != null) {
+          activeGroupTrackers.add(new ActiveGroupTracker(currentGroupId++,
+              Collections.singletonList(new ReplicaTracker(r, time, replicaThrottleDurationMs)),
+              /*priority*/ true, /*weight*/ boost));
+        } else {
+          nonPriorityReplicas.add(r);
+        }
+      }
+    }
+
+    // for this data node break the remaining replicas into chunks
     List<List<RemoteReplicaInfo>> remoteReplicaSegregatedList =
-        chunkReplicas(remoteReplicas, replicationConfig.replicationMaxPartitionCountPerRequest,
+        chunkReplicas(nonPriorityReplicas, replicationConfig.replicationMaxPartitionCountPerRequest,
             replicationConfig.replicationSpreadLaggersAcrossChunks, lagExtractor);
 
     // for each of smaller array of remote replicas create active group trackers with consecutive group ids
@@ -85,6 +109,16 @@ public class DataNodeTracker {
 
     // standby group id has maximum group id
     standByGroupTracker = new StandByGroupTracker(currentGroupId);
+  }
+
+  /**
+   * Convenience constructor for callers without priority logic (priority snapshot is empty).
+   */
+  public DataNodeTracker(DataNodeId dataNodeId, List<RemoteReplicaInfo> remoteReplicas, int startGroupId, Time time,
+      long replicaThrottleDurationMs, ReplicationConfig replicationConfig,
+      ToLongFunction<RemoteReplicaInfo> lagExtractor) {
+    this(dataNodeId, remoteReplicas, startGroupId, time, replicaThrottleDurationMs, replicationConfig, lagExtractor,
+        /*prioritySnapshot*/ null);
   }
 
   /**

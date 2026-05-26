@@ -13,9 +13,14 @@
  */
 package com.github.ambry.replication.continuous;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
@@ -237,6 +243,159 @@ public class DataNodeTrackerTest {
     assertEquals(2, chunks.size());
     assertEquals(Arrays.asList(100L, 0L), lagsOf(chunks.get(0)));
     assertEquals(Arrays.asList(0L, -5L), lagsOf(chunks.get(1)));
+  }
+
+  // ---- constructor tests (priority ctor + lifecycle) ----
+
+  /** Null prioritySnapshot ⇒ identical to no-priority ctor: every chunk is a normal-weight non-priority chunk. */
+  @Test
+  public void testCtorNullPrioritySnapshotMatchesNoPriorityCtor() {
+    List<RemoteReplicaInfo> replicas = makeReplicas(5, i -> 0L);
+    DataNodeTracker withNull = new DataNodeTracker(mockDataNode(), replicas, 0, new MockTime(), 1L,
+        buildConfig(/*maxChunk*/ 3, /*spread*/ false), extractor, null);
+    DataNodeTracker plain = new DataNodeTracker(mockDataNode(), replicas, 0, new MockTime(), 1L,
+        buildConfig(/*maxChunk*/ 3, /*spread*/ false), extractor);
+
+    assertEquals(plain.getActiveGroupTrackers().size(), withNull.getActiveGroupTrackers().size());
+    for (int i = 0; i < plain.getActiveGroupTrackers().size(); i++) {
+      ActiveGroupTracker a = plain.getActiveGroupTrackers().get(i);
+      ActiveGroupTracker b = withNull.getActiveGroupTrackers().get(i);
+      assertEquals("group[" + i + "] priority", a.isPriority(), b.isPriority());
+      assertEquals("group[" + i + "] weight", a.getWeight(), b.getWeight());
+      assertEquals("group[" + i + "] size", a.getReplicaCount(), b.getReplicaCount());
+    }
+  }
+
+  /** Empty prioritySnapshot is equivalent to null. */
+  @Test
+  public void testCtorEmptyPrioritySnapshotSkipsPriorityPath() {
+    List<RemoteReplicaInfo> replicas = makeReplicas(4, i -> 0L);
+    DataNodeTracker tracker = new DataNodeTracker(mockDataNode(), replicas, 0, new MockTime(), 1L,
+        buildConfig(2, false), extractor, Collections.emptyMap());
+
+    // 4 replicas, max chunk size 2 ⇒ 2 chunks, all non-priority weight=1.
+    assertEquals(2, tracker.getActiveGroupTrackers().size());
+    for (ActiveGroupTracker g : tracker.getActiveGroupTrackers()) {
+      assertFalse("no priority groups", g.isPriority());
+      assertEquals("weight=1", 1, g.getWeight());
+    }
+  }
+
+  /** One priority partition ⇒ one singleton priority chunk + normal chunks for the rest. */
+  @Test
+  public void testCtorPrioritySnapshotProducesSingletonPriorityChunk() {
+    List<RemoteReplicaInfo> replicas = makeReplicas(5, i -> 0L);
+    PartitionId priorityPartition = replicas.get(2).getReplicaId().getPartitionId();
+    Map<PartitionId, Integer> snapshot = new HashMap<>();
+    snapshot.put(priorityPartition, 8);
+
+    DataNodeTracker tracker = new DataNodeTracker(mockDataNode(), replicas, 0, new MockTime(), 1L,
+        buildConfig(/*maxChunk*/ 10, /*spread*/ false), extractor, snapshot);
+
+    // Expect 1 singleton priority chunk + 1 normal chunk holding the other 4 replicas.
+    assertEquals(2, tracker.getActiveGroupTrackers().size());
+    ActiveGroupTracker priorityChunk = tracker.getActiveGroupTrackers().get(0);
+    ActiveGroupTracker normalChunk = tracker.getActiveGroupTrackers().get(1);
+    assertTrue("first chunk is priority", priorityChunk.isPriority());
+    assertEquals("priority weight=boost", 8, priorityChunk.getWeight());
+    assertEquals("priority chunk is singleton", 1, priorityChunk.getReplicaCount());
+    assertFalse("second chunk is non-priority", normalChunk.isPriority());
+    assertEquals("non-priority weight=1", 1, normalChunk.getWeight());
+    assertEquals("non-priority chunk holds remaining 4", 4, normalChunk.getReplicaCount());
+  }
+
+  /** Multiple priorities + non-priorities + chunk overflow: every priority gets its own chunk; rest are chunked. */
+  @Test
+  public void testCtorMultiplePrioritiesAndChunkSplit() {
+    List<RemoteReplicaInfo> replicas = makeReplicas(7, i -> 0L);
+    PartitionId p1 = replicas.get(0).getReplicaId().getPartitionId();
+    PartitionId p2 = replicas.get(3).getReplicaId().getPartitionId();
+    Map<PartitionId, Integer> snapshot = new HashMap<>();
+    snapshot.put(p1, 4);
+    snapshot.put(p2, 16);
+
+    DataNodeTracker tracker = new DataNodeTracker(mockDataNode(), replicas, 0, new MockTime(), 1L,
+        buildConfig(/*maxChunk*/ 3, /*spread*/ false), extractor, snapshot);
+
+    // 7 replicas: 2 priority + 5 non-priority. Non-priority split into chunks of 3 ⇒ 3 chunks (3, 2).
+    // Total: 2 priority singletons + 2 non-priority chunks = 4 chunks.
+    assertEquals(4, tracker.getActiveGroupTrackers().size());
+    int priorityCount = 0;
+    int normalCount = 0;
+    int totalReplicaCount = 0;
+    for (ActiveGroupTracker g : tracker.getActiveGroupTrackers()) {
+      totalReplicaCount += g.getReplicaCount();
+      if (g.isPriority()) {
+        priorityCount++;
+        assertEquals("priority chunk is singleton", 1, g.getReplicaCount());
+        assertTrue("priority weight 4 or 16", g.getWeight() == 4 || g.getWeight() == 16);
+      } else {
+        normalCount++;
+        assertEquals("non-priority weight=1", 1, g.getWeight());
+        assertTrue("non-priority chunk size <= 3", g.getReplicaCount() <= 3);
+      }
+    }
+    assertEquals("2 priority chunks", 2, priorityCount);
+    assertEquals("2 non-priority chunks (5 replicas split 3+2)", 2, normalCount);
+    assertEquals("conservation: 7 replicas total", 7, totalReplicaCount);
+  }
+
+  /** Group IDs are unique and sequential across priority + non-priority chunks; standby ID is max+1. */
+  @Test
+  public void testCtorGroupIdsSequentialAndUnique() {
+    List<RemoteReplicaInfo> replicas = makeReplicas(6, i -> 0L);
+    PartitionId p = replicas.get(0).getReplicaId().getPartitionId();
+    Map<PartitionId, Integer> snapshot = new HashMap<>();
+    snapshot.put(p, 4);
+
+    int startGroupId = 100;
+    DataNodeTracker tracker = new DataNodeTracker(mockDataNode(), replicas, startGroupId, new MockTime(), 1L,
+        buildConfig(3, false), extractor, snapshot);
+
+    Set<Integer> ids = new HashSet<>();
+    int expectedId = startGroupId;
+    for (ActiveGroupTracker g : tracker.getActiveGroupTrackers()) {
+      assertEquals("group ids assigned sequentially from startGroupId", expectedId, g.getGroupId());
+      ids.add(g.getGroupId());
+      expectedId++;
+    }
+    assertEquals("all group ids are unique", tracker.getActiveGroupTrackers().size(), ids.size());
+    assertEquals("standby group id is max+1", expectedId, tracker.getStandByGroupTracker().getGroupId());
+  }
+
+  /** Priority entry for a partition NOT in this DataNode's slice produces no chunk for it. */
+  @Test
+  public void testCtorPriorityEntryWithoutMatchingReplicaProducesNoChunk() {
+    List<RemoteReplicaInfo> replicas = makeReplicas(3, i -> 0L);
+    Map<PartitionId, Integer> snapshot = new HashMap<>();
+    // Use a fresh partition id not present in any replica.
+    PartitionId orphan = mock(PartitionId.class);
+    when(orphan.toPathString()).thenReturn("orphan");
+    snapshot.put(orphan, 8);
+
+    DataNodeTracker tracker = new DataNodeTracker(mockDataNode(), replicas, 0, new MockTime(), 1L,
+        buildConfig(3, false), extractor, snapshot);
+
+    // Should be one normal chunk; no priority chunks (orphan has no replicas in this slice).
+    assertEquals(1, tracker.getActiveGroupTrackers().size());
+    assertFalse("no priority chunks", tracker.getActiveGroupTrackers().get(0).isPriority());
+    assertEquals("conservation: 3 replicas", 3, tracker.getActiveGroupTrackers().get(0).getReplicaCount());
+  }
+
+  /** Build a minimal ReplicationConfig for tests with chunk size + spread flag overrides. */
+  private static ReplicationConfig buildConfig(int maxPartitionCountPerRequest, boolean spreadLaggersAcrossChunks) {
+    Properties properties = new Properties();
+    properties.setProperty("replication.max.partition.count.per.request",
+        String.valueOf(maxPartitionCountPerRequest));
+    properties.setProperty(ReplicationConfig.REPLICATION_SPREAD_LAGGERS_ACROSS_CHUNKS,
+        String.valueOf(spreadLaggersAcrossChunks));
+    return new ReplicationConfig(new VerifiableProperties(properties));
+  }
+
+  private static DataNodeId mockDataNode() {
+    DataNodeId dataNodeId = mock(DataNodeId.class);
+    when(dataNodeId.toString()).thenReturn("mock-datanode");
+    return dataNodeId;
   }
 
   // ---- helpers ----

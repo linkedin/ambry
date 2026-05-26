@@ -44,11 +44,16 @@ import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.ForceDeleteAdminRequest;
+import com.github.ambry.protocol.ListReplicationPriorityAdminRequest;
+import com.github.ambry.protocol.ListReplicationPriorityAdminResponse;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.protocol.UpdateReplicationPriorityAdminRequest;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationAPI;
+import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.DiskHealthStatus;
@@ -67,6 +72,7 @@ import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -100,6 +106,8 @@ public class AmbryServerRequests extends AmbryRequests {
   private final DiskManagerConfig diskManagerConfig;
   private final StatsManager statsManager;
   private final ClusterParticipant clusterParticipant;
+  // Defensive cap; the precise wire-layer limit is enforced on the frontend.
+  private static final int MAX_PRIORITY_BOOST = 1024;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
@@ -228,6 +236,12 @@ public class AmbryServerRequests extends AmbryRequests {
         case ForceDelete:
           response = handleForceDeleteRequest(requestStream, adminRequest);
           break;
+        case UpdateReplicationPriority:
+          response = handleUpdateReplicationPriorityRequest(requestStream, adminRequest);
+          break;
+        case ListReplicationPriority:
+          response = handleListReplicationPriorityRequest(requestStream, adminRequest);
+          break;
       }
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
@@ -246,6 +260,13 @@ public class AmbryServerRequests extends AmbryRequests {
         case ForceDelete:
           response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(),
               ServerErrorCode.UnknownError);
+          break;
+        case ListReplicationPriority:
+          // Client deserializer expects a typed response; the inner handler builds one normally but if
+          // we land in this catch the client would otherwise fail to parse the bare AdminResponse.
+          response = new ListReplicationPriorityAdminResponse(Collections.emptyList(),
+              new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(),
+                  ServerErrorCode.UnknownError));
           break;
       }
     } finally {
@@ -599,6 +620,145 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.error("ForceDeleteAdminRequest Unexpected error when handleForceDeleteRequest", e);
     }
     return new AdminResponse(correlationId, clientId, ServerErrorCode.UnknownError);
+  }
+
+  /**
+   * Handles {@link AdminRequestOrResponseType#UpdateReplicationPriority} — set, unset, or wipe all
+   * replication priorities for partitions on this storage node by fanning out to every
+   * {@link ReplicaThread} pool managed by the {@link ReplicationEngine}.
+   *
+   * <p>The handler validates that the partition-list shape matches the wire-level
+   * {@link UpdateReplicationPriorityAdminRequest.Action}: SET and UNSET require a non-empty list;
+   * UNSET_ALL requires an empty list. Mismatches are rejected with
+   * {@link ServerErrorCode#BadRequest} so we never reach the engine with a malformed request.
+   */
+  private AdminResponse handleUpdateReplicationPriorityRequest(DataInputStream requestStream,
+      AdminRequest adminRequest) {
+    final int correlationId = adminRequest.getCorrelationId();
+    final String clientId = adminRequest.getClientId();
+    if (!serverConfig.serverHandleReplicationPriorityRequestEnabled) {
+      logger.warn("UpdateReplicationPriority request is disabled");
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+    }
+    UpdateReplicationPriorityAdminRequest updateRequest;
+    try {
+      updateRequest = UpdateReplicationPriorityAdminRequest.readFrom(requestStream, clusterMap, adminRequest);
+    } catch (Exception e) {
+      logger.error("Failed to deserialize UpdateReplicationPriorityAdminRequest", e);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+    }
+    if (updateRequest.getPartitionIds().size() > UpdateReplicationPriorityAdminRequest.MAX_PARTITIONS_PER_REQUEST) {
+      logger.warn("Rejecting UpdateReplicationPriority clientId={} — partition list size {} exceeds cap {}",
+          clientId, updateRequest.getPartitionIds().size(), UpdateReplicationPriorityAdminRequest.MAX_PARTITIONS_PER_REQUEST);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+    }
+    final UpdateReplicationPriorityAdminRequest.Action action = updateRequest.getAction();
+    final boolean empty = updateRequest.getPartitionIds().isEmpty();
+    switch (action) {
+      case SET:
+        if (empty) {
+          logger.warn("Rejecting UpdateReplicationPriority clientId={} — SET requires non-empty partition list",
+              clientId);
+          return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+        }
+        break;
+      case UNSET:
+        if (empty) {
+          logger.warn(
+              "Rejecting UpdateReplicationPriority clientId={} — UNSET requires non-empty partition list; use UNSET_ALL to wipe all",
+              clientId);
+          return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+        }
+        break;
+      case UNSET_ALL:
+        if (!empty) {
+          logger.warn("Rejecting UpdateReplicationPriority clientId={} — UNSET_ALL requires empty partition list",
+              clientId);
+          return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+        }
+        break;
+    }
+    if (action == UpdateReplicationPriorityAdminRequest.Action.SET && updateRequest.getBoost() < 1) {
+      logger.warn("Rejecting UpdateReplicationPriority clientId={} boost={} — must be >= 1", clientId,
+          updateRequest.getBoost());
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+    }
+    if (action == UpdateReplicationPriorityAdminRequest.Action.SET
+        && updateRequest.getBoost() > MAX_PRIORITY_BOOST) {
+      logger.warn("Rejecting UpdateReplicationPriority clientId={} boost={} — exceeds cap={}",
+          clientId, updateRequest.getBoost(), MAX_PRIORITY_BOOST);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+    }
+    if (action == UpdateReplicationPriorityAdminRequest.Action.SET) {
+      // All-or-nothing. A null partitionId means ClusterMap couldn't resolve; treat as unknown.
+      List<PartitionId> unknownPartitions = new ArrayList<>();
+      for (PartitionId partitionId : updateRequest.getPartitionIds()) {
+        if (partitionId == null || !replicationEngine.hostsPartition(partitionId)) {
+          unknownPartitions.add(partitionId);
+        }
+      }
+      if (!unknownPartitions.isEmpty()) {
+        logger.warn(
+            "Rejecting UpdateReplicationPriority clientId={} — {} partition(s) not hosted on this server: {}",
+            clientId, unknownPartitions.size(), unknownPartitions);
+        return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+      }
+    }
+    try {
+      switch (action) {
+        case UNSET_ALL:
+          logger.info("UpdateReplicationPriority clientId={} UNSET_ALL — wiping ALL priorities on this host", clientId);
+          replicationEngine.unsetPriorityPartitions(Collections.emptyList());
+          break;
+        case UNSET:
+          logger.info("UpdateReplicationPriority clientId={} UNSET partitions={}", clientId,
+              updateRequest.getPartitionIds());
+          replicationEngine.unsetPriorityPartitions(updateRequest.getPartitionIds());
+          break;
+        case SET:
+          logger.info("UpdateReplicationPriority clientId={} SET boost={} partitions={}", clientId,
+              updateRequest.getBoost(), updateRequest.getPartitionIds());
+          replicationEngine.prioritizePartitions(updateRequest.getPartitionIds(), updateRequest.getBoost());
+          break;
+      }
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.NoError);
+    } catch (UnsupportedOperationException e) {
+      logger.error("UpdateReplicationPriorityAdminRequest not supported by replication engine impl", e);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+    } catch (Exception e) {
+      logger.error("UpdateReplicationPriorityAdminRequest failed", e);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.UnknownError);
+    }
+  }
+
+  /**
+   * Handles {@link AdminRequestOrResponseType#ListReplicationPriority} — returns a snapshot of every
+   * priority entry currently held by any {@link ReplicaThread} on this host. The {@code isInterColo}
+   * flag on each entry is derived from {@link ReplicaThread#isReplicatingFromRemoteColo()}.
+   */
+  private AdminResponse handleListReplicationPriorityRequest(DataInputStream requestStream, AdminRequest adminRequest) {
+    final int correlationId = adminRequest.getCorrelationId();
+    final String clientId = adminRequest.getClientId();
+    if (!serverConfig.serverHandleReplicationPriorityRequestEnabled) {
+      logger.warn("ListReplicationPriority request is disabled");
+      AdminResponse base = new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+      return new ListReplicationPriorityAdminResponse(Collections.emptyList(), base);
+    }
+    try {
+      ListReplicationPriorityAdminRequest.readFrom(requestStream, adminRequest);
+    } catch (Exception e) {
+      logger.error("Failed to deserialize ListReplicationPriorityAdminRequest", e);
+      AdminResponse base = new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
+      return new ListReplicationPriorityAdminResponse(Collections.emptyList(), base);
+    }
+    try {
+      AdminResponse base = new AdminResponse(correlationId, clientId, ServerErrorCode.NoError);
+      return new ListReplicationPriorityAdminResponse(replicationEngine.listAllPriorityPartitions(), base);
+    } catch (UnsupportedOperationException e) {
+      logger.error("ListReplicationPriorityAdminRequest not supported by replication engine impl", e);
+      AdminResponse base = new AdminResponse(correlationId, clientId, ServerErrorCode.UnknownError);
+      return new ListReplicationPriorityAdminResponse(Collections.emptyList(), base);
+    }
   }
 
   /**

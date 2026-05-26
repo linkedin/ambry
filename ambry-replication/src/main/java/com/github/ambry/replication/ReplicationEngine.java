@@ -44,6 +44,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -176,6 +177,66 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @throws ReplicationException
    */
   public abstract void start() throws ReplicationException;
+
+  /**
+   * Fans out a priority-set call to every {@link ReplicaThread} pool on this node. Each
+   * {@code ReplicaThread} that holds replicas of any listed partition will treat them as priority;
+   * threads without those replicas pass them through but they have no effect there.
+   *
+   * <p>The per-thread auto-prune in {@code fillDataNodeTrackers} removes entries once their
+   * partitions catch up.
+   */
+  @Override
+  public void prioritizePartitions(List<PartitionId> partitions, int boost) {
+    for (List<ReplicaThread> pool : replicaThreadPoolByDc.values()) {
+      for (ReplicaThread replicaThread : pool) {
+        replicaThread.prioritizePartitions(partitions, boost);
+      }
+    }
+  }
+
+  @Override
+  public boolean hostsPartition(PartitionId partition) {
+    return partitionToPartitionInfo.containsKey(partition);
+  }
+
+  /**
+   * Fans out a priority-unset call to every {@link ReplicaThread} pool. A non-empty list unsets
+   * only the listed partitions; an empty list WIPES ALL priorities on this host. The empty-list
+   * branch must only be reached from a handler that has explicitly validated wipe-all intent
+   * (the admin layer requires {@code unsetAll=true} on the wire); routing an unvalidated empty
+   * list here would risk silent wipe-all.
+   */
+  @Override
+  public void unsetPriorityPartitions(List<PartitionId> partitions) {
+    for (List<ReplicaThread> pool : replicaThreadPoolByDc.values()) {
+      for (ReplicaThread replicaThread : pool) {
+        replicaThread.unsetPriorityPartitions(partitions);
+      }
+    }
+  }
+
+  /**
+   * Snapshot priority entries across every {@link ReplicaThread} on this node. A partition that is
+   * prioritized on multiple threads (typical, since priorities are mirrored across pools) appears
+   * once per thread, each entry tagged with its {@code isInterColo} flag.
+   */
+  @Override
+  public List<PriorityEntry> listAllPriorityPartitions() {
+    List<PriorityEntry> entries = new ArrayList<>();
+    for (List<ReplicaThread> pool : replicaThreadPoolByDc.values()) {
+      for (ReplicaThread thread : pool) {
+        boolean isInterColo = thread.isReplicatingFromRemoteColo();
+        for (Map.Entry<PartitionId, Integer> e : thread.listPriorityPartitions().entrySet()) {
+          entries.add(new PriorityEntry(e.getKey(), e.getValue(), isInterColo));
+        }
+      }
+    }
+    entries.sort(Comparator
+        .comparing((PriorityEntry e) -> e.getPartitionId().toPathString())
+        .thenComparing(PriorityEntry::isInterColo));
+    return entries;
+  }
 
   /**
    * Enable/Disable replication for given partitions if all origins are involved,
