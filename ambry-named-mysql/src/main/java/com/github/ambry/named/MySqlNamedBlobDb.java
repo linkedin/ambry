@@ -114,28 +114,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
   private final String LIST_WITH_PREFIX_SQL;
-
-  /**
-   * Similar like LIST_QUERY_V2, but this query is used when user don't provide the prefix and want to list all records.
-   */
-  // @formatter:off
-  private static final String LIST_ALL_QUERY = String.format(""
-      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
-      + "FROM named_blobs_v2 t1 "
-      + "INNER JOIN "
-      + "(SELECT account_id, container_id, blob_name, max(version) as version "
-      + "FROM named_blobs_v2 "
-      + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-      + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
-      + "        GROUP BY account_id, container_id, blob_name) t2 "
-      + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-      + "WHERE "
-      + "  CASE "
-      + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
-      + "     ELSE 1 "
-      + "   END "
-      + "ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
-  // @formatter:on
+  private final String LIST_ALL_SQL;
 
   /**
    * Attempt to insert a new mapping into the database. The 'modified_ts' column in the DB will be auto-populated on
@@ -201,6 +180,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     this.accountService = accountService;
     this.config = config;
     this.LIST_WITH_PREFIX_SQL = getListWithPrefixSQLStatement(config);
+    this.LIST_ALL_SQL = getListAllSQLStatement(config);
     this.localDatacenter = localDatacenter;
     this.retryExecutor = new RetryExecutor(null);
     this.metricsRecoder = metricRecorder;
@@ -324,6 +304,81 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "    AND %1$s " // blob_state = x
             + "    AND blob_name LIKE ? " // 3
             + "    AND blob_name >= ? " // 4
+            + ") t "
+            + "WHERE version = max_version "
+            + "  AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
+            + "ORDER BY blob_name "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME); // 5
+        // @formatter:on
+      default:
+        throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
+    }
+  }
+
+  /**
+   * Build the no-prefix LIST SQL. Selected by the same {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption}
+   * knob as {@link #getListWithPrefixSQLStatement}. Options 2 and 3 share the legacy INNER-JOIN + MAX-grouped
+   * subquery shape; option 4 uses a window-function shape that mirrors LIST_WITH_PREFIX_SQL option 4.
+   *
+   * S3-handler change in linkedin/ambry#3260's follow-up normalizes empty-string prefix to null at the API
+   * layer, so any empty-prefix S3 LIST now arrives here. Option 4's LIST_WITH_PREFIX_SQL with
+   * {@code blob_name LIKE '%'} was the failure shape we are routing away from.
+   */
+  private String getListAllSQLStatement(MySqlNamedBlobDbConfig config) {
+    switch (config.listNamedBlobsSQLOption) {
+      case 2:
+      case 3:
+        /**
+         * Legacy no-prefix LIST.
+         * INNER JOIN against a MAX(version) GROUP BY subquery. Preserves the pre-option-4 behavior:
+         * the deleted_ts filter lives in the inner subquery, so a soft-deleted latest version is
+         * filtered out before MAX is computed — meaning the second-latest non-deleted version surfaces
+         * as the apparent "latest" for that blob. This semantic differs from LIST_WITH_PREFIX_SQL
+         * options 2/3/4 (which hide the blob entirely when its latest version is deleted), but is
+         * preserved here to avoid changing default behavior for fabrics still on option 2 or 3.
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
+            + "FROM named_blobs_v2 t1 "
+            + "INNER JOIN "
+            + "(SELECT account_id, container_id, blob_name, max(version) as version "
+            + "FROM named_blobs_v2 "
+            + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
+            + "        GROUP BY account_id, container_id, blob_name) t2 "
+            + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+            + "WHERE "
+            + "  CASE "
+            + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
+            + "     ELSE 1 "
+            + "   END "
+            + "ORDER BY t1.blob_name ASC LIMIT ?", STATE_MATCH, CURRENT_TIME);
+        // @formatter:on
+      case 4:
+        /**
+         * No-prefix LIST, window-function variant. Single PK range scan over (account_id, container_id)
+         * with MAX(version) OVER (PARTITION BY blob_name); no INNER JOIN, no GROUP BY materialization.
+         *
+         * Correctness invariant — matches LIST_WITH_PREFIX_SQL option 4: deleted_ts predicate is applied
+         * on the OUTER select after the window operator, so a soft-deleted latest version causes the
+         * blob to be hidden entirely (rather than surfacing an older non-deleted version). This unifies
+         * the no-prefix and with-prefix LIST semantics under option 4. Operators flipping from option 3
+         * to option 4 inherit both the perf improvement and the consistent hide-latest-deleted semantic.
+         *
+         * Requires MySQL 8.0+ or TiDB (window function).
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
+            + "FROM ( "
+            + "  SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts, "
+            + "         MAX(version) OVER (PARTITION BY blob_name) AS max_version "
+            + "  FROM named_blobs_v2 "
+            + "  WHERE account_id = ? " // 1
+            + "    AND container_id = ? " // 2
+            + "    AND %1$s " // blob_state = x
+            + "    AND ( ? IS NULL OR blob_name >= ? ) " // 3, 4 (pageToken twice)
             + ") t "
             + "WHERE version = max_version "
             + "  AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
@@ -807,7 +862,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
     String query = "";
-    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY : LIST_WITH_PREFIX_SQL;
+    String queryStatement = blobNamePrefix == null ? LIST_ALL_SQL : LIST_WITH_PREFIX_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       if (blobNamePrefix == null) {
