@@ -88,6 +88,7 @@ import org.slf4j.LoggerFactory;
  * 2. Triggering of compaction of a particular partition on a particular node.
  * 3. Get catchup status of peers for a particular blob.
  * 4. Stop/Start a particular blob store via BlobStoreControl operation.
+ * 5. Set/clear/list replication priority for partitions across whole fabrics.
  */
 public class ServerAdminTool implements Closeable {
   private static final int POLL_TIMEOUT_MS = 10;
@@ -113,7 +114,9 @@ public class ServerAdminTool implements Closeable {
     RequestControl,
     ReplicationControl,
     CatchupStatus,
-    BlobStoreControl
+    BlobStoreControl,
+    SetReplicationPriority,
+    ListReplicationPriority
   }
 
   /**
@@ -239,6 +242,52 @@ public class ServerAdminTool implements Closeable {
     final BlobStoreControlAction storeControlRequestType;
 
     /**
+     * The fetchSize weight to apply to each listed partition when setting replication priority.
+     * Applicable for: SetReplicationPriority (when {@code clear=false}).
+     */
+    @Config("boost")
+    @Default("2")
+    final int boost;
+
+    /**
+     * If {@code true}, clears (unsets) replication priority instead of setting it. With a non-empty
+     * partition list this unsets only those partitions; with an empty partition list it wipes ALL
+     * priorities on the target host(s).
+     * Applicable for: SetReplicationPriority
+     */
+    @Config("clear")
+    @Default("false")
+    final boolean clear;
+
+    /**
+     * The single datacenter (fabric) name to scope the operation to (one fabric per invocation, for
+     * scope/blast-radius control). REQUIRED for {@code SetReplicationPriority} (no implicit cluster-wide
+     * default); optional for {@code ListReplicationPriority} (omitted = whole cluster).
+     * Applicable for: SetReplicationPriority,ListReplicationPriority
+     */
+    @Config("fabric")
+    @Default("")
+    final String fabric;
+
+    /**
+     * Optional comma separated list of hostnames to narrow the fan-out to (omitted = all hosts in the
+     * requested fabric(s)). Each listed host must be in the fabric(s) and host a requested partition.
+     * Applicable for: SetReplicationPriority,ListReplicationPriority
+     */
+    @Config("servers")
+    @Default("")
+    final String servers;
+
+    /**
+     * Reject the request if {@code partitions × resolvedHosts} exceeds this.
+     * Catches typos / runaway scripts before any host is contacted.
+     * Applicable for: SetReplicationPriority,ListReplicationPriority
+     */
+    @Config("max.fanout.total")
+    @Default("1000")
+    final int maxFanoutTotal;
+
+    /**
      * Path of the file where the data from certain operations will output. For example, the blob from GetBlob and the
      * user metadata from GetUserMetadata will be written into this file.
      */
@@ -269,7 +318,12 @@ public class ServerAdminTool implements Closeable {
           verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 0,
               Short.MAX_VALUE);
       storeControlRequestType =
-          BlobStoreControlAction.valueOf(verifiableProperties.getString("store.control.request.type"));
+          BlobStoreControlAction.valueOf(verifiableProperties.getString("store.control.request.type", "StartStore"));
+      boost = verifiableProperties.getInt("boost", 2);
+      clear = verifiableProperties.getBoolean("clear", false);
+      fabric = verifiableProperties.getString("fabric", "");
+      servers = verifiableProperties.getString("servers", "");
+      maxFanoutTotal = verifiableProperties.getIntInRange("max.fanout.total", 1000, 1, Integer.MAX_VALUE);
       dataOutputFilePath = verifiableProperties.getString("data.output.file.path", "/tmp/ambryResult.out");
     }
   }
@@ -293,8 +347,12 @@ public class ServerAdminTool implements Closeable {
       throw new IllegalStateException("Could not create " + file);
     }
     FileOutputStream outputFileStream = new FileOutputStream(config.dataOutputFilePath);
+    // The replication-priority ops do their own fabric-scoped host resolution, so they skip the single
+    // --hostname target node that all other ops require.
+    boolean isReplicationPriorityOp = config.typeOfOperation == Operation.SetReplicationPriority
+        || config.typeOfOperation == Operation.ListReplicationPriority;
     DataNodeId dataNodeId = clusterMap.getDataNodeId(config.hostname, config.port);
-    if (dataNodeId == null) {
+    if (dataNodeId == null && !isReplicationPriorityOp) {
       throw new IllegalArgumentException(
           "Could not find a data node corresponding to " + config.hostname + ":" + config.port);
     }
@@ -445,6 +503,20 @@ public class ServerAdminTool implements Closeable {
           LOGGER.error("There were no partitions provided to be controlled (Start/Stop)");
         }
         break;
+      case SetReplicationPriority: {
+        ReplicationPriorityAdminHelper priorityHelper =
+            new ReplicationPriorityAdminHelper(clusterMap, serverAdminTool::sendRequestGetResponse);
+        priorityHelper.runSetReplicationPriority(String.join(",", config.partitionIds), config.boost, config.clear,
+            config.fabric, config.servers, config.maxFanoutTotal);
+        break;
+      }
+      case ListReplicationPriority: {
+        ReplicationPriorityAdminHelper priorityHelper =
+            new ReplicationPriorityAdminHelper(clusterMap, serverAdminTool::sendRequestGetResponse);
+        priorityHelper.runListReplicationPriority(String.join(",", config.partitionIds), config.fabric, config.servers,
+            config.maxFanoutTotal);
+        break;
+      }
       default:
         throw new IllegalStateException("Recognized but unsupported operation: " + config.typeOfOperation);
     }
@@ -872,8 +944,9 @@ public class ServerAdminTool implements Closeable {
    * @return the response as a {@link ResponseInfo} if the response was successfully received. {@code null} otherwise.
    * @throws TimeoutException
    */
-  private ResponseInfo sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId,
-      SendWithCorrelationId request) throws TimeoutException {
+  // Package-private (was private) so it can be passed as the transport function to ReplicationPriorityAdminHelper.
+  ResponseInfo sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId, SendWithCorrelationId request)
+      throws TimeoutException {
     ReplicaId replicaId = ToolRequestResponseUtil.getReplicaFromNode(dataNodeId, partitionId, clusterMap);
     String hostname = dataNodeId.getHostname();
     Port port = dataNodeId.getPortToConnectTo();
