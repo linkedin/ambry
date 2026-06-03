@@ -23,6 +23,9 @@ import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.UpdateReplicationPriorityAdminRequest;
 import com.github.ambry.replication.PriorityEntry;
 import com.github.ambry.server.ServerErrorCode;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -117,13 +120,13 @@ public class ReplicationPriorityAdminHelperTest {
   @Test
   public void testResolveActionSetBoostTooHighRejected() {
     assertThrowsIae(() -> ReplicationPriorityAdminHelper.resolveAction(false,
-        Collections.singletonList(partitions.get(0)), ReplicationPriorityAdminHelper.MAX_BOOST + 1));
+        Collections.singletonList(partitions.get(0)), UpdateReplicationPriorityAdminRequest.MAX_PRIORITY_BOOST + 1));
   }
 
   @Test
   public void testResolveActionSetBoostAtCapAccepted() {
     assertEquals(UpdateReplicationPriorityAdminRequest.Action.SET, ReplicationPriorityAdminHelper.resolveAction(false,
-        Collections.singletonList(partitions.get(0)), ReplicationPriorityAdminHelper.MAX_BOOST));
+        Collections.singletonList(partitions.get(0)), UpdateReplicationPriorityAdminRequest.MAX_PRIORITY_BOOST));
   }
 
   @Test
@@ -255,6 +258,19 @@ public class ReplicationPriorityAdminHelperTest {
             entry.getValue().contains(specialPartition));
       }
     }
+  }
+
+  @Test
+  public void testResolveTargetHostPartitionsSetNoHostsInFabricRejected() throws Exception {
+    // SET (no --servers) scoped to a fabric where NONE of the requested partitions has a replica must be rejected,
+    // not silently resolve to zero hosts (a requested=0 no-op that's easy to mistake for success, e.g. a mistyped
+    // --fabric). Symmetric to the --servers "hosts none of the requested partitions" rejection. A freshly added DC
+    // hosts no existing partition, giving us a known-but-empty fabric for the requested partition.
+    clusterMap.createNewDataNodes(1, "DC-empty");
+    assertThrowsIae(
+        () -> ReplicationPriorityAdminHelper.resolveTargetHostPartitions(clusterMap,
+            Collections.singletonList("DC-empty"), Collections.emptyList(),
+            Collections.singletonList(partitions.get(0)), UpdateReplicationPriorityAdminRequest.Action.SET));
   }
 
   // ---- clear semantics: servers narrowing + validation ----
@@ -797,7 +813,83 @@ public class ReplicationPriorityAdminHelperTest {
     assertEquals(kept.getId(), priorities.getJSONObject(0).getLong("partitionId"));
   }
 
+  // ---- run* paths: null-response handling + replica-less node short-circuit ----
+
+  @Test
+  public void testRunSetReplicationPriorityNullResponseReportedAsActionableError() {
+    // sendRequestGetResponse may return null on a network-layer failure. The operator must see an actionable
+    // error for that host, NOT a bare NullPointerException (dereferencing null + a second NPE on release()).
+    ReplicationPriorityAdminHelper.Sender nullSender = (node, partition, request) -> null;
+    ReplicationPriorityAdminHelper helper = new ReplicationPriorityAdminHelper(clusterMap, nullSender);
+    JSONObject json = captureJson(
+        () -> helper.runSetReplicationPriority(partitions.get(0).toPathString(), 4, false, "DC1", "", 1000));
+    assertEquals(0, json.getJSONObject("summary").getInt("succeeded"));
+    JSONArray results = json.getJSONArray("results");
+    assertTrue("expected at least one targeted host", results.length() > 0);
+    for (int i = 0; i < results.length(); i++) {
+      assertHostErrorIsNullResponseNotNpe(results.getJSONObject(i));
+    }
+  }
+
+  @Test
+  public void testRunListReplicationPriorityNullResponseReportedAsActionableError() {
+    ReplicationPriorityAdminHelper.Sender nullSender = (node, partition, request) -> null;
+    ReplicationPriorityAdminHelper helper = new ReplicationPriorityAdminHelper(clusterMap, nullSender);
+    JSONObject json = captureJson(() -> helper.runListReplicationPriority("", "DC1", "", 1000));
+    JSONArray results = json.getJSONArray("results");
+    assertTrue("expected at least one queried host", results.length() > 0);
+    for (int i = 0; i < results.length(); i++) {
+      assertHostErrorIsNullResponseNotNpe(results.getJSONObject(i));
+    }
+  }
+
+  @Test
+  public void testRunListReplicationPriorityReplicaLessNodeReportedOkEmptyNotError() throws Exception {
+    // A fresh / spare / draining node hosts no replicas, so it can hold no priorities. It must be reported as an
+    // empty-but-OK result, never contacted over the network (which would route through getReplicaFromNode with no
+    // replica to pick and surface a healthy node as status:"error").
+    MockDataNodeId spare = clusterMap.createNewDataNodes(1, "DC-spare").get(0);
+    spare.setHostname("DC-spare-host.test");
+    ReplicationPriorityAdminHelper.Sender sender = (node, partition, request) -> {
+      throw new AssertionError("a replica-less node must not be contacted over the network");
+    };
+    ReplicationPriorityAdminHelper helper = new ReplicationPriorityAdminHelper(clusterMap, sender);
+    JSONObject json =
+        captureJson(() -> helper.runListReplicationPriority("", "", spare.getHostname(), 1000));
+    assertEquals(1, json.getJSONObject("summary").getInt("queriedHosts"));
+    assertEquals(0, json.getJSONObject("summary").getInt("hostsWithPriorities"));
+    JSONArray results = json.getJSONArray("results");
+    assertEquals(1, results.length());
+    JSONObject hostJson = results.getJSONObject(0);
+    assertEquals(spare.getHostname(), hostJson.getString("host"));
+    assertEquals("ok", hostJson.getString("status"));
+    assertEquals(0, hostJson.getJSONArray("priorities").length());
+  }
+
   // ---- helpers ----
+
+  /** Asserts a results[] entry is an error whose message is the actionable null-response IOException, not an NPE. */
+  private static void assertHostErrorIsNullResponseNotNpe(JSONObject hostJson) {
+    assertEquals("error", hostJson.getString("status"));
+    String error = hostJson.getString("error");
+    assertTrue("error should surface the null-response IOException, got: " + error, error.contains("Null response"));
+    assertFalse("must not surface a NullPointerException, got: " + error, error.contains("NullPointerException"));
+  }
+
+  /** Runs {@code runnable}, capturing what it writes to {@code System.out}, and parses it as a {@link JSONObject}. */
+  private static JSONObject captureJson(Runnable runnable) {
+    PrintStream original = System.out;
+    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    try {
+      System.setOut(new PrintStream(buffer, true, "UTF-8"));
+      runnable.run();
+      return new JSONObject(buffer.toString("UTF-8"));
+    } catch (UnsupportedEncodingException e) {
+      throw new AssertionError(e);
+    } finally {
+      System.setOut(original);
+    }
+  }
 
   private List<PartitionId> tooManyPartitions() {
     List<PartitionId> many = new ArrayList<>();

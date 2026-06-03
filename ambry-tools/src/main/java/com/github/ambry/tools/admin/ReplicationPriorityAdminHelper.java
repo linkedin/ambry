@@ -65,13 +65,6 @@ public class ReplicationPriorityAdminHelper {
   private static final String CLIENT_ID = "ServerAdminTool";
   private static final Logger LOGGER = LoggerFactory.getLogger(ReplicationPriorityAdminHelper.class);
 
-  /**
-   * Defensive cap on the boost weight (the server enforces the precise fetch-size-derived limit). Mirrors,
-   * and must stay in sync with, the server's {@code AmbryServerRequests.MAX_PRIORITY_BOOST}.
-   */
-  @VisibleForTesting
-  static final int MAX_BOOST = 1024;
-
   private final ClusterMap clusterMap;
   private final Sender sender;
   private final AtomicInteger correlationId = new AtomicInteger(0);
@@ -151,8 +144,10 @@ public class ReplicationPriorityAdminHelper {
       if (empty) {
         throw new IllegalArgumentException("SET (clear=false) requires a non-empty partition list");
       }
-      if (boost < 1 || boost > MAX_BOOST) {
-        throw new IllegalArgumentException("boost must be in [1, " + MAX_BOOST + "] for SET; got " + boost);
+      if (boost < 1 || boost > UpdateReplicationPriorityAdminRequest.MAX_PRIORITY_BOOST) {
+        throw new IllegalArgumentException(
+            "boost must be in [1, " + UpdateReplicationPriorityAdminRequest.MAX_PRIORITY_BOOST + "] for SET; got "
+                + boost);
       }
       if (partitionIds.size() > UpdateReplicationPriorityAdminRequest.MAX_PARTITIONS_PER_REQUEST) {
         throw new IllegalArgumentException(
@@ -251,7 +246,13 @@ public class ReplicationPriorityAdminHelper {
     }
 
     if (!serversProvided) {
-      // servers omitted -> fan out to every fabric host hosting any requested partition.
+      // servers omitted -> every fabric host hosting a requested partition; reject if none do (e.g. a mistyped
+      // --fabric) rather than silently doing nothing.
+      if (fabricHostSubset.isEmpty()) {
+        throw new IllegalArgumentException(
+            "None of the requested partitions are hosted in fabric(s) " + fabricSet
+                + "; nothing to do (check --fabric and --partition.ids)");
+      }
       return fabricHostSubset;
     }
 
@@ -563,7 +564,10 @@ public class ReplicationPriorityAdminHelper {
     Map<DataNodeId, List<PriorityEntry>> hostEntries = new LinkedHashMap<>();
     Map<DataNodeId, String> failures = new LinkedHashMap<>();
     FanOutSummary summary = fanOut(hosts, "ListReplicationPriority", host -> {
-      List<PriorityEntry> entries = listReplicationPriority(host);
+      // A replica-less node (spare/draining) hosts no partitions, so it has no priorities. Report it as empty/OK
+      // rather than contacting it (which would surface a healthy node as an error).
+      List<PriorityEntry> entries =
+          clusterMap.getReplicaIds(host).isEmpty() ? Collections.emptyList() : listReplicationPriority(host);
       hostEntries.put(host, entries);
     }, failures);
     System.out.println(buildListResultJson(hosts, hostEntries, failures, partitionFilter, summary).toString(2));
@@ -737,6 +741,9 @@ public class ReplicationPriorityAdminHelper {
         buildUpdateRequest(partitionIds, boost, action, correlationId.incrementAndGet());
     PartitionId replicaResolutionPartition = resolveReplicaPartition(partitionIds);
     ResponseInfo response = sender.send(dataNodeId, replicaResolutionPartition, updateRequest);
+    if (response == null) {
+      throw new IOException("Null response from " + dataNodeId + " — possible network-layer failure");
+    }
     try {
       AdminResponse adminResponse = AdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
       return adminResponse.getError();
@@ -760,6 +767,9 @@ public class ReplicationPriorityAdminHelper {
     ListReplicationPriorityAdminRequest listRequest = new ListReplicationPriorityAdminRequest(adminRequest);
     // Partition-agnostic request: pass null so getReplicaFromNode picks any replica on the node.
     ResponseInfo response = sender.send(dataNodeId, null, listRequest);
+    if (response == null) {
+      throw new IOException("Null response from " + dataNodeId + " — possible network-layer failure");
+    }
     try {
       ListReplicationPriorityAdminResponse adminResponse =
           ListReplicationPriorityAdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()),

@@ -317,8 +317,11 @@ public class ServerAdminTool implements Closeable {
       numReplicasCaughtUpPerPartition =
           verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 0,
               Short.MAX_VALUE);
-      storeControlRequestType =
-          BlobStoreControlAction.valueOf(verifiableProperties.getString("store.control.request.type", "StartStore"));
+      // Required for BlobStoreControl (defaulting it could silently start stores the operator didn't intend);
+      // other ops ignore it, so default it there to avoid failing config construction over an unrelated key.
+      storeControlRequestType = BlobStoreControlAction.valueOf(typeOfOperation == Operation.BlobStoreControl
+          ? verifiableProperties.getString("store.control.request.type")
+          : verifiableProperties.getString("store.control.request.type", "StartStore"));
       boost = verifiableProperties.getInt("boost", 2);
       clear = verifiableProperties.getBoolean("clear", false);
       fabric = verifiableProperties.getString("fabric", "");
