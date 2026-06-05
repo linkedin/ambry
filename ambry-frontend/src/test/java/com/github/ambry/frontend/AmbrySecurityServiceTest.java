@@ -274,8 +274,9 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)})} should throw RestServiceException if rate
-   * is more than expected. RestServiceErrorCode.TooManyRequests is expected in this case.
+   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)})} should throw RestServiceException if the
+   * host-level throttler signals overload. RestServiceErrorCode.ServiceUnavailable (HTTP 503) is expected in this
+   * case — host-local overload semantic is "this host is overloaded; try another," which 503 expresses correctly.
    */
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
@@ -300,7 +301,7 @@ public class AmbrySecurityServiceTest {
         ambrySecurityService.postProcessRequest(restRequest).get();
         Assert.fail("Should have failed.");
       } catch (Exception e) {
-        Assert.assertEquals("Exception should be TooManyRequests", RestServiceErrorCode.TooManyRequests,
+        Assert.assertEquals("Exception should be ServiceUnavailable", RestServiceErrorCode.ServiceUnavailable,
             ((RestServiceException) e.getCause()).getErrorCode());
       }
     }

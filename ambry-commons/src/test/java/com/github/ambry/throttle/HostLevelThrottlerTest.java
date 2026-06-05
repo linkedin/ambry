@@ -19,6 +19,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.commons.Criteria;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
@@ -28,6 +29,8 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.MockClock;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -44,9 +47,10 @@ import org.mockito.Mockito;
 
 
 /**
- * Tests for {@link HostLevelThrottler} after the per-method binary cap check was replaced with per-(method,
- * account, container) fair-share dropping. The hardware threshold branch is still binary in this commit —
- * fair-share for the hardware branch lands in a follow-up commit.
+ * Tests for {@link HostLevelThrottler} after the hardware threshold branch was replaced with per-namespace
+ * sustainabilityFactor-scaled fair-share dropping (max-wins composition with the per-method cap branch),
+ * the caller-visible response was flipped from 429 to 503, and the {@code updateConfig} runtime hook was
+ * added for runtime overrides.
  */
 public class HostLevelThrottlerTest {
 
@@ -97,8 +101,8 @@ public class HostLevelThrottlerTest {
   }
 
   /**
-   * TRACK mode runs the per-method fair-share algorithm and marks {@code wouldThrottle.restMethodCap} when an
-   * over-share namespace would be dropped, but never returns {@code shouldThrottle=true}.
+   * TRACK mode runs the per-method fair-share algorithm and marks {@code wouldThrottle.restMethodCap.GET} when
+   * an over-share namespace would be dropped, but never returns {@code shouldThrottle=true}.
    */
   @Test
   public void trackModeMarksWouldThrottleButReturnsFalse() throws Exception {
@@ -318,31 +322,6 @@ public class HostLevelThrottlerTest {
   }
 
   /**
-   * The hardware threshold branch is BINARY in this commit: any breach drops every namespaced request.
-   * Per-resource fair-share lands in the follow-up commit.
-   */
-  @Test
-  public void hardwareBranchStillBinary() throws Exception {
-    HostThrottleConfig config = buildConfig("ENFORCE", caps(), hardwareThresholds(101, 101, 50));
-    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
-    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.HEAP_MEMORY)).thenReturn(10);
-    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.CPU)).thenReturn(10);
-    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.DIRECT_MEMORY)).thenReturn(99);
-    MetricRegistry registry = new MetricRegistry();
-    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, registry, new MockClock());
-
-    RestRequest req = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
-    // Binary: every call drops with dropProb = 1.0.
-    for (int i = 0; i < 100; i++) {
-      Assert.assertTrue("Hardware breach must drop every namespaced request (binary).",
-          throttler.shouldThrottle(req));
-    }
-    Meter throttled = registry.meter(MetricRegistry.name(HostLevelThrottler.class, "throttled", "hardwareThreshold",
-        HardwareResource.DIRECT_MEMORY.name()));
-    Assert.assertEquals("Every drop must mark throttled.hardwareThreshold.DIRECT_MEMORY.", 100, throttled.getCount());
-  }
-
-  /**
    * Hardware threshold boundary: when {@code observedPercent == threshold}, the branch must NOT fire. The
    * guard at the hardware branch is {@code if (observedPercent <= threshold) continue;} — strict
    * greater-than for firing. Pins the off-by-one against a future refactor.
@@ -387,49 +366,415 @@ public class HostLevelThrottlerTest {
     }
   }
 
+  // ---------- Hardware fair-share branch (new in this commit) ----------
+
   /**
-   * Thread-safety stress test. With no triggers configured every call must return {@code false} regardless
-   * of interleaving; any data race (Caffeine cache + Codahale Meter interaction) surfaces as an exception
-   * or a count mismatch. Hard timeout guards against deadlocks.
+   * Hardware fair-share: when DIRECT_MEMORY is over threshold, sustainabilityFactor = threshold/observed
+   * scales the host-wide rate down to the sustainable target. Per-namespace fair-share = (hostTotal *
+   * sustainabilityFactor) / activeNamespaces. The over-share namespace bears the drop weight while
+   * under-share namespaces are admitted.
    */
-  @Test(timeout = 30_000)
-  public void concurrentShouldThrottleIsThreadSafe() throws Exception {
+  @Test
+  public void hardwareFairShareDropsOverShareNamespace() throws Exception {
+    // observed=95, threshold=80 ⇒ sustainabilityFactor ≈ 0.842. With one noisy + two quiet namespaces,
+    // the noisy one dominates hostTotal and ends up over its fair share; the two quiet ones stay under.
+    HostThrottleConfig config = buildConfig("ENFORCE", caps(), hardwareThresholds(101, 101, 80));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.HEAP_MEMORY)).thenReturn(10);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.CPU)).thenReturn(10);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.DIRECT_MEMORY)).thenReturn(95);
+    MockClock mockClock = new MockClock();
+    MetricRegistry registry = new MetricRegistry();
+    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, registry, mockClock);
+
+    RestRequest noisyReq = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
+    RestRequest quietReqB = newRequest(RestMethod.GET, ACCOUNT_B, CONTAINER_Y);
+    RestRequest quietReqC = newRequest(RestMethod.GET, (short) 300, (short) 30);
+    // Build lopsided rates: 1000 noisy vs 10 each on quiet ⇒ noisy is the clear over-share owner.
+    for (int i = 0; i < 1000; i++) {
+      throttler.shouldThrottle(noisyReq);
+    }
+    for (int i = 0; i < 10; i++) {
+      throttler.shouldThrottle(quietReqB);
+      throttler.shouldThrottle(quietReqC);
+    }
+    mockClock.tick(60);
+
+    int noisyDropped = 0;
+    int quietBDropped = 0;
+    int quietCDropped = 0;
+    for (int i = 0; i < 500; i++) {
+      if (throttler.shouldThrottle(noisyReq)) {
+        noisyDropped++;
+      }
+      if (throttler.shouldThrottle(quietReqB)) {
+        quietBDropped++;
+      }
+      if (throttler.shouldThrottle(quietReqC)) {
+        quietCDropped++;
+      }
+    }
+    Assert.assertTrue("Noisy namespace must be dropped under hardware pressure; got " + noisyDropped, noisyDropped > 0);
+    Assert.assertTrue("Noisy must be dropped at >=10x the rate of either quiet namespace; noisy=" + noisyDropped
+        + " quietB=" + quietBDropped + " quietC=" + quietCDropped,
+        noisyDropped >= 10 * (quietBDropped + 1) && noisyDropped >= 10 * (quietCDropped + 1));
+    Meter throttled = registry.meter(MetricRegistry.name(HostLevelThrottler.class, "throttled", "hardwareThreshold",
+        HardwareResource.DIRECT_MEMORY.name()));
+    Assert.assertTrue("Drops from hardware fair-share must be attributed to the hardwareThreshold.DIRECT_MEMORY trigger; count="
+        + throttled.getCount(), throttled.getCount() > 0);
+  }
+
+  /**
+   * Hardware fair-share with uniform load: every namespace drives equal rate and the sustainabilityFactor
+   * pulls fair share below the per-namespace rate, so all three see (roughly equal) non-zero drop. Pins the
+   * proportional behaviour — no namespace gets a free pass under sustained overload.
+   */
+  @Test
+  public void hardwareFairShareUniformOverloadDropsEveryone() throws Exception {
+    // observed=95, threshold=50 ⇒ sustainabilityFactor ≈ 0.526. With 3 namespaces at equal rate the
+    // fair share is well below each namespace's rate, so all three drop at the same ratio.
+    HostThrottleConfig config = buildConfig("ENFORCE", caps(), hardwareThresholds(101, 101, 50));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.HEAP_MEMORY)).thenReturn(10);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.CPU)).thenReturn(10);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.DIRECT_MEMORY)).thenReturn(95);
+    MockClock mockClock = new MockClock();
+    MetricRegistry registry = new MetricRegistry();
+    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, registry, mockClock);
+
+    RestRequest reqA = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
+    RestRequest reqB = newRequest(RestMethod.GET, ACCOUNT_B, CONTAINER_Y);
+    RestRequest reqC = newRequest(RestMethod.GET, (short) 300, (short) 30);
+    for (int i = 0; i < 500; i++) {
+      throttler.shouldThrottle(reqA);
+      throttler.shouldThrottle(reqB);
+      throttler.shouldThrottle(reqC);
+    }
+    mockClock.tick(60);
+
+    int droppedA = 0;
+    int droppedB = 0;
+    int droppedC = 0;
+    int samples = 500;
+    for (int i = 0; i < samples; i++) {
+      if (throttler.shouldThrottle(reqA)) {
+        droppedA++;
+      }
+      if (throttler.shouldThrottle(reqB)) {
+        droppedB++;
+      }
+      if (throttler.shouldThrottle(reqC)) {
+        droppedC++;
+      }
+    }
+    Assert.assertTrue("All three namespaces must drop under uniform hardware overload; A=" + droppedA + " B="
+        + droppedB + " C=" + droppedC, droppedA > 0 && droppedB > 0 && droppedC > 0);
+    // Sustainability fraction ~0.526 ⇒ expected drop ratio ~0.47. Allow a generous band for sampling noise.
+    int min = Math.min(droppedA, Math.min(droppedB, droppedC));
+    int max = Math.max(droppedA, Math.max(droppedB, droppedC));
+    Assert.assertTrue("Drop ratios across three equally-noisy namespaces must be roughly equal; A=" + droppedA
+        + " B=" + droppedB + " C=" + droppedC, max <= 2 * min);
+  }
+
+  /**
+   * Max-wins composition between per-method cap branch and hardware fair-share branch: when both fire on
+   * the same request, the larger dropProb (and its trigger label) wins. We pick a hardware threshold so far
+   * below observed that sustainabilityFactor dominates over a mild per-method cap fair-share — the trigger
+   * meter for {@code hardwareThreshold.DIRECT_MEMORY} must accumulate while {@code restMethodCap.GET}'s does
+   * not, when the HW dropProb wins.
+   */
+  @Test
+  public void hardwareFairShareMaxWinsWithPerMethodCap() throws Exception {
+    // Configure a modest per-method cap and a HW threshold low enough that HW fair-share is much tighter.
+    // 1 namespace, GET cap=100, rate ~16.7/s ⇒ aggregate (~16.7) < cap (100): per-method branch doesn't
+    // even fire. HW threshold=20 vs observed=99 ⇒ sustainabilityFactor ≈ 0.202, fair share ≈ 3.4/s ⇒ HW
+    // branch drops with dropProb ≈ 0.8. So the trigger marked is unambiguously DIRECT_MEMORY.
+    String capsJson = new JSONObject().put("GET", 100).toString();
+    HostThrottleConfig config = buildConfig("ENFORCE", capsJson, hardwareThresholds(101, 101, 20));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.HEAP_MEMORY)).thenReturn(10);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.CPU)).thenReturn(10);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.DIRECT_MEMORY)).thenReturn(99);
+    MockClock mockClock = new MockClock();
+    MetricRegistry registry = new MetricRegistry();
+    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, registry, mockClock);
+
+    RestRequest req = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
+    for (int i = 0; i < 1000; i++) {
+      throttler.shouldThrottle(req);
+    }
+    mockClock.tick(60);
+    for (int i = 0; i < 500; i++) {
+      throttler.shouldThrottle(req);
+    }
+
+    Meter hwThrottled = registry.meter(MetricRegistry.name(HostLevelThrottler.class, "throttled",
+        "hardwareThreshold", HardwareResource.DIRECT_MEMORY.name()));
+    Meter restMethodCapThrottled = registry.meter(
+        MetricRegistry.name(HostLevelThrottler.class, "throttled", "restMethodCap", RestMethod.GET.name()));
+    Assert.assertTrue("hardwareThreshold.DIRECT_MEMORY trigger must own the throttle attribution; count="
+        + hwThrottled.getCount(), hwThrottled.getCount() > 0);
+    Assert.assertEquals("restMethodCap.GET must not be the attributed trigger when HW dropProb wins.", 0,
+        restMethodCapThrottled.getCount());
+  }
+
+  /**
+   * LowerBound criteria are silently skipped in {@code shouldThrottle}'s hardware branch — the
+   * sustainabilityFactor math is only sensible for an UpperBound (observed > threshold). Even with observed
+   * way above threshold, a LowerBound criterion must not drop any request.
+   */
+  @Test
+  public void lowerBoundCriteriaSkipped() throws Exception {
+    Properties props = new Properties();
+    props.setProperty(HostThrottleConfig.MODE, "ENFORCE");
+    props.setProperty(HostThrottleConfig.REST_REQUEST_QUOTA_STRING, caps());
+    // DIRECT_MEMORY is LowerBound at 50 ⇒ observed=99 satisfies "above" but the branch must skip it.
+    String thresholdsJson = new JSONObject()
+        .put("HEAP_MEMORY", new JSONObject().put("threshold", 101).put("boundType", "UpperBound"))
+        .put("CPU", new JSONObject().put("threshold", 101).put("boundType", "UpperBound"))
+        .put("DIRECT_MEMORY", new JSONObject().put("threshold", 50).put("boundType", "LowerBound"))
+        .toString();
+    props.setProperty(HostThrottleConfig.HARDWARE_THRESHOLDS, thresholdsJson);
+    HostThrottleConfig config = new HostThrottleConfig(new VerifiableProperties(props));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(Mockito.any(HardwareResource.class))).thenReturn(99);
+    MockClock mockClock = new MockClock();
+    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, new MetricRegistry(), mockClock);
+
+    RestRequest req = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
+    for (int i = 0; i < 1000; i++) {
+      throttler.shouldThrottle(req);
+    }
+    mockClock.tick(60);
+    for (int i = 0; i < 200; i++) {
+      Assert.assertFalse("LowerBound criteria must be silently skipped — no drops attributable to them.",
+          throttler.shouldThrottle(req));
+    }
+  }
+
+  /**
+   * Trigger meters must be pre-registered for every {@link RestMethod} cap and every {@link HardwareResource}
+   * threshold at construction so {@link HostLevelThrottler#updateConfig} can later expand the trigger set
+   * without mutating the {@link MetricRegistry}. Construct with an empty config and assert every expected
+   * meter is registered.
+   */
+  @Test
+  public void triggerMetersPreRegisteredForAllResources() {
     HostThrottleConfig config = buildConfig("ENFORCE", caps(), hardwareThresholds(101, 101, 101));
     HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
     Mockito.when(hwMeter.getHardwareResourcePercentage(Mockito.any(HardwareResource.class))).thenReturn(10);
-    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, new MetricRegistry(), new MockClock());
+    MetricRegistry registry = new MetricRegistry();
+    new HostLevelThrottler(config, hwMeter, registry, new MockClock());
 
-    int threads = 16;
-    int callsPerThread = 1000;
+    for (String base : new String[]{"wouldThrottle", "throttled"}) {
+      for (RestMethod method : RestMethod.values()) {
+        String name = MetricRegistry.name(HostLevelThrottler.class, base, "restMethodCap", method.name());
+        Assert.assertTrue(name + " must be pre-registered.", registry.getMeters().containsKey(name));
+      }
+      for (HardwareResource resource : HardwareResource.values()) {
+        String name = MetricRegistry.name(HostLevelThrottler.class, base, "hardwareThreshold", resource.name());
+        Assert.assertTrue(name + " must be pre-registered.", registry.getMeters().containsKey(name));
+      }
+    }
+  }
+
+  // ---------- updateConfig runtime hook (new in this commit) ----------
+
+  /**
+   * {@link HostLevelThrottler#updateConfig} must swap the active mode atomically: an ENFORCE throttler that
+   * was dropping traffic must immediately stop dropping after the caller pushes OFF.
+   */
+  @Test
+  public void updateConfigSwapsModeAndIsObservedByNextRequest() throws Exception {
+    // Start in ENFORCE with a kill switch on GET so every request drops.
+    String capsJson = new JSONObject().put("GET", 0).toString();
+    HostThrottleConfig config = buildConfig("ENFORCE", capsJson, hardwareThresholds(101, 101, 101));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(Mockito.any(HardwareResource.class))).thenReturn(10);
+    HostLevelThrottler throttler =
+        new HostLevelThrottler(config, hwMeter, new MetricRegistry(), new MockClock());
+
+    RestRequest req = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
+    for (int i = 0; i < 50; i++) {
+      Assert.assertTrue("ENFORCE+killSwitch must drop.", throttler.shouldThrottle(req));
+    }
+
+    // Flip mode to OFF — must instantly admit everything regardless of the killSwitch quota.
+    throttler.updateConfig(ThrottleMode.OFF, killSwitchGetQuota(), unboundedThresholds());
+    for (int i = 0; i < 100; i++) {
+      Assert.assertFalse("OFF after updateConfig must admit every request.", throttler.shouldThrottle(req));
+    }
+  }
+
+  /**
+   * {@link HostLevelThrottler#updateConfig} must swap the {@code restRequestQuota} map atomically: a
+   * throttler that was uncapped must immediately start enforcing a fresh per-method cap after the push.
+   */
+  @Test
+  public void updateConfigSwapsQuotaAtomically() throws Exception {
+    // Start in ENFORCE with no caps (uncapped).
+    HostThrottleConfig config = buildConfig("ENFORCE", caps(), hardwareThresholds(101, 101, 101));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(Mockito.any(HardwareResource.class))).thenReturn(10);
+    MetricRegistry registry = new MetricRegistry();
+    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, registry, new MockClock());
+
+    RestRequest req = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
+    for (int i = 0; i < 100; i++) {
+      Assert.assertFalse("No caps configured ⇒ ENFORCE must pass.", throttler.shouldThrottle(req));
+    }
+
+    // Push a kill switch on GET via updateConfig — pre-registered restMethodCap.GET meter must accumulate.
+    throttler.updateConfig(ThrottleMode.ENFORCE, killSwitchGetQuota(), unboundedThresholds());
+    int dropped = 0;
+    for (int i = 0; i < 100; i++) {
+      if (throttler.shouldThrottle(req)) {
+        dropped++;
+      }
+    }
+    Assert.assertEquals("Fresh cap=0 must drop every request after updateConfig.", 100, dropped);
+    Meter throttled = registry.meter(
+        MetricRegistry.name(HostLevelThrottler.class, "throttled", "restMethodCap", RestMethod.GET.name()));
+    Assert.assertEquals("Drops from the pushed cap must be attributed to restMethodCap.GET.", 100,
+        throttled.getCount());
+  }
+
+  /**
+   * {@link HostLevelThrottler#updateConfig} must swap the {@code hardwareThresholds} map atomically: with
+   * the same observed HW reading, flipping the threshold low enough must start firing the HW branch.
+   */
+  @Test
+  public void updateConfigSwapsThresholdsAtomically() throws Exception {
+    // Start ENFORCE with all HW thresholds unreachable (101) — HW branch is inert.
+    HostThrottleConfig config = buildConfig("ENFORCE", caps(), hardwareThresholds(101, 101, 101));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.DIRECT_MEMORY)).thenReturn(95);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.HEAP_MEMORY)).thenReturn(10);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(HardwareResource.CPU)).thenReturn(10);
+    MockClock mockClock = new MockClock();
+    MetricRegistry registry = new MetricRegistry();
+    HostLevelThrottler throttler = new HostLevelThrottler(config, hwMeter, registry, mockClock);
+
+    RestRequest req = newRequest(RestMethod.GET, ACCOUNT_A, CONTAINER_X);
+    for (int i = 0; i < 1000; i++) {
+      throttler.shouldThrottle(req);
+    }
+    mockClock.tick(60);
+
+    // Push a new threshold for DIRECT_MEMORY that is below observed (95 > 50) ⇒ HW branch should fire.
+    Map<HardwareResource, Criteria> newThresholds = new EnumMap<>(HardwareResource.class);
+    newThresholds.put(HardwareResource.HEAP_MEMORY, new Criteria(101, Criteria.BoundType.UpperBound));
+    newThresholds.put(HardwareResource.CPU, new Criteria(101, Criteria.BoundType.UpperBound));
+    newThresholds.put(HardwareResource.DIRECT_MEMORY, new Criteria(50, Criteria.BoundType.UpperBound));
+    throttler.updateConfig(ThrottleMode.ENFORCE, Collections.emptyMap(), newThresholds);
+
+    int dropped = 0;
+    for (int i = 0; i < 500; i++) {
+      if (throttler.shouldThrottle(req)) {
+        dropped++;
+      }
+    }
+    Assert.assertTrue("HW fair-share must fire after threshold pushed below observed; dropped=" + dropped,
+        dropped > 0);
+    Meter throttled = registry.meter(MetricRegistry.name(HostLevelThrottler.class, "throttled", "hardwareThreshold",
+        HardwareResource.DIRECT_MEMORY.name()));
+    Assert.assertTrue("Pushed-threshold drops must be attributed to hardwareThreshold.DIRECT_MEMORY; count="
+        + throttled.getCount(), throttled.getCount() > 0);
+  }
+
+  /**
+   * Null arguments to {@link HostLevelThrottler#updateConfig} must throw {@link NullPointerException}. The
+   * caller is responsible for validating the push contents; rejecting null arg is the throttler's
+   * defensive line.
+   */
+  @Test
+  public void updateConfigRejectsNullArgsViaNPE() {
+    HostThrottleConfig config = buildConfig("OFF", caps(), hardwareThresholds(101, 101, 101));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    HostLevelThrottler throttler =
+        new HostLevelThrottler(config, hwMeter, new MetricRegistry(), new MockClock());
+    Map<RestMethod, Long> quota = Collections.emptyMap();
+    Map<HardwareResource, Criteria> thresholds = Collections.emptyMap();
+    try {
+      throttler.updateConfig(null, quota, thresholds);
+      Assert.fail("null mode must throw NPE.");
+    } catch (NullPointerException expected) {
+    }
+    try {
+      throttler.updateConfig(ThrottleMode.OFF, null, thresholds);
+      Assert.fail("null quota must throw NPE.");
+    } catch (NullPointerException expected) {
+    }
+    try {
+      throttler.updateConfig(ThrottleMode.OFF, quota, null);
+      Assert.fail("null thresholds must throw NPE.");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  /**
+   * Concurrent readers and a writer pushing alternating {@code updateConfig} snapshots must never see a
+   * torn triple. The volatile snapshot guarantees that each {@code shouldThrottle} call observes a
+   * consistent (mode, quota, thresholds). Hard timeout guards against deadlocks.
+   */
+  @Test(timeout = 30_000)
+  public void concurrentReadsUnderUpdateConfigSeeConsistentSnapshot() throws Exception {
+    HostThrottleConfig config = buildConfig("ENFORCE", caps(), hardwareThresholds(101, 101, 101));
+    HardwareUsageMeter hwMeter = Mockito.mock(HardwareUsageMeter.class);
+    Mockito.when(hwMeter.getHardwareResourcePercentage(Mockito.any(HardwareResource.class))).thenReturn(10);
+    HostLevelThrottler throttler =
+        new HostLevelThrottler(config, hwMeter, new MetricRegistry(), new MockClock());
+
+    int readers = 4;
+    int readsPerThread = 1000;
     Map<Integer, RestRequest> requestsByThread = new HashMap<>();
-    for (int t = 0; t < threads; t++) {
-      // Distinct (account, container) per thread so the caches see concurrent writes for different keys.
+    for (int t = 0; t < readers; t++) {
       requestsByThread.put(t, newRequest(RestMethod.GET, (short) (1000 + t), (short) 1));
     }
-    ExecutorService executor = Executors.newFixedThreadPool(threads);
+    ExecutorService executor = Executors.newFixedThreadPool(readers + 1);
     CountDownLatch start = new CountDownLatch(1);
-    AtomicLong dropCount = new AtomicLong();
     AtomicReference<Throwable> error = new AtomicReference<>();
-    for (int t = 0; t < threads; t++) {
+    CountDownLatch finished = new CountDownLatch(readers + 1);
+
+    for (int t = 0; t < readers; t++) {
       final RestRequest req = requestsByThread.get(t);
       executor.submit(() -> {
         try {
           start.await();
-          for (int i = 0; i < callsPerThread; i++) {
-            if (throttler.shouldThrottle(req)) {
-              dropCount.incrementAndGet();
-            }
+          for (int i = 0; i < readsPerThread; i++) {
+            // Just call — we don't care about the bool result, only that it doesn't throw.
+            throttler.shouldThrottle(req);
           }
         } catch (Throwable e) {
           error.set(e);
+        } finally {
+          finished.countDown();
         }
       });
     }
+
+    // One writer thread alternates the snapshot.
+    Map<RestMethod, Long> capA = killSwitchGetQuota();
+    Map<RestMethod, Long> capB = Collections.emptyMap();
+    Map<HardwareResource, Criteria> thresholds = unboundedThresholds();
+    executor.submit(() -> {
+      try {
+        start.await();
+        for (int i = 0; i < 100; i++) {
+          throttler.updateConfig(i % 2 == 0 ? ThrottleMode.ENFORCE : ThrottleMode.OFF,
+              i % 2 == 0 ? capA : capB, thresholds);
+        }
+      } catch (Throwable e) {
+        error.set(e);
+      } finally {
+        finished.countDown();
+      }
+    });
+
     start.countDown();
+    Assert.assertTrue("Workers did not finish within 20s.", finished.await(20, TimeUnit.SECONDS));
     executor.shutdown();
-    Assert.assertTrue("Workers did not finish within 20s.", executor.awaitTermination(20, TimeUnit.SECONDS));
-    Assert.assertNull("No exception expected during concurrent shouldThrottle.", error.get());
-    Assert.assertEquals("With no triggers configured, every concurrent call must return false.", 0, dropCount.get());
+    Assert.assertNull("No exception expected under concurrent updateConfig: " + error.get(), error.get());
   }
 
   // ---------- Helpers ----------
@@ -455,6 +800,22 @@ public class HostLevelThrottlerTest {
       quota.put(m.name(), -1);
     }
     return quota.toString();
+  }
+
+  /** A quota map with {@code GET=0} (kill switch). Used by updateConfig tests. */
+  private static Map<RestMethod, Long> killSwitchGetQuota() {
+    Map<RestMethod, Long> quota = new EnumMap<>(RestMethod.class);
+    quota.put(RestMethod.GET, 0L);
+    return quota;
+  }
+
+  /** Hardware thresholds map with every resource UpperBound at an unreachable 101%. */
+  private static Map<HardwareResource, Criteria> unboundedThresholds() {
+    Map<HardwareResource, Criteria> map = new EnumMap<>(HardwareResource.class);
+    for (HardwareResource r : HardwareResource.values()) {
+      map.put(r, new Criteria(101, Criteria.BoundType.UpperBound));
+    }
+    return map;
   }
 
   /** Build a hardware-thresholds JSON: heap/cpu/direct UpperBound at the given percents. */

@@ -167,7 +167,7 @@ class AmbrySecurityService implements SecurityService {
       if (!isOpen) {
         exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
-        exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+        exception = new RestServiceException("Host throttled", RestServiceErrorCode.ServiceUnavailable);
       } else {
         if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.recommend(restRequest);
