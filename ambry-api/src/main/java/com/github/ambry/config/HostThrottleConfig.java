@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.throttle.ThrottleMode;
 import org.json.JSONObject;
 
 
@@ -21,6 +22,7 @@ import org.json.JSONObject;
  */
 public class HostThrottleConfig {
   private static final String PREFIX = "host.throttle.";
+  public static final String MODE = PREFIX + "mode";
   public static final String REST_REQUEST_QUOTA_STRING = PREFIX + "rest.request.quota";
   public static final String HARDWARE_THRESHOLDS = PREFIX + "hardware.thresholds";
   public static final String CPU_SAMPLING_PERIOD_MS = PREFIX + "cpu.sampling.period.ms";
@@ -60,6 +62,14 @@ public class HostThrottleConfig {
           .toString();
 
   /**
+   * Operating mode for the host-level throttler. Default {@code OFF} keeps the throttler silently
+   * disabled out-of-the-box; operators opt in per-fabric via config.
+   */
+  @Config(MODE)
+  @Default("OFF")
+  public final ThrottleMode mode;
+
+  /**
    * Quotas for rest requests, in JSON string.
    * Default value: DEFAULT_REST_REQUEST_QUOTA_STRING
    */
@@ -88,6 +98,9 @@ public class HostThrottleConfig {
   public int memorySamplingPeriodMs;
 
   public HostThrottleConfig(VerifiableProperties verifiableProperties) {
+    // Fail-fast on invalid mode strings via the IllegalArgumentException thrown by Enum.valueOf —
+    // a typo in the config property should surface at startup, not silently degrade to OFF.
+    mode = ThrottleMode.valueOf(verifiableProperties.getString(MODE, ThrottleMode.OFF.name()));
     restRequestQuota = verifiableProperties.getString(REST_REQUEST_QUOTA_STRING, DEFAULT_REST_REQUEST_QUOTA_STRING);
     hardwareThresholds = verifiableProperties.getString(HARDWARE_THRESHOLDS, DEFAULT_HARDWARE_THRESHOLDS_STRING);
     cpuSamplingPeriodMs = verifiableProperties.getInt(CPU_SAMPLING_PERIOD_MS, 100);
