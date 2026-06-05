@@ -13,150 +13,254 @@
  */
 package com.github.ambry.throttle;
 
+import com.codahale.metrics.Clock;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.commons.Criteria;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.utils.JsonUtil;
-import com.github.ambry.utils.RejectThrottler;
-import java.io.IOException;
+import com.github.ambry.rest.RestUtils;
+import com.github.ambry.utils.Pair;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
-import org.json.JSONObject;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * A class to decide if a request should be host-level throttled. Operating modes are defined by
- * {@link ThrottleMode}.
+ * A class to decide if a request should be throttled. Operating modes are defined by {@link ThrottleMode}.
  *
- * <p>In {@code TRACK} / {@code ENFORCE} two trigger families are checked (first match wins):
+ * <p>In {@code TRACK} / {@code ENFORCE} two trigger families fire independently and the largest drop probability
+ * across all triggers wins:
  * <ol>
- *   <li>{@code restMethodCap.<RestMethod>}: the configured per-{@link RestMethod} QPS cap in
- *       {@link HostThrottleConfig#restRequestQuota} is exceeded.</li>
- *   <li>{@code hardwareThreshold.<HardwareResource>}: the measured percentage falls outside the configured
- *       {@link Criteria} threshold in {@link HostThrottleConfig#hardwareThresholds} (e.g.
- *       {@code DIRECT_MEMORY > 85%}).</li>
+ *   <li>{@code restMethodCap.<RestMethod>}: the configured per-RestMethod QPS cap is exceeded; the over-share
+ *       caller for that method receives {@code dropProb = (rate - fairShare) / rate}, where
+ *       {@code fairShare = cap / activeKeysForMethod}.</li>
+ *   <li>{@code hardwareThreshold.<HardwareResource>}: the observed percentage for a configured hardware
+ *       resource (e.g. {@code DIRECT_MEMORY}) exceeds the configured UpperBound — drops everyone (binary).
+ *       Fair-share for the hardware branch lands in a follow-up commit.</li>
  * </ol>
+ *
+ * <p>Requests without a resolvable (account, container) — admin/operational endpoints such as
+ * {@code /accounts}, {@code /peers}, {@code /getClusterMapSnapshot}, {@code /statsReport} — are never
+ * throttled in {@code TRACK}/{@code ENFORCE}, regardless of trigger state. The throttler is scoped to
+ * defending against noisy namespaced tenants (e.g. one account+container hammering a host); admin traffic
+ * is low-volume internal traffic and not in scope. Short-circuiting on UNKNOWN also avoids polluting the
+ * per-method aggregate rate that the fair-share branch reads.
  */
 public class HostLevelThrottler {
-  /** Trigger family name for the per-{@link RestMethod} QPS cap branch. */
-  static final String TRIGGER_REST_METHOD_CAP = "restMethodCap";
-  /** Trigger family name for the per-{@link HardwareResource} threshold branch. */
-  static final String TRIGGER_HARDWARE_THRESHOLD = "hardwareThreshold";
-  private static final String WOULD_THROTTLE_METRIC_BASE = "wouldThrottle";
-  private static final String THROTTLED_METRIC_BASE = "throttled";
-
   private static final Logger logger = LoggerFactory.getLogger(HostLevelThrottler.class);
 
-  private final ThrottleMode mode;
-  private final Map<RestMethod, RejectThrottler> quotaMap;
-  private final Map<HardwareResource, Criteria> hardwareThresholdMap;
-  private final HardwareUsageMeter hardwareUsageMeter;
-  private final Map<String, Meter> wouldThrottleMeters;
-  private final Map<String, Meter> throttledMeters;
+  /** Trigger family name for the per-RestMethod QPS-cap branch. */
+  private static final String TRIGGER_REST_METHOD_CAP = "restMethodCap";
+  /** Trigger family name for the per-HardwareResource threshold branch. */
+  private static final String TRIGGER_HARDWARE_THRESHOLD = "hardwareThreshold";
 
-  /**
-   * Production constructor. Reads {@link HostThrottleConfig} and registers per-trigger meters on the
-   * provided {@link MetricRegistry}.
-   */
+  // Caffeine idle-expiry for per-namespace meter entries. Hardcoded to match Codahale Meter's 1-minute EWMA
+  // window (Meter.getOneMinuteRate, which we call below): once a namespace stops emitting, its rate decays
+  // to near-zero within ~60s, so dropping it from the cache after 60s of inactivity loses no operational
+  // signal. This is also what keeps perMethodNamespaceMeters.estimatedSize() honest as the fair-share
+  // denominator — without expiry, every namespace ever seen would count forever and active callers would
+  // eat ever-tighter fair shares. Promote to config only if the algorithm ever moves off the 1-minute window.
+  private static final long METER_TTL_SECONDS = 60;
+
+  // Sentinel used when the request has no resolvable namespace (admin/operational endpoints — see class Javadoc).
+  private static final Pair<Short, Short> UNKNOWN_NAMESPACE =
+      new Pair<>(Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+
+  private final ThrottleMode mode;
+  // Parsed at config load — see HostThrottleConfig.
+  private final Map<HardwareResource, Criteria> hardwareThresholds;
+  private final HardwareUsageMeter hardwareUsageMeter;
+  // Per-method QPS cap from config. cap < 0 = uncapped; cap = 0 = kill switch; cap > 0 = rate cap with fair-share.
+  // Methods not present are treated as uncapped (consumer uses getOrDefault(method, -1L)).
+  private final Map<RestMethod, Long> restRequestQuota;
+  // For each method: cache of per-namespace Meters. estimatedSize() approximates the active-key count for that method.
+  private final EnumMap<RestMethod, Cache<Pair<Short, Short>, Meter>> perMethodNamespaceMeters;
+  // Aggregate rate per method (sum of all namespaces). Compared against restRequestQuota.
+  private final EnumMap<RestMethod, Meter> perMethodAggregateMeters;
+  // Externally visible "would throttle" meters, keyed by trigger name. Marked on every drop decision
+  // regardless of mode — preserves rate continuity across TRACK→ENFORCE flips (the drop bit is the same).
+  private final Map<String, Meter> wouldThrottleMeters;
+  // Externally visible "throttled" meters, keyed by trigger name. Marked only when the request was actually
+  // rejected (mode == ENFORCE && drop). Lets operators alert on real impact independent of mode.
+  private final Map<String, Meter> throttledMeters;
+  // Clock used to back every per-namespace Meter we lazily allocate.
+  private final Clock clock;
+
   public HostLevelThrottler(HostThrottleConfig hostThrottleConfig, MetricRegistry metricRegistry) {
     this(hostThrottleConfig,
         new HardwareUsageMeter(hostThrottleConfig.cpuSamplingPeriodMs, hostThrottleConfig.memorySamplingPeriodMs),
-        buildQuotaMap(hostThrottleConfig.restRequestQuota), metricRegistry);
+        metricRegistry, Clock.defaultClock());
   }
 
   /**
-   * Package-private test constructor that lets tests inject a mocked {@link HardwareUsageMeter} and a
-   * pre-built per-method {@link RejectThrottler} map (e.g. with a {@code MockClock}-backed
-   * {@link com.codahale.metrics.Meter}).
+   * Package-private test entry point. Lets tests inject a mock {@link HardwareUsageMeter} and a
+   * {@link Clock} that backs every internal {@link Meter}.
    */
   HostLevelThrottler(HostThrottleConfig hostThrottleConfig, HardwareUsageMeter hardwareUsageMeter,
-      Map<RestMethod, RejectThrottler> quotaMap, MetricRegistry metricRegistry) {
-    this.mode = hostThrottleConfig.mode;
+      MetricRegistry metricRegistry, Clock clock) {
     this.hardwareUsageMeter = hardwareUsageMeter;
-    this.quotaMap = quotaMap;
-    this.hardwareThresholdMap = getHardwareThresholdMap(hostThrottleConfig.hardwareThresholds);
-    this.wouldThrottleMeters = registerTriggerMeters(metricRegistry, WOULD_THROTTLE_METRIC_BASE);
-    this.throttledMeters = registerTriggerMeters(metricRegistry, THROTTLED_METRIC_BASE);
-    logger.info("HostLevelThrottler initialized: mode={} quotaMap={} hardwareThresholdMap={}", mode, quotaMap,
-        hardwareThresholdMap);
+    this.restRequestQuota = hostThrottleConfig.restRequestQuota;
+    this.hardwareThresholds = hostThrottleConfig.hardwareThresholds;
+    this.mode = hostThrottleConfig.mode;
+
+    this.perMethodNamespaceMeters = new EnumMap<>(RestMethod.class);
+    this.perMethodAggregateMeters = new EnumMap<>(RestMethod.class);
+    for (RestMethod restMethod : RestMethod.values()) {
+      this.perMethodNamespaceMeters.put(restMethod,
+          Caffeine.newBuilder().expireAfterAccess(METER_TTL_SECONDS, TimeUnit.SECONDS).build());
+      this.perMethodAggregateMeters.put(restMethod, new Meter(clock));
+    }
+    this.clock = clock;
+    this.wouldThrottleMeters = registerTriggerMeters(metricRegistry, "wouldThrottle");
+    this.throttledMeters = registerTriggerMeters(metricRegistry, "throttled");
+
+    logger.info("Host throttling config: mode={} restRequestQuota={} hardwareThresholds={}", this.mode,
+        this.restRequestQuota, this.hardwareThresholds);
   }
 
   /**
-   * @param restRequest the {@link RestRequest} to evaluate.
-   * @return {@code true} if the request should be rejected (only possible when mode == {@code ENFORCE}).
+   * Decide whether to throttle this request.
+   *
+   * <p>{@code OFF} short-circuits with no accounting. {@code TRACK} runs the algorithm and marks
+   * {@code wouldThrottle.*} on each drop decision, but always returns {@code false}; {@code ENFORCE}
+   * returns the drop decision.
+   *
+   * @param restRequest the request to check.
+   * @return {@code true} if the caller should reject this request, {@code false} otherwise.
    */
   public boolean shouldThrottle(RestRequest restRequest) {
     if (mode == ThrottleMode.OFF) {
       return false;
     }
-    String triggerFired = null;
-    RestMethod restMethod = restRequest.getRestMethod();
-    RejectThrottler perMethodThrottler = quotaMap.get(restMethod);
-    if (perMethodThrottler != null && perMethodThrottler.shouldThrottle(1)) {
-      triggerFired = TRIGGER_REST_METHOD_CAP + "." + restMethod.name();
-    }
-    if (triggerFired == null) {
-      for (HardwareResource hardwareResource : HardwareResource.values()) {
-        Criteria criteria = hardwareThresholdMap.get(hardwareResource);
-        if (criteria == null) {
-          continue;
-        }
-        int observed = hardwareUsageMeter.getHardwareResourcePercentage(hardwareResource);
-        if (!meetsRequirement(criteria, observed)) {
-          triggerFired = TRIGGER_HARDWARE_THRESHOLD + "." + hardwareResource.name();
-          logger.warn("HostLevelThrottler drop on {}: observed={}%", hardwareResource, observed);
-          break;
-        }
-      }
-    }
-    if (triggerFired == null) {
+
+    RestMethod method = restRequest.getRestMethod();
+    Pair<Short, Short> namespace = extractNamespace(restRequest);
+    // Admin/operational endpoints (no resolvable account+container) bypass throttling — see the class
+    // Javadoc for scope. Returning early also skips the accounting marks below, so their rate doesn't
+    // poison the per-method aggregate.
+    if (namespace.equals(UNKNOWN_NAMESPACE)) {
       return false;
     }
-    Meter wouldThrottleMeter = wouldThrottleMeters.get(triggerFired);
-    if (wouldThrottleMeter != null) {
-      wouldThrottleMeter.mark();
-    }
-    if (mode == ThrottleMode.ENFORCE) {
-      Meter throttledMeter = throttledMeters.get(triggerFired);
-      if (throttledMeter != null) {
-        throttledMeter.mark();
+
+    // Emit-on-write: every active aggregate gets a single mark. Each call is O(1).
+    Meter perMethodNamespaceMeter =
+        perMethodNamespaceMeters.get(method).get(namespace, key -> new Meter(clock));
+    perMethodNamespaceMeter.mark();
+    Meter perMethodAggregate = perMethodAggregateMeters.get(method);
+    perMethodAggregate.mark();
+
+    double dropProb = 0.0;
+    String triggerFired = null;
+
+    // Per-method cap branch. Missing methods are uncapped (-1) — the config map only contains explicit entries.
+    // Matches legacy RejectThrottler semantics: cap < 0 = uncapped, cap = 0 = drop everything (kill switch),
+    // cap > 0 = normal rate cap with fair-share over-share drop.
+    long restMethodCap = restRequestQuota.getOrDefault(method, -1L);
+    if (restMethodCap == 0) {
+      dropProb = 1.0;
+      triggerFired = TRIGGER_REST_METHOD_CAP + "." + method.name();
+    } else if (restMethodCap > 0 && perMethodAggregate.getOneMinuteRate() > restMethodCap) {
+      double activeKeys = perMethodNamespaceMeters.get(method).estimatedSize();
+      // Guard against async Caffeine eviction races: a concurrent eviction between our get() and
+      // estimatedSize() can leave activeKeys at 0 even though we just inserted. Skip the branch in that
+      // (rare) case rather than divide by zero.
+      if (activeKeys > 0.0) {
+        double fairShare = (double) restMethodCap / activeKeys;
+        double thisRate = perMethodNamespaceMeter.getOneMinuteRate();
+        if (thisRate > fairShare) {
+          double newDrop = (thisRate - fairShare) / thisRate;
+          if (newDrop > dropProb) {
+            dropProb = newDrop;
+            triggerFired = TRIGGER_REST_METHOD_CAP + "." + method.name();
+          }
+        }
       }
-      return true;
     }
-    return false;
+
+    // Hardware threshold branch — still BINARY in this commit. Any breach drops everyone (dropProb = 1.0).
+    // Per-resource fair-share lands in the next commit.
+    for (Map.Entry<HardwareResource, Criteria> entry : hardwareThresholds.entrySet()) {
+      Criteria criteria = entry.getValue();
+      // Only UpperBound is meaningful for "observed exceeds threshold" semantics. LowerBound criteria are
+      // silently skipped — they will become meaningful when fair-share replaces the binary check.
+      if (criteria.getBoundType() != Criteria.BoundType.UpperBound) {
+        continue;
+      }
+      int observedPercent = hardwareUsageMeter.getHardwareResourcePercentage(entry.getKey());
+      if (observedPercent <= criteria.getThreshold()) {
+        continue;
+      }
+      if (1.0 > dropProb) {
+        dropProb = 1.0;
+        triggerFired = TRIGGER_HARDWARE_THRESHOLD + "." + entry.getKey().name();
+      }
+    }
+
+    // One drop decision shared across TRACK and ENFORCE — guarantees TRACK-mode wouldThrottle rate
+    // equals the rate that ENFORCE would have produced for the same traffic.
+    boolean drop = dropProb > 0.0 && ThreadLocalRandom.current().nextDouble() < dropProb;
+    boolean enforce = (mode == ThrottleMode.ENFORCE) && drop;
+    if (drop) {
+      // dropProb > 0 implies triggerFired was set above (every dropProb assignment co-occurs with one).
+      // Always mark wouldThrottle on drop (regardless of mode) so dashboards see continuous rate across
+      // TRACK→ENFORCE flips. Additionally mark throttled when the request was actually rejected — that's
+      // the metric operators alert on for real impact.
+      mark(wouldThrottleMeters, triggerFired);
+      if (enforce) {
+        mark(throttledMeters, triggerFired);
+      }
+    }
+
+    if (enforce && logger.isDebugEnabled()) {
+      // Logged at debug because under sustained ENFORCE this fires on every dropped request — operators
+      // should watch the throttled.* meters for aggregate visibility instead.
+      logger.debug("Throttling request method={} namespace={} dropProb={} trigger={}", method, namespace, dropProb,
+          triggerFired);
+    }
+    return enforce;
+  }
+
+  private static void mark(Map<String, Meter> meters, String trigger) {
+    Meter meter = meters.get(trigger);
+    if (meter != null) {
+      meter.mark();
+    }
   }
 
   /**
-   * Parse the per-{@link RestMethod} QPS quota JSON string from {@link HostThrottleConfig#restRequestQuota}
-   * into a {@link RejectThrottler} map. Missing methods get a {@code -1} cap (disabled).
+   * Best-effort namespace extraction. Reads the {@link Account} / {@link Container} that
+   * {@code AccountAndContainerInjector} placed under {@link RestUtils.InternalKeys#TARGET_ACCOUNT_KEY} /
+   * {@code TARGET_CONTAINER_KEY}. Falls back to {@link #UNKNOWN_NAMESPACE} for requests with no resolvable
+   * namespace (admin/operational endpoints — see class Javadoc) — those all share a single bucket.
    */
-  private static Map<RestMethod, RejectThrottler> buildQuotaMap(String restRequestQuotaJson) {
-    JSONObject quota = new JSONObject(restRequestQuotaJson);
-    Map<RestMethod, RejectThrottler> quotaMap = new HashMap<>();
-    for (RestMethod restMethod : RestMethod.values()) {
-      quotaMap.put(restMethod, new RejectThrottler(quota.optInt(restMethod.name(), -1)));
+  private static Pair<Short, Short> extractNamespace(RestRequest restRequest) {
+    Object accountObj = restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
+    Object containerObj = restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
+    if (accountObj instanceof Account && containerObj instanceof Container) {
+      return new Pair<>(((Account) accountObj).getId(), ((Container) containerObj).getId());
     }
-    return quotaMap;
+    return UNKNOWN_NAMESPACE;
   }
 
   /**
-   * Eagerly register per-trigger meters on the given {@link MetricRegistry}, one per
-   * {@code (family, sub-key)} pair:
+   * Eagerly register every {@code <metricBase>.<family>.<sub-key>} meter the throttler can ever mark:
    * <ul>
-   *   <li>{@code <base>.restMethodCap.<RestMethod>} for every {@link RestMethod} value.</li>
-   *   <li>{@code <base>.hardwareThreshold.<HardwareResource>} for every {@link HardwareResource} value.</li>
+   *   <li>{@code restMethodCap.<RestMethod>} for every {@link RestMethod} value.</li>
+   *   <li>{@code hardwareThreshold.<HardwareResource>} for every {@link HardwareResource} value.</li>
    * </ul>
-   * Meters are registered up front so subsequent config updates can change which sub-key fires
-   * without mutating the metric registry. {@link MetricRegistry#meter(String)} is idempotent by
-   * name, so the {@code wouldThrottle} and {@code throttled} families can safely share the same
-   * registry.
+   * Registered up front (independent of the current config) so runtime config flips can change which
+   * sub-key actually fires without mutating the metric registry. Per-namespace meters are NOT registered —
+   * that would blow up cardinality.
    */
   private static Map<String, Meter> registerTriggerMeters(MetricRegistry metricRegistry, String metricBase) {
     Map<String, Meter> result = new HashMap<>();
@@ -173,39 +277,5 @@ public class HostLevelThrottler {
               resource.name())));
     }
     return result;
-  }
-
-  /**
-   * Evaluate a {@link Criteria} against an observed percentage. {@link Criteria#meetRequirement(Long)}
-   * is package-private to {@code com.github.ambry.commons}; this throttler lives in
-   * {@code com.github.ambry.throttle}, so we apply the same predicate via the public getters.
-   */
-  private static boolean meetsRequirement(Criteria criteria, int observed) {
-    long threshold = criteria.getThreshold();
-    return criteria.getBoundType() == Criteria.BoundType.UpperBound ? observed <= threshold : observed >= threshold;
-  }
-
-  /**
-   * Parse the hardware threshold JSON string into a typed {@link Criteria} map. Unparseable
-   * per-resource blocks are skipped with a warning so an operator-config typo doesn't disable
-   * the rest of the thresholds.
-   */
-  static Map<HardwareResource, Criteria> getHardwareThresholdMap(String hardwareThresholdsString) {
-    JSONObject thresholds = new JSONObject(hardwareThresholdsString);
-    Map<HardwareResource, Criteria> hardwareThresholdMap = new EnumMap<>(HardwareResource.class);
-    // All criteria must be satisfied. If we ever need OR-of-rules, this should become a list.
-    for (HardwareResource hardwareResource : HardwareResource.values()) {
-      if (thresholds.has(hardwareResource.name())) {
-        String jsonString = thresholds.getJSONObject(hardwareResource.name()).toString();
-        ObjectMapper objectMapper = JsonUtil.newObjectMapper();
-        try {
-          Criteria criteria = objectMapper.readValue(jsonString, Criteria.class);
-          hardwareThresholdMap.put(hardwareResource, criteria);
-        } catch (IOException e) {
-          logger.error("Error while parsing {} threshold", hardwareResource.name(), e);
-        }
-      }
-    }
-    return hardwareThresholdMap;
   }
 }
