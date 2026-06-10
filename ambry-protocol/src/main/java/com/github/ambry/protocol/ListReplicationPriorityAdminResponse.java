@@ -16,8 +16,10 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.replication.PriorityEntry;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -28,10 +30,10 @@ import java.util.List;
  * priority entries held by every {@link com.github.ambry.replication.ReplicaThread} on the
  * target storage node at handler-invocation time.
  *
- * Each {@link PriorityEntry} carries an {@code isInterColo} flag indicating whether the entry
- * came from the inter-colo (cross-datacenter) replication thread pool or the intra-colo pool.
- * The current design applies priorities to both pools by default, so the same partition
- * typically appears twice in the response — once per pool.
+ * Each {@link PriorityEntry} carries an {@code isInterColo} flag (inter-colo vs intra-colo thread pool)
+ * and the name of the holding {@link com.github.ambry.replication.ReplicaThread}. A partition can be
+ * replicated by more than one thread on a node, so it may appear once per thread; the thread name
+ * disambiguates otherwise-identical {@code (partition, boost, isInterColo)} rows.
  */
 public class ListReplicationPriorityAdminResponse extends AdminResponse {
   private static final short VERSION_V1 = 1;
@@ -40,6 +42,7 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
 
   private final List<PriorityEntry> entries;
   private final byte[][] partitionIdBytes;
+  private final byte[][] threadNameBytes;
   private final long sizeInBytes;
 
   public static ListReplicationPriorityAdminResponse readFrom(DataInputStream stream, ClusterMap clusterMap)
@@ -58,7 +61,8 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
       PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
       int boost = stream.readInt();
       boolean isInterColo = stream.readByte() != 0;
-      entries.add(new PriorityEntry(partitionId, boost, isInterColo));
+      String threadName = Utils.readIntString(stream, StandardCharsets.UTF_8);
+      entries.add(new PriorityEntry(partitionId, boost, isInterColo, threadName));
     }
     return new ListReplicationPriorityAdminResponse(entries, adminResponse);
   }
@@ -67,8 +71,12 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
     super(adminResponse.getCorrelationId(), adminResponse.getClientId(), adminResponse.getError());
     this.entries = Collections.unmodifiableList(new ArrayList<>(entries));
     this.partitionIdBytes = new byte[this.entries.size()][];
+    this.threadNameBytes = new byte[this.entries.size()][];
     for (int i = 0; i < this.entries.size(); i++) {
-      this.partitionIdBytes[i] = this.entries.get(i).getPartitionId().getBytes();
+      PriorityEntry entry = this.entries.get(i);
+      this.partitionIdBytes[i] = entry.getPartitionId().getBytes();
+      String threadName = entry.getThreadName() == null ? "" : entry.getThreadName();
+      this.threadNameBytes[i] = threadName.getBytes(StandardCharsets.UTF_8);
     }
     this.sizeInBytes = computeSizeInBytes();
   }
@@ -98,6 +106,9 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
       bufferToSend.writeBytes(partitionIdBytes[i]);
       bufferToSend.writeInt(entry.getBoost());
       bufferToSend.writeByte(entry.isInterColo() ? (byte) 1 : (byte) 0);
+      // length-prefixed UTF-8 thread name (readable by Utils.readIntString).
+      bufferToSend.writeInt(threadNameBytes[i].length);
+      bufferToSend.writeBytes(threadNameBytes[i]);
     }
   }
 
@@ -105,8 +116,8 @@ public class ListReplicationPriorityAdminResponse extends AdminResponse {
     // parent + version + num-entries
     long size = super.sizeInBytes() + Short.BYTES + Integer.BYTES;
     for (int i = 0; i < entries.size(); i++) {
-      // partition id + boost + isInterColo flag
-      size += partitionIdBytes[i].length + Integer.BYTES + Byte.BYTES;
+      // partition id + boost + isInterColo flag + (thread-name length prefix + bytes)
+      size += partitionIdBytes[i].length + Integer.BYTES + Byte.BYTES + Integer.BYTES + threadNameBytes[i].length;
     }
     return size;
   }

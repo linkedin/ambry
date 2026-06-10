@@ -228,13 +228,14 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       for (ReplicaThread thread : pool) {
         boolean isInterColo = thread.isReplicatingFromRemoteColo();
         for (Map.Entry<PartitionId, Integer> e : thread.listPriorityPartitions().entrySet()) {
-          entries.add(new PriorityEntry(e.getKey(), e.getValue(), isInterColo));
+          entries.add(new PriorityEntry(e.getKey(), e.getValue(), isInterColo, thread.getName()));
         }
       }
     }
     entries.sort(Comparator
         .comparing((PriorityEntry e) -> e.getPartitionId().toPathString())
-        .thenComparing(PriorityEntry::isInterColo));
+        .thenComparing(PriorityEntry::isInterColo)
+        .thenComparing(e -> e.getThreadName() == null ? "" : e.getThreadName()));
     return entries;
   }
 

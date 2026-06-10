@@ -33,11 +33,19 @@ public class PriorityEntry {
   private final PartitionId partitionId;
   private final int boost;
   private final boolean isInterColo;
+  private final String threadName;
 
-  public PriorityEntry(PartitionId partitionId, int boost, boolean isInterColo) {
+  /**
+   * @param partitionId the prioritized partition.
+   * @param boost the fetchSize weight applied to the partition.
+   * @param isInterColo whether the entry came from the inter-colo (cross-datacenter) thread pool.
+   * @param threadName the {@link ReplicaThread} holding this entry; may be {@code null} if unknown.
+   */
+  public PriorityEntry(PartitionId partitionId, int boost, boolean isInterColo, String threadName) {
     this.partitionId = partitionId;
     this.boost = boost;
     this.isInterColo = isInterColo;
+    this.threadName = threadName;
   }
 
   public PartitionId getPartitionId() {
@@ -52,8 +60,18 @@ public class PriorityEntry {
     return isInterColo;
   }
 
+  /**
+   * @return the name of the {@link ReplicaThread} that holds this priority entry, or {@code null} if unknown.
+   *         Two threads on the same node can each report the same partition (one entry per thread), so this
+   *         disambiguates otherwise-identical {@code (partition, boost, isInterColo)} rows.
+   */
+  public String getThreadName() {
+    return threadName;
+  }
+
   @Override
   public String toString() {
-    return "PriorityEntry[" + partitionId + ", boost=" + boost + ", isInterColo=" + isInterColo + "]";
+    return "PriorityEntry[" + partitionId + ", boost=" + boost + ", isInterColo=" + isInterColo + ", threadName="
+        + threadName + "]";
   }
 }
