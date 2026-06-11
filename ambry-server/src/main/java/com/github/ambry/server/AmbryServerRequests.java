@@ -106,8 +106,6 @@ public class AmbryServerRequests extends AmbryRequests {
   private final DiskManagerConfig diskManagerConfig;
   private final StatsManager statsManager;
   private final ClusterParticipant clusterParticipant;
-  // Defensive cap; the precise wire-layer limit is enforced on the frontend.
-  private static final int MAX_PRIORITY_BOOST = 1024;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
@@ -684,9 +682,9 @@ public class AmbryServerRequests extends AmbryRequests {
       return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
     }
     if (action == UpdateReplicationPriorityAdminRequest.Action.SET
-        && updateRequest.getBoost() > MAX_PRIORITY_BOOST) {
+        && updateRequest.getBoost() > UpdateReplicationPriorityAdminRequest.MAX_PRIORITY_BOOST) {
       logger.warn("Rejecting UpdateReplicationPriority clientId={} boost={} — exceeds cap={}",
-          clientId, updateRequest.getBoost(), MAX_PRIORITY_BOOST);
+          clientId, updateRequest.getBoost(), UpdateReplicationPriorityAdminRequest.MAX_PRIORITY_BOOST);
       return new AdminResponse(correlationId, clientId, ServerErrorCode.BadRequest);
     }
     if (action == UpdateReplicationPriorityAdminRequest.Action.SET) {

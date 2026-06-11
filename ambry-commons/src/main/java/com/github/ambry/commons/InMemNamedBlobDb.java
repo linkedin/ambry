@@ -100,14 +100,18 @@ public class InMemNamedBlobDb implements NamedBlobDb {
 
     TreeMap<String, List<NamedBlobRow>> allNamedBlobsInContainer = allRecords.get(accountName).get(containerName);
     NavigableMap<String, List<NamedBlobRow>> nextMap;
-    if (pageToken == null) {
+    if (pageToken != null) {
+      nextMap = allNamedBlobsInContainer.tailMap(pageToken, true);
+    } else if (blobNamePrefix != null) {
       nextMap = allNamedBlobsInContainer.tailMap(blobNamePrefix, true);
     } else {
-      nextMap = allNamedBlobsInContainer.tailMap(pageToken, true);
+      // No prefix and no continuation token: iterate all entries. Mirrors MySqlNamedBlobDb's
+      // LIST_ALL_QUERY path which is selected when blobNamePrefix == null.
+      nextMap = allNamedBlobsInContainer;
     }
     int numRecords = 0;
     for (Map.Entry<String, List<NamedBlobRow>> entry : nextMap.entrySet()) {
-      if (!entry.getKey().startsWith(blobNamePrefix)) {
+      if (blobNamePrefix != null && !entry.getKey().startsWith(blobNamePrefix)) {
         break;
       }
 

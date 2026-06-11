@@ -48,6 +48,8 @@ public class UpdateReplicationPriorityAdminRequest extends AdminRequest {
   private static final short VERSION_V1 = 1;
   // Realistic priority lists are dozens, not hundreds.
   public static final int MAX_PARTITIONS_PER_REQUEST = 256;
+  // Defensive cap on the boost weight; the precise fetch-size-derived limit is enforced at the frontend.
+  public static final int MAX_PRIORITY_BOOST = 1024;
 
   /** The action this request performs. Wire values are explicit so reordering enum constants in code does not silently break the wire format. */
   public enum Action {
