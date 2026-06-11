@@ -235,7 +235,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     entries.sort(Comparator
         .comparing((PriorityEntry e) -> e.getPartitionId().toPathString())
         .thenComparing(PriorityEntry::isInterColo)
-        .thenComparing(e -> e.getThreadName() == null ? "" : e.getThreadName()));
+        .thenComparing(PriorityEntry::getThreadName));
     return entries;
   }
 
