@@ -675,7 +675,7 @@ public class ReplicationPriorityAdminHelperTest {
     PartitionId p = partitions.get(0);
     DataNodeId host = clusterMap.getDataNodeIds().get(0);
     Map<DataNodeId, List<PriorityEntry>> hostEntries = new LinkedHashMap<>();
-    hostEntries.put(host, Collections.singletonList(new PriorityEntry(p, 4, /*isInterColo*/ false)));
+    hostEntries.put(host, Collections.singletonList(new PriorityEntry(p, 4, /*isInterColo*/ false, null)));
     JSONObject json = ReplicationPriorityAdminHelper.buildListResultJson(Collections.singletonList(host), hostEntries,
         Collections.emptyMap(), Collections.emptySet(), new ReplicationPriorityAdminHelper.FanOutSummary(1, 1));
     JSONArray priorities = indexByHost(json.getJSONArray("results")).get(host.getHostname()).getJSONArray("priorities");
@@ -691,7 +691,7 @@ public class ReplicationPriorityAdminHelperTest {
     PartitionId p = partitions.get(0);
     DataNodeId host = clusterMap.getDataNodeIds().get(0);
     Map<DataNodeId, List<PriorityEntry>> hostEntries = new LinkedHashMap<>();
-    hostEntries.put(host, Collections.singletonList(new PriorityEntry(p, 7, /*isInterColo*/ true)));
+    hostEntries.put(host, Collections.singletonList(new PriorityEntry(p, 7, /*isInterColo*/ true, null)));
     JSONObject json = ReplicationPriorityAdminHelper.buildListResultJson(Collections.singletonList(host), hostEntries,
         Collections.emptyMap(), Collections.emptySet(), new ReplicationPriorityAdminHelper.FanOutSummary(1, 1));
     JSONArray priorities = indexByHost(json.getJSONArray("results")).get(host.getHostname()).getJSONArray("priorities");
@@ -708,8 +708,8 @@ public class ReplicationPriorityAdminHelperTest {
     DataNodeId host = clusterMap.getDataNodeIds().get(0);
     Map<DataNodeId, List<PriorityEntry>> hostEntries = new LinkedHashMap<>();
     hostEntries.put(host, Arrays.asList(
-        new PriorityEntry(p, 5, /*isInterColo*/ false),
-        new PriorityEntry(p, 5, /*isInterColo*/ true)));
+        new PriorityEntry(p, 5, /*isInterColo*/ false, null),
+        new PriorityEntry(p, 5, /*isInterColo*/ true, null)));
     JSONObject json = ReplicationPriorityAdminHelper.buildListResultJson(Collections.singletonList(host), hostEntries,
         Collections.emptyMap(), Collections.emptySet(), new ReplicationPriorityAdminHelper.FanOutSummary(1, 1));
     JSONArray priorities = indexByHost(json.getJSONArray("results")).get(host.getHostname()).getJSONArray("priorities");
@@ -737,9 +737,9 @@ public class ReplicationPriorityAdminHelperTest {
 
     Map<DataNodeId, List<PriorityEntry>> hostEntries = new LinkedHashMap<>();
     hostEntries.put(hostWithPriorities, Arrays.asList(
-        new PriorityEntry(p0, 4, false),
-        new PriorityEntry(p0, 4, true),
-        new PriorityEntry(p1, 9, true)));   // p1 inter-only
+        new PriorityEntry(p0, 4, false, null),
+        new PriorityEntry(p0, 4, true, null),
+        new PriorityEntry(p1, 9, true, null)));   // p1 inter-only
     hostEntries.put(hostEmpty, Collections.emptyList());
     Map<DataNodeId, String> failures = new LinkedHashMap<>();
     failures.put(hostError, "IOException: timeout");
@@ -806,7 +806,7 @@ public class ReplicationPriorityAdminHelperTest {
     PartitionId dropped = partitions.get(1);
     DataNodeId host = clusterMap.getDataNodeIds().get(0);
     Map<DataNodeId, List<PriorityEntry>> hostEntries = new LinkedHashMap<>();
-    hostEntries.put(host, Arrays.asList(new PriorityEntry(kept, 2, false), new PriorityEntry(dropped, 3, false)));
+    hostEntries.put(host, Arrays.asList(new PriorityEntry(kept, 2, false, null), new PriorityEntry(dropped, 3, false, null)));
     JSONObject json = ReplicationPriorityAdminHelper.buildListResultJson(Collections.singletonList(host), hostEntries,
         Collections.emptyMap(), Collections.singleton(kept), new ReplicationPriorityAdminHelper.FanOutSummary(1, 1));
     assertEquals(1, json.getJSONObject("summary").getInt("uniquePartitions"));
