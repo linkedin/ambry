@@ -328,6 +328,65 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
   }
 
   /**
+   * Reproduces the request shape that the AWS S3 SDK emits when the caller sets an unset/empty
+   * prefix on ListObjectsRequest: the query string contains {@code prefix=} (parameter present,
+   * value empty) rather than omitting the parameter entirely. This is the exact shape that
+   * caused the original empty-prefix regression on option 4 (LIST_WITH_PREFIX_SQL evaluated
+   * {@code blob_name LIKE '%'} over a full container scan, timing out at MAX_EXECUTION_TIME);
+   * fixed in linkedin/ambry#3265 by collapsing empty {@code prefix} to {@code null} in
+   * {@link NamedBlobPath#parseS3}.
+   *
+   * This test asserts the request path returns 200 OK end-to-end through the S3 handler stack
+   * (HTTP → Netty → {@code S3ListHandler} → {@code NamedBlobPath.parseS3} → {@code
+   * NamedBlobListHandler} → {@code NamedBlobDb#list}). The named-blob DB in this integration
+   * test is {@code InMemNamedBlobDbFactory}, so this test specifically catches regressions in
+   * the S3-handler routing layer (empty-prefix collapse, parseS3 logic) — not SQL-side
+   * regressions, which are covered by
+   * {@code MySqlNamedBlobDbListOperationIntegrationTest#testListNamedBlobsWithNullPrefix}
+   * against a real MySQL backend.
+   */
+  @Test
+  public void s3ListEmptyPrefixTest() throws Exception {
+    Container container = ACCOUNT.getAllContainers().iterator().next();
+    String account = ACCOUNT.getName();
+    String containerName = container.getName();
+
+    // Seed a couple of blobs so the LIST has something to return — the test focuses on the
+    // request shape and routing, not on the content of the response.
+    String[] keys = new String[]{"empty_prefix_seed_a", "empty_prefix_seed_b"};
+    int contentSize = 64;
+    for (String key : keys) {
+      byte[] content = TestUtils.getRandomBytes(contentSize);
+      doPutBlob(account, containerName, key, contentSize, content);
+    }
+
+    // V1 LIST: GET /s3/{account}/{container}?prefix=  (explicit empty value)
+    String uriV1 = String.format("/s3/%s/%s?prefix=", account, containerName);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    FullHttpRequest reqV1 = buildRequest(HttpMethod.GET, uriV1, headers, null);
+    NettyClient.ResponseParts partsV1 = nettyClient.sendRequest(reqV1, null, null).get();
+    HttpResponse respV1 = getHttpResponse(partsV1);
+    assertEquals("LIST v1 with explicit empty prefix should return 200 OK end-to-end through "
+        + "the S3 handler stack; regression in parseS3 empty-prefix collapse would surface here",
+        HttpResponseStatus.OK, respV1.status());
+
+    // V2 LIST: GET /s3/{account}/{container}?prefix=&list-type=2
+    String uriV2 = String.format("/s3/%s/%s?prefix=&list-type=2", account, containerName);
+    FullHttpRequest reqV2 = buildRequest(HttpMethod.GET, uriV2, new DefaultHttpHeaders(), null);
+    NettyClient.ResponseParts partsV2 = nettyClient.sendRequest(reqV2, null, null).get();
+    HttpResponse respV2 = getHttpResponse(partsV2);
+    assertEquals("LIST v2 with explicit empty prefix should return 200 OK end-to-end",
+        HttpResponseStatus.OK, respV2.status());
+
+    // Cleanup
+    for (String key : keys) {
+      String deleteUri = String.format("/s3/%s/%s/%s", account, containerName, key);
+      FullHttpRequest delReq = buildRequest(HttpMethod.DELETE, deleteUri, new DefaultHttpHeaders(), null);
+      nettyClient.sendRequest(delReq, null, null).get();
+    }
+  }
+
+  /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
    * @param account {@link Account} for which quota needs to be specified.
