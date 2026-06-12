@@ -202,15 +202,18 @@ class GetManager {
     long startTime = time.milliseconds();
     requestRegistrationCallback.setRequestsToSend(requestsToSend);
     requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
-    for (GetOperation op : getOperations) {
-      try {
-        op.poll(requestRegistrationCallback);
-        if (op.isOperationComplete()) {
-          remove(op);
+    // Iterating allocates a KeyIterator even when the set is empty; skip when no ops are in flight.
+    if (!getOperations.isEmpty()) {
+      for (GetOperation op : getOperations) {
+        try {
+          op.poll(requestRegistrationCallback);
+          if (op.isOperationComplete()) {
+            remove(op);
+          }
+        } catch (Exception e) {
+          removeAndAbort(op,
+              new RouterException("Get poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
         }
-      } catch (Exception e) {
-        removeAndAbort(op,
-            new RouterException("Get poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
       }
     }
     routerMetrics.getManagerPollTimeMs.update(time.milliseconds() - startTime);
