@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -222,6 +223,101 @@ public class MySqlNamedBlobDbListOperationIntegrationTest extends MySqlNamedBlob
         namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals("Latest version expired; blob must be hidden entirely (no older-version leak). Got "
         + page.getEntries(), 0, page.getEntries().size());
+  }
+
+  /**
+   * Test case for list named blobs with a null prefix — the LIST_ALL_QUERY code path.
+   *
+   * Closes a coverage gap surfaced after #3265: prior to this test, every list() invocation in
+   * this integration suite passed a non-null prefix, so the no-prefix LIST code path
+   * (LIST_ALL_QUERY for options 2/3, LIST_ALL_SQL window-function variant for option 4) was
+   * never exercised by the int-test matrix. The TMC regression that motivated #3265 specifically
+   * crossed this path (S3 SDK sends `prefix=` empty → parseS3 collapses to null → list() with
+   * null prefix → LIST_ALL_QUERY under option 4), and option 4's window-function variant only
+   * shipped with unit-test coverage. This test runs against options 2/3/4 × hard-delete on/off
+   * via the existing parameterized matrix.
+   *
+   * Option-agnostic: PUT N distinct blobs in one container, LIST with null prefix, expect all N
+   * back in blob_name order. No multi-version / deleted-latest scenario here — see the
+   * follow-up testListAllNullPrefixHidesDeletedLatestUnderOption4 for that, which has
+   * different semantics across options 2/3 vs option 4 and so is option-4-only.
+   */
+  @Test
+  public void testListNamedBlobsWithNullPrefix() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+
+    // Seed N blobs with stable lexicographic names so we can assert ordering deterministically.
+    final int N = 5;
+    final String[] blobNames = new String[N];
+    for (int i = 0; i < N; i++) {
+      blobNames[i] = String.format("testListAllNullPrefix-%02d-%s", i, TestUtils.getRandomKey(8));
+    }
+    Arrays.sort(blobNames);
+    for (String name : blobNames) {
+      NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), name,
+          getBlobId(account, container),
+          calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+      namedBlobDb.put(record, NamedBlobState.READY, true).get();
+    }
+
+    // null prefix triggers LIST_ALL_QUERY (or LIST_ALL_SQL under option 4). This is the path
+    // TMC's empty-prefix S3 LIST collapses to via parseS3.
+    Page<NamedBlobRecord> page =
+        namedBlobDb.list(account.getName(), container.getName(), null, null, null).get();
+
+    assertEquals("Null-prefix LIST should return all " + N + " seeded blobs",
+        N, page.getEntries().size());
+    for (int i = 0; i < N; i++) {
+      assertEquals("Null-prefix LIST should return blobs in blob_name ascending order",
+          blobNames[i], page.getEntries().get(i).getBlobName());
+    }
+  }
+
+  /**
+   * Option-4-only invariant test for the null-prefix path: if the latest READY version of a
+   * blob is TTL-expired (or soft-deleted), the blob must be hidden entirely from a null-prefix
+   * LIST. Under option 4, LIST_ALL_SQL applies the deleted_ts filter on the OUTER select after
+   * the window operator, so the second-latest non-deleted version is NOT surfaced — matching
+   * the LIST_WITH_PREFIX_SQL contract (already covered by testListHidesBlobWhenLatestVersionIsExpired).
+   *
+   * Options 2/3 LIST_ALL_QUERY has the opposite semantic (deleted_ts filter inside the inner
+   * subquery → second-latest surfaces). That divergence is intentional and is preserved by
+   * #3265 to avoid changing default behavior for fabrics still on options 2/3. So this test
+   * only runs under option 4.
+   */
+  @Test
+  public void testListAllNullPrefixHidesDeletedLatestUnderOption4() throws Exception {
+    Assume.assumeTrue("Semantic only holds for option 4 LIST_ALL_SQL; options 2/3 surface "
+        + "the second-latest non-deleted version by design", listSqlOption == 4);
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    final String blobName = "testListAllNullPrefixHidesDeletedLatest";
+
+    // v1: older version, expires far in the future.
+    NamedBlobRecord v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+
+    // Advance the mock clock so v2's generated version is strictly greater than v1's.
+    time.sleep(100);
+
+    // v2: latest version, already expired at LIST time.
+    NamedBlobRecord v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() - TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v2, NamedBlobState.READY, true).get();
+
+    // null prefix → LIST_ALL_SQL under option 4. The blob must be hidden entirely.
+    Page<NamedBlobRecord> page =
+        namedBlobDb.list(account.getName(), container.getName(), null, null, null).get();
+    assertEquals("Option 4: latest version expired; null-prefix LIST must hide the blob entirely "
+        + "(no older-version leak). Got " + page.getEntries(), 0, page.getEntries().size());
   }
 
   /**
