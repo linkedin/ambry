@@ -319,12 +319,48 @@ public class ReplicaThread implements Runnable {
     if (partitions.isEmpty()) {
       return;
     }
-    for (PartitionId id : partitions) {
-      priorityPartitions.put(id, boost);
+    int applied = 0;
+    lock.lock();
+    try {
+      for (PartitionId id : partitions) {
+        // Only a thread that actually replicates this partition can act on a boost for it. Setting it on a
+        // thread that holds no replica of the partition is a no-op that also never auto-prunes (see the
+        // empty-infos case in shouldAutoPrunePriority), leaving a stale "ghost" entry. Skip those here.
+        if (hostsPartition(id)) {
+          priorityPartitions.put(id, boost);
+          applied++;
+        }
+      }
+    } finally {
+      lock.unlock();
     }
-    terminateCycleAndWake();
-    logger.info("Set replication priority for {} partitions on thread {} to boost {}",
-        partitions.size(), getName(), boost);
+    if (applied > 0) {
+      terminateCycleAndWake();
+      logger.info("Set replication priority for {} of {} requested partitions on thread {} to boost {}", applied,
+          partitions.size(), getName(), boost);
+    } else {
+      // Expected in the fan-out case: the engine offers every thread the full partition list and most threads
+      // host none of them. Log at debug so we don't emit N noisy INFO lines per operator request.
+      logger.debug("No hosted partitions among the {} requested for replication priority on thread {}",
+          partitions.size(), getName());
+    }
+  }
+
+  /**
+   * Whether this thread currently replicates at least one {@link RemoteReplicaInfo} of {@code partitionId}.
+   * Callers MUST hold {@link #lock} as this reads {@link #replicasToReplicateGroupedByNode}.
+   * @param partitionId the partition to check.
+   * @return {@code true} if at least one hosted remote replica belongs to {@code partitionId}.
+   */
+  private boolean hostsPartition(PartitionId partitionId) {
+    for (Set<RemoteReplicaInfo> infos : replicasToReplicateGroupedByNode.values()) {
+      for (RemoteReplicaInfo info : infos) {
+        if (info.getReplicaId().getPartitionId().equals(partitionId)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -473,6 +509,14 @@ public class ReplicaThread implements Runnable {
         } else {
           logger.info("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
           decreaseAssignedRemoteReplicaInfosMetric();
+          // Drop any replication priority held for this partition once its last replica leaves this thread;
+          // otherwise the entry never auto-prunes (empty-infos case) and lingers as a stale "ghost".
+          PartitionId removedPartition = remoteReplicaInfo.getReplicaId().getPartitionId();
+          if (priorityPartitions.containsKey(removedPartition) && !hostsPartition(removedPartition)) {
+            priorityPartitions.remove(removedPartition);
+            logger.info("Removed replication priority for partition {} on thread {} after its last replica was removed",
+                removedPartition, threadName);
+          }
         }
       } else {
         replicationMetrics.remoteReplicaInfoRemoveError.inc();

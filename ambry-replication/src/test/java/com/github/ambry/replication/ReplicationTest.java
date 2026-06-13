@@ -204,6 +204,128 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * {@link ReplicaThread#prioritizePartitions} must only apply a boost to partitions this thread actually hosts.
+   * A boost on a partition with no local replica on the thread would create a "ghost" entry that never
+   * auto-prunes (see the empty-infos case of {@link ReplicaThread#shouldAutoPrunePriority}), so it must be skipped.
+   */
+  @Test
+  public void prioritizePartitionsSkipsNonHostedPartitionsTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    ReplicaThread replicaThread = buildReplicaThreadForPriorityTest(clusterMap, localHost, remoteHost);
+    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
+
+    // Host exactly one partition on this thread.
+    RemoteReplicaInfo hosted = remoteReplicaInfoList.get(0);
+    replicaThread.addRemoteReplicaInfo(hosted);
+    PartitionId hostedPartition = hosted.getReplicaId().getPartitionId();
+    PartitionId nonHostedPartition = remoteReplicaInfoList.get(1).getReplicaId().getPartitionId();
+    assertNotEquals("test needs two distinct partitions", hostedPartition, nonHostedPartition);
+
+    replicaThread.prioritizePartitions(Arrays.asList(hostedPartition, nonHostedPartition), 5);
+
+    Map<PartitionId, Integer> priorities = replicaThread.listPriorityPartitions();
+    assertEquals("only the hosted partition should be prioritized", Collections.singleton(hostedPartition),
+        priorities.keySet());
+    assertEquals("boost should match", Integer.valueOf(5), priorities.get(hostedPartition));
+  }
+
+  /**
+   * When a thread's last replica of a prioritized partition is removed, the priority entry must be dropped so it
+   * does not linger as an orphan that never auto-prunes (the empty-infos case is intentionally not pruned in the
+   * replication cycle, so cleanup happens here at removal time).
+   */
+  @Test
+  public void removeRemoteReplicaInfoClearsOrphanedPriorityTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    ReplicaThread replicaThread = buildReplicaThreadForPriorityTest(clusterMap, localHost, remoteHost);
+    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
+
+    RemoteReplicaInfo hosted = remoteReplicaInfoList.get(0);
+    replicaThread.addRemoteReplicaInfo(hosted);
+    PartitionId hostedPartition = hosted.getReplicaId().getPartitionId();
+    replicaThread.prioritizePartitions(Collections.singletonList(hostedPartition), 3);
+    assertTrue("priority should be set on the hosted partition",
+        replicaThread.listPriorityPartitions().containsKey(hostedPartition));
+
+    replicaThread.removeRemoteReplicaInfo(hosted);
+    assertFalse("priority must be cleared once the last replica of the partition is removed",
+        replicaThread.listPriorityPartitions().containsKey(hostedPartition));
+  }
+
+  /**
+   * A thread can hold multiple {@link RemoteReplicaInfo}s for the same partition (one per peer). Removing one
+   * must NOT drop the priority while another replica of the partition remains on the thread; only removing the
+   * last one clears it. Exercises the {@code && !hostsPartition(...)} guard in {@code removeRemoteReplicaInfo}.
+   */
+  @Test
+  public void removeRemoteReplicaInfoRetainsPriorityWhileAnotherReplicaRemainsTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    ReplicaThread replicaThread =
+        buildReplicaThreadForPriorityTest(clusterMap, localAndRemoteHosts.getFirst(), localAndRemoteHosts.getSecond());
+
+    // Two peer replicas of the SAME partition on two different remote nodes, both on this thread.
+    PartitionId partition = clusterMap.getWritablePartitionIds(null).get(0);
+    RemoteReplicaInfo peerA = mockRemoteReplicaInfoFor(partition, mock(DataNodeId.class));
+    RemoteReplicaInfo peerB = mockRemoteReplicaInfoFor(partition, mock(DataNodeId.class));
+    replicaThread.addRemoteReplicaInfo(peerA);
+    replicaThread.addRemoteReplicaInfo(peerB);
+
+    replicaThread.prioritizePartitions(Collections.singletonList(partition), 6);
+    assertTrue("priority should be set", replicaThread.listPriorityPartitions().containsKey(partition));
+
+    // Remove one peer: still hosted via the other peer -> priority RETAINED.
+    replicaThread.removeRemoteReplicaInfo(peerA);
+    assertTrue("priority must be retained while another replica of the partition remains on the thread",
+        replicaThread.listPriorityPartitions().containsKey(partition));
+
+    // Remove the last peer: no replica of the partition remains -> priority CLEARED.
+    replicaThread.removeRemoteReplicaInfo(peerB);
+    assertFalse("priority must be cleared after the last replica of the partition is removed",
+        replicaThread.listPriorityPartitions().containsKey(partition));
+  }
+
+  private RemoteReplicaInfo mockRemoteReplicaInfoFor(PartitionId partition, DataNodeId node) {
+    ReplicaId replicaId = mock(ReplicaId.class);
+    when(replicaId.getPartitionId()).thenReturn(partition);
+    when(replicaId.getDataNodeId()).thenReturn(node);
+    RemoteReplicaInfo info = mock(RemoteReplicaInfo.class);
+    when(info.getReplicaId()).thenReturn(replicaId);
+    return info;
+  }
+
+  /**
+   * Builds a bare {@link ReplicaThread} (no replicas added) for the priority unit tests above, mirroring the
+   * construction in {@link #remoteReplicaInfoAddRemoveTest()}.
+   */
+  private ReplicaThread buildReplicaThreadForPriorityTest(MockClusterMap clusterMap, MockHost localHost,
+      MockHost remoteHost) throws Exception {
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+    ReplicationMetrics replicationMetrics =
+        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
+    replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    hosts.put(remoteHost.dataNodeId, remoteHost);
+    FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
+    MockNetworkClient networkClient = new MockNetworkClient(hosts, clusterMap, 4, findTokenHelper);
+    return new ReplicaThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
+        networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+        clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+        new ResponseHandler(clusterMap), time, null, null, null);
+  }
+
+  /**
    * Test {@link ReplicationManager} is started successfully with empty replicas
    * @throws Exception
    */

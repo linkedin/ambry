@@ -1560,13 +1560,34 @@ public class RequestResponseTest {
     doListReplicationPriorityAdminResponseTest(clusterMap, Collections.emptyList());
     // Single entry
     doListReplicationPriorityAdminResponseTest(clusterMap, Collections.singletonList(
-        new PriorityEntry(partitions.get(0), 4, false)));
-    // Mixed intra/inter-colo, multiple entries
+        new PriorityEntry(partitions.get(0), 4, false, "ReplicaThread-Intra-0-dc1")));
+    // Mixed intra/inter-colo, multiple entries, distinct thread names
     List<PriorityEntry> entries = new ArrayList<>();
-    entries.add(new PriorityEntry(partitions.get(0), 8, false));
-    entries.add(new PriorityEntry(partitions.get(1), 16, true));
-    entries.add(new PriorityEntry(partitions.get(2), 1, false));
+    entries.add(new PriorityEntry(partitions.get(0), 8, false, "ReplicaThread-Intra-0-dc1"));
+    entries.add(new PriorityEntry(partitions.get(1), 16, true, "ReplicaThread-Inter-1-dc2"));
+    entries.add(new PriorityEntry(partitions.get(2), 1, false, "ReplicaThread-Intra-1-dc1"));
     doListReplicationPriorityAdminResponseTest(clusterMap, entries);
+  }
+
+  /**
+   * A {@code null} thread name is serialized as an empty string and reads back as {@code ""} (never null),
+   * pinning the wire contract for entries created without a thread name.
+   */
+  @Test
+  public void listReplicationPriorityAdminResponseNullThreadNameTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    List<PartitionId> partitions = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    Assume.assumeTrue("Need at least 1 partition for this test", partitions.size() >= 1);
+    AdminResponse baseResponse = new AdminResponse(7, "null-threadname-client", ServerErrorCode.NoError);
+    ListReplicationPriorityAdminResponse response = new ListReplicationPriorityAdminResponse(
+        Collections.singletonList(new PriorityEntry(partitions.get(0), 3, false, null)), baseResponse);
+    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
+    ListReplicationPriorityAdminResponse deserialized =
+        ListReplicationPriorityAdminResponse.readFrom(responseStream, clusterMap);
+    Assert.assertEquals("entry count", 1, deserialized.getEntries().size());
+    Assert.assertEquals("null thread name should read back as empty string", "",
+        deserialized.getEntries().get(0).getThreadName());
+    response.release();
   }
 
   private void doUpdateReplicationPriorityAdminRequestTest(MockClusterMap clusterMap, List<PartitionId> partitions,
@@ -1610,6 +1631,7 @@ public class RequestResponseTest {
       Assert.assertEquals("entry[" + i + "].partition", expected.getPartitionId(), actual.getPartitionId());
       Assert.assertEquals("entry[" + i + "].boost", expected.getBoost(), actual.getBoost());
       Assert.assertEquals("entry[" + i + "].isInterColo", expected.isInterColo(), actual.isInterColo());
+      Assert.assertEquals("entry[" + i + "].threadName", expected.getThreadName(), actual.getThreadName());
     }
     response.release();
   }
