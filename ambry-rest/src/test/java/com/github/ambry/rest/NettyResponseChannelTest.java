@@ -463,6 +463,27 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests that no NPE occurs when the root cause of a RestServiceException has a null message (e.g.,
+   * {@link java.util.concurrent.TimeoutException} created by {@link java.util.concurrent.CompletableFuture#orTimeout}).
+   */
+  @Test
+  public void setFailureReasonNullMessageNoNpeTest() throws Exception {
+    HttpRequest request =
+        createRequestWithHeaders(HttpMethod.GET, TestingUri.SetFailureReasonInResponseWithNullMessage.toString());
+    HttpUtil.setKeepAlive(request, false);
+
+    EmbeddedChannel channel = createEmbeddedChannel();
+    channel.writeInbound(request);
+
+    HttpResponse response = channel.readOutbound();
+    assertEquals(HttpResponseStatus.SERVICE_UNAVAILABLE, response.status());
+    // No FAILURE_REASON_HEADER when root cause message is null — no NPE should be thrown
+    assertFalse("Should not have failure reason header when root message is null",
+        response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER));
+    assertFalse("Channel not closed on the server", channel.isActive());
+  }
+
+  /**
    * Sends null input to {@link NettyResponseChannel#setHeader(String, Object)} (through
    * {@link MockNettyMessageProcessor}) and tests for reaction.
    */
@@ -1340,6 +1361,11 @@ enum TestingUri {
    */
   SetFailureReasonInResponseWithException,
   /**
+   * When this request is received, a RestServiceException whose root cause has a null message is used on
+   * onResponseComplete. Verifies no NPE when the root cause message is null.
+   */
+  SetFailureReasonInResponseWithNullMessage,
+  /**
    * Catch all TestingUri.
    */
   Unknown;
@@ -1583,6 +1609,12 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       case SetFailureReasonInResponseWithException:
         request.setArg(RestUtils.InternalKeys.SEND_FAILURE_REASON, Boolean.TRUE);
         restResponseChannel.onResponseComplete(new Exception(TestingUri.SetFailureReasonInResponse.toString()));
+        break;
+      case SetFailureReasonInResponseWithNullMessage:
+        request.setArg(RestUtils.InternalKeys.SEND_FAILURE_REASON, Boolean.TRUE);
+        // TimeoutException() with no message simulates CompletableFuture.orTimeout() behavior
+        restResponseChannel.onResponseComplete(new RestServiceException("outer message",
+            new TimeoutException(), RestServiceErrorCode.ServiceUnavailable));
         break;
     }
   }
