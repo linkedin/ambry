@@ -42,6 +42,7 @@ public class MySqlMetrics {
   public static final String CONNECTION_SUCCESS_COUNT = "ConnectionSuccessCount";
   public static final String CONNECTION_FAILURE_COUNT = "ConnectionFailureCount";
   public static final String CONSTRUCT_RETENTION_POLICY_FAILURE_COUNT = "ConstructRetentionPolicyFailureCount";
+  public static final String DATASET_ROW_READ_NPE_COUNT = "DatasetRowReadNpeCount";
 
   public final Histogram writeTimeMs;
   public final Counter writeSuccessCount;
@@ -67,6 +68,7 @@ public class MySqlMetrics {
   public final Counter connectionFailureCount;
 
   public final Counter constructRetentionPolicyFailureCount;
+  public final Counter datasetRowReadNpeCount;
 
   public MySqlMetrics(Class<?> clazz, MetricRegistry metricRegistry) {
     writeTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, WRITE_TIME_MSEC));
@@ -88,5 +90,6 @@ public class MySqlMetrics {
     connectionFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, CONNECTION_FAILURE_COUNT));
     constructRetentionPolicyFailureCount =
         metricRegistry.counter(MetricRegistry.name(clazz, CONSTRUCT_RETENTION_POLICY_FAILURE_COUNT));
+    datasetRowReadNpeCount = metricRegistry.counter(MetricRegistry.name(clazz, DATASET_ROW_READ_NPE_COUNT));
   }
 }
