@@ -587,7 +587,16 @@ class NettyResponseChannel implements RestResponseChannel {
       RestServiceException restServiceException = (RestServiceException) cause;
       restServiceErrorCode = restServiceException.getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
-      status = getHttpResponseStatus(errorResponseStatus);
+      if (restServiceErrorCode == RestServiceErrorCode.HostLevelThrottled) {
+        // Throttler drops share the 503 wire status with ServiceUnavailable but get their own
+        // counter so SLO dashboards keyed on ServiceUnavailableErrorCount (host-down / crash /
+        // shutdown signal) aren't polluted by intentional throttler-driven drops. Branching
+        // here skips the ServiceUnavailable counter increment getHttpResponseStatus would do.
+        nettyMetrics.hostLevelThrottledCount.inc();
+        status = HttpResponseStatus.SERVICE_UNAVAILABLE;
+      } else {
+        status = getHttpResponseStatus(errorResponseStatus);
+      }
       if (shouldSendFailureReason(status, restServiceException)) {
         errReason = new String(
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),

@@ -275,8 +275,9 @@ public class AmbrySecurityServiceTest {
 
   /**
    * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)})} should throw RestServiceException if the
-   * host-level throttler signals overload. RestServiceErrorCode.ServiceUnavailable (HTTP 503) is expected in this
-   * case — host-local overload semantic is "this host is overloaded; try another," which 503 expresses correctly.
+   * host-level throttler signals overload. RestServiceErrorCode.HostLevelThrottled (mapped to HTTP 503) is expected
+   * in this case — host-local overload semantic is "this host is overloaded; try another," which 503 expresses
+   * correctly. The dedicated error code keeps throttler drops separate from generic ServiceUnavailable in metrics.
    */
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
@@ -301,7 +302,7 @@ public class AmbrySecurityServiceTest {
         ambrySecurityService.postProcessRequest(restRequest).get();
         Assert.fail("Should have failed.");
       } catch (Exception e) {
-        Assert.assertEquals("Exception should be ServiceUnavailable", RestServiceErrorCode.ServiceUnavailable,
+        Assert.assertEquals("Exception should be HostLevelThrottled", RestServiceErrorCode.HostLevelThrottled,
             ((RestServiceException) e.getCause()).getErrorCode());
       }
     }

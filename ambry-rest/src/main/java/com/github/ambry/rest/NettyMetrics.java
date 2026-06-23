@@ -128,6 +128,7 @@ public class NettyMetrics {
   public final Counter goneCount;
   public final Counter internalServerErrorCount;
   public final Counter serviceUnavailableErrorCount;
+  public final Counter hostLevelThrottledCount;
   public final Counter insufficientCapacityErrorCount;
   public final Counter preconditionFailedErrorCount;
   public final Counter methodNotAllowedErrorCount;
@@ -314,6 +315,8 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount"));
     serviceUnavailableErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ServiceUnavailableErrorCount"));
+    hostLevelThrottledCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "HostLevelThrottledCount"));
     insufficientCapacityErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InsufficientCapacityErrorCount"));
     preconditionFailedErrorCount =

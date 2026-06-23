@@ -881,6 +881,7 @@ public class NettyResponseChannelTest {
       case RangeNotSatisfiable:
         return HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE;
       case ServiceUnavailable:
+      case HostLevelThrottled:
         return HttpResponseStatus.SERVICE_UNAVAILABLE;
       case TooManyRequests:
         return HttpResponseStatus.TOO_MANY_REQUESTS;
