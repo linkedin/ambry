@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -35,6 +34,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.throttle.HostLevelThrottler;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -167,7 +167,7 @@ class AmbrySecurityService implements SecurityService {
       if (!isOpen) {
         exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
-        exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+        exception = new RestServiceException("Host throttled", RestServiceErrorCode.HostLevelThrottled);
       } else {
         if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.recommend(restRequest);
