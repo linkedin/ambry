@@ -392,9 +392,25 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
    * @param account {@link Account} for which quota needs to be specified.
    * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, Account account)
+  static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, Account account)
       throws IOException, GeneralSecurityException {
-    Properties properties = buildFrontendVProps(trustStoreFile);
+    return buildFrontendVPropsForQuota(trustStoreFile, account, "com.github.ambry.commons.InMemNamedBlobDbFactory",
+        null);
+  }
+
+  /**
+   * Builds quota-enabled frontend properties, letting the caller pick the named-blob DB factory (e.g. the
+   * MySQL-backed factory) and supply extra properties (e.g. the dbInfo and LIST SQL option). Reused by
+   * sibling integration tests that exercise the S3 stack against a real backend.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param account {@link Account} for which quota needs to be specified.
+   * @param namedBlobDbFactory the fully-qualified {@link com.github.ambry.named.NamedBlobDbFactory} class name.
+   * @param extraProps additional properties to layer on top (may be null).
+   * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
+   */
+  static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, Account account,
+      String namedBlobDbFactory, Properties extraProps) throws IOException, GeneralSecurityException {
+    Properties properties = buildFrontendVProps(trustStoreFile, namedBlobDbFactory, extraProps);
     JSONObject cuResourceQuotaJson = new JSONObject();
     JSONObject quotaJson = new JSONObject();
     quotaJson.put("rcu", 10737418240L);
@@ -413,7 +429,18 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
    * @return a {@link Properties} with the parameters for an Ambry frontend server.
    */
-  private static Properties buildFrontendVProps(File trustStoreFile)
+  static Properties buildFrontendVProps(File trustStoreFile) throws IOException, GeneralSecurityException {
+    return buildFrontendVProps(trustStoreFile, "com.github.ambry.commons.InMemNamedBlobDbFactory", null);
+  }
+
+  /**
+   * Builds frontend properties with a caller-selected named-blob DB factory and optional extra properties.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param namedBlobDbFactory the fully-qualified {@link com.github.ambry.named.NamedBlobDbFactory} class name.
+   * @param extraProps additional properties to layer on top (may be null).
+   * @return a {@link Properties} with the parameters for an Ambry frontend server.
+   */
+  static Properties buildFrontendVProps(File trustStoreFile, String namedBlobDbFactory, Properties extraProps)
       throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.rest.request.service.factory",
@@ -436,8 +463,11 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(true));
-    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.commons.InMemNamedBlobDbFactory");
+    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, namedBlobDbFactory);
     properties.setProperty(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, String.valueOf(NAMED_BLOB_LIST_RESULT_MAX));
+    if (extraProps != null) {
+      properties.putAll(extraProps);
+    }
     return properties;
   }
 }
