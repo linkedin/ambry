@@ -328,14 +328,89 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
   }
 
   /**
+   * Reproduces the request shape that the AWS S3 SDK emits when the caller sets an unset/empty
+   * prefix on ListObjectsRequest: the query string contains {@code prefix=} (parameter present,
+   * value empty) rather than omitting the parameter entirely. This is the exact shape that
+   * caused the original empty-prefix regression on option 4 (LIST_WITH_PREFIX_SQL evaluated
+   * {@code blob_name LIKE '%'} over a full container scan, timing out at MAX_EXECUTION_TIME);
+   * fixed in linkedin/ambry#3265 by collapsing empty {@code prefix} to {@code null} in
+   * {@link NamedBlobPath#parseS3}.
+   *
+   * This test asserts the request path returns 200 OK end-to-end through the S3 handler stack
+   * (HTTP → Netty → {@code S3ListHandler} → {@code NamedBlobPath.parseS3} → {@code
+   * NamedBlobListHandler} → {@code NamedBlobDb#list}). The named-blob DB in this integration
+   * test is {@code InMemNamedBlobDbFactory}, so this test specifically catches regressions in
+   * the S3-handler routing layer (empty-prefix collapse, parseS3 logic) — not SQL-side
+   * regressions, which are covered by
+   * {@code MySqlNamedBlobDbListOperationIntegrationTest#testListNamedBlobsWithNullPrefix}
+   * against a real MySQL backend.
+   */
+  @Test
+  public void s3ListEmptyPrefixTest() throws Exception {
+    Container container = ACCOUNT.getAllContainers().iterator().next();
+    String account = ACCOUNT.getName();
+    String containerName = container.getName();
+
+    // Seed a couple of blobs so the LIST has something to return — the test focuses on the
+    // request shape and routing, not on the content of the response.
+    String[] keys = new String[]{"empty_prefix_seed_a", "empty_prefix_seed_b"};
+    int contentSize = 64;
+    for (String key : keys) {
+      byte[] content = TestUtils.getRandomBytes(contentSize);
+      doPutBlob(account, containerName, key, contentSize, content);
+    }
+
+    // V1 LIST: GET /s3/{account}/{container}?prefix=  (explicit empty value)
+    String uriV1 = String.format("/s3/%s/%s?prefix=", account, containerName);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    FullHttpRequest reqV1 = buildRequest(HttpMethod.GET, uriV1, headers, null);
+    NettyClient.ResponseParts partsV1 = nettyClient.sendRequest(reqV1, null, null).get();
+    HttpResponse respV1 = getHttpResponse(partsV1);
+    assertEquals("LIST v1 with explicit empty prefix should return 200 OK end-to-end through "
+        + "the S3 handler stack; regression in parseS3 empty-prefix collapse would surface here",
+        HttpResponseStatus.OK, respV1.status());
+
+    // V2 LIST: GET /s3/{account}/{container}?prefix=&list-type=2
+    String uriV2 = String.format("/s3/%s/%s?prefix=&list-type=2", account, containerName);
+    FullHttpRequest reqV2 = buildRequest(HttpMethod.GET, uriV2, new DefaultHttpHeaders(), null);
+    NettyClient.ResponseParts partsV2 = nettyClient.sendRequest(reqV2, null, null).get();
+    HttpResponse respV2 = getHttpResponse(partsV2);
+    assertEquals("LIST v2 with explicit empty prefix should return 200 OK end-to-end",
+        HttpResponseStatus.OK, respV2.status());
+
+    // Cleanup
+    for (String key : keys) {
+      String deleteUri = String.format("/s3/%s/%s/%s", account, containerName, key);
+      FullHttpRequest delReq = buildRequest(HttpMethod.DELETE, deleteUri, new DefaultHttpHeaders(), null);
+      nettyClient.sendRequest(delReq, null, null).get();
+    }
+  }
+
+  /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
    * @param account {@link Account} for which quota needs to be specified.
    * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, Account account)
+  static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, Account account)
       throws IOException, GeneralSecurityException {
-    Properties properties = buildFrontendVProps(trustStoreFile);
+    return buildFrontendVPropsForQuota(trustStoreFile, account, "com.github.ambry.commons.InMemNamedBlobDbFactory",
+        null);
+  }
+
+  /**
+   * Builds quota-enabled frontend properties, letting the caller pick the named-blob DB factory (e.g. the
+   * MySQL-backed factory) and supply extra properties (e.g. the dbInfo and LIST SQL option). Reused by
+   * sibling integration tests that exercise the S3 stack against a real backend.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param account {@link Account} for which quota needs to be specified.
+   * @param namedBlobDbFactory the fully-qualified {@link com.github.ambry.named.NamedBlobDbFactory} class name.
+   * @param extraProps additional properties to layer on top (may be null).
+   * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
+   */
+  static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, Account account,
+      String namedBlobDbFactory, Properties extraProps) throws IOException, GeneralSecurityException {
+    Properties properties = buildFrontendVProps(trustStoreFile, namedBlobDbFactory, extraProps);
     JSONObject cuResourceQuotaJson = new JSONObject();
     JSONObject quotaJson = new JSONObject();
     quotaJson.put("rcu", 10737418240L);
@@ -354,7 +429,18 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
    * @return a {@link Properties} with the parameters for an Ambry frontend server.
    */
-  private static Properties buildFrontendVProps(File trustStoreFile)
+  static Properties buildFrontendVProps(File trustStoreFile) throws IOException, GeneralSecurityException {
+    return buildFrontendVProps(trustStoreFile, "com.github.ambry.commons.InMemNamedBlobDbFactory", null);
+  }
+
+  /**
+   * Builds frontend properties with a caller-selected named-blob DB factory and optional extra properties.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param namedBlobDbFactory the fully-qualified {@link com.github.ambry.named.NamedBlobDbFactory} class name.
+   * @param extraProps additional properties to layer on top (may be null).
+   * @return a {@link Properties} with the parameters for an Ambry frontend server.
+   */
+  static Properties buildFrontendVProps(File trustStoreFile, String namedBlobDbFactory, Properties extraProps)
       throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.rest.request.service.factory",
@@ -377,8 +463,11 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(true));
-    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.commons.InMemNamedBlobDbFactory");
+    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, namedBlobDbFactory);
     properties.setProperty(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, String.valueOf(NAMED_BLOB_LIST_RESULT_MAX));
+    if (extraProps != null) {
+      properties.putAll(extraProps);
+    }
     return properties;
   }
 }

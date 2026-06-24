@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -222,6 +223,187 @@ public class MySqlNamedBlobDbListOperationIntegrationTest extends MySqlNamedBlob
         namedBlobDb.list(account.getName(), container.getName(), blobName, null, null).get();
     assertEquals("Latest version expired; blob must be hidden entirely (no older-version leak). Got "
         + page.getEntries(), 0, page.getEntries().size());
+  }
+
+  /**
+   * Test case for list named blobs with a null prefix — the LIST_ALL_QUERY code path.
+   *
+   * Closes a coverage gap surfaced after #3265: prior to this test, every list() invocation in
+   * this integration suite passed a non-null prefix, so the no-prefix LIST code path
+   * (LIST_ALL_QUERY for options 2/3, LIST_ALL_SQL window-function variant for option 4) was
+   * never exercised by the int-test matrix. The empty-prefix LIST regression that motivated #3265
+   * specifically crossed this path (S3 SDK sends `prefix=` empty → parseS3 collapses to null → list() with
+   * null prefix → LIST_ALL_QUERY under option 4), and option 4's window-function variant only
+   * shipped with unit-test coverage. This test runs against options 2/3/4 × hard-delete on/off
+   * via the existing parameterized matrix.
+   *
+   * Option-agnostic: PUT N distinct blobs in one container, LIST with null prefix, expect all N
+   * back in blob_name order. No multi-version / deleted-latest scenario here — see the
+   * follow-up testListAllNullPrefixHidesDeletedLatestUnderOption4 for that, which has
+   * different semantics across options 2/3 vs option 4 and so is option-4-only.
+   */
+  @Test
+  public void testListNamedBlobsWithNullPrefix() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+
+    // Seed N blobs with stable lexicographic names so we can assert ordering deterministically.
+    final int N = 5;
+    final String[] blobNames = new String[N];
+    for (int i = 0; i < N; i++) {
+      blobNames[i] = String.format("testListAllNullPrefix-%02d-%s", i, TestUtils.getRandomKey(8));
+    }
+    Arrays.sort(blobNames);
+    for (String name : blobNames) {
+      NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), name,
+          getBlobId(account, container),
+          calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+      namedBlobDb.put(record, NamedBlobState.READY, true).get();
+    }
+
+    // null prefix triggers LIST_ALL_QUERY (or LIST_ALL_SQL under option 4). This is the path
+    // an empty-prefix S3 LIST collapses to via parseS3.
+    Page<NamedBlobRecord> page =
+        namedBlobDb.list(account.getName(), container.getName(), null, null, null).get();
+
+    assertEquals("Null-prefix LIST should return all " + N + " seeded blobs",
+        N, page.getEntries().size());
+    for (int i = 0; i < N; i++) {
+      assertEquals("Null-prefix LIST should return blobs in blob_name ascending order",
+          blobNames[i], page.getEntries().get(i).getBlobName());
+    }
+  }
+
+  /**
+   * Option-4-only invariant test for the null-prefix path: if the latest READY version of a
+   * blob is TTL-expired (or soft-deleted), the blob must be hidden entirely from a null-prefix
+   * LIST. Under option 4, LIST_ALL_SQL applies the deleted_ts filter on the OUTER select after
+   * the window operator, so the second-latest non-deleted version is NOT surfaced — matching
+   * the LIST_WITH_PREFIX_SQL contract (already covered by testListHidesBlobWhenLatestVersionIsExpired).
+   *
+   * Options 2/3 LIST_ALL_QUERY has the opposite semantic (deleted_ts filter inside the inner
+   * subquery → second-latest surfaces). That divergence is intentional and is preserved by
+   * #3265 to avoid changing default behavior for fabrics still on options 2/3. So this test
+   * only runs under option 4.
+   */
+  @Test
+  public void testListAllNullPrefixHidesDeletedLatestUnderOption4() throws Exception {
+    Assume.assumeTrue("Semantic only holds for option 4 LIST_ALL_SQL; options 2/3 surface "
+        + "the second-latest non-deleted version by design", listSqlOption == 4);
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    final String blobName = "testListAllNullPrefixHidesDeletedLatest";
+
+    // v1: older version, expires far in the future.
+    NamedBlobRecord v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+
+    // Advance the mock clock so v2's generated version is strictly greater than v1's.
+    time.sleep(100);
+
+    // v2: latest version, already expired at LIST time.
+    NamedBlobRecord v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() - TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v2, NamedBlobState.READY, true).get();
+
+    // null prefix → LIST_ALL_SQL under option 4. The blob must be hidden entirely.
+    Page<NamedBlobRecord> page =
+        namedBlobDb.list(account.getName(), container.getName(), null, null, null).get();
+    assertEquals("Option 4: latest version expired; null-prefix LIST must hide the blob entirely "
+        + "(no older-version leak). Got " + page.getEntries(), 0, page.getEntries().size());
+  }
+
+  /**
+   * Option-agnostic null-prefix pagination test. PUT N distinct blobs, then page through a null-prefix
+   * LIST with maxKeys < N and assert every page is in blob_name order with a correct continuation token,
+   * and that the concatenation across pages is exactly the N seeded blobs with no duplicates or gaps.
+   *
+   * This exercises the null-prefix continuation path on both the first page (pageToken == null → the
+   * {@code ? IS NULL} guard lists from the start) and subsequent pages (pageToken != null →
+   * {@code blob_name >= ?}). Under option 4 it covers the new correlated-subquery LIST_ALL binder
+   * (constructListAllQueryV4) on both code paths.
+   */
+  @Test
+  public void testListAllNullPrefixPagination() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+
+    final int N = 5;
+    final int pageSize = 2;
+    final String[] blobNames = new String[N];
+    for (int i = 0; i < N; i++) {
+      blobNames[i] = String.format("testListAllNullPrefixPagination-%02d-%s", i, TestUtils.getRandomKey(8));
+    }
+    Arrays.sort(blobNames);
+    for (String name : blobNames) {
+      NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), name,
+          getBlobId(account, container), calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+      namedBlobDb.put(record, NamedBlobState.READY, true).get();
+    }
+
+    List<String> collected = new ArrayList<>();
+    String pageToken = null;
+    int pageCount = 0;
+    do {
+      Page<NamedBlobRecord> page =
+          namedBlobDb.list(account.getName(), container.getName(), null, pageToken, pageSize).get();
+      assertTrue("A non-final page must return exactly pageSize entries; final page returns the remainder",
+          page.getEntries().size() <= pageSize);
+      for (NamedBlobRecord record : page.getEntries()) {
+        collected.add(record.getBlobName());
+      }
+      pageToken = page.getNextPageToken();
+      assertTrue("Pagination did not terminate within the expected number of pages", ++pageCount <= N + 1);
+    } while (pageToken != null);
+
+    assertEquals("Null-prefix pagination must return every seeded blob exactly once across pages",
+        Arrays.asList(blobNames), collected);
+  }
+
+  /**
+   * Option-4-only positive counterpart to testListAllNullPrefixHidesDeletedLatestUnderOption4: when a blob
+   * has multiple non-deleted versions, a null-prefix LIST must return the LATEST version (not an older one).
+   * Confirms the correlated-subquery LIST_ALL form returns {@code candidate.version = MAX(version)}.
+   */
+  @Test
+  public void testListAllNullPrefixReturnsLatestVersionUnderOption4() throws Exception {
+    Assume.assumeTrue("Multi-version null-prefix LIST_ALL exercised under option 4", listSqlOption == 4);
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    final String blobName = "testListAllNullPrefixReturnsLatest-" + TestUtils.getRandomKey(8);
+
+    // v1: older version, far-future expiry (non-deleted).
+    NamedBlobRecord v1 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v1, NamedBlobState.READY, true).get();
+
+    // Advance the mock clock so v2's generated version is strictly greater than v1's.
+    time.sleep(100);
+
+    // v2: latest version, far-future expiry (non-deleted).
+    NamedBlobRecord v2 = new NamedBlobRecord(account.getName(), container.getName(), blobName,
+        getBlobId(account, container), calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1));
+    namedBlobDb.put(v2, NamedBlobState.READY, true).get();
+
+    Page<NamedBlobRecord> page =
+        namedBlobDb.list(account.getName(), container.getName(), null, null, null).get();
+    assertEquals("Null-prefix LIST must return exactly one row for a multi-version blob. Got "
+        + page.getEntries(), 1, page.getEntries().size());
+    assertEquals("Null-prefix LIST must return the latest version's blob id (v2), not an older one",
+        v2.getBlobId(), page.getEntries().get(0).getBlobId());
   }
 
   /**

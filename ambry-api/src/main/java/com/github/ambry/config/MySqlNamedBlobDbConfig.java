@@ -32,6 +32,7 @@ public class MySqlNamedBlobDbConfig {
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
+  public static final String LIST_QUERY_TIMEOUT_SECONDS = PREFIX + "list.query.timeout.seconds";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
   public static final String ENABLE_HARD_DELETE = PREFIX + "enable.hard.delete";
@@ -118,6 +119,20 @@ public class MySqlNamedBlobDbConfig {
   public final int staleDataRetentionDays;
 
   /**
+   * Per-statement timeout (in seconds) applied to LIST queries via {@link java.sql.Statement#setQueryTimeout(int)}.
+   * Guards against a LIST scanning an unexpectedly large container: when the budget is exceeded the JDBC driver
+   * issues a clean cancel and the server throws a {@link java.sql.SQLException} (e.g. MySQLTimeoutException),
+   * which surfaces as an ordinary error rather than tearing the socket ("Communications link failure" -> HTTP 500).
+   *
+   * <p><b>Default 0 disables the timeout</b>, making this a no-op for existing deployments. Operators on fabrics
+   * where a network/socket timeout is shorter than the server statement kill should set this just below that
+   * socket timeout so a slow LIST fails fast and cleanly instead of poisoning the connection.
+   */
+  @Config(LIST_QUERY_TIMEOUT_SECONDS)
+  @Default("0")
+  public final int listQueryTimeoutSeconds;
+
+  /**
    * Transaction isolation level to be set on DB Connection. When nothing is set, default MySQL DB transaction level
    * (REPEATABLE_READ) will take effect.
    */
@@ -164,6 +179,8 @@ public class MySqlNamedBlobDbConfig {
         verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays =
         verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
+    this.listQueryTimeoutSeconds =
+        verifiableProperties.getIntInRange(LIST_QUERY_TIMEOUT_SECONDS, 0, 0, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);
