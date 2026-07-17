@@ -50,6 +50,8 @@ public class FrontendConfig {
   public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES =
       PREFIX + "container.metrics.enabled.get.request.types";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
+  public static final String NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS =
+      PREFIX + "named.blob.cleanup.container.delay.seconds";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -94,6 +96,15 @@ public class FrontendConfig {
   @Config("frontend.named.blob.cleanup.seconds")
   @Default("60 * 60 * 24 * 7")
   public final int namedBlobCleanupSeconds;
+
+  /**
+   * The optional delay in seconds between eligible containers within one named blob cleanup run. This is separate from
+   * {@link #namedBlobCleanupSeconds}, which controls the interval between full cleanup runs. A value of 0 disables the
+   * inter-container delay.
+   */
+  @Config(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS)
+  @Default("0")
+  public final int namedBlobCleanupContainerDelaySeconds;
 
 
   /**
@@ -323,6 +334,8 @@ public class FrontendConfig {
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
     enableNamedBlobCleanupTask = verifiableProperties.getBoolean("frontend.enable.named.blob.cleanup.task", false);
     namedBlobCleanupSeconds = verifiableProperties.getInt("frontend.named.blob.cleanup.seconds", 60 * 60 * 24 * 7);
+    namedBlobCleanupContainerDelaySeconds =
+        verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS, 0, 0, Integer.MAX_VALUE);
     permanentNamedBlobInitialPutTtl =
         verifiableProperties.getLong("permanent.named.blob.initial.put.ttl", 25 * 60 * 60);
     optionsAllowMethods =
