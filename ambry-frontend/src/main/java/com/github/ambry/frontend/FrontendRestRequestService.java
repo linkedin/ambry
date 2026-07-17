@@ -254,7 +254,9 @@ class FrontendRestRequestService implements RestRequestService {
     s3GetHandler =
         new S3GetHandler(s3ListHandler, s3MultipartUploadHandler, getBlobHandler, securityService, frontendMetrics,
             accountAndContainerInjector);
-    namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb, accountService);
+    namedBlobsCleanupRunner =
+        new NamedBlobsCleanupRunner(router, namedBlobDb, accountService,
+            frontendConfig.namedBlobCleanupContainerDelaySeconds);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
       int initialDelayInSeconds = random.nextInt(frontendConfig.namedBlobCleanupSeconds);
