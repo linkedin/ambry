@@ -481,6 +481,11 @@ class NettyResponseChannel implements RestResponseChannel {
       restRequestMetricsTracker.markUnsatisfied();
       logUnsatisfiedRequest(requestPerfToCheck);
     }
+    if (responseStatus.isServerError()) {
+      // Track 5xx responses via a dedicated per-operation metric (separate from the unsatisfied request count)
+      // so that alerts can be configured specifically on server errors.
+      restRequestMetricsTracker.markServerError();
+    }
     restRequestMetricsTracker.recordMetrics();
   }
 
