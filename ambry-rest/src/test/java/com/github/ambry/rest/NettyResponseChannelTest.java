@@ -1217,6 +1217,8 @@ public class NettyResponseChannelTest {
     } else {
       assertFalse(httpRequest.method() + " request should be unsatisfied", MockNettyRequest.mockTracker.isSatisfied());
     }
+    assertEquals(httpRequest.method() + " request server error tracking is incorrect", expectedStatus.code() >= 500,
+        MockNettyRequest.mockTracker.isServerError());
   }
 }
 

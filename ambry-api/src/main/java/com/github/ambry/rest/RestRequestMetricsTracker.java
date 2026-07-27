@@ -58,6 +58,7 @@ public class RestRequestMetricsTracker {
   private ContainerMetrics containerMetrics;
   private boolean failed = false;
   private boolean satisfied = true;
+  private boolean serverError = false;
   private ResponseStatus responseStatus = ResponseStatus.Ok;
 
   private long bytesTransferred = 0;
@@ -216,6 +217,24 @@ public class RestRequestMetricsTracker {
   }
 
   /**
+   * Marks that the request resulted in a server error (5xx response) so that a metric dedicated to server errors
+   * can be tracked. This is tracked separately from {@link #markUnsatisfied()} so that alerts can be set up on 5xx
+   * responses specifically, without being diluted by requests that are unsatisfied for other reasons (e.g. missed
+   * performance thresholds).
+   */
+  public void markServerError() {
+    serverError = true;
+  }
+
+  /**
+   * Return whether the rest request resulted in a server error (5xx response) or not.
+   * @return {@code true} if the request resulted in a server error.
+   */
+  public boolean isServerError() {
+    return serverError;
+  }
+
+  /**
    * @param responseStatus the {@link ResponseStatus} to be used for certain count metrics.
    */
   public void setResponseStatus(ResponseStatus responseStatus) {
@@ -281,6 +300,9 @@ public class RestRequestMetricsTracker {
           metrics.satisfiedRequestCount.inc();
         } else {
           metrics.unsatisfiedRequestCount.inc();
+        }
+        if (serverError) {
+          metrics.serverErrorCount.inc();
         }
 
         // Only add throughput metrics when the request is successful and bytes were actually transfered over the wire.
