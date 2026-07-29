@@ -276,39 +276,45 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       case 4:
         /**
          * List named-blobs query, given a prefix.
-         * Equivalent semantics to options 2 and 3, but the per-blob latest-version computation is done in
-         * a single PK range scan via MAX(version) OVER (PARTITION BY blob_name) instead of an INNER JOIN
-         * (option 2) or a correlated subquery (option 3). This avoids the per-outer-row inner probe that
-         * options 2/3 incur and is cheaper on TiDB and MySQL 8.0+.
+         * Correlated-subquery form (same shape as option 3) with an explicit ORDER BY. The prior option-4
+         * form used MAX(version) OVER (PARTITION BY blob_name); that window plan buffers/materializes the
+         * ENTIRE prefix range (Sort -> Window-with-buffering -> Materialize) before LIMIT can apply, so its
+         * cost is O(container) regardless of page size. On large containers this ran for many seconds and
+         * was connection-killed by the EI watchdog at ~6s. This correlated form early-terminates: the PK
+         * (account_id, container_id, blob_name, version) range scan walks blob_name in order, probes an
+         * indexed MAX(version) per candidate, and LIMIT stops after one page -> O(page).
          *
          * Correctness invariant — same as options 2 and 3:
-         * 1. The windowed MAX(version) is computed over all blob_state=READY rows for a given blob_name,
+         * 1. The subquery MAX(version) is computed over all blob_state=READY rows for a given blob_name,
          *    INCLUDING rows with a non-null deleted_ts.
-         * 2. The deleted_ts predicate is applied only on the OUTER select after the window operator
-         *    computes max_version. This means: if the latest READY version of a blob has expired or been
-         *    soft-deleted, the blob is hidden entirely; we do NOT surface a stale older version.
-         *    Putting the deleted_ts filter inside the inner scan would silently violate this invariant.
+         * 2. The deleted_ts predicate is applied on the OUTER select, so if the latest READY version of a
+         *    blob has expired or been soft-deleted the blob is hidden entirely; we never surface a stale
+         *    older version.
          *
-         * Requires MySQL 8.0+ or TiDB (window functions are unavailable in MySQL 5.7). Default remains
-         * option 2; operators must opt in per fabric.
+         * ORDER BY candidate.blob_name makes pagination deterministic. Because the PK range scan already
+         * yields blob_name in order, the optimizer satisfies it without an extra Sort. Binds SEVEN
+         * parameters — keep constructListQueryWithPrefixV4 in lockstep.
          */
         // @formatter:off
         return String.format(""
-            + "SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts "
-            + "FROM ( "
-            + "  SELECT blob_name, blob_id, version, deleted_ts, blob_size, modified_ts, "
-            + "         MAX(version) OVER (PARTITION BY blob_name) AS max_version "
-            + "  FROM named_blobs_v2 "
-            + "  WHERE account_id = ? " // 1
-            + "    AND container_id = ? " // 2
-            + "    AND %1$s " // blob_state = x
-            + "    AND blob_name LIKE ? " // 3
-            + "    AND blob_name >= ? " // 4
-            + ") t "
-            + "WHERE version = max_version "
-            + "  AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
-            + "ORDER BY blob_name "
-            + "LIMIT ?", STATE_MATCH, CURRENT_TIME); // 5
+            + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
+            + "FROM named_blobs_v2 candidate "
+            + "WHERE candidate.account_id = ? "
+            + "    AND candidate.container_id = ? "
+            + "    AND candidate.%1$s"
+            + "    AND candidate.blob_name LIKE ? "
+            + "    AND candidate.blob_name >= ? "
+            + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + "    AND candidate.version = ( "
+            + "        SELECT MAX(latest.version) "
+            + "        FROM named_blobs_v2 latest "
+            + "        WHERE latest.account_id = ? "
+            + "            AND latest.container_id = ? "
+            + "            AND latest.blob_name = candidate.blob_name "
+            + "            AND latest.%1$s"
+            + "    ) "
+            + "ORDER BY candidate.blob_name "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
         // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
@@ -1031,8 +1037,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
   /**
    * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 4.
-   * Option 4 uses a window function (MAX(version) OVER (PARTITION BY blob_name)) and binds five parameters:
-   * (account_id, container_id, blob_name LIKE prefix%, blob_name >= cursor, LIMIT).
+   * Option 4 now uses a correlated subquery (see {@link #getListWithPrefixSQLStatement}) and binds seven
+   * parameters: (account_id, container_id, blob_name LIKE prefix%, blob_name >= cursor, account_id,
+   * container_id, LIMIT). Params 5 and 6 feed the inner MAX(version) subquery. Identical to
+   * {@link #constructListQueryWithPrefixV3}.
    * @param statement The {@link PreparedStatement} to set the parameters on.
    * @param accountId The account id
    * @param containerId The container id
@@ -1047,7 +1055,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     statement.setInt(2, containerId);
     statement.setString(3, blobNamePrefix + "%");
     statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
-    statement.setInt(5, maxKeysValue + 1);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setInt(7, maxKeysValue + 1);
   }
 
   private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId,
