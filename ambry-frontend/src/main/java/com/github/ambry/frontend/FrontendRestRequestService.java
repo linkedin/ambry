@@ -259,7 +259,12 @@ class FrontendRestRequestService implements RestRequestService {
             frontendConfig.namedBlobCleanupContainerDelaySeconds);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
-      int initialDelayInSeconds = random.nextInt(frontendConfig.namedBlobCleanupSeconds);
+      // Bound the randomized initial delay: a large cleanup interval combined with frequent pod restarts (each
+      // restart re-rolls this delay) could otherwise indefinitely postpone the first cleanup run. See
+      // FrontendConfig#namedBlobCleanupInitialDelayMaxSeconds.
+      int initialDelayBoundSeconds =
+          Math.min(frontendConfig.namedBlobCleanupSeconds, frontendConfig.namedBlobCleanupInitialDelayMaxSeconds);
+      int initialDelayInSeconds = initialDelayBoundSeconds > 0 ? random.nextInt(initialDelayBoundSeconds) : 0;
       namedBlobsCleanupTask =
           namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, initialDelayInSeconds,
               frontendConfig.namedBlobCleanupSeconds, TimeUnit.SECONDS);
