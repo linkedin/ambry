@@ -48,4 +48,28 @@ public class FrontendConfigTest {
     } catch (IllegalArgumentException ignored) {
     }
   }
+
+  @Test
+  public void testNamedBlobCleanupInitialDelayMaxSeconds() {
+    Properties properties = new Properties();
+    FrontendConfig config = new FrontendConfig(new VerifiableProperties(properties));
+    Assert.assertEquals("The initial delay max should default to 600 seconds", 600,
+        config.namedBlobCleanupInitialDelayMaxSeconds);
+
+    properties.setProperty(FrontendConfig.NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS, "42");
+    config = new FrontendConfig(new VerifiableProperties(properties));
+    Assert.assertEquals("The configured initial delay max should be used", 42,
+        config.namedBlobCleanupInitialDelayMaxSeconds);
+  }
+
+  @Test
+  public void testNamedBlobCleanupInitialDelayMaxSecondsRejectsNegativeValue() {
+    Properties properties = new Properties();
+    properties.setProperty(FrontendConfig.NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS, "-1");
+    try {
+      new FrontendConfig(new VerifiableProperties(properties));
+      Assert.fail("A negative initial delay max should be rejected");
+    } catch (IllegalArgumentException ignored) {
+    }
+  }
 }
