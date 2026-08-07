@@ -540,8 +540,8 @@ public class RestUtils {
     /**
      * Set to {@code true} when an infinite named blob TTL is temporarily replaced for the initial router upload.
      */
-    public static final String PERMANENT_NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED =
-        KEY_PREFIX + "permanent-named-blob-initial-put-ttl-transformed";
+    public static final String NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED =
+        KEY_PREFIX + "named-blob-initial-put-ttl-transformed";
 
     /**
      * Boolean field set to "true" if this is a S3 request.
