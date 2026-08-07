@@ -139,6 +139,15 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
       logger.error("Request {} was aborted because the channel {} became inactive", request.getUri(), ctx.channel());
+      // Flip channelOpen=false so downstream callbacks that check restRequest.isOpen() observe the disconnect
+      // and can short-circuit best-effort work (e.g. named-blob metadata commit in AmbryIdConverterFactory).
+      // NettyRequest.close() is idempotent via channelOpen.compareAndSet(true,false), so double-close on the
+      // normal-completion path is a no-op.
+      try {
+        request.close();
+      } catch (Exception e) {
+        logger.warn("Exception while closing request {} on channelInactive", request.getUri(), e);
+      }
       onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
     } else {
       close();

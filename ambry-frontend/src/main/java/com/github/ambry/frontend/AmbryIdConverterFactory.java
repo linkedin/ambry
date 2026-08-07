@@ -211,6 +211,17 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           });
         } else {
           Objects.requireNonNull(blobProperties, "blobProperties cannot be null.");
+          // Best-effort: if the client channel has already been closed (e.g. TCP disconnect / stream reset while
+          // router upload was still in flight), skip the metadata commit so the caller's retry can win MAX(version)
+          // in MySqlNamedBlobDb instead of being silently overwritten by this now-orphan attempt. Router chunks
+          // already uploaded will self-expire via existing chunk TTL. See RequestChannelClosed javadoc.
+          if (!restRequest.isOpen()) {
+            frontendMetrics.idConverterClientAbortedCount.inc();
+            LOGGER.info("Client disconnected before namedBlobDb.put for {}; skipping metadata commit",
+                restRequest.getUri());
+            throw new RestServiceException("Client disconnected before named-blob metadata commit",
+                RestServiceErrorCode.RequestChannelClosed);
+          }
           NamedBlobPath namedBlobPath =
               NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
           String blobId = RestUtils.stripSlashAndExtensionFromId(input);
