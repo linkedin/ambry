@@ -538,6 +538,12 @@ public class RestUtils {
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
 
     /**
+     * Set to {@code true} when an infinite named blob TTL is temporarily replaced for the initial router upload.
+     */
+    public static final String PERMANENT_NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED =
+        KEY_PREFIX + "permanent-named-blob-initial-put-ttl-transformed";
+
+    /**
      * Boolean field set to "true" if this is a S3 request.
      */
     public static final String S3_REQUEST = KEY_PREFIX + "is-s3-request";

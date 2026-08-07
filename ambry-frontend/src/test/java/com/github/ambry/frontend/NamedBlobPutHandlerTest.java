@@ -533,6 +533,8 @@ public class NamedBlobPutHandlerTest {
       assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
           restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
       assertEquals("Unexpected TTL in blob", -1, blob.getBlobProperties().getTimeToLiveInSeconds());
+      assertEquals("Dataset-adjusted infinite TTL should be marked as transformed", Boolean.TRUE,
+          request.getArgs().get(RestUtils.InternalKeys.PERMANENT_NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED));
     }
   }
 
@@ -578,6 +580,7 @@ public class NamedBlobPutHandlerTest {
         assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
             restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
         assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
+        assertPermanentNamedBlobInitialPutTtlMarker(request, ttl);
       } else {
         TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
             errorChecker);
@@ -737,9 +740,25 @@ public class NamedBlobPutHandlerTest {
       assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
       assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
       assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
+      assertPermanentNamedBlobInitialPutTtlMarker(request, ttl);
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);
+    }
+  }
+
+  /**
+   * Verify that the temporary initial PUT TTL marker reflects the effective TTL used by the handler.
+   * @param request the named blob PUT request.
+   * @param effectiveTtlSecs the effective TTL expected when the router upload starts.
+   */
+  private void assertPermanentNamedBlobInitialPutTtlMarker(RestRequest request, long effectiveTtlSecs) {
+    if (effectiveTtlSecs == Utils.Infinite_Time) {
+      assertEquals("Permanent named blob initial PUT TTL should be marked as transformed", Boolean.TRUE,
+          request.getArgs().get(RestUtils.InternalKeys.PERMANENT_NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED));
+    } else {
+      assertFalse("Finite TTL should not have the permanent named blob initial PUT TTL marker",
+          request.getArgs().containsKey(RestUtils.InternalKeys.PERMANENT_NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED));
     }
   }
 
