@@ -603,9 +603,12 @@ class NettyResponseChannel implements RestResponseChannel {
         status = getHttpResponseStatus(errorResponseStatus);
       }
       if (shouldSendFailureReason(status, restServiceException)) {
-        errReason = new String(
-            Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
-            StandardCharsets.US_ASCII);
+        String rootMessage = Utils.getRootCause(cause).getMessage();
+        if (rootMessage != null) {
+          errReason = new String(
+              rootMessage.replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
+              StandardCharsets.US_ASCII);
+        }
       }
       if (restServiceException.shouldIncludeExceptionMetadataInResponse()) {
         errHeaders = restServiceException.getExceptionHeadersMap();
