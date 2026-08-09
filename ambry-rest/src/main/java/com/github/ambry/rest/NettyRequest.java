@@ -339,6 +339,10 @@ public class NettyRequest implements RestRequest {
    * pending read.
    */
   void markPossibleClientTermination() {
+    // Check-then-act, not atomic/CAS - safe because channelInactive/exceptionCaught/userEventTriggered all fire on
+    // the same Netty channel's single-threaded event loop for a given request, so these calls are never actually
+    // concurrent with each other; the volatile field just ensures the eventual invokeCallback() on another thread
+    // sees the final write.
     if (channelException != CLIENT_CHANNEL_CLOSE_EXCEPTION) {
       channelException = POSSIBLE_CLIENT_CHANNEL_CLOSE_EXCEPTION;
     }
