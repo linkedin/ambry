@@ -542,10 +542,17 @@ public class NettyMessageProcessorTest {
    * {@link com.github.ambry.utils.Utils#isPossibleClientTermination(Throwable)}.
    * <p/>
    * Also verifies that the same typed exception is now delivered to the separate response-completion path
-   * (via {@code onRequestAborted}) - not just to {@code readInto} - and that doing so is behavior-neutral for any
-   * error response that manages to be written before the network channel physically closes: the response status
-   * code (if one is observed at all) is unchanged from what the pre-existing message-based
-   * {@code Utils.convertToClientTerminationException(...)} wrap would have produced.
+   * (via {@code onRequestAborted}) - not just to {@code readInto} - and that doing so is behavior-neutral. Unlike
+   * the idle-timeout case below, this is NOT independently verified by a runtime assertion in this test: by the
+   * time {@code onRequestAborted} runs here, the network channel has already begun closing (this test simulates
+   * the abort via {@code channel.close()} itself), so {@code NettyResponseChannel} never gets to actually write an
+   * error response to the outbound queue - {@code channel.readOutbound()} is always {@code null} in this scenario.
+   * Behavior-neutrality for this call site is instead established by code inspection (see the PR description):
+   * {@code NettyResponseChannel#getErrorResponse} routes through {@code Utils.isPossibleClientTermination(cause)},
+   * which recognizes {@link ClientChannelCloseException} unconditionally via {@code instanceof} - identically to
+   * how the legacy {@code Utils.convertToClientTerminationException(...)} message wrap it replaces always matched
+   * that same check - so the response status code and {@code clientEarlyTerminationCount} metric this call site
+   * would have produced are provably unchanged, even though no response is actually observable in this test.
    * @throws Exception
    */
   @Test
@@ -576,14 +583,9 @@ public class NettyMessageProcessorTest {
       assertTrue("readInto callback exception should be a ClientChannelCloseException",
           callback.exception instanceof ClientChannelCloseException);
 
-      // The channel is already closing by the time onRequestAborted runs, so an error response may or may not have
-      // been written before the physical close completed; if one was, it must still be BAD_REQUEST (unchanged from
-      // before this typed-exception propagation into onRequestAborted).
-      Object outboundResponse = channel.readOutbound();
-      if (outboundResponse instanceof HttpResponse) {
-        assertEquals("Response status for a client-rooted abort must remain BAD_REQUEST", HttpResponseStatus.BAD_REQUEST,
-            ((HttpResponse) outboundResponse).status());
-      }
+      // No outbound error response is observable in this scenario - see the class-level javadoc note above for why
+      // this call site's Path B behavior-neutrality is verified by code inspection instead.
+      assertNull("No outbound response is expected once the channel is already closing", channel.readOutbound());
     } finally {
       capturingHandler.shutdown();
     }
