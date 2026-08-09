@@ -29,6 +29,7 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ClientChannelCloseException;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
@@ -63,7 +64,6 @@ import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -576,18 +576,18 @@ public class NettyMessageProcessorTest {
 
   /**
    * Verifies that a client idle/stall timeout (the {@link IdleState#ALL_IDLE} branch of
-   * {@link NettyMessageProcessor#userEventTriggered}) does NOT deliver a {@link ClientChannelCloseException} to the
-   * pending {@code readInto} callback. This is intentional: {@link NettyRequest} suspends reads (autoRead=false) on
-   * the channel while a slow/backpressured downstream consumer keeps buffered data above
-   * {@code nettyServerRequestBufferWatermark} (see {@link NettyRequest#continueReadIfPossible}), so
-   * {@code ALL_IDLE} can fire purely due to a server/destination-side stall rather than genuine client inactivity.
-   * Since this ambiguity cannot yet be cleanly disambiguated with high confidence, idle-timeout is left untagged in
-   * this change (falls back to the default {@link ClosedChannelException}); only {@code channelInactive} has been
-   * proven exclusively client-rooted.
+   * {@link NettyMessageProcessor#userEventTriggered}) delivers a {@link PossibleClientChannelCloseException} - not
+   * the high-confidence {@link ClientChannelCloseException} - to the pending {@code readInto} callback. This is
+   * intentional: {@link NettyRequest} suspends reads (autoRead=false) on the channel while a slow/backpressured
+   * downstream consumer keeps buffered data above {@code nettyServerRequestBufferWatermark} (see
+   * {@link NettyRequest#continueReadIfPossible}), so {@code ALL_IDLE} can fire purely due to a server/destination-side
+   * stall rather than genuine client inactivity. Since this ambiguity cannot be cleanly disambiguated with high
+   * confidence, idle-timeout is tagged with the "possible" tier rather than the "sure" tier; only
+   * {@code channelInactive} has been proven exclusively client-rooted.
    * @throws Exception
    */
   @Test
-  public void idleTimeoutDoesNotDeliverClientTerminationToReadIntoTest() throws Exception {
+  public void idleTimeoutDeliversPossibleClientTerminationToReadIntoTest() throws Exception {
     CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
     capturingHandler.start();
     try {
@@ -596,7 +596,7 @@ public class NettyMessageProcessorTest {
       EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
 
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
-      httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "idleTimeoutDoesNotDeliverClientTerminationToReadIntoTest");
+      httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "idleTimeoutDeliversPossibleClientTerminationToReadIntoTest");
       httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
       channel.writeInbound(httpRequest);
 
@@ -613,11 +613,11 @@ public class NettyMessageProcessorTest {
       callback.awaitCallback();
       assertNotNull("readInto callback should have received an exception", callback.exception);
       assertFalse(
-          "readInto callback exception must NOT be a ClientChannelCloseException for idle-timeout in this change "
-              + "(left untagged due to backpressure ambiguity - see channelInactive for the proven client-exclusive "
-              + "case)", callback.exception instanceof ClientChannelCloseException);
-      assertTrue("readInto callback exception should still be a ClosedChannelException",
-          callback.exception instanceof ClosedChannelException);
+          "readInto callback exception must NOT be the high-confidence ClientChannelCloseException for idle-timeout "
+              + "(ambiguous - could be a server/destination-side stall) - see channelInactive for the proven "
+              + "client-exclusive case", callback.exception instanceof ClientChannelCloseException);
+      assertTrue("readInto callback exception should be a PossibleClientChannelCloseException for idle-timeout",
+          callback.exception instanceof PossibleClientChannelCloseException);
     } finally {
       capturingHandler.shutdown();
     }
@@ -626,14 +626,15 @@ public class NettyMessageProcessorTest {
   /**
    * Verifies (and documents) that an {@link IOException} reaching {@link NettyMessageProcessor#exceptionCaught}
    * while a PUT request is still in-flight (e.g. "connection reset"/"broken pipe" while reading further request
-   * content from the client) does NOT deliver a {@link ClientChannelCloseException} to the pending {@code readInto}
-   * callback in this change. This path is a plausible high-confidence client-rooted signal, but is deliberately left
-   * untagged/out of scope here alongside idle-timeout - only {@code channelInactive} has been proven exclusively
-   * client-rooted with no possible server-initiated trigger. Tagging this site is a documented follow-up candidate.
+   * content from the client) delivers a {@link PossibleClientChannelCloseException} - not the high-confidence
+   * {@link ClientChannelCloseException} - to the pending {@code readInto} callback. This path is a plausible
+   * client-rooted signal, but exclusivity isn't proven the way it is for {@code channelInactive} - a destination-write
+   * failure could in principle propagate here via Netty's implicit exception routing - so it is tagged with the
+   * "possible" tier.
    * @throws Exception
    */
   @Test
-  public void exceptionCaughtIOExceptionDoesNotDeliverClientTerminationToReadIntoTest() throws Exception {
+  public void exceptionCaughtIOExceptionDeliversPossibleClientTerminationToReadIntoTest() throws Exception {
     CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
     capturingHandler.start();
     try {
@@ -643,7 +644,7 @@ public class NettyMessageProcessorTest {
 
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
       httpRequest.headers()
-          .set(RestUtils.Headers.SERVICE_ID, "exceptionCaughtIOExceptionDoesNotDeliverClientTerminationToReadIntoTest");
+          .set(RestUtils.Headers.SERVICE_ID, "exceptionCaughtIOExceptionDeliversPossibleClientTerminationToReadIntoTest");
       httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
       channel.writeInbound(httpRequest);
 
@@ -661,9 +662,12 @@ public class NettyMessageProcessorTest {
       callback.awaitCallback();
       assertNotNull("readInto callback should have received an exception", callback.exception);
       assertFalse(
-          "readInto callback exception must NOT be a ClientChannelCloseException for exceptionCaught's IOException "
-              + "branch in this change (deliberately left untagged/out of scope - see channelInactive for the "
-              + "proven client-exclusive case)", callback.exception instanceof ClientChannelCloseException);
+          "readInto callback exception must NOT be the high-confidence ClientChannelCloseException for "
+              + "exceptionCaught's IOException branch (exclusivity unproven) - see channelInactive for the proven "
+              + "client-exclusive case", callback.exception instanceof ClientChannelCloseException);
+      assertTrue(
+          "readInto callback exception should be a PossibleClientChannelCloseException for exceptionCaught's "
+              + "IOException branch", callback.exception instanceof PossibleClientChannelCloseException);
     } finally {
       capturingHandler.shutdown();
     }
@@ -672,11 +676,12 @@ public class NettyMessageProcessorTest {
   /**
    * Verifies that a server-side abort (e.g. {@link NettyMessageProcessor#exceptionCaught} triggered by an internal
    * {@link RestServiceException}, with no client disconnect) does NOT deliver a {@link ClientChannelCloseException}
-   * to the pending {@code readInto} callback. This is the positive-tagging counterpart to
+   * or a {@link PossibleClientChannelCloseException} to the pending {@code readInto} callback - it must land in the
+   * unclassified "other" tier. This is the positive-tagging counterpart to
    * {@link #channelInactiveDeliversClientTerminationToReadIntoTest()}, and complements
-   * {@link #idleTimeoutDoesNotDeliverClientTerminationToReadIntoTest()} and
-   * {@link #exceptionCaughtIOExceptionDoesNotDeliverClientTerminationToReadIntoTest()}, together proving
-   * server/internal terminations are never mis-tagged as client-rooted.
+   * {@link #idleTimeoutDeliversPossibleClientTerminationToReadIntoTest()} and
+   * {@link #exceptionCaughtIOExceptionDeliversPossibleClientTerminationToReadIntoTest()}, together proving
+   * server/internal terminations are never mis-tagged as client-rooted (at either the "sure" or "possible" tier).
    * @throws Exception
    */
   @Test
@@ -708,6 +713,9 @@ public class NettyMessageProcessorTest {
       assertNotNull("readInto callback should have received an exception", callback.exception);
       assertFalse("readInto callback exception must NOT be a ClientChannelCloseException for a server-rooted abort",
           callback.exception instanceof ClientChannelCloseException);
+      assertFalse(
+          "readInto callback exception must NOT be a PossibleClientChannelCloseException for a server-rooted abort",
+          callback.exception instanceof PossibleClientChannelCloseException);
     } finally {
       capturingHandler.shutdown();
     }

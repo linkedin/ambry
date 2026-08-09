@@ -17,6 +17,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.ClientChannelCloseException;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultMaxBytesRecvByteBufAllocator;
@@ -67,6 +68,8 @@ public class NettyRequest implements RestRequest {
   static int bufferWatermark = -1;
   private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
   private static final ClientChannelCloseException CLIENT_CHANNEL_CLOSE_EXCEPTION = new ClientChannelCloseException();
+  private static final PossibleClientChannelCloseException POSSIBLE_CLIENT_CHANNEL_CLOSE_EXCEPTION =
+      new PossibleClientChannelCloseException();
 
   protected final HttpRequest request;
   protected final Channel channel;
@@ -305,10 +308,9 @@ public class NettyRequest implements RestRequest {
 
   /**
    * Marks this request's pending read (if any) as terminated because of a high-confidence, client-rooted event
-   * (e.g. the client disconnected, reset the connection, or went idle past the configured timeout). Must be called,
-   * if at all, before {@link #close()} so that {@link ClientChannelCloseException} - rather than the default
-   * {@link ClosedChannelException} - is delivered to the pending {@link #readInto} callback. Idempotent and safe to
-   * call even if there is no pending read.
+   * (e.g. the client disconnected or reset the connection). Must be called, if at all, before {@link #close()} so
+   * that {@link ClientChannelCloseException} - rather than the default {@link ClosedChannelException} - is delivered
+   * to the pending {@link #readInto} callback. Idempotent and safe to call even if there is no pending read.
    */
   void markClientTerminated() {
     channelException = CLIENT_CHANNEL_CLOSE_EXCEPTION;
@@ -322,6 +324,34 @@ public class NettyRequest implements RestRequest {
    */
   void closeDueToClientTermination() {
     markClientTerminated();
+    close();
+  }
+
+  /**
+   * Marks this request's pending read (if any) as terminated because of an event that is plausibly, but not
+   * confirmably, client-rooted (e.g. an idle timeout, which can equally be caused by a slow destination write; or an
+   * {@link java.io.IOException} reaching Netty's {@code exceptionCaught}, which is usually but not provably
+   * client-facing). Must be called, if at all, before {@link #close()} so that
+   * {@link PossibleClientChannelCloseException} - rather than the default {@link ClosedChannelException} - is
+   * delivered to the pending {@link #readInto} callback. Does not overwrite an already-set
+   * {@link #markClientTerminated() high-confidence} tag, so that a "sure" classification is never downgraded to
+   * "possible" if both were somehow triggered for the same request. Idempotent and safe to call even if there is no
+   * pending read.
+   */
+  void markPossibleClientTermination() {
+    if (channelException != CLIENT_CHANNEL_CLOSE_EXCEPTION) {
+      channelException = POSSIBLE_CLIENT_CHANNEL_CLOSE_EXCEPTION;
+    }
+  }
+
+  /**
+   * Convenience method that marks this request as possibly client-terminated (see
+   * {@link #markPossibleClientTermination()}) and then closes it, in one call. Use this at call sites that close the
+   * request directly, so the "mark before close" ordering requirement can never be broken by a future edit that
+   * reorders or drops one of the two calls.
+   */
+  void closeDueToPossibleClientTermination() {
+    markPossibleClientTermination();
     close();
   }
 

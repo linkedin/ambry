@@ -21,6 +21,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.ClientChannelCloseException;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -331,6 +332,50 @@ public class NettyRequestTest {
     assertNotNull("Callback should have received an exception", callback.exception);
     assertTrue("Exception should be a ClientChannelCloseException",
         callback.exception instanceof ClientChannelCloseException);
+  }
+
+  /**
+   * Tests that {@link NettyRequest#markPossibleClientTermination()} causes {@link NettyRequest#close()} to deliver a
+   * {@link PossibleClientChannelCloseException} - the ambiguous/lower-confidence tier, distinct from
+   * {@link ClientChannelCloseException} - to a pending {@link NettyRequest#readInto} callback. Also verifies that a
+   * "sure" tag set via {@link NettyRequest#markClientTerminated()} is never downgraded by a subsequent
+   * {@link NettyRequest#markPossibleClientTermination()} call on the same request.
+   * @throws Exception
+   */
+  @Test
+  public void markPossibleClientTerminationDeliversTypedExceptionTest() throws Exception {
+    // Case 1: markPossibleClientTermination() then close() -> pending readInto callback gets
+    // PossibleClientChannelCloseException, not ClientChannelCloseException.
+    Channel channel = new MockChannel();
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    AsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    nettyRequest.markPossibleClientTermination();
+    nettyRequest.close();
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertTrue("Exception should be a PossibleClientChannelCloseException",
+        callback.exception instanceof PossibleClientChannelCloseException);
+    assertFalse("PossibleClientChannelCloseException must not satisfy ClientChannelCloseException instanceof checks "
+        + "(sibling, not subtype)", callback.exception instanceof ClientChannelCloseException);
+    assertTrue("PossibleClientChannelCloseException must still be a ClosedChannelException for backward "
+        + "compatibility", callback.exception instanceof ClosedChannelException);
+
+    // Case 2: markClientTerminated() (sure) followed by markPossibleClientTermination() (possible) must NOT
+    // downgrade the already-set "sure" tag.
+    channel = new MockChannel();
+    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    writeChannel = new ByteBufferAsyncWritableChannel();
+    callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    nettyRequest.markClientTerminated();
+    nettyRequest.markPossibleClientTermination();
+    nettyRequest.close();
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertTrue("A prior 'sure' tag must not be downgraded to 'possible' by a later "
+        + "markPossibleClientTermination() call", callback.exception instanceof ClientChannelCloseException);
   }
 
   /**

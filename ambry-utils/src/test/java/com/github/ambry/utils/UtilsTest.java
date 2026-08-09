@@ -690,6 +690,11 @@ public class UtilsTest {
     exception = new ClientChannelCloseException();
     assertTrue("ClientChannelCloseException should be declared as a client termination",
         Utils.isPossibleClientTermination(exception));
+
+    // the typed PossibleClientChannelCloseException (the ambiguous tier) should also be recognized directly.
+    exception = new PossibleClientChannelCloseException();
+    assertTrue("PossibleClientChannelCloseException should be declared as a client termination",
+        Utils.isPossibleClientTermination(exception));
   }
 
   /**

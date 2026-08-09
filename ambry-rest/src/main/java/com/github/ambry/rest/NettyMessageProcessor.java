@@ -174,14 +174,21 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     try {
       if (request != null && request.isOpen() && cause instanceof Exception) {
         nettyMetrics.processorExceptionCaughtCount.inc();
-        // NOTE: an IOException reaching this handler for an in-flight request is likely client-rooted (Netty's own
-        // handling of this client-facing channel, e.g. "connection reset"/"broken pipe" while reading further
-        // request content) rather than a business/destination write failure (those are reported directly to the
-        // RestResponseChannel by FrontendRestRequestService/AsyncRequestResponseHandler and never reach this
-        // pipeline handler). However, this path is intentionally left untagged as ClientChannelCloseException in
-        // this change - only channelInactive() (below) has been proven exclusively client-rooted with no
-        // server-initiated code path that can trigger it while request.isOpen() is still true. Tagging this site
-        // is left as a documented follow-up rather than risking a less-proven exclusivity claim here.
+        if (cause instanceof IOException) {
+          // NOTE: an IOException reaching this handler for an in-flight request is likely client-rooted (Netty's
+          // own handling of this client-facing channel, e.g. "connection reset"/"broken pipe" while reading further
+          // request content) rather than a business/destination write failure (those are reported directly to the
+          // RestResponseChannel by FrontendRestRequestService/AsyncRequestResponseHandler and never reach this
+          // pipeline handler). However, exclusivity isn't proven the way it is for channelInactive() (below) - a
+          // destination-write failure could in principle propagate here via Netty's implicit exception routing - so
+          // this is tagged as "possible" (PossibleClientChannelCloseException), not "sure"
+          // (ClientChannelCloseException).
+          try {
+            request.markPossibleClientTermination();
+          } catch (Exception e) {
+            logger.warn("Exception while marking request {} as possibly client-terminated", request.getUri(), e);
+          }
+        }
         onRequestAborted((Exception) cause);
       } else if (isOpen()) {
         if (cause instanceof RestServiceException) {
@@ -233,8 +240,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
-        // NOTE: idle-timeout is intentionally left untagged as ClientChannelCloseException, pending a
-        // backpressure-aware follow-up. NettyRequest suspends reads (autoRead=false) while the amount of data
+        // NOTE: idle-timeout is tagged as "possible" (PossibleClientChannelCloseException), not "sure"
+        // (ClientChannelCloseException). NettyRequest suspends reads (autoRead=false) while the amount of data
         // buffered for a slow/backpressured downstream consumer exceeds nettyServerRequestBufferWatermark (see
         // NettyRequest#continueReadIfPossible); while reads are suspended, no channelRead events can occur no
         // matter how active the client is, so IdleStateHandler's ALL_IDLE can fire purely because OUR OWN
@@ -242,12 +249,16 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         // narrow race: NettyRequest#writeContent unconditionally re-enables autoRead the instant the last client
         // chunk arrives, before the corresponding destination write is even issued - so a slow destination write
         // on that final chunk leaves the channel silent in both directions with autoRead==true for the entire
-        // idle window, a deterministic (not merely racy) false-positive shape. Tagging this as a client
+        // idle window, a deterministic (not merely racy) false-positive shape. Tagging this as a "sure" client
         // termination would risk hiding a real server/destination-side slowness problem, violating the "bias
-        // toward NOT-client on ambiguity" invariant. So this path deliberately falls through to the default
-        // (untagged) ClosedChannelException, same as before this change; only channelInactive() has been proven
-        // exclusively client-rooted. A correct follow-up would need to gate on "no destination write currently
-        // in flight" rather than on autoRead state.
+        // toward NOT-client on ambiguity" invariant; only channelInactive() has been proven exclusively
+        // client-rooted. A correct "sure" follow-up would need to gate on "no destination write currently in
+        // flight" rather than on autoRead state - out of scope here.
+        try {
+          request.markPossibleClientTermination();
+        } catch (Exception e) {
+          logger.warn("Exception while marking request {} as possibly client-terminated", request.getUri(), e);
+        }
         onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
       } else {
         close();

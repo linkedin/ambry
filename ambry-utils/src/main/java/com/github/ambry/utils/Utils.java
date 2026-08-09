@@ -1286,7 +1286,7 @@ public class Utils {
    * @return {@code true} this cause indicates a possible early termination from the client. {@code false} otherwise.
    */
   public static boolean isPossibleClientTermination(Throwable cause) {
-    if (cause instanceof ClientChannelCloseException) {
+    if (cause instanceof ClientChannelCloseException || cause instanceof PossibleClientChannelCloseException) {
       return true;
     }
     if (cause instanceof IOException) {

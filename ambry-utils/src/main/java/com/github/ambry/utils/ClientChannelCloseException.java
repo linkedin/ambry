@@ -18,8 +18,9 @@ import java.nio.channels.ClosedChannelException;
 
 /**
  * A {@link ClosedChannelException} thrown specifically when a channel is confirmed, with high confidence, to have
- * been closed because of a client-rooted termination (e.g. the client disconnected, reset the connection, or went
- * idle for longer than the configured timeout).
+ * been closed because of a client-rooted termination (e.g. the client disconnected or reset the connection). This is
+ * the "sure" tier of client-termination classification - see {@link PossibleClientChannelCloseException} for the
+ * "possible, but unproven" tier (e.g. idle timeout, where a slow destination write can produce the same symptoms).
  * <p/>
  * Extending {@link ClosedChannelException} keeps this backward compatible with any existing code that catches or
  * checks for {@link ClosedChannelException}. Callers that need to distinguish a client-rooted termination from any
