@@ -672,11 +672,11 @@ public class NettyMessageProcessorTest {
   /**
    * Verifies that a server-side abort (e.g. {@link NettyMessageProcessor#exceptionCaught} triggered by an internal
    * {@link RestServiceException}, with no client disconnect) does NOT deliver a {@link ClientChannelCloseException}
-   * to the pending {@code readInto} callback. This is the negative counterpart to
-   * {@link #channelInactiveDeliversClientTerminationToReadIntoTest()},
-   * {@link #idleTimeoutDeliversClientTerminationToReadIntoTest()}, and
-   * {@link #exceptionCaughtIOExceptionDeliversClientTerminationToReadIntoTest()}, proving server/internal
-   * terminations are never mis-tagged as client-rooted.
+   * to the pending {@code readInto} callback. This is the positive-tagging counterpart to
+   * {@link #channelInactiveDeliversClientTerminationToReadIntoTest()}, and complements
+   * {@link #idleTimeoutDoesNotDeliverClientTerminationToReadIntoTest()} and
+   * {@link #exceptionCaughtIOExceptionDoesNotDeliverClientTerminationToReadIntoTest()}, together proving
+   * server/internal terminations are never mis-tagged as client-rooted.
    * @throws Exception
    */
   @Test
