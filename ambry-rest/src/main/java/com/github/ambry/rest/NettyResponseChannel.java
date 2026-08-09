@@ -805,6 +805,18 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param shouldCloseRequest used to determine if we want to close the request or not.
    */
   private void completeRequest(boolean closeNetworkChannel, boolean shouldDelay, boolean shouldCloseRequest) {
+    // Close the request (and flip its isOpen() state to false) before scheduling the network channel close below.
+    // If writeFuture is already complete, addListener(...) fires its listener synchronously, which can close the
+    // network channel and trigger channelInactive() re-entrantly on this same call stack. NettyMessageProcessor's
+    // channelInactive() uses request.isOpen() to decide whether channel inactivity is client-rooted (as opposed to
+    // this server-initiated completion) - closeRequest() must therefore run first so that check is never fooled by
+    // a server-initiated close still in progress. Failures here must not prevent the network channel close below
+    // from being scheduled (that was always attempted first previously), so swallow (and log) any exception.
+    try {
+      closeRequest(shouldCloseRequest);
+    } catch (Exception e) {
+      logger.error("Exception while closing request on channel {}", ctx.channel(), e);
+    }
     if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
       if (shouldDelay && (request != null && request.getRestMethod().equals(RestMethod.POST))
           && this.nettyConfig.nettyServerCloseDelayTimeoutMs > 0) {
@@ -815,7 +827,6 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       logger.trace("Requested closing of channel {}", ctx.channel());
     }
-    closeRequest(shouldCloseRequest);
   }
 
   /**

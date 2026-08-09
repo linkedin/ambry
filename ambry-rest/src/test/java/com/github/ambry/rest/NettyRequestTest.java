@@ -20,6 +20,7 @@ import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.ClientChannelCloseException;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -278,6 +279,58 @@ public class NettyRequestTest {
         assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
       }
     }
+  }
+
+  /**
+   * Tests that {@link NettyRequest#markClientTerminated()} causes {@link NettyRequest#close()} to deliver a
+   * {@link ClientChannelCloseException} to a pending {@link NettyRequest#readInto} callback, instead of the
+   * default bare {@link ClosedChannelException}.
+   * @throws Exception
+   */
+  @Test
+  public void markClientTerminatedDeliversTypedExceptionTest() throws Exception {
+    // Case 1: markClientTerminated() then close() -> pending readInto callback gets ClientChannelCloseException.
+    Channel channel = new MockChannel();
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    AsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    nettyRequest.markClientTerminated();
+    nettyRequest.close();
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertTrue("Exception should be a ClientChannelCloseException",
+        callback.exception instanceof ClientChannelCloseException);
+    assertTrue("ClientChannelCloseException must still be a ClosedChannelException for backward compatibility",
+        callback.exception instanceof ClosedChannelException);
+
+    // Case 2: close() without markClientTerminated() -> pending readInto callback gets the default bare
+    // ClosedChannelException, NOT ClientChannelCloseException. This proves the normal-completion path (which
+    // never calls markClientTerminated()) is unaffected.
+    channel = new MockChannel();
+    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    writeChannel = new ByteBufferAsyncWritableChannel();
+    callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    nettyRequest.close();
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertFalse("Exception should not be a ClientChannelCloseException when markClientTerminated() was not called",
+        callback.exception instanceof ClientChannelCloseException);
+    assertTrue("Exception should still be a ClosedChannelException", callback.exception instanceof ClosedChannelException);
+
+    // Case 3: closeDueToClientTermination() (the atomic mark-then-close convenience method) has the same effect as
+    // Case 1's two-step call.
+    channel = new MockChannel();
+    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    writeChannel = new ByteBufferAsyncWritableChannel();
+    callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    nettyRequest.closeDueToClientTermination();
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertTrue("Exception should be a ClientChannelCloseException",
+        callback.exception instanceof ClientChannelCloseException);
   }
 
   /**

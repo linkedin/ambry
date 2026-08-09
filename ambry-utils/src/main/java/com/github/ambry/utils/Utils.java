@@ -1286,6 +1286,9 @@ public class Utils {
    * @return {@code true} this cause indicates a possible early termination from the client. {@code false} otherwise.
    */
   public static boolean isPossibleClientTermination(Throwable cause) {
+    if (cause instanceof ClientChannelCloseException) {
+      return true;
+    }
     if (cause instanceof IOException) {
       String msg = cause.getMessage();
       if (msg != null) {

@@ -685,6 +685,11 @@ public class UtilsTest {
     exception = new java.nio.channels.ClosedChannelException();
     assertFalse("Bare ClosedChannelException should not be declared as a client termination",
         Utils.isPossibleClientTermination(exception));
+
+    // the typed ClientChannelCloseException should be recognized directly, regardless of message.
+    exception = new ClientChannelCloseException();
+    assertTrue("ClientChannelCloseException should be declared as a client termination",
+        Utils.isPossibleClientTermination(exception));
   }
 
   /**

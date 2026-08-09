@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.ClientChannelCloseException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultMaxBytesRecvByteBufAllocator;
@@ -65,6 +66,7 @@ public class NettyRequest implements RestRequest {
   // is <=0, it is assumed that there is no limit on the size of unacknowledged data.
   static int bufferWatermark = -1;
   private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
+  private static final ClientChannelCloseException CLIENT_CHANNEL_CLOSE_EXCEPTION = new ClientChannelCloseException();
 
   protected final HttpRequest request;
   protected final Channel channel;
@@ -299,6 +301,28 @@ public class NettyRequest implements RestRequest {
         }
       }
     }
+  }
+
+  /**
+   * Marks this request's pending read (if any) as terminated because of a high-confidence, client-rooted event
+   * (e.g. the client disconnected, reset the connection, or went idle past the configured timeout). Must be called,
+   * if at all, before {@link #close()} so that {@link ClientChannelCloseException} - rather than the default
+   * {@link ClosedChannelException} - is delivered to the pending {@link #readInto} callback. Idempotent and safe to
+   * call even if there is no pending read.
+   */
+  void markClientTerminated() {
+    channelException = CLIENT_CHANNEL_CLOSE_EXCEPTION;
+  }
+
+  /**
+   * Convenience method that marks this request as client-terminated (see {@link #markClientTerminated()}) and then
+   * closes it, in one call. Use this at call sites that close the request directly (as opposed to sites where the
+   * close happens later via a different code path, e.g. through {@link NettyResponseChannel}), so the "mark before
+   * close" ordering requirement can never be broken by a future edit that reorders or drops one of the two calls.
+   */
+  void closeDueToClientTermination() {
+    markClientTerminated();
+    close();
   }
 
   @Override

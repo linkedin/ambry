@@ -764,6 +764,57 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Regression test for the ordering fix in {@code NettyResponseChannel#completeRequest}. That method now closes
+   * the request (flipping {@link NettyRequest#isOpen()} to {@code false}) before it schedules the listener that
+   * closes the underlying network channel, instead of the other way around as before this change.
+   * <p/>
+   * This is a coupled/dependent fix, not a drive-by: {@link NettyMessageProcessor#channelInactive} tags the
+   * termination as client-rooted (via {@link com.github.ambry.utils.ClientChannelCloseException}) precisely
+   * because it trusts {@code request.isOpen()} to already be {@code false} for every server-initiated completion
+   * by the time the network channel actually closes and {@code channelInactive} fires. Before this reorder, that
+   * was not guaranteed: {@link io.netty.channel.ChannelFuture#addListener} invokes its listener synchronously/
+   * re-entrantly if the future is already complete, so a pure server-side completion (no client involvement)
+   * could close the network channel - and trigger {@code channelInactive} re-entrantly on the same call stack -
+   * before {@code closeRequest()} had flipped {@code isOpen()} to {@code false}, which would have made
+   * {@code channelInactive}'s sole tagged call site unsafe (a false client-abort masking a server completion).
+   * This test is therefore the evidence that the reorder is required for {@code channelInactive}-only tagging to
+   * be safe, not incidental scope creep - it asserts the invariant directly, for both the exception and
+   * non-exception {@link RestResponseChannel#onResponseComplete(Exception)} paths, so that a future refactor that
+   * reorders {@code completeRequest} again cannot silently reopen the race.
+   */
+  @Test
+  public void completeRequestClosesRequestBeforeReturningTest() throws Exception {
+    // success (non-exception) path: TestingUri.CopyHeaders drives onResponseComplete(null).
+    {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      HttpRequest httpRequest = createRequestWithHeaders(HttpMethod.GET, TestingUri.CopyHeaders.toString());
+      channel.writeInbound(httpRequest);
+      // MockNettyMessageProcessor's handler for CopyHeaders calls onResponseComplete(null) synchronously while
+      // processing the inbound request, and EmbeddedChannel resolves writes synchronously (no real network I/O),
+      // so by the time writeInbound() returns, onResponseComplete(null) must already have returned too.
+      assertFalse("Request must already be closed once onResponseComplete(null) has returned",
+          processor.getRequest().isOpen());
+      while (channel.readOutbound() != null) {
+        // drain the channel.
+      }
+    }
+    // exception path: TestingUri.OnResponseCompleteWithNonRestException drives onResponseComplete(exception).
+    {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      HttpRequest httpRequest =
+          createRequestWithHeaders(HttpMethod.GET, TestingUri.OnResponseCompleteWithNonRestException.toString());
+      channel.writeInbound(httpRequest);
+      assertFalse("Request must already be closed once onResponseComplete(exception) has returned",
+          processor.getRequest().isOpen());
+      while (channel.readOutbound() != null) {
+        // drain the channel.
+      }
+    }
+  }
+
+  /**
    * Tests the invocation of DELAYED_CLOSE when post failures happen in {@link NettyResponseChannel}.
    */
   @Test
@@ -1399,6 +1450,13 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
 
   public NettyMetrics getNettyMetrics() {
     return nettyMetrics;
+  }
+
+  /**
+   * @return the {@link NettyRequest} backing the current/most recently handled request on this processor.
+   */
+  public NettyRequest getRequest() {
+    return request;
   }
 
   @Override

@@ -143,8 +143,12 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       // and can short-circuit best-effort work (e.g. named-blob metadata commit in AmbryIdConverterFactory).
       // NettyRequest.close() is idempotent via channelOpen.compareAndSet(true,false), so double-close on the
       // normal-completion path is a no-op.
+      // Mark the pending readInto callback as client-rooted before closing: reaching this branch means the
+      // request was never closed by the normal completion path (which always closes the request - see
+      // NettyResponseChannel#completeRequest - before scheduling the network channel close), so channel
+      // inactivity here can only be due to the client.
       try {
-        request.close();
+        request.closeDueToClientTermination();
       } catch (Exception e) {
         logger.warn("Exception while closing request {} on channelInactive", request.getUri(), e);
       }
@@ -170,6 +174,14 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     try {
       if (request != null && request.isOpen() && cause instanceof Exception) {
         nettyMetrics.processorExceptionCaughtCount.inc();
+        // NOTE: an IOException reaching this handler for an in-flight request is likely client-rooted (Netty's own
+        // handling of this client-facing channel, e.g. "connection reset"/"broken pipe" while reading further
+        // request content) rather than a business/destination write failure (those are reported directly to the
+        // RestResponseChannel by FrontendRestRequestService/AsyncRequestResponseHandler and never reach this
+        // pipeline handler). However, this path is intentionally left untagged as ClientChannelCloseException in
+        // this change - only channelInactive() (below) has been proven exclusively client-rooted with no
+        // server-initiated code path that can trigger it while request.isOpen() is still true. Tagging this site
+        // is left as a documented follow-up rather than risking a less-proven exclusivity claim here.
         onRequestAborted((Exception) cause);
       } else if (isOpen()) {
         if (cause instanceof RestServiceException) {
@@ -221,6 +233,15 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
+        // NOTE: idle-timeout is intentionally left untagged as ClientChannelCloseException. NettyRequest suspends
+        // reads (autoRead=false) on this same channel while the amount of data buffered for a slow/backpressured
+        // downstream consumer exceeds nettyServerRequestBufferWatermark (see NettyRequest#continueReadIfPossible).
+        // While reads are suspended, no channelRead events can occur no matter how active the client is, so
+        // IdleStateHandler's ALL_IDLE can fire purely because OUR OWN downstream write is stalled - not because the
+        // client is idle or has failed. Tagging this as a client termination would risk a false positive that hides
+        // a server/destination-side slowness problem, violating the "bias toward NOT-client on ambiguity" invariant.
+        // So this path deliberately falls through to the default (untagged) ClosedChannelException, same as before
+        // this change; only channelInactive() has been proven exclusively client-rooted.
         onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
       } else {
         close();
