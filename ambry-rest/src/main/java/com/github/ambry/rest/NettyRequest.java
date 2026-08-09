@@ -348,17 +348,6 @@ public class NettyRequest implements RestRequest {
     }
   }
 
-  /**
-   * Convenience method that marks this request as possibly client-terminated (see
-   * {@link #markPossibleClientTermination()}) and then closes it, in one call. Use this at call sites that close the
-   * request directly, so the "mark before close" ordering requirement can never be broken by a future edit that
-   * reorders or drops one of the two calls.
-   */
-  void closeDueToPossibleClientTermination() {
-    markPossibleClientTermination();
-    close();
-  }
-
   @Override
   public RestRequestMetricsTracker getMetricsTracker() {
     return restRequestMetricsTracker;
