@@ -15,7 +15,8 @@ package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.ClientChannelCloseException;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.HttpContent;
@@ -28,7 +29,6 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import java.io.IOException;
-import java.nio.channels.ClosedChannelException;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -152,7 +152,14 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       } catch (Exception e) {
         logger.warn("Exception while closing request {} on channelInactive", request.getUri(), e);
       }
-      onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
+      // Use the same typed "sure" exception delivered to readInto() here too, so a consumer of the
+      // response-completion path (onRequestAborted -> RestResponseChannel#close/onResponseComplete) can also
+      // detect this tier via instanceof, not just via the message-based Utils#isPossibleClientTermination check.
+      // This is behavior-neutral: ClientChannelCloseException is recognized by isPossibleClientTermination() just
+      // like the previous Utils.convertToClientTerminationException(...) wrap was, so the response status code
+      // and client-early-termination metrics emitted downstream (see NettyResponseChannel#getErrorResponse) are
+      // unchanged.
+      onRequestAborted(new ClientChannelCloseException());
     } else {
       close();
     }
@@ -259,7 +266,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         } catch (Exception e) {
           logger.warn("Exception while marking request {} as possibly client-terminated", request.getUri(), e);
         }
-        onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
+        // See the comment on the equivalent onRequestAborted(...) call in channelInactive() above: using the typed
+        // "possible" exception here is behavior-neutral for the same reason (isPossibleClientTermination()
+        // recognizes it unconditionally, exactly as it did the previous message-based wrap).
+        onRequestAborted(new PossibleClientChannelCloseException());
       } else {
         close();
       }

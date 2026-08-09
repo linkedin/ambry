@@ -540,6 +540,12 @@ public class NettyMessageProcessorTest {
    * still in-flight delivers a {@link ClientChannelCloseException} to the pending {@code readInto} callback, so
    * downstream consumers can recognize the termination as client-rooted via {@code instanceof} or
    * {@link com.github.ambry.utils.Utils#isPossibleClientTermination(Throwable)}.
+   * <p/>
+   * Also verifies that the same typed exception is now delivered to the separate response-completion path
+   * (via {@code onRequestAborted}) - not just to {@code readInto} - and that doing so is behavior-neutral for any
+   * error response that manages to be written before the network channel physically closes: the response status
+   * code (if one is observed at all) is unchanged from what the pre-existing message-based
+   * {@code Utils.convertToClientTerminationException(...)} wrap would have produced.
    * @throws Exception
    */
   @Test
@@ -569,6 +575,15 @@ public class NettyMessageProcessorTest {
       assertNotNull("readInto callback should have received an exception", callback.exception);
       assertTrue("readInto callback exception should be a ClientChannelCloseException",
           callback.exception instanceof ClientChannelCloseException);
+
+      // The channel is already closing by the time onRequestAborted runs, so an error response may or may not have
+      // been written before the physical close completed; if one was, it must still be BAD_REQUEST (unchanged from
+      // before this typed-exception propagation into onRequestAborted).
+      Object outboundResponse = channel.readOutbound();
+      if (outboundResponse instanceof HttpResponse) {
+        assertEquals("Response status for a client-rooted abort must remain BAD_REQUEST", HttpResponseStatus.BAD_REQUEST,
+            ((HttpResponse) outboundResponse).status());
+      }
     } finally {
       capturingHandler.shutdown();
     }
@@ -618,6 +633,14 @@ public class NettyMessageProcessorTest {
               + "client-exclusive case", callback.exception instanceof ClientChannelCloseException);
       assertTrue("readInto callback exception should be a PossibleClientChannelCloseException for idle-timeout",
           callback.exception instanceof PossibleClientChannelCloseException);
+
+      // The idle-timeout channel is still active when onRequestAborted fires, so an error response is written
+      // before network teardown; assert it is BAD_REQUEST - unchanged from the pre-existing message-based wrap -
+      // proving the typed-exception propagation into onRequestAborted for this call site is behavior-neutral.
+      HttpResponse outboundResponse = channel.readOutbound();
+      assertNotNull("An error response should have been written for the idle-timeout abort", outboundResponse);
+      assertEquals("Response status for a possible-client abort must remain BAD_REQUEST", HttpResponseStatus.BAD_REQUEST,
+          outboundResponse.status());
     } finally {
       capturingHandler.shutdown();
     }
