@@ -233,15 +233,21 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
-        // NOTE: idle-timeout is intentionally left untagged as ClientChannelCloseException. NettyRequest suspends
-        // reads (autoRead=false) on this same channel while the amount of data buffered for a slow/backpressured
-        // downstream consumer exceeds nettyServerRequestBufferWatermark (see NettyRequest#continueReadIfPossible).
-        // While reads are suspended, no channelRead events can occur no matter how active the client is, so
-        // IdleStateHandler's ALL_IDLE can fire purely because OUR OWN downstream write is stalled - not because the
-        // client is idle or has failed. Tagging this as a client termination would risk a false positive that hides
-        // a server/destination-side slowness problem, violating the "bias toward NOT-client on ambiguity" invariant.
-        // So this path deliberately falls through to the default (untagged) ClosedChannelException, same as before
-        // this change; only channelInactive() has been proven exclusively client-rooted.
+        // NOTE: idle-timeout is intentionally left untagged as ClientChannelCloseException, pending a
+        // backpressure-aware follow-up. NettyRequest suspends reads (autoRead=false) while the amount of data
+        // buffered for a slow/backpressured downstream consumer exceeds nettyServerRequestBufferWatermark (see
+        // NettyRequest#continueReadIfPossible); while reads are suspended, no channelRead events can occur no
+        // matter how active the client is, so IdleStateHandler's ALL_IDLE can fire purely because OUR OWN
+        // downstream write is stalled - not because the client is idle or has failed. Worse, this isn't just a
+        // narrow race: NettyRequest#writeContent unconditionally re-enables autoRead the instant the last client
+        // chunk arrives, before the corresponding destination write is even issued - so a slow destination write
+        // on that final chunk leaves the channel silent in both directions with autoRead==true for the entire
+        // idle window, a deterministic (not merely racy) false-positive shape. Tagging this as a client
+        // termination would risk hiding a real server/destination-side slowness problem, violating the "bias
+        // toward NOT-client on ambiguity" invariant. So this path deliberately falls through to the default
+        // (untagged) ClosedChannelException, same as before this change; only channelInactive() has been proven
+        // exclusively client-rooted. A correct follow-up would need to gate on "no destination write currently
+        // in flight" rather than on autoRead state.
         onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
       } else {
         close();
