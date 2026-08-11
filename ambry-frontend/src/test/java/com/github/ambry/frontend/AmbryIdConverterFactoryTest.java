@@ -37,6 +37,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -263,8 +264,13 @@ public class AmbryIdConverterFactoryTest {
   @Test
   public void ambryIdConverterNamedBlobPutClientDisconnectTest() throws Exception {
     // Best-effort race guard: when the client has already disconnected, AmbryIdConverterFactory should NOT
-    // commit named-blob metadata (namedBlobDb.put), and should surface RequestChannelClosed on both the
-    // future and callback paths, while incrementing idConverterClientAbortedCount.
+    // commit named-blob metadata (namedBlobDb.put), and should surface a client-termination exception on
+    // both the future and callback paths, while incrementing idConverterClientAbortedCount.
+    //
+    // The exception shape matters: NettyResponseChannel.getErrorResponse() checks
+    // `cause instanceof RestServiceException` BEFORE Utils.isPossibleClientTermination(cause), so throwing a
+    // RestServiceException here bypasses client-termination detection and gets classified as HTTP 500 /
+    // InternalServerErrorCount rather than HTTP 400 / ClientEarlyTerminationCount.
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     IdSigningService idSigningService = mock(IdSigningService.class);
@@ -304,15 +310,21 @@ public class AmbryIdConverterFactoryTest {
       idConverter.convert(restRequest, blobId.getID(), blobInfo.getBlobProperties(), callback).get(5, TimeUnit.SECONDS);
       fail("ID conversion should have failed because the client disconnected");
     } catch (ExecutionException e) {
-      RestServiceException re = (RestServiceException) e.getCause();
-      assertEquals("Unexpected RestServiceErrorCode (Future)", RestServiceErrorCode.RequestChannelClosed,
-          re.getErrorCode());
+      Throwable cause = e.getCause();
+      assertFalse("Guard must not throw RestServiceException (would be classified as HTTP 500) but got " + cause,
+          cause instanceof RestServiceException);
+      assertTrue("Expected IOException (Future) but got " + cause, cause instanceof IOException);
+      assertTrue("Exception must be recognized by Utils.isPossibleClientTermination (Future) but got " + cause,
+          Utils.isPossibleClientTermination(cause));
     }
     assertNotNull("Callback exception should be set", callback.exception);
-    assertTrue("Callback exception should be RestServiceException",
+    assertFalse(
+        "Guard must not throw RestServiceException (would be classified as HTTP 500) but got " + callback.exception,
         callback.exception instanceof RestServiceException);
-    assertEquals("Unexpected RestServiceErrorCode (Callback)", RestServiceErrorCode.RequestChannelClosed,
-        ((RestServiceException) callback.exception).getErrorCode());
+    assertTrue("Expected IOException (Callback) but got " + callback.exception,
+        callback.exception instanceof IOException);
+    assertTrue("Exception must be recognized by Utils.isPossibleClientTermination (Callback) but got "
+        + callback.exception, Utils.isPossibleClientTermination(callback.exception));
     verify(namedBlobDb, never()).put(any(), any(), any());
     assertEquals("idConverterClientAbortedCount should have incremented by exactly 1", beforeCount + 1,
         metricRegistry.counter(metricName).getCount());

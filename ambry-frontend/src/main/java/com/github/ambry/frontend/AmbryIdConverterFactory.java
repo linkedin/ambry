@@ -34,6 +34,8 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -42,7 +44,6 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.github.ambry.utils.Utils;
 
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
@@ -164,7 +165,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
      * @throws RestServiceException
      */
     private CompletionStage<String> convertId(String input, RestRequest restRequest, BlobProperties blobProperties)
-        throws RestServiceException {
+        throws RestServiceException, IOException {
       CompletionStage<String> conversionFuture;
       LOGGER.debug("input for convertId : " + input);
       LOGGER.debug("restRequest for convertId : " + restRequest);
@@ -219,8 +220,20 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             frontendMetrics.idConverterClientAbortedCount.inc();
             LOGGER.info("Client disconnected before namedBlobDb.put for {}; skipping metadata commit",
                 restRequest.getUri());
-            throw new RestServiceException("Client disconnected before named-blob metadata commit",
-                RestServiceErrorCode.RequestChannelClosed);
+            // Must be a client-termination IOException, NOT a RestServiceException.
+            // NettyResponseChannel.getErrorResponse() tests `cause instanceof RestServiceException` BEFORE
+            // Utils.isPossibleClientTermination(cause), so any RestServiceException short-circuits
+            // client-termination detection. RestServiceErrorCode.RequestChannelClosed is not in a 4xx group in
+            // ResponseStatus.getResponseStatus(), so it fell through to InternalServerError -> HTTP 500 and
+            // NettyResponseChannel.InternalServerErrorCount. Because the socket is already dead,
+            // maybeWriteResponseMetadata() never writes that 500, so it inflated 5xx metrics without any
+            // client ever observing it.
+            //
+            // Utils.convertToClientTerminationException() yields the IOException shape that
+            // Utils.isPossibleClientTermination() recognizes, so this lands on HTTP 400 +
+            // NettyResponseChannel.ClientEarlyTerminationCount -- identical to what
+            // NettyMessageProcessor.channelInactive() already emits for this exact disconnect.
+            throw Utils.convertToClientTerminationException(new ClosedChannelException());
           }
           NamedBlobPath namedBlobPath =
               NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
