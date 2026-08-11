@@ -160,7 +160,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       // Even when up, "sure" means the close originated from our TCP peer (which may be a load balancer/proxy rather
       // than the end client) - but for router health accounting and response classification that is the meaningful
       // distinction from a locally-initiated shutdown close.
-      boolean serviceUp = restServerState == null || restServerState.isServiceUp();
+      // If restServerState is unavailable (null), we cannot establish service liveness, so fail safe to the
+      // "possible" tier rather than over-claiming a sure client termination.
+      boolean serviceUp = restServerState != null && restServerState.isServiceUp();
       try {
         if (serviceUp) {
           request.closeDueToClientTermination();

@@ -651,6 +651,52 @@ public class NettyMessageProcessorTest {
   }
 
   /**
+   * Verifies the fail-safe null-guard on {@link NettyMessageProcessor#channelInactive}: when {@link RestServerState}
+   * is unavailable (null), service liveness cannot be established, so an in-flight channelInactive must fall back to
+   * the "possible" tier ({@link PossibleClientChannelCloseException}) rather than over-claiming the high-confidence
+   * {@link ClientChannelCloseException}. This is the safer direction - if we cannot prove the service was up, we must
+   * not assert a proven client termination (which would suppress router health metrics for what could be a
+   * server-side event). Null is not expected in production (the state is always injected), but this pins the
+   * fail-safe behavior of the guard.
+   * @throws Exception
+   */
+  @Test
+  public void channelInactiveWithNullServerStateDeliversPossibleClientTerminationTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, null);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers()
+          .set(RestUtils.Headers.SERVICE_ID, "channelInactiveWithNullServerStateDeliversPossibleClientTerminationTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+      assertTrue("RestRequest must be open before channelInactive", capturedRequest.isOpen());
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      channel.close().awaitUninterruptibly();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertFalse("With no server state, the close must NOT be classified as the high-confidence "
+              + "ClientChannelCloseException", callback.exception instanceof ClientChannelCloseException);
+      assertTrue("With no server state, the close should fail safe to a PossibleClientChannelCloseException",
+          callback.exception instanceof PossibleClientChannelCloseException);
+      assertFalse("RestRequest.isOpen() must be false after channelInactive", capturedRequest.isOpen());
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
    * Verifies that a client idle/stall timeout (the {@link IdleState#ALL_IDLE} branch of
    * {@link NettyMessageProcessor#userEventTriggered}) delivers a {@link PossibleClientChannelCloseException} - not
    * the high-confidence {@link ClientChannelCloseException} - to the pending {@code readInto} callback. This is
