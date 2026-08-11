@@ -37,6 +37,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
@@ -116,6 +117,12 @@ public class RouterUtils {
           isInternalError = true;
           break;
       }
+    } else if (exception instanceof PossibleClientChannelCloseException) {
+      // The "possible" tier deliberately includes causes that can be server- or dependency-rooted (e.g. a stalled
+      // downstream write surfacing as an idle timeout, or a destination-side I/O failure). Suppressing router health
+      // metrics for these would hide genuine server problems, so treat them as system health errors here. Only the
+      // high-confidence ClientChannelCloseException tier (handled below via isPossibleClientTermination) suppresses.
+      isSystemHealthError = true;
     } else if (Utils.isPossibleClientTermination(exception)) {
       isSystemHealthError = false;
     }

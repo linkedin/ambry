@@ -810,22 +810,24 @@ class NettyResponseChannel implements RestResponseChannel {
     // network channel and trigger channelInactive() re-entrantly on this same call stack. NettyMessageProcessor's
     // channelInactive() uses request.isOpen() to decide whether channel inactivity is client-rooted (as opposed to
     // this server-initiated completion) - closeRequest() must therefore run first so that check is never fooled by
-    // a server-initiated close still in progress. Failures here must not prevent the network channel close below
-    // from being scheduled (that was always attempted first previously), so swallow (and log) any exception.
+    // a server-initiated close still in progress. The network channel close below must always be scheduled even if
+    // closeRequest() throws (that was always attempted first previously), so it runs in a finally block; the original
+    // exception then propagates to the caller's existing failure handling (e.g. onResponseComplete's catch, which
+    // increments responseCompleteTasksError and fails the writeFuture) rather than being downgraded to a log-only
+    // event.
     try {
       closeRequest(shouldCloseRequest);
-    } catch (Exception e) {
-      logger.error("Exception while closing request on channel {}", ctx.channel(), e);
-    }
-    if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
-      if (shouldDelay && (request != null && request.getRestMethod().equals(RestMethod.POST))
-          && this.nettyConfig.nettyServerCloseDelayTimeoutMs > 0) {
-        nettyMetrics.delayedCloseScheduledCount.inc();
-        writeFuture.addListener(DELAYED_CLOSE);
-      } else {
-        writeFuture.addListener(ChannelFutureListener.CLOSE);
+    } finally {
+      if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
+        if (shouldDelay && (request != null && request.getRestMethod().equals(RestMethod.POST))
+            && this.nettyConfig.nettyServerCloseDelayTimeoutMs > 0) {
+          nettyMetrics.delayedCloseScheduledCount.inc();
+          writeFuture.addListener(DELAYED_CLOSE);
+        } else {
+          writeFuture.addListener(ChannelFutureListener.CLOSE);
+        }
+        logger.trace("Requested closing of channel {}", ctx.channel());
       }
-      logger.trace("Requested closing of channel {}", ctx.channel());
     }
   }
 

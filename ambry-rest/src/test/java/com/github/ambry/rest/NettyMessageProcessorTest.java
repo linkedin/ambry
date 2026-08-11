@@ -95,6 +95,15 @@ public class NettyMessageProcessorTest {
   private static final NettyConfig NETTY_CONFIG = new NettyConfig(new VerifiableProperties(new Properties()));
   private static final PerformanceConfig PERFORMANCE_CONFIG =
       new PerformanceConfig(new VerifiableProperties(new Properties()));
+  // A RestServerState that reports the service as up, matching normal request-serving conditions. Only isServiceUp()
+  // is read by NettyMessageProcessor, so a single shared instance is safe across tests.
+  private static final RestServerState SERVICE_UP_STATE = createServiceUpState();
+
+  private static RestServerState createServiceUpState() {
+    RestServerState state = new RestServerState("/healthCheck");
+    state.markServiceUp();
+    return state;
+  }
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -379,7 +388,7 @@ public class NettyMessageProcessorTest {
 
     DelayedContinueWriteHandler delayHandler = new DelayedContinueWriteHandler();
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(), processor);
 
     HttpHeaders headers = new DefaultHttpHeaders();
@@ -459,7 +468,7 @@ public class NettyMessageProcessorTest {
 
     DelayedContinueWriteHandler delayHandler = new DelayedContinueWriteHandler();
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(), processor);
 
     HttpHeaders headers = new DefaultHttpHeaders();
@@ -512,7 +521,7 @@ public class NettyMessageProcessorTest {
     capturingHandler.start();
     try {
       NettyMessageProcessor processor =
-          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler);
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
       EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
 
       // Send a PUT header only (no LastHttpContent) so the request stays in-flight when we close the channel.
@@ -561,7 +570,7 @@ public class NettyMessageProcessorTest {
     capturingHandler.start();
     try {
       NettyMessageProcessor processor =
-          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler);
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
       EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
 
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
@@ -592,6 +601,56 @@ public class NettyMessageProcessorTest {
   }
 
   /**
+   * Verifies that when the channel becomes inactive while the service is DOWN (e.g. a server-initiated close during
+   * {@link RestServer#shutdown()}, where the Netty worker event loop's {@code shutdownGracefully()} closes in-flight
+   * connections), {@link NettyMessageProcessor#channelInactive} delivers only the "possible" tier
+   * ({@link PossibleClientChannelCloseException}) - NOT the high-confidence {@link ClientChannelCloseException} - to
+   * the pending {@code readInto} callback. {@code channelInactive} fires for both client- and server-initiated closes,
+   * so a server-shutdown abort must not be mislabeled as a proven client termination (which would incorrectly suppress
+   * router health metrics for a genuine server-side event). The request is still open when the channel goes inactive,
+   * exactly as in the sure-tier case; only {@code restServerState.isServiceUp()} distinguishes the two.
+   * @throws Exception
+   */
+  @Test
+  public void channelInactiveWhileServiceDownDeliversPossibleClientTerminationTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    RestServerState serviceDownState = new RestServerState("/healthCheck");
+    // Leave the service marked down (the default) to simulate a server shutdown already in progress.
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, serviceDownState);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers()
+          .set(RestUtils.Headers.SERVICE_ID, "channelInactiveWhileServiceDownDeliversPossibleClientTerminationTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+      assertTrue("RestRequest must be open before channelInactive", capturedRequest.isOpen());
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      // Simulate the channel becoming inactive while the server is shutting down.
+      channel.close().awaitUninterruptibly();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertFalse("A server-initiated close (service down) must NOT be classified as the high-confidence "
+              + "ClientChannelCloseException", callback.exception instanceof ClientChannelCloseException);
+      assertTrue("A server-initiated close (service down) should deliver a PossibleClientChannelCloseException",
+          callback.exception instanceof PossibleClientChannelCloseException);
+      assertFalse("RestRequest.isOpen() must be false after channelInactive", capturedRequest.isOpen());
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
    * Verifies that a client idle/stall timeout (the {@link IdleState#ALL_IDLE} branch of
    * {@link NettyMessageProcessor#userEventTriggered}) delivers a {@link PossibleClientChannelCloseException} - not
    * the high-confidence {@link ClientChannelCloseException} - to the pending {@code readInto} callback. This is
@@ -609,7 +668,7 @@ public class NettyMessageProcessorTest {
     capturingHandler.start();
     try {
       NettyMessageProcessor processor =
-          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler);
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
       EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
 
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
@@ -664,7 +723,7 @@ public class NettyMessageProcessorTest {
     capturingHandler.start();
     try {
       NettyMessageProcessor processor =
-          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler);
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
       EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
 
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
@@ -715,7 +774,7 @@ public class NettyMessageProcessorTest {
     capturingHandler.start();
     try {
       NettyMessageProcessor processor =
-          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler);
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
       EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
 
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
@@ -784,13 +843,13 @@ public class NettyMessageProcessorTest {
    */
   private EmbeddedChannel createChannel() {
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 
   private EmbeddedChannel createChannel(NettyConfig nettyConfig) {
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 

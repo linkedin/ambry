@@ -72,6 +72,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
   private final RestRequestHandler requestHandler;
+  private final RestServerState restServerState;
   private static final Logger logger = LoggerFactory.getLogger(NettyMessageProcessor.class);
 
   // variables that will live through the life of the channel.
@@ -95,13 +96,18 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * @param nettyConfig the configuration object to use.
    * @param performanceConfig the configuration object to use for SLO evaluation.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   * @param restServerState the {@link RestServerState} used to distinguish a client-initiated channel close from a
+   *                        server-initiated one (e.g. during {@link RestServer#shutdown()}). Used to gate the
+   *                        high-confidence {@link ClientChannelCloseException} classification in
+   *                        {@link #channelInactive(ChannelHandlerContext)}.
    */
   public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig, PerformanceConfig performanceConfig,
-      RestRequestHandler requestHandler) {
+      RestRequestHandler requestHandler, RestServerState restServerState) {
     this.nettyMetrics = nettyMetrics;
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.requestHandler = requestHandler;
+    this.restServerState = restServerState;
     logger.trace("Instantiated NettyMessageProcessor");
   }
 
@@ -143,23 +149,35 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       // and can short-circuit best-effort work (e.g. named-blob metadata commit in AmbryIdConverterFactory).
       // NettyRequest.close() is idempotent via channelOpen.compareAndSet(true,false), so double-close on the
       // normal-completion path is a no-op.
-      // Mark the pending readInto callback as client-rooted before closing: reaching this branch means the
-      // request was never closed by the normal completion path (which always closes the request - see
-      // NettyResponseChannel#completeRequest - before scheduling the network channel close), so channel
-      // inactivity here can only be due to the client.
+      //
+      // Classify the pending readInto callback. Reaching this branch means the request was never closed by the
+      // normal completion path (which always closes the request - see NettyResponseChannel#completeRequest - before
+      // scheduling the network channel close), so the channel went inactive out-of-band. However, channelInactive
+      // also fires for SERVER-initiated closes: RestServer#shutdown() marks the service down and then shuts down the
+      // Netty server, whose worker event-loop shutdownGracefully() closes in-flight connections. To avoid labeling a
+      // server-shutdown abort as a high-confidence client termination, only tag the "sure" tier
+      // (ClientChannelCloseException) while the service is up; otherwise fall back to the "possible" tier.
+      // Even when up, "sure" means the close originated from our TCP peer (which may be a load balancer/proxy rather
+      // than the end client) - but for router health accounting and response classification that is the meaningful
+      // distinction from a locally-initiated shutdown close.
+      boolean serviceUp = restServerState == null || restServerState.isServiceUp();
       try {
-        request.closeDueToClientTermination();
+        if (serviceUp) {
+          request.closeDueToClientTermination();
+        } else {
+          request.markPossibleClientTermination();
+          request.close();
+        }
       } catch (Exception e) {
         logger.warn("Exception while closing request {} on channelInactive", request.getUri(), e);
       }
-      // Use the same typed "sure" exception delivered to readInto() here too, so a consumer of the
-      // response-completion path (onRequestAborted -> RestResponseChannel#close/onResponseComplete) can also
-      // detect this tier via instanceof, not just via the message-based Utils#isPossibleClientTermination check.
-      // This is behavior-neutral: ClientChannelCloseException is recognized by isPossibleClientTermination() just
-      // like the previous Utils.convertToClientTerminationException(...) wrap was, so the response status code
-      // and client-early-termination metrics emitted downstream (see NettyResponseChannel#getErrorResponse) are
-      // unchanged.
-      onRequestAborted(new ClientChannelCloseException());
+      // Use the same typed exception delivered to readInto() here too, so a consumer of the response-completion path
+      // (onRequestAborted -> RestResponseChannel#close/onResponseComplete) can also detect this tier via instanceof,
+      // not just via the message-based Utils#isPossibleClientTermination check. This is behavior-neutral: both typed
+      // exceptions are recognized by isPossibleClientTermination() just like the previous
+      // Utils.convertToClientTerminationException(...) wrap was, so the response status code and
+      // client-early-termination metrics emitted downstream (see NettyResponseChannel#getErrorResponse) are unchanged.
+      onRequestAborted(serviceUp ? new ClientChannelCloseException() : new PossibleClientChannelCloseException());
     } else {
       close();
     }

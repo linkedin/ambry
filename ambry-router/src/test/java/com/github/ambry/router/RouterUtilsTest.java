@@ -29,7 +29,9 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.utils.ClientChannelCloseException;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;
 import java.util.Properties;
@@ -118,6 +120,11 @@ public class RouterUtilsTest {
     }
     Assert.assertTrue(RouterUtils.isSystemHealthError(new Exception()));
     Assert.assertFalse(RouterUtils.isSystemHealthError(Utils.convertToClientTerminationException(new Exception())));
+    // The high-confidence "sure client" tier suppresses router health metrics (it is a genuine client disconnect).
+    Assert.assertFalse(RouterUtils.isSystemHealthError(new ClientChannelCloseException()));
+    // The "possible client" tier must NOT suppress: it can be server/dependency-rooted (e.g. a stalled downstream
+    // write or destination-side I/O failure), so counting it as a system health error avoids hiding real problems.
+    Assert.assertTrue(RouterUtils.isSystemHealthError(new PossibleClientChannelCloseException()));
   }
 
   /**

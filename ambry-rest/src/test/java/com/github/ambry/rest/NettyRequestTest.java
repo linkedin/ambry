@@ -379,6 +379,63 @@ public class NettyRequestTest {
   }
 
   /**
+   * Tests the queue-then-read ordering race: {@link NettyRequest#close()} runs BEFORE
+   * {@link NettyRequest#readInto} is ever called (as happens when AsyncRequestResponseHandler queues a request and the
+   * client disconnects before the router registers a read). In that ordering {@code close()} has no pending callback to
+   * deliver to, so the classification must instead be preserved on the stored {@code channelException} and delivered by
+   * the later {@code readInto} via its already-closed branch - rather than being discarded in favor of a fresh bare
+   * {@link ClosedChannelException}.
+   * @throws Exception
+   */
+  @Test
+  public void closeBeforeReadIntoDeliversStoredClassificationTest() throws Exception {
+    // Case 1: markClientTerminated() + close() BEFORE readInto() -> readInto's already-closed branch delivers the
+    // stored high-confidence ClientChannelCloseException.
+    Channel channel = new MockChannel();
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    nettyRequest.markClientTerminated();
+    nettyRequest.close();
+    AsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertTrue("readInto after close must deliver the stored ClientChannelCloseException, not a bare "
+        + "ClosedChannelException", callback.exception instanceof ClientChannelCloseException);
+
+    // Case 2: markPossibleClientTermination() + close() BEFORE readInto() -> the stored possible tier is delivered.
+    channel = new MockChannel();
+    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    nettyRequest.markPossibleClientTermination();
+    nettyRequest.close();
+    writeChannel = new ByteBufferAsyncWritableChannel();
+    callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertTrue("readInto after close must deliver the stored PossibleClientChannelCloseException",
+        callback.exception instanceof PossibleClientChannelCloseException);
+    assertFalse("possible tier must not satisfy ClientChannelCloseException instanceof",
+        callback.exception instanceof ClientChannelCloseException);
+
+    // Case 3: close() with no classification BEFORE readInto() -> the untagged path is unchanged, delivering a bare
+    // ClosedChannelException that is neither typed subclass.
+    channel = new MockChannel();
+    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    nettyRequest.close();
+    writeChannel = new ByteBufferAsyncWritableChannel();
+    callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    callback.awaitCallback();
+    assertNotNull("Callback should have received an exception", callback.exception);
+    assertTrue("Untagged close must still deliver a ClosedChannelException",
+        callback.exception instanceof ClosedChannelException);
+    assertFalse("Untagged close must not be classified as a client termination",
+        callback.exception instanceof ClientChannelCloseException
+            || callback.exception instanceof PossibleClientChannelCloseException);
+  }
+
+  /**
    * Tests for behavior of multiple operations after {@link NettyRequest#close()} has been called. Some should be ok to
    * do and some should throw exceptions.
    * @throws Exception

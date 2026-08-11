@@ -383,7 +383,14 @@ public class NettyRequest implements RestRequest {
     try {
       if (!isOpen()) {
         nettyMetrics.requestAlreadyClosedError.inc();
-        tempWrapper.invokeCallback(new ClosedChannelException());
+        // Deliver the stored channelException (not a fresh ClosedChannelException) so a client-termination
+        // classification recorded via markClientTerminated()/markPossibleClientTermination() before close() is
+        // preserved even when the read is registered AFTER the request already closed. This is the realistic
+        // AsyncRequestResponseHandler queue-then-read ordering: a client can disconnect (channelInactive ->
+        // closeDueToClientTermination) before the router calls readInto(), at which point close() had no
+        // callbackWrapper to deliver to. channelException defaults to a plain ClosedChannelException when the
+        // request was never tagged, so the untagged path is unchanged.
+        tempWrapper.invokeCallback(channelException);
       } else if (writeChannel != null) {
         throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }
