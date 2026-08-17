@@ -107,6 +107,6 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
     }
     // custom processing class that interfaces with a RestRequestService.
     pipeline.addLast("processor",
-        new NettyMessageProcessor(nettyMetrics, nettyConfig, performanceConfig, requestHandler));
+        new NettyMessageProcessor(nettyMetrics, nettyConfig, performanceConfig, requestHandler, restServerState));
   }
 }

@@ -785,6 +785,105 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Regression test for the try/finally fix in {@code NettyResponseChannel#completeRequest}. A failure from
+   * {@code closeRequest()} must be surfaced through the existing {@code onResponseComplete} failure handling
+   * (incrementing {@code responseCompleteTasksError} and failing the {@code writeFuture}) rather than being downgraded
+   * to a log-only event as the previous blanket {@code catch} did, while the network-channel close is still guaranteed
+   * to be scheduled via the {@code finally} block.
+   * <p/>
+   * The channel is disconnected first so {@code maybeSendErrorResponse()} returns {@code false} and
+   * {@code completeRequest()} runs directly inside {@code onResponseComplete()}'s try block (rather than from an
+   * error-response write listener), making the propagation observable. With the previous log-only catch,
+   * {@code responseCompleteTasksError} would remain 0 and the request would stay open (the swallowed close is never
+   * retried); with the fix it is incremented and the request ends up closed via the catch's recovery
+   * {@code completeRequest} call.
+   * @throws Exception
+   */
+  @Test
+  public void completeRequestSurfacesCloseFailureTest() throws Exception {
+    MockNettyRequest.throwOnFirstClose = true;
+    try {
+      ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+      EmbeddedChannel channel = new EmbeddedChannel(chunkedWriteHandler);
+      VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+      NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+      // recordMetrics (reached via closeRequest -> evaluatePerformanceAndUpdateMetrics on the recovery path) requires
+      // the tracker defaults to be initialized; the processor-based harness does this in channelActive.
+      RestRequestMetricsTracker.setDefaults(new MetricRegistry());
+      NettyResponseChannel nettyResponseChannel =
+          new NettyResponseChannel(new MockChannelHandlerContext(channel), nettyMetrics,
+              new PerformanceConfig(verifiableProperties), new NettyConfig(verifiableProperties));
+      HttpRequest httpRequest = createRequestWithHeaders(HttpMethod.GET, TestingUri.Close.toString());
+      MockNettyRequest mockRequest = new MockNettyRequest(httpRequest, channel, nettyMetrics, Collections.emptySet());
+      nettyResponseChannel.setRequest(mockRequest);
+      // Make the channel inactive so maybeSendErrorResponse() returns false and completeRequest() runs directly inside
+      // onResponseComplete()'s try block.
+      channel.disconnect().awaitUninterruptibly();
+
+      long before = nettyMetrics.responseCompleteTasksError.getCount();
+      nettyResponseChannel.onResponseComplete(new RuntimeException("driver exception"));
+
+      assertEquals("closeRequest() failure must be surfaced as responseCompleteTasksError, not swallowed", before + 1,
+          nettyMetrics.responseCompleteTasksError.getCount());
+      assertFalse("Request must still end up closed via the recovery path after the injected close() failure",
+          mockRequest.isOpen());
+    } finally {
+      MockNettyRequest.throwOnFirstClose = false;
+    }
+  }
+
+  /**
+   * Regression test for the ordering fix in {@code NettyResponseChannel#completeRequest}. That method now closes
+   * the request (flipping {@link NettyRequest#isOpen()} to {@code false}) before it schedules the listener that
+   * closes the underlying network channel, instead of the other way around as before this change.
+   * <p/>
+   * This is a coupled/dependent fix, not a drive-by: {@link NettyMessageProcessor#channelInactive} tags the
+   * termination as client-rooted (via {@link com.github.ambry.utils.ClientChannelCloseException}) precisely
+   * because it trusts {@code request.isOpen()} to already be {@code false} for every server-initiated completion
+   * by the time the network channel actually closes and {@code channelInactive} fires. Before this reorder, that
+   * was not guaranteed: {@link io.netty.channel.ChannelFuture#addListener} invokes its listener synchronously/
+   * re-entrantly if the future is already complete, so a pure server-side completion (no client involvement)
+   * could close the network channel - and trigger {@code channelInactive} re-entrantly on the same call stack -
+   * before {@code closeRequest()} had flipped {@code isOpen()} to {@code false}, which would have made
+   * {@code channelInactive}'s sole tagged call site unsafe (a false client-abort masking a server completion).
+   * This test is therefore the evidence that the reorder is required for {@code channelInactive}-only tagging to
+   * be safe, not incidental scope creep - it asserts the invariant directly, for both the exception and
+   * non-exception {@link RestResponseChannel#onResponseComplete(Exception)} paths, so that a future refactor that
+   * reorders {@code completeRequest} again cannot silently reopen the race.
+   */
+  @Test
+  public void completeRequestClosesRequestBeforeReturningTest() throws Exception {
+    // success (non-exception) path: TestingUri.CopyHeaders drives onResponseComplete(null).
+    {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      HttpRequest httpRequest = createRequestWithHeaders(HttpMethod.GET, TestingUri.CopyHeaders.toString());
+      channel.writeInbound(httpRequest);
+      // MockNettyMessageProcessor's handler for CopyHeaders calls onResponseComplete(null) synchronously while
+      // processing the inbound request, and EmbeddedChannel resolves writes synchronously (no real network I/O),
+      // so by the time writeInbound() returns, onResponseComplete(null) must already have returned too.
+      assertFalse("Request must already be closed once onResponseComplete(null) has returned",
+          processor.getRequest().isOpen());
+      while (channel.readOutbound() != null) {
+        // drain the channel.
+      }
+    }
+    // exception path: TestingUri.OnResponseCompleteWithNonRestException drives onResponseComplete(exception).
+    {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      HttpRequest httpRequest =
+          createRequestWithHeaders(HttpMethod.GET, TestingUri.OnResponseCompleteWithNonRestException.toString());
+      channel.writeInbound(httpRequest);
+      assertFalse("Request must already be closed once onResponseComplete(exception) has returned",
+          processor.getRequest().isOpen());
+      while (channel.readOutbound() != null) {
+        // drain the channel.
+      }
+    }
+  }
+
+  /**
    * Tests the invocation of DELAYED_CLOSE when post failures happen in {@link NettyResponseChannel}.
    */
   @Test
@@ -1427,6 +1526,13 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     return nettyMetrics;
   }
 
+  /**
+   * @return the {@link NettyRequest} backing the current/most recently handled request on this processor.
+   */
+  public NettyRequest getRequest() {
+    return request;
+  }
+
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
     this.ctx = ctx;
@@ -1826,6 +1932,10 @@ class MockNettyRequest extends NettyRequest {
   static long roundTripTime = 1L;
   static long timeToFirstByte = 1L;
   static RestRequestMetricsTracker mockTracker;
+  // When true, the first call to close() throws a RuntimeException before delegating to super.close(); subsequent
+  // calls behave normally. Used to exercise NettyResponseChannel#completeRequest's failure handling for closeRequest().
+  static boolean throwOnFirstClose = false;
+  private boolean firstCloseThrown = false;
 
   MockNettyRequest(HttpRequest request, Channel channel, NettyMetrics metrics, Set<String> parameters)
       throws Exception {
@@ -1834,6 +1944,15 @@ class MockNettyRequest extends NettyRequest {
     when(mockTracker.getRoundTripTimeInMs()).thenReturn(roundTripTime);
     when(mockTracker.getTimeToFirstByteInMs()).thenReturn(timeToFirstByte);
     mockTracker.nioMetricsTracker.markRequestReceived();
+  }
+
+  @Override
+  public void close() {
+    if (throwOnFirstClose && !firstCloseThrown) {
+      firstCloseThrown = true;
+      throw new RuntimeException("Injected close() failure for test");
+    }
+    super.close();
   }
 
   @Override

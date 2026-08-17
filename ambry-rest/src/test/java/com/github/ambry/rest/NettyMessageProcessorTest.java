@@ -28,6 +28,8 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.notification.UpdateType;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.utils.ClientChannelCloseException;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
@@ -57,6 +59,8 @@ import io.netty.handler.codec.http.multipart.HttpDataFactory;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -91,6 +95,15 @@ public class NettyMessageProcessorTest {
   private static final NettyConfig NETTY_CONFIG = new NettyConfig(new VerifiableProperties(new Properties()));
   private static final PerformanceConfig PERFORMANCE_CONFIG =
       new PerformanceConfig(new VerifiableProperties(new Properties()));
+  // A RestServerState that reports the service as up, matching normal request-serving conditions. Only isServiceUp()
+  // is read by NettyMessageProcessor, so a single shared instance is safe across tests.
+  private static final RestServerState SERVICE_UP_STATE = createServiceUpState();
+
+  private static RestServerState createServiceUpState() {
+    RestServerState state = new RestServerState("/healthCheck");
+    state.markServiceUp();
+    return state;
+  }
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -375,7 +388,7 @@ public class NettyMessageProcessorTest {
 
     DelayedContinueWriteHandler delayHandler = new DelayedContinueWriteHandler();
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(), processor);
 
     HttpHeaders headers = new DefaultHttpHeaders();
@@ -455,7 +468,7 @@ public class NettyMessageProcessorTest {
 
     DelayedContinueWriteHandler delayHandler = new DelayedContinueWriteHandler();
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(), processor);
 
     HttpHeaders headers = new DefaultHttpHeaders();
@@ -508,7 +521,7 @@ public class NettyMessageProcessorTest {
     capturingHandler.start();
     try {
       NettyMessageProcessor processor =
-          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler);
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
       EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
 
       // Send a PUT header only (no LastHttpContent) so the request stays in-flight when we close the channel.
@@ -526,6 +539,313 @@ public class NettyMessageProcessorTest {
 
       assertFalse("RestRequest.isOpen() must be false after channelInactive so downstream callbacks "
           + "(e.g. named-blob metadata commit) can observe the disconnect", capturedRequest.isOpen());
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
+   * Verifies that a client TCP disconnect ({@link NettyMessageProcessor#channelInactive}) while a PUT request is
+   * still in-flight delivers a {@link ClientChannelCloseException} to the pending {@code readInto} callback, so
+   * downstream consumers can recognize the termination as client-rooted via {@code instanceof} or
+   * {@link com.github.ambry.utils.Utils#isPossibleClientTermination(Throwable)}.
+   * <p/>
+   * Also verifies that the same typed exception is now delivered to the separate response-completion path
+   * (via {@code onRequestAborted}) - not just to {@code readInto} - and that doing so is behavior-neutral. Unlike
+   * the idle-timeout case below, this is NOT independently verified by a runtime assertion in this test: by the
+   * time {@code onRequestAborted} runs here, the network channel has already begun closing (this test simulates
+   * the abort via {@code channel.close()} itself), so {@code NettyResponseChannel} never gets to actually write an
+   * error response to the outbound queue - {@code channel.readOutbound()} is always {@code null} in this scenario.
+   * Behavior-neutrality for this call site is instead established by code inspection (see the PR description):
+   * {@code NettyResponseChannel#getErrorResponse} routes through {@code Utils.isPossibleClientTermination(cause)},
+   * which recognizes {@link ClientChannelCloseException} unconditionally via {@code instanceof} - identically to
+   * how the legacy {@code Utils.convertToClientTerminationException(...)} message wrap it replaces always matched
+   * that same check - so the response status code and {@code clientEarlyTerminationCount} metric this call site
+   * would have produced are provably unchanged, even though no response is actually observable in this test.
+   * @throws Exception
+   */
+  @Test
+  public void channelInactiveDeliversClientTerminationToReadIntoTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "channelInactiveDeliversClientTerminationToReadIntoTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      // Simulate the client TCP disconnect / channel becoming inactive mid-request.
+      channel.close().awaitUninterruptibly();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertTrue("readInto callback exception should be a ClientChannelCloseException",
+          callback.exception instanceof ClientChannelCloseException);
+
+      // No outbound error response is observable in this scenario - see the class-level javadoc note above for why
+      // this call site's Path B behavior-neutrality is verified by code inspection instead.
+      assertNull("No outbound response is expected once the channel is already closing", channel.readOutbound());
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
+   * Verifies that when the channel becomes inactive while the service is DOWN (e.g. a server-initiated close during
+   * {@link RestServer#shutdown()}, where the Netty worker event loop's {@code shutdownGracefully()} closes in-flight
+   * connections), {@link NettyMessageProcessor#channelInactive} delivers only the "possible" tier
+   * ({@link PossibleClientChannelCloseException}) - NOT the high-confidence {@link ClientChannelCloseException} - to
+   * the pending {@code readInto} callback. {@code channelInactive} fires for both client- and server-initiated closes,
+   * so a server-shutdown abort must not be mislabeled as a proven client termination (which would incorrectly suppress
+   * router health metrics for a genuine server-side event). The request is still open when the channel goes inactive,
+   * exactly as in the sure-tier case; only {@code restServerState.isServiceUp()} distinguishes the two.
+   * @throws Exception
+   */
+  @Test
+  public void channelInactiveWhileServiceDownDeliversPossibleClientTerminationTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    RestServerState serviceDownState = new RestServerState("/healthCheck");
+    // Leave the service marked down (the default) to simulate a server shutdown already in progress.
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, serviceDownState);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers()
+          .set(RestUtils.Headers.SERVICE_ID, "channelInactiveWhileServiceDownDeliversPossibleClientTerminationTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+      assertTrue("RestRequest must be open before channelInactive", capturedRequest.isOpen());
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      // Simulate the channel becoming inactive while the server is shutting down.
+      channel.close().awaitUninterruptibly();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertFalse("A server-initiated close (service down) must NOT be classified as the high-confidence "
+              + "ClientChannelCloseException", callback.exception instanceof ClientChannelCloseException);
+      assertTrue("A server-initiated close (service down) should deliver a PossibleClientChannelCloseException",
+          callback.exception instanceof PossibleClientChannelCloseException);
+      assertFalse("RestRequest.isOpen() must be false after channelInactive", capturedRequest.isOpen());
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
+   * Verifies the fail-safe null-guard on {@link NettyMessageProcessor#channelInactive}: when {@link RestServerState}
+   * is unavailable (null), service liveness cannot be established, so an in-flight channelInactive must fall back to
+   * the "possible" tier ({@link PossibleClientChannelCloseException}) rather than over-claiming the high-confidence
+   * {@link ClientChannelCloseException}. This is the safer direction - if we cannot prove the service was up, we must
+   * not assert a proven client termination (which would suppress router health metrics for what could be a
+   * server-side event). Null is not expected in production (the state is always injected), but this pins the
+   * fail-safe behavior of the guard.
+   * @throws Exception
+   */
+  @Test
+  public void channelInactiveWithNullServerStateDeliversPossibleClientTerminationTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, null);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers()
+          .set(RestUtils.Headers.SERVICE_ID, "channelInactiveWithNullServerStateDeliversPossibleClientTerminationTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+      assertTrue("RestRequest must be open before channelInactive", capturedRequest.isOpen());
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      channel.close().awaitUninterruptibly();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertFalse("With no server state, the close must NOT be classified as the high-confidence "
+              + "ClientChannelCloseException", callback.exception instanceof ClientChannelCloseException);
+      assertTrue("With no server state, the close should fail safe to a PossibleClientChannelCloseException",
+          callback.exception instanceof PossibleClientChannelCloseException);
+      assertFalse("RestRequest.isOpen() must be false after channelInactive", capturedRequest.isOpen());
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
+   * Verifies that a client idle/stall timeout (the {@link IdleState#ALL_IDLE} branch of
+   * {@link NettyMessageProcessor#userEventTriggered}) delivers a {@link PossibleClientChannelCloseException} - not
+   * the high-confidence {@link ClientChannelCloseException} - to the pending {@code readInto} callback. This is
+   * intentional: {@link NettyRequest} suspends reads (autoRead=false) on the channel while a slow/backpressured
+   * downstream consumer keeps buffered data above {@code nettyServerRequestBufferWatermark} (see
+   * {@link NettyRequest#continueReadIfPossible}), so {@code ALL_IDLE} can fire purely due to a server/destination-side
+   * stall rather than genuine client inactivity. Since this ambiguity cannot be cleanly disambiguated with high
+   * confidence, idle-timeout is tagged with the "possible" tier rather than the "sure" tier; only
+   * {@code channelInactive} has been proven exclusively client-rooted.
+   * @throws Exception
+   */
+  @Test
+  public void idleTimeoutDeliversPossibleClientTerminationToReadIntoTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "idleTimeoutDeliversPossibleClientTerminationToReadIntoTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      // Simulate the connection going idle past the configured timeout.
+      channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
+      channel.runPendingTasks();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertFalse(
+          "readInto callback exception must NOT be the high-confidence ClientChannelCloseException for idle-timeout "
+              + "(ambiguous - could be a server/destination-side stall) - see channelInactive for the proven "
+              + "client-exclusive case", callback.exception instanceof ClientChannelCloseException);
+      assertTrue("readInto callback exception should be a PossibleClientChannelCloseException for idle-timeout",
+          callback.exception instanceof PossibleClientChannelCloseException);
+
+      // The idle-timeout channel is still active when onRequestAborted fires, so an error response is written
+      // before network teardown; assert it is BAD_REQUEST - unchanged from the pre-existing message-based wrap -
+      // proving the typed-exception propagation into onRequestAborted for this call site is behavior-neutral.
+      HttpResponse outboundResponse = channel.readOutbound();
+      assertNotNull("An error response should have been written for the idle-timeout abort", outboundResponse);
+      assertEquals("Response status for a possible-client abort must remain BAD_REQUEST", HttpResponseStatus.BAD_REQUEST,
+          outboundResponse.status());
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
+   * Verifies (and documents) that an {@link IOException} reaching {@link NettyMessageProcessor#exceptionCaught}
+   * while a PUT request is still in-flight (e.g. "connection reset"/"broken pipe" while reading further request
+   * content from the client) delivers a {@link PossibleClientChannelCloseException} - not the high-confidence
+   * {@link ClientChannelCloseException} - to the pending {@code readInto} callback. This path is a plausible
+   * client-rooted signal, but exclusivity isn't proven the way it is for {@code channelInactive} - a destination-write
+   * failure could in principle propagate here via Netty's implicit exception routing - so it is tagged with the
+   * "possible" tier.
+   * @throws Exception
+   */
+  @Test
+  public void exceptionCaughtIOExceptionDeliversPossibleClientTerminationToReadIntoTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers()
+          .set(RestUtils.Headers.SERVICE_ID, "exceptionCaughtIOExceptionDeliversPossibleClientTerminationToReadIntoTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      // Simulate an IOException surfacing on the client-facing channel while the request is still open (e.g. a
+      // broken pipe / connection reset detected while trying to read further content from the client).
+      channel.pipeline().fireExceptionCaught(new IOException("Simulated connection reset by peer"));
+      channel.runPendingTasks();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertFalse(
+          "readInto callback exception must NOT be the high-confidence ClientChannelCloseException for "
+              + "exceptionCaught's IOException branch (exclusivity unproven) - see channelInactive for the proven "
+              + "client-exclusive case", callback.exception instanceof ClientChannelCloseException);
+      assertTrue(
+          "readInto callback exception should be a PossibleClientChannelCloseException for exceptionCaught's "
+              + "IOException branch", callback.exception instanceof PossibleClientChannelCloseException);
+    } finally {
+      capturingHandler.shutdown();
+    }
+  }
+
+  /**
+   * Verifies that a server-side abort (e.g. {@link NettyMessageProcessor#exceptionCaught} triggered by an internal
+   * {@link RestServiceException}, with no client disconnect) does NOT deliver a {@link ClientChannelCloseException}
+   * or a {@link PossibleClientChannelCloseException} to the pending {@code readInto} callback - it must land in the
+   * unclassified "other" tier. This is the positive-tagging counterpart to
+   * {@link #channelInactiveDeliversClientTerminationToReadIntoTest()}, and complements
+   * {@link #idleTimeoutDeliversPossibleClientTerminationToReadIntoTest()} and
+   * {@link #exceptionCaughtIOExceptionDeliversPossibleClientTerminationToReadIntoTest()}, together proving
+   * server/internal terminations are never mis-tagged as client-rooted (at either the "sure" or "possible" tier).
+   * @throws Exception
+   */
+  @Test
+  public void serverAbortDoesNotDeliverClientTerminationToReadIntoTest() throws Exception {
+    CapturingRestRequestHandler capturingHandler = new CapturingRestRequestHandler();
+    capturingHandler.start();
+    try {
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, capturingHandler, SERVICE_UP_STATE);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", null);
+      httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "serverAbortDoesNotDeliverClientTerminationToReadIntoTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      channel.writeInbound(httpRequest);
+
+      RestRequest capturedRequest = capturingHandler.getCapturedRequest();
+      assertNotNull("Handler should have received the in-flight RestRequest", capturedRequest);
+
+      ReadIntoCallback callback = new ReadIntoCallback();
+      capturedRequest.readInto(new com.github.ambry.commons.ByteBufferAsyncWritableChannel(), callback);
+
+      // Simulate a purely server-side/internal abort - no client disconnect, no idle timeout.
+      channel.pipeline()
+          .fireExceptionCaught(new RestServiceException("Simulated internal error", RestServiceErrorCode.InternalServerError));
+      channel.runPendingTasks();
+
+      callback.awaitCallback();
+      assertNotNull("readInto callback should have received an exception", callback.exception);
+      assertFalse("readInto callback exception must NOT be a ClientChannelCloseException for a server-rooted abort",
+          callback.exception instanceof ClientChannelCloseException);
+      assertFalse(
+          "readInto callback exception must NOT be a PossibleClientChannelCloseException for a server-rooted abort",
+          callback.exception instanceof PossibleClientChannelCloseException);
     } finally {
       capturingHandler.shutdown();
     }
@@ -569,13 +889,13 @@ public class NettyMessageProcessorTest {
    */
   private EmbeddedChannel createChannel() {
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 
   private EmbeddedChannel createChannel(NettyConfig nettyConfig) {
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler);
+        new NettyMessageProcessor(NETTY_METRICS, nettyConfig, PERFORMANCE_CONFIG, requestHandler, SERVICE_UP_STATE);
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 

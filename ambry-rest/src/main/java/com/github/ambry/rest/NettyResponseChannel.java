@@ -808,17 +808,30 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param shouldCloseRequest used to determine if we want to close the request or not.
    */
   private void completeRequest(boolean closeNetworkChannel, boolean shouldDelay, boolean shouldCloseRequest) {
-    if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
-      if (shouldDelay && (request != null && request.getRestMethod().equals(RestMethod.POST))
-          && this.nettyConfig.nettyServerCloseDelayTimeoutMs > 0) {
-        nettyMetrics.delayedCloseScheduledCount.inc();
-        writeFuture.addListener(DELAYED_CLOSE);
-      } else {
-        writeFuture.addListener(ChannelFutureListener.CLOSE);
+    // Close the request (and flip its isOpen() state to false) before scheduling the network channel close below.
+    // If writeFuture is already complete, addListener(...) fires its listener synchronously, which can close the
+    // network channel and trigger channelInactive() re-entrantly on this same call stack. NettyMessageProcessor's
+    // channelInactive() uses request.isOpen() to decide whether channel inactivity is client-rooted (as opposed to
+    // this server-initiated completion) - closeRequest() must therefore run first so that check is never fooled by
+    // a server-initiated close still in progress. The network channel close below must always be scheduled even if
+    // closeRequest() throws (that was always attempted first previously), so it runs in a finally block; the original
+    // exception then propagates to the caller's existing failure handling (e.g. onResponseComplete's catch, which
+    // increments responseCompleteTasksError and fails the writeFuture) rather than being downgraded to a log-only
+    // event.
+    try {
+      closeRequest(shouldCloseRequest);
+    } finally {
+      if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
+        if (shouldDelay && (request != null && request.getRestMethod().equals(RestMethod.POST))
+            && this.nettyConfig.nettyServerCloseDelayTimeoutMs > 0) {
+          nettyMetrics.delayedCloseScheduledCount.inc();
+          writeFuture.addListener(DELAYED_CLOSE);
+        } else {
+          writeFuture.addListener(ChannelFutureListener.CLOSE);
+        }
+        logger.trace("Requested closing of channel {}", ctx.channel());
       }
-      logger.trace("Requested closing of channel {}", ctx.channel());
     }
-    closeRequest(shouldCloseRequest);
   }
 
   /**

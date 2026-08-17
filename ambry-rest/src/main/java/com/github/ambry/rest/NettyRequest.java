@@ -16,6 +16,8 @@ package com.github.ambry.rest;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.ClientChannelCloseException;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultMaxBytesRecvByteBufAllocator;
@@ -65,6 +67,9 @@ public class NettyRequest implements RestRequest {
   // is <=0, it is assumed that there is no limit on the size of unacknowledged data.
   static int bufferWatermark = -1;
   private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
+  private static final ClientChannelCloseException CLIENT_CHANNEL_CLOSE_EXCEPTION = new ClientChannelCloseException();
+  private static final PossibleClientChannelCloseException POSSIBLE_CLIENT_CHANNEL_CLOSE_EXCEPTION =
+      new PossibleClientChannelCloseException();
 
   protected final HttpRequest request;
   protected final Channel channel;
@@ -301,6 +306,48 @@ public class NettyRequest implements RestRequest {
     }
   }
 
+  /**
+   * Marks this request's pending read (if any) as terminated because of a high-confidence, client-rooted event
+   * (e.g. the client disconnected or reset the connection). Must be called, if at all, before {@link #close()} so
+   * that {@link ClientChannelCloseException} - rather than the default {@link ClosedChannelException} - is delivered
+   * to the pending {@link #readInto} callback. Idempotent and safe to call even if there is no pending read.
+   */
+  void markClientTerminated() {
+    channelException = CLIENT_CHANNEL_CLOSE_EXCEPTION;
+  }
+
+  /**
+   * Convenience method that marks this request as client-terminated (see {@link #markClientTerminated()}) and then
+   * closes it, in one call. Use this at call sites that close the request directly (as opposed to sites where the
+   * close happens later via a different code path, e.g. through {@link NettyResponseChannel}), so the "mark before
+   * close" ordering requirement can never be broken by a future edit that reorders or drops one of the two calls.
+   */
+  void closeDueToClientTermination() {
+    markClientTerminated();
+    close();
+  }
+
+  /**
+   * Marks this request's pending read (if any) as terminated because of an event that is plausibly, but not
+   * confirmably, client-rooted (e.g. an idle timeout, which can equally be caused by a slow destination write; or an
+   * {@link java.io.IOException} reaching Netty's {@code exceptionCaught}, which is usually but not provably
+   * client-facing). Must be called, if at all, before {@link #close()} so that
+   * {@link PossibleClientChannelCloseException} - rather than the default {@link ClosedChannelException} - is
+   * delivered to the pending {@link #readInto} callback. Does not overwrite an already-set
+   * {@link #markClientTerminated() high-confidence} tag, so that a "sure" classification is never downgraded to
+   * "possible" if both were somehow triggered for the same request. Idempotent and safe to call even if there is no
+   * pending read.
+   */
+  void markPossibleClientTermination() {
+    // Check-then-act, not atomic/CAS - safe because channelInactive/exceptionCaught/userEventTriggered all fire on
+    // the same Netty channel's single-threaded event loop for a given request, so these calls are never actually
+    // concurrent with each other; the volatile field just ensures the eventual invokeCallback() on another thread
+    // sees the final write.
+    if (channelException != CLIENT_CHANNEL_CLOSE_EXCEPTION) {
+      channelException = POSSIBLE_CLIENT_CHANNEL_CLOSE_EXCEPTION;
+    }
+  }
+
   @Override
   public RestRequestMetricsTracker getMetricsTracker() {
     return restRequestMetricsTracker;
@@ -336,7 +383,14 @@ public class NettyRequest implements RestRequest {
     try {
       if (!isOpen()) {
         nettyMetrics.requestAlreadyClosedError.inc();
-        tempWrapper.invokeCallback(new ClosedChannelException());
+        // Deliver the stored channelException (not a fresh ClosedChannelException) so a client-termination
+        // classification recorded via markClientTerminated()/markPossibleClientTermination() before close() is
+        // preserved even when the read is registered AFTER the request already closed. This is the realistic
+        // AsyncRequestResponseHandler queue-then-read ordering: a client can disconnect (channelInactive ->
+        // closeDueToClientTermination) before the router calls readInto(), at which point close() had no
+        // callbackWrapper to deliver to. channelException defaults to a plain ClosedChannelException when the
+        // request was never tagged, so the untagged path is unchanged.
+        tempWrapper.invokeCallback(channelException);
       } else if (writeChannel != null) {
         throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }

@@ -15,7 +15,8 @@ package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.ClientChannelCloseException;
+import com.github.ambry.utils.PossibleClientChannelCloseException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.HttpContent;
@@ -28,7 +29,6 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import java.io.IOException;
-import java.nio.channels.ClosedChannelException;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -72,6 +72,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
   private final RestRequestHandler requestHandler;
+  private final RestServerState restServerState;
   private static final Logger logger = LoggerFactory.getLogger(NettyMessageProcessor.class);
 
   // variables that will live through the life of the channel.
@@ -95,13 +96,18 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * @param nettyConfig the configuration object to use.
    * @param performanceConfig the configuration object to use for SLO evaluation.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   * @param restServerState the {@link RestServerState} used to distinguish a client-initiated channel close from a
+   *                        server-initiated one (e.g. during {@link RestServer#shutdown()}). Used to gate the
+   *                        high-confidence {@link ClientChannelCloseException} classification in
+   *                        {@link #channelInactive(ChannelHandlerContext)}.
    */
   public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig, PerformanceConfig performanceConfig,
-      RestRequestHandler requestHandler) {
+      RestRequestHandler requestHandler, RestServerState restServerState) {
     this.nettyMetrics = nettyMetrics;
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.requestHandler = requestHandler;
+    this.restServerState = restServerState;
     logger.trace("Instantiated NettyMessageProcessor");
   }
 
@@ -143,12 +149,37 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       // and can short-circuit best-effort work (e.g. named-blob metadata commit in AmbryIdConverterFactory).
       // NettyRequest.close() is idempotent via channelOpen.compareAndSet(true,false), so double-close on the
       // normal-completion path is a no-op.
+      //
+      // Classify the pending readInto callback. Reaching this branch means the request was never closed by the
+      // normal completion path (which always closes the request - see NettyResponseChannel#completeRequest - before
+      // scheduling the network channel close), so the channel went inactive out-of-band. However, channelInactive
+      // also fires for SERVER-initiated closes: RestServer#shutdown() marks the service down and then shuts down the
+      // Netty server, whose worker event-loop shutdownGracefully() closes in-flight connections. To avoid labeling a
+      // server-shutdown abort as a high-confidence client termination, only tag the "sure" tier
+      // (ClientChannelCloseException) while the service is up; otherwise fall back to the "possible" tier.
+      // Even when up, "sure" means the close originated from our TCP peer (which may be a load balancer/proxy rather
+      // than the end client) - but for router health accounting and response classification that is the meaningful
+      // distinction from a locally-initiated shutdown close.
+      // If restServerState is unavailable (null), we cannot establish service liveness, so fail safe to the
+      // "possible" tier rather than over-claiming a sure client termination.
+      boolean serviceUp = restServerState != null && restServerState.isServiceUp();
       try {
-        request.close();
+        if (serviceUp) {
+          request.closeDueToClientTermination();
+        } else {
+          request.markPossibleClientTermination();
+          request.close();
+        }
       } catch (Exception e) {
         logger.warn("Exception while closing request {} on channelInactive", request.getUri(), e);
       }
-      onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
+      // Use the same typed exception delivered to readInto() here too, so a consumer of the response-completion path
+      // (onRequestAborted -> RestResponseChannel#close/onResponseComplete) can also detect this tier via instanceof,
+      // not just via the message-based Utils#isPossibleClientTermination check. This is behavior-neutral: both typed
+      // exceptions are recognized by isPossibleClientTermination() just like the previous
+      // Utils.convertToClientTerminationException(...) wrap was, so the response status code and
+      // client-early-termination metrics emitted downstream (see NettyResponseChannel#getErrorResponse) are unchanged.
+      onRequestAborted(serviceUp ? new ClientChannelCloseException() : new PossibleClientChannelCloseException());
     } else {
       close();
     }
@@ -170,6 +201,21 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     try {
       if (request != null && request.isOpen() && cause instanceof Exception) {
         nettyMetrics.processorExceptionCaughtCount.inc();
+        if (cause instanceof IOException) {
+          // NOTE: an IOException reaching this handler for an in-flight request is likely client-rooted (Netty's
+          // own handling of this client-facing channel, e.g. "connection reset"/"broken pipe" while reading further
+          // request content) rather than a business/destination write failure (those are reported directly to the
+          // RestResponseChannel by FrontendRestRequestService/AsyncRequestResponseHandler and never reach this
+          // pipeline handler). However, exclusivity isn't proven the way it is for channelInactive() (below) - a
+          // destination-write failure could in principle propagate here via Netty's implicit exception routing - so
+          // this is tagged as "possible" (PossibleClientChannelCloseException), not "sure"
+          // (ClientChannelCloseException).
+          try {
+            request.markPossibleClientTermination();
+          } catch (Exception e) {
+            logger.warn("Exception while marking request {} as possibly client-terminated", request.getUri(), e);
+          }
+        }
         onRequestAborted((Exception) cause);
       } else if (isOpen()) {
         if (cause instanceof RestServiceException) {
@@ -221,7 +267,29 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
-        onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
+        // NOTE: idle-timeout is tagged as "possible" (PossibleClientChannelCloseException), not "sure"
+        // (ClientChannelCloseException). NettyRequest suspends reads (autoRead=false) while the amount of data
+        // buffered for a slow/backpressured downstream consumer exceeds nettyServerRequestBufferWatermark (see
+        // NettyRequest#continueReadIfPossible); while reads are suspended, no channelRead events can occur no
+        // matter how active the client is, so IdleStateHandler's ALL_IDLE can fire purely because OUR OWN
+        // downstream write is stalled - not because the client is idle or has failed. Worse, this isn't just a
+        // narrow race: NettyRequest#writeContent unconditionally re-enables autoRead the instant the last client
+        // chunk arrives, before the corresponding destination write is even issued - so a slow destination write
+        // on that final chunk leaves the channel silent in both directions with autoRead==true for the entire
+        // idle window, a deterministic (not merely racy) false-positive shape. Tagging this as a "sure" client
+        // termination would risk hiding a real server/destination-side slowness problem, violating the "bias
+        // toward NOT-client on ambiguity" invariant; only channelInactive() has been proven exclusively
+        // client-rooted. A correct "sure" follow-up would need to gate on "no destination write currently in
+        // flight" rather than on autoRead state - out of scope here.
+        try {
+          request.markPossibleClientTermination();
+        } catch (Exception e) {
+          logger.warn("Exception while marking request {} as possibly client-terminated", request.getUri(), e);
+        }
+        // See the comment on the equivalent onRequestAborted(...) call in channelInactive() above: using the typed
+        // "possible" exception here is behavior-neutral for the same reason (isPossibleClientTermination()
+        // recognizes it unconditionally, exactly as it did the previous message-based wrap).
+        onRequestAborted(new PossibleClientChannelCloseException());
       } else {
         close();
       }
