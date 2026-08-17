@@ -15,10 +15,13 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -26,6 +29,7 @@ import java.util.Map;
  */
 class HelixParticipantMetrics {
   private static final String stateTransitionMetricTemplate = "State-Transition-Partition-%s-from-%s-to-%s";
+  private static final long STALE_BOOTSTRAP_THRESHOLD_MS = TimeUnit.HOURS.toMillis(4);
 
   private final boolean enablePartitionStateTransitionMetrics;
 
@@ -37,6 +41,16 @@ class HelixParticipantMetrics {
   final Counter setReplicaDisabledStateErrorCount;
 
   public final Counter updateDiskCapacityCounter;
+
+  // --- State Transition Latency Metrics ---
+  // Tracks when each partition entered BOOTSTRAP state (epoch ms)
+  private final ConcurrentHashMap<String, Long> bootstrapStartTimeMs = new ConcurrentHashMap<>();
+  // Histogram of successful BOOTSTRAP→STANDBY durations in milliseconds
+  final Histogram bootstrapToStandbyDurationMs;
+  // Histogram of OFFLINE→BOOTSTRAP transition durations in milliseconds
+  final Histogram offlineToBootstrapDurationMs;
+  // Counter for bootstrap failures (partition went to ERROR from BOOTSTRAP)
+  final Counter bootstrapFailureCount;
 
   final Map<String, Counter> partitionTransitionToCount;
 
@@ -72,6 +86,17 @@ class HelixParticipantMetrics {
     updateDiskCapacityCounter =
         metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "updateDiskCapacityCount"));
     partitionTransitionToCount = new HashMap<>();
+
+    // State transition latency metrics
+    bootstrapToStandbyDurationMs = metricRegistry.histogram(
+        MetricRegistry.name(HelixParticipant.class, "bootstrapToStandbyDurationMs" + zkSuffix));
+    offlineToBootstrapDurationMs = metricRegistry.histogram(
+        MetricRegistry.name(HelixParticipant.class, "offlineToBootstrapDurationMs" + zkSuffix));
+    bootstrapFailureCount = metricRegistry.counter(
+        MetricRegistry.name(HelixParticipant.class, "bootstrapFailureCount" + zkSuffix));
+    Gauge<Long> maxTimeInBootstrap = this::computeMaxTimeInBootstrap;
+    registry.gauge(MetricRegistry.name(HelixParticipant.class, "maxTimeInBootstrapMs" + zkSuffix),
+        () -> maxTimeInBootstrap);
   }
 
   /**
@@ -93,6 +118,60 @@ class HelixParticipantMetrics {
       replicaCountByState = replicaStateAndCount;
     }
     return replicaCountByState.get(state);
+  }
+
+  /**
+   * Record that a partition has entered BOOTSTRAP state.
+   * @param partitionName the partition that entered BOOTSTRAP
+   */
+  void recordBootstrapStart(String partitionName) {
+    bootstrapStartTimeMs.put(partitionName, System.currentTimeMillis());
+  }
+
+  /**
+   * Record that a partition has completed BOOTSTRAP→STANDBY transition successfully.
+   * @param partitionName the partition that reached STANDBY
+   */
+  void recordBootstrapComplete(String partitionName) {
+    Long startTime = bootstrapStartTimeMs.remove(partitionName);
+    if (startTime != null) {
+      bootstrapToStandbyDurationMs.update(System.currentTimeMillis() - startTime);
+    }
+  }
+
+  /**
+   * Record that a partition failed during BOOTSTRAP (went to ERROR).
+   * @param partitionName the partition that failed
+   */
+  void recordBootstrapFailure(String partitionName) {
+    bootstrapStartTimeMs.remove(partitionName);
+    bootstrapFailureCount.inc();
+  }
+
+  /**
+   * Record the duration of an OFFLINE→BOOTSTRAP transition.
+   * @param durationMs time in milliseconds the transition took
+   */
+  void recordOfflineToBootstrapDuration(long durationMs) {
+    offlineToBootstrapDurationMs.update(durationMs);
+  }
+
+  /**
+   * Compute the maximum time any partition has been in BOOTSTRAP state.
+   * Cleans up entries older than the stale threshold.
+   */
+  private long computeMaxTimeInBootstrap() {
+    long now = System.currentTimeMillis();
+    long maxDuration = 0;
+    for (Map.Entry<String, Long> entry : bootstrapStartTimeMs.entrySet()) {
+      long duration = now - entry.getValue();
+      if (duration > STALE_BOOTSTRAP_THRESHOLD_MS) {
+        bootstrapStartTimeMs.remove(entry.getKey(), entry.getValue());
+        continue;
+      }
+      maxDuration = Math.max(maxDuration, duration);
+    }
+    return maxDuration;
   }
 
   /**
