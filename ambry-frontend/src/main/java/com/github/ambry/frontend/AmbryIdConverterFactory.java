@@ -34,7 +34,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -43,6 +42,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.github.ambry.utils.Utils;
 
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
@@ -164,7 +164,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
      * @throws RestServiceException
      */
     private CompletionStage<String> convertId(String input, RestRequest restRequest, BlobProperties blobProperties)
-        throws RestServiceException, IOException {
+        throws RestServiceException {
       CompletionStage<String> conversionFuture;
       LOGGER.debug("input for convertId : " + input);
       LOGGER.debug("restRequest for convertId : " + restRequest);
