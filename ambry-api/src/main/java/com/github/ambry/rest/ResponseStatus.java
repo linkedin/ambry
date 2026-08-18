@@ -213,6 +213,7 @@ public enum ResponseStatus {
       case RangeNotSatisfiable:
         return RangeNotSatisfiable;
       case ServiceUnavailable:
+      case HostLevelThrottled:
         return ServiceUnavailable;
       case TooManyRequests:
         return TooManyRequests;

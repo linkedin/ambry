@@ -114,28 +114,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
   private final String LIST_WITH_PREFIX_SQL;
-
-  /**
-   * Similar like LIST_QUERY_V2, but this query is used when user don't provide the prefix and want to list all records.
-   */
-  // @formatter:off
-  private static final String LIST_ALL_QUERY = String.format(""
-      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
-      + "FROM named_blobs_v2 t1 "
-      + "INNER JOIN "
-      + "(SELECT account_id, container_id, blob_name, max(version) as version "
-      + "FROM named_blobs_v2 "
-      + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-      + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
-      + "        GROUP BY account_id, container_id, blob_name) t2 "
-      + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-      + "WHERE "
-      + "  CASE "
-      + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
-      + "     ELSE 1 "
-      + "   END "
-      + "ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
-  // @formatter:on
+  private final String LIST_ALL_SQL;
 
   /**
    * Attempt to insert a new mapping into the database. The 'modified_ts' column in the DB will be auto-populated on
@@ -201,6 +180,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     this.accountService = accountService;
     this.config = config;
     this.LIST_WITH_PREFIX_SQL = getListWithPrefixSQLStatement(config);
+    this.LIST_ALL_SQL = getListAllSQLStatement(config);
     this.localDatacenter = localDatacenter;
     this.retryExecutor = new RetryExecutor(null);
     this.metricsRecoder = metricRecorder;
@@ -293,6 +273,134 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "    ) "
             + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
       // @formatter:on
+      case 4:
+        /**
+         * List named-blobs query, given a prefix.
+         * Correlated-subquery form (same shape as option 3) with an explicit ORDER BY. The prior option-4
+         * form used MAX(version) OVER (PARTITION BY blob_name); that window plan buffers/materializes the
+         * ENTIRE prefix range (Sort -> Window-with-buffering -> Materialize) before LIMIT can apply, so its
+         * cost is O(container) regardless of page size. On large containers this ran for many seconds and
+         * was connection-killed by the EI watchdog at ~6s. This correlated form early-terminates: the PK
+         * (account_id, container_id, blob_name, version) range scan walks blob_name in order, probes an
+         * indexed MAX(version) per candidate, and LIMIT stops after one page -> O(page).
+         *
+         * Correctness invariant — same as options 2 and 3:
+         * 1. The subquery MAX(version) is computed over all blob_state=READY rows for a given blob_name,
+         *    INCLUDING rows with a non-null deleted_ts.
+         * 2. The deleted_ts predicate is applied on the OUTER select, so if the latest READY version of a
+         *    blob has expired or been soft-deleted the blob is hidden entirely; we never surface a stale
+         *    older version.
+         *
+         * ORDER BY candidate.blob_name makes pagination deterministic. Because the PK range scan already
+         * yields blob_name in order, the optimizer satisfies it without an extra Sort. Binds SEVEN
+         * parameters — keep constructListQueryWithPrefixV4 in lockstep.
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
+            + "FROM named_blobs_v2 candidate "
+            + "WHERE candidate.account_id = ? "
+            + "    AND candidate.container_id = ? "
+            + "    AND candidate.%1$s"
+            + "    AND candidate.blob_name LIKE ? "
+            + "    AND candidate.blob_name >= ? "
+            + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + "    AND candidate.version = ( "
+            + "        SELECT MAX(latest.version) "
+            + "        FROM named_blobs_v2 latest "
+            + "        WHERE latest.account_id = ? "
+            + "            AND latest.container_id = ? "
+            + "            AND latest.blob_name = candidate.blob_name "
+            + "            AND latest.%1$s"
+            + "    ) "
+            + "ORDER BY candidate.blob_name "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
+        // @formatter:on
+      default:
+        throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
+    }
+  }
+
+  /**
+   * Build the no-prefix LIST SQL. Selected by the same {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption}
+   * knob as {@link #getListWithPrefixSQLStatement}. Options 2 and 3 share the legacy INNER-JOIN + MAX-grouped
+   * subquery shape; option 4 uses a correlated-subquery shape that early-terminates at LIMIT (it mirrors
+   * LIST_WITH_PREFIX_SQL option 3's shape, minus the prefix predicate, while keeping option-4's
+   * hide-latest-deleted semantic).
+   *
+   * S3-handler change in linkedin/ambry#3260's follow-up normalizes empty-string prefix to null at the API
+   * layer, so any empty-prefix S3 LIST now arrives here. Two shapes were rejected for this no-prefix path:
+   * option 4's LIST_WITH_PREFIX_SQL with {@code blob_name LIKE '%'} (full-container scan), and the
+   * window-function variant ({@code MAX(version) OVER (PARTITION BY blob_name)}) which materializes the whole
+   * container's derived table before LIMIT and timed out on large containers (HTTP 500).
+   */
+  private String getListAllSQLStatement(MySqlNamedBlobDbConfig config) {
+    switch (config.listNamedBlobsSQLOption) {
+      case 2:
+      case 3:
+        /**
+         * Legacy no-prefix LIST.
+         * INNER JOIN against a MAX(version) GROUP BY subquery. Preserves the pre-option-4 behavior:
+         * the deleted_ts filter lives in the inner subquery, so a soft-deleted latest version is
+         * filtered out before MAX is computed — meaning the second-latest non-deleted version surfaces
+         * as the apparent "latest" for that blob. This semantic differs from LIST_WITH_PREFIX_SQL
+         * options 2/3/4 (which hide the blob entirely when its latest version is deleted), but is
+         * preserved here to avoid changing default behavior for fabrics still on option 2 or 3.
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
+            + "FROM named_blobs_v2 t1 "
+            + "INNER JOIN "
+            + "(SELECT account_id, container_id, blob_name, max(version) as version "
+            + "FROM named_blobs_v2 "
+            + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
+            + "        GROUP BY account_id, container_id, blob_name) t2 "
+            + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+            + "WHERE "
+            + "  CASE "
+            + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
+            + "     ELSE 1 "
+            + "   END "
+            + "ORDER BY t1.blob_name ASC LIMIT ?", STATE_MATCH, CURRENT_TIME);
+        // @formatter:on
+      case 4:
+        /**
+         * No-prefix LIST, correlated-subquery variant (mirrors LIST_WITH_PREFIX_SQL option 3's shape,
+         * minus the prefix predicate). The outer scans candidate rows in PRIMARY KEY (blob_name) order and
+         * keeps only the row whose version equals the per-name MAX(version). The deleted_ts predicate sits
+         * on the OUTER candidate, so a soft-deleted latest version hides the blob entirely — no older
+         * non-deleted version can substitute (its version != MAX) — matching LIST_WITH_PREFIX_SQL option 4
+         * semantics. Operators flipping from option 3 to option 4 inherit the consistent hide-latest-deleted
+         * semantic for the no-prefix path too.
+         *
+         * Unlike the window-function shape, this plan does NOT materialize the whole container. With the PK
+         * already ordered by blob_name, "ORDER BY blob_name LIMIT N" early-terminates after N matches instead
+         * of computing MAX(version) OVER the entire partition. That is what keeps an empty-prefix LIST on a
+         * large container bounded (first-page cost ~ O(N + skipped deleted-latest names)) rather than
+         * O(container) — the prior window variant materialized the full derived table before LIMIT and timed
+         * out on large containers (Communications link failure -> HTTP 500).
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
+            + "FROM named_blobs_v2 candidate "
+            + "WHERE candidate.account_id = ? " // 1
+            + "    AND candidate.container_id = ? " // 2
+            + "    AND candidate.%1$s " // blob_state = x
+            + "    AND ( ? IS NULL OR candidate.blob_name >= ? ) " // 3, 4 (pageToken twice)
+            + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + "    AND candidate.version = ( "
+            + "        SELECT MAX(latest.version) "
+            + "        FROM named_blobs_v2 latest "
+            + "        WHERE latest.account_id = ? " // 5
+            + "            AND latest.container_id = ? " // 6
+            + "            AND latest.blob_name = candidate.blob_name "
+            + "            AND latest.%1$s ) "
+            + "ORDER BY candidate.blob_name "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME); // 7
+        // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
     }
@@ -770,17 +878,45 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
     String query = "";
-    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY : LIST_WITH_PREFIX_SQL;
+    String queryStatement = blobNamePrefix == null ? LIST_ALL_SQL : LIST_WITH_PREFIX_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       if (blobNamePrefix == null) {
-        constructListAllQuery(statement, accountId, containerId, pageToken, maxKeysValue);
-      } else {
-        if (config.listNamedBlobsSQLOption == MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION) {
-          constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
-        } else {
-          constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+        // The no-prefix LIST_ALL_SQL placeholder count differs by option: options 2/3 bind 5 params,
+        // option 4 (correlated subquery) binds 7. Keep the binder in lockstep with getListAllSQLStatement.
+        switch (config.listNamedBlobsSQLOption) {
+          case 2:
+          case 3:
+            constructListAllQuery(statement, accountId, containerId, pageToken, maxKeysValue);
+            break;
+          case 4:
+            constructListAllQueryV4(statement, accountId, containerId, pageToken, maxKeysValue);
+            break;
+          default:
+            throw new IllegalStateException(
+                "Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
         }
+      } else {
+        switch (config.listNamedBlobsSQLOption) {
+          case 2:
+            constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          case 3:
+            constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          case 4:
+            constructListQueryWithPrefixV4(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          default:
+            throw new IllegalStateException(
+                "Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
+        }
+      }
+      // Bound the LIST against an unexpectedly large container. With a positive timeout the driver cancels the
+      // statement and the server throws a SQLException (cleanly), instead of the query running past a shorter
+      // network/socket timeout and tearing the connection ("Communications link failure" -> HTTP 500).
+      if (config.listQueryTimeoutSeconds > 0) {
+        statement.setQueryTimeout(config.listQueryTimeoutSeconds);
       }
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
@@ -823,12 +959,36 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private void constructListAllQuery(PreparedStatement statement, short accountId, short containerId, String pageToken,
       int maxKeysValue) throws SQLException {
-    // list-all no prefix
+    // list-all no prefix (options 2/3 legacy INNER JOIN form, 5 params)
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);
     statement.setString(3, pageToken);
     statement.setString(4, pageToken);
     statement.setInt(5, maxKeysValue + 1);
+  }
+
+  /**
+   * Construct the no-prefix LIST_ALL query when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 4.
+   * Option 4's no-prefix form is a correlated subquery (see {@link #getListAllSQLStatement}) and binds seven
+   * parameters: (account_id, container_id, pageToken for the NULL guard, pageToken for blob_name >= cursor,
+   * subquery account_id, subquery container_id, LIMIT). A null pageToken (first page) short-circuits the
+   * {@code ? IS NULL} guard so the scan lists from the start of the container.
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param pageToken The page token (null on the first page)
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListAllQueryV4(PreparedStatement statement, short accountId, short containerId,
+      String pageToken, int maxKeysValue) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, pageToken);
+    statement.setString(4, pageToken);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setInt(7, maxKeysValue + 1);
   }
 
   /**
@@ -865,6 +1025,31 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * @throws SQLException
    */
   private void constructListQueryWithPrefixV3(PreparedStatement statement, short accountId, short containerId,
+      String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, blobNamePrefix + "%");
+    statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setInt(7, maxKeysValue + 1);
+  }
+
+  /**
+   * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 4.
+   * Option 4 now uses a correlated subquery (see {@link #getListWithPrefixSQLStatement}) and binds seven
+   * parameters: (account_id, container_id, blob_name LIKE prefix%, blob_name >= cursor, account_id,
+   * container_id, LIMIT). Params 5 and 6 feed the inner MAX(version) subquery. Identical to
+   * {@link #constructListQueryWithPrefixV3}.
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param blobNamePrefix The blobname prefix
+   * @param pageToken The page token
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListQueryWithPrefixV4(PreparedStatement statement, short accountId, short containerId,
       String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);

@@ -481,6 +481,11 @@ class NettyResponseChannel implements RestResponseChannel {
       restRequestMetricsTracker.markUnsatisfied();
       logUnsatisfiedRequest(requestPerfToCheck);
     }
+    if (responseStatus.isServerError()) {
+      // Track 5xx responses via a dedicated per-operation metric (separate from the unsatisfied request count)
+      // so that alerts can be configured specifically on server errors.
+      restRequestMetricsTracker.markServerError();
+    }
     restRequestMetricsTracker.recordMetrics();
   }
 
@@ -587,11 +592,23 @@ class NettyResponseChannel implements RestResponseChannel {
       RestServiceException restServiceException = (RestServiceException) cause;
       restServiceErrorCode = restServiceException.getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
-      status = getHttpResponseStatus(errorResponseStatus);
+      if (restServiceErrorCode == RestServiceErrorCode.HostLevelThrottled) {
+        // Throttler drops share the 503 wire status with ServiceUnavailable but get their own
+        // counter so SLO dashboards keyed on ServiceUnavailableErrorCount (host-down / crash /
+        // shutdown signal) aren't polluted by intentional throttler-driven drops. Branching
+        // here skips the ServiceUnavailable counter increment getHttpResponseStatus would do.
+        nettyMetrics.hostLevelThrottledCount.inc();
+        status = HttpResponseStatus.SERVICE_UNAVAILABLE;
+      } else {
+        status = getHttpResponseStatus(errorResponseStatus);
+      }
       if (shouldSendFailureReason(status, restServiceException)) {
-        errReason = new String(
-            Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
-            StandardCharsets.US_ASCII);
+        String rootMessage = Utils.getRootCause(cause).getMessage();
+        if (rootMessage != null) {
+          errReason = new String(
+              rootMessage.replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
+              StandardCharsets.US_ASCII);
+        }
       }
       if (restServiceException.shouldIncludeExceptionMetadataInResponse()) {
         errHeaders = restServiceException.getExceptionHeadersMap();

@@ -351,6 +351,9 @@ public class NonBlockingRouter implements Router {
     if (e instanceof RouterException
         && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
       routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.inc();
+      if (!routerConfig.routerNamedBlobTranslateNotFoundToUnavailableEnabled) {
+        return e;
+      }
       logger.warn("Named blob metadata exists but storage returned BlobNotFound for blob {}; "
           + "translating to AmbryUnavailable (retryable 503)", resolvedBlobId);
       return new RouterException(

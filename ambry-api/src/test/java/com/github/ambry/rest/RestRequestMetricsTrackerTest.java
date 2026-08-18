@@ -54,6 +54,63 @@ public class RestRequestMetricsTrackerTest {
   }
 
   /**
+   * Tests that {@link RestRequestMetricsTracker#markServerError()} increments a metric that is separate and
+   * independent from the unsatisfied/satisfied request count metrics tracked via
+   * {@link RestRequestMetricsTracker#markUnsatisfied()}.
+   */
+  @Test
+  public void markServerErrorTest() {
+    // server error marked, request otherwise satisfied (mirrors requests unsatisfied only due to a 5xx response).
+    serverErrorTest(true, true);
+    // server error marked and request also marked unsatisfied (mirrors requests unsatisfied due to 5xx AND missed
+    // thresholds).
+    serverErrorTest(true, false);
+    // no server error, request satisfied.
+    serverErrorTest(false, true);
+    // no server error, request unsatisfied (e.g. missed thresholds on a non-5xx response).
+    serverErrorTest(false, false);
+  }
+
+  /**
+   * Tests recording of the server error metric in combination with the satisfied/unsatisfied request metrics.
+   * @param induceServerError if {@code true}, {@link RestRequestMetricsTracker#markServerError()} is called.
+   * @param satisfied if {@code true}, the request is left in its default satisfied state; if {@code false},
+   *                  {@link RestRequestMetricsTracker#markUnsatisfied()} is called.
+   */
+  private void serverErrorTest(boolean induceServerError, boolean satisfied) {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    String testRequestType = "ServerErrorTest";
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    RestRequestMetrics restRequestMetrics = new RestRequestMetrics(getClass(), testRequestType, metricRegistry);
+    requestMetrics.injectMetrics(restRequestMetrics);
+
+    assertFalse("Request should not be a server error by default", requestMetrics.isServerError());
+    if (induceServerError) {
+      requestMetrics.markServerError();
+    }
+    if (!satisfied) {
+      requestMetrics.markUnsatisfied();
+    }
+    assertEquals("isServerError() does not reflect markServerError() call", induceServerError,
+        requestMetrics.isServerError());
+    assertEquals("isSatisfied() should be unaffected by markServerError()", satisfied, requestMetrics.isSatisfied());
+
+    requestMetrics.recordMetrics();
+
+    String metricPrefix = getClass().getCanonicalName() + "." + testRequestType;
+    long expectedServerErrorCount = induceServerError ? 1 : 0;
+    assertEquals("Server error count metric value is not as expected", expectedServerErrorCount,
+        metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.SERVER_ERROR_COUNT_SUFFIX).getCount());
+    assertEquals("Satisfied request count metric value is not as expected", satisfied ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.SATISFIED_REQUEST_COUNT_SUFFIX).getCount());
+    assertEquals("Unsatisfied request count metric value is not as expected", satisfied ? 0 : 1,
+        metricRegistry.getCounters()
+            .get(metricPrefix + RestRequestMetrics.UNSATISFIED_REQUEST_COUNT_SUFFIX)
+            .getCount());
+  }
+
+  /**
    * Tests reaction to bad calls to {@link RestRequestMetricsTracker.NioMetricsTracker#markRequestCompleted()} and
    * {@link RestRequestMetricsTracker.ScalingMetricsTracker#markRequestCompleted()}
    */

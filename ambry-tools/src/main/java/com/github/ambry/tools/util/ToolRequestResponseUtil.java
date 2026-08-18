@@ -24,6 +24,7 @@ import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import java.io.DataInputStream;
 import java.io.InputStream;
+import java.util.List;
 
 
 public class ToolRequestResponseUtil {
@@ -65,7 +66,11 @@ public class ToolRequestResponseUtil {
       }
     } else {
       // pick any replica on this node
-      replicaToReturn = clusterMap.getReplicaIds(dataNodeId).get(0);
+      List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
+      if (replicaIds.isEmpty()) {
+        throw new IllegalStateException("Node " + dataNodeId + " hosts no replicas; cannot resolve a replica for it");
+      }
+      replicaToReturn = replicaIds.get(0);
     }
     return replicaToReturn;
   }

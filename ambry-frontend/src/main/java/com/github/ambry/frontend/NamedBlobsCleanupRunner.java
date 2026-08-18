@@ -19,6 +19,8 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -40,11 +42,28 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private static final Logger logger = LoggerFactory.getLogger(NamedBlobsCleanupRunner.class);
   private final AccountService accountService;
   private final String smallestASCII = "\0";
+  private final int containerDelaySeconds;
+  private final Time time;
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService) {
+    this(router, namedBlobDb, accountService, 0);
+  }
+
+  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, SystemTime.getInstance());
+  }
+
+  NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Time time) {
+    if (containerDelaySeconds < 0) {
+      throw new IllegalArgumentException("containerDelaySeconds must not be negative");
+    }
     this.router = router;
     this.namedBlobDb = namedBlobDb;
     this.accountService = accountService;
+    this.containerDelaySeconds = containerDelaySeconds;
+    this.time = time;
   }
 
   @Override
@@ -57,9 +76,20 @@ public class NamedBlobsCleanupRunner implements Runnable {
       combinedContainers.addAll(inactiveContainers);
       List<StaleNamedBlob> batchStaleBlobs = Collections.emptyList();
       NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
+      boolean processedContainer = false;
       for (Container container : combinedContainers) {
         if (container.getNamedBlobMode() == Container.NamedBlobMode.DISABLED) {
           continue;
+        }
+        if (processedContainer && containerDelaySeconds > 0) {
+          try {
+            logger.info("Waiting {} seconds before cleaning container {}", containerDelaySeconds, container.getId());
+            time.sleep(TimeUnit.SECONDS.toMillis(containerDelaySeconds));
+          } catch (InterruptedException e) {
+            logger.info("Named blob cleanup interrupted before container {}; stopping cleanup run", container.getId());
+            Thread.currentThread().interrupt();
+            return;
+          }
         }
         logger.info("Started the cleaner for container: {}", container.getId());
         // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
@@ -93,12 +123,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
 
           blobName = staleBlobsWithLatestBlobName.getLatestBlob();
         } while (staleBlobsWithLatestBlobName.getLatestBlob() != null);
-        try {
-          logger.info("Finished cleaning container {}. Sleeping for 7 days before next container...", container.getId());
-          Thread.sleep(604800000); // 7 days
-        } catch (InterruptedException e) {
-          logger.error("Sleep interrupted after container cleanup", e);
-        }
+        logger.info("Finished cleaning container {}", container.getId());
+        processedContainer = true;
       }
       logger.info("Named Blobs Cleanup Runner is completed");
     } catch (ExecutionException e) {

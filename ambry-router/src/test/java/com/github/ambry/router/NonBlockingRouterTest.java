@@ -1270,6 +1270,24 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
   }
 
+  /** With the gating config disabled, storage NOT_FOUND surfaces as BlobDoesNotExist (no translation). */
+  @Test
+  public void testNamedBlobMissingInStorageNotTranslatedWhenConfigDisabled() throws Exception {
+    AtomicReference<String> storedBlobId = new AtomicReference<>();
+    Properties props = getNonBlockingRouterProperties(localDcName);
+    props.setProperty("router.named.blob.translate.not.found.to.unavailable.enabled", "false");
+    MockServerLayout layout = setUpNamedBlobAndPut(storedBlobId, props);
+    try {
+      layout.getMockServers().forEach(s -> s.setServerErrorForAllRequests(ServerErrorCode.BlobNotFound));
+      Assert.assertEquals(RouterErrorCode.BlobDoesNotExist,
+          ((RouterException) expectGetFailure("a", "c", "b").getCause()).getErrorCode());
+      // Metric still increments for observability even when translation is disabled.
+      Assert.assertEquals(1L, routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.getCount());
+    } finally {
+      if (router != null) { router.close(); assertClosed(); }
+    }
+  }
+
   /** Translation also fires when getBlobHelper short-circuits via the notFoundCache. */
   @Test
   public void testNamedBlobMissingViaNotFoundCacheStillTranslatedToAmbryUnavailable() throws Exception {
@@ -1288,6 +1306,12 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   /** Wire a mock IdConverter, set up the router, PUT a named blob {@code /a/c/b}, and stub the
    *  GET-path {@code convert(RestRequest, String)} to return the resolved blob ID. */
   private MockServerLayout setUpNamedBlobAndPut(AtomicReference<String> storedBlobId) throws Exception {
+    return setUpNamedBlobAndPut(storedBlobId, getNonBlockingRouterProperties(localDcName));
+  }
+
+  /** Variant of {@link #setUpNamedBlobAndPut(AtomicReference)} that accepts custom router properties. */
+  private MockServerLayout setUpNamedBlobAndPut(AtomicReference<String> storedBlobId, Properties props)
+      throws Exception {
     CountDownLatch putLatch = new CountDownLatch(1);
     // Wire a mock IdConverterFactory + IdConverter.
     IdConverterFactory factory = mock(IdConverterFactory.class);
@@ -1308,8 +1332,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     });
     // Build the router with the mock factory.
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
-    setRouterWithIdConverterFactory(getNonBlockingRouterProperties(localDcName), layout,
-        new LoggingNotificationSystem(), factory);
+    setRouterWithIdConverterFactory(props, layout, new LoggingNotificationSystem(), factory);
     // PUT a named blob /a/c/b, then wait for the convert mock to have run.
     setOperationParams();
     router.putBlob(createNamedBlobRestRequest(RestMethod.PUT, "a", "c", "b", false, false, false, false),

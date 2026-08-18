@@ -98,6 +98,15 @@ public class NamedBlobPath {
     path = path.startsWith("/") ? path.substring(1) : path;
     String[] splitPath = path.split("/", 4);
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
+    // S3 clients can send `prefix=` with no value, which is semantically equivalent to
+    // omitting the prefix entirely. Collapse the empty case to null so it routes to
+    // LIST_ALL_QUERY rather than LIST_WITH_PREFIX_SQL with `blob_name LIKE '%'`; under
+    // listNamedBlobsSQLOption=4 the latter produces a Window-over-full-container-scan
+    // plan that can exceed MAX_EXECUTION_TIME on large containers, while LIST_ALL_QUERY
+    // is purpose-built for the unbounded case.
+    if (blobNamePrefix != null && blobNamePrefix.isEmpty()) {
+      blobNamePrefix = null;
+    }
     boolean isBatchDelete = args.containsKey(BATCH_DELETE_QUERY_PARAM);
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
     // For S3 container-level operations, expected segments = 3

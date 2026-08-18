@@ -593,6 +593,7 @@ public class NamedBlobPutHandler {
         // For blob with infinite time, the procedure is putBlob with a TTL, record insert to database with
         // infinite TTL, and ttlUpdate.
         properties.setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
+        restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED, Boolean.TRUE);
       } else {
         properties = blobInfoFromRequest.getBlobProperties();
       }

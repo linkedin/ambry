@@ -13,13 +13,14 @@
  */
 package com.github.ambry.frontend;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.throttle.HostLevelThrottler;
 
 
 /**
@@ -32,6 +33,7 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   private final FrontendConfig frontendConfig;
   private final HostThrottleConfig hostThrottleConfig;
   private final FrontendMetrics frontendMetrics;
+  private final MetricRegistry metricRegistry;
   private final UrlSigningService urlSigningService;
   private final QuotaManager quotaManager;
 
@@ -40,7 +42,8 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
       AccountAndContainerInjector accountAndContainerInjector, QuotaManager quotaManager) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     hostThrottleConfig = new HostThrottleConfig(verifiableProperties);
-    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry(), frontendConfig);
+    metricRegistry = clusterMap.getMetricRegistry();
+    frontendMetrics = new FrontendMetrics(metricRegistry, frontendConfig);
     this.urlSigningService = urlSigningService;
     this.quotaManager = quotaManager;
   }
@@ -48,6 +51,6 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   @Override
   public SecurityService getSecurityService() {
     return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService,
-        new HostLevelThrottler(hostThrottleConfig), quotaManager);
+        new HostLevelThrottler(hostThrottleConfig, metricRegistry), quotaManager);
   }
 }

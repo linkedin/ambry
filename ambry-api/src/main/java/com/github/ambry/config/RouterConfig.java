@@ -130,6 +130,8 @@ public class RouterConfig {
   public static final String ROUTER_STORE_KEY_CONVERTER_FACTORY = "router.store.key.converter.factory";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS = "router.unavailable.due.to.offline.replicas";
   public static final String ROUTER_NOT_FOUND_CACHE_TTL_IN_MS = "router.not.found.cache.ttl.in.ms";
+  public static final String ROUTER_NAMED_BLOB_TRANSLATE_NOT_FOUND_TO_UNAVAILABLE_ENABLED =
+      "router.named.blob.translate.not.found.to.unavailable.enabled";
   public static final String ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS =
       "router.update.op.metadata.reliance.timestamp.in.ms";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE =
@@ -647,6 +649,17 @@ public class RouterConfig {
   @Default("15*1000")
   public final long routerNotFoundCacheTtlInMs;
 
+  /**
+   * If {@code true}, when a named blob's metadata row exists but storage replicas return
+   * {@link com.github.ambry.router.RouterErrorCode#BlobDoesNotExist}, the router translates the
+   * error to {@link com.github.ambry.router.RouterErrorCode#AmbryUnavailable} (retryable 503)
+   * instead of letting it surface as an authoritative 404. Acts as a kill switch for the
+   * behavior added in PR #3234 / AMBRY-14247.
+   */
+  @Config(ROUTER_NAMED_BLOB_TRANSLATE_NOT_FOUND_TO_UNAVAILABLE_ENABLED)
+  @Default("true")
+  public final boolean routerNamedBlobTranslateNotFoundToUnavailableEnabled;
+
   public static final String ROUTER_BLOB_METADATA_CACHE_ID = "router.blob.metadata.cache.id";
   @Config(ROUTER_BLOB_METADATA_CACHE_ID)
   public final String routerBlobMetadataCacheId;
@@ -935,6 +948,8 @@ public class RouterConfig {
         verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
+    routerNamedBlobTranslateNotFoundToUnavailableEnabled =
+        verifiableProperties.getBoolean(ROUTER_NAMED_BLOB_TRANSLATE_NOT_FOUND_TO_UNAVAILABLE_ENABLED, true);
     routerUpdateOpMetadataRelianceTimestampInMs =
         verifiableProperties.getLong(ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS,
             DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);

@@ -71,6 +71,7 @@ public class S3BatchDeleteHandlerTest {
   private final Account account;
   private final Container container;
   private FrontendConfig frontendConfig;
+  private FrontendMetrics metrics;
   private NamedBlobPutHandler namedBlobPutHandler;
   private S3BatchDeleteHandler s3BatchDeleteHandler;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
@@ -233,6 +234,7 @@ public class S3BatchDeleteHandlerTest {
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    long parseErrorsBefore = metrics.s3BatchDeleteRequestParseError.getCount();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     s3BatchDeleteHandler.handle(request, restResponseChannel, futureResult::done);
     ReadableStreamChannel readableStreamChannel = futureResult.get();
@@ -245,6 +247,8 @@ public class S3BatchDeleteHandlerTest {
     assertEquals(response.getMessage(), ERR_MALFORMED_REQUEST_BODY_MESSAGE);
     assertEquals(response.getCode(), ERR_MALFORMED_REQUEST_BODY_CODE);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("Parse-error counter should increment by 1", parseErrorsBefore + 1,
+        metrics.s3BatchDeleteRequestParseError.getCount());
   }
 
   @Test
@@ -314,7 +318,7 @@ public class S3BatchDeleteHandlerTest {
     CommonTestUtils.populateRequiredRouterProps(properties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     IdSigningService idSigningService = new AmbryIdSigningService();
     AmbrySecurityServiceFactory securityServiceFactory =

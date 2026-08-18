@@ -44,6 +44,10 @@ public class RestRequestMetrics {
   static final String UNSATISFIED_REQUEST_COUNT_SUFFIX = "UnsatisfiedRequestCount";
   static final String SATISFIED_REQUEST_COUNT_SUFFIX = "SatisfiedRequestCount";
 
+  // Tracked separately from UNSATISFIED_REQUEST_COUNT_SUFFIX so that alerts can be configured on 5xx server errors
+  // specifically, without being diluted by requests that are unsatisfied for other reasons (e.g. missed thresholds).
+  static final String SERVER_ERROR_COUNT_SUFFIX = "ServerErrorCount";
+
   static final String THROUGHPUT_SUFFIX = "Throughput";
 
   final Histogram nioRequestProcessingTimeInMs;
@@ -62,6 +66,7 @@ public class RestRequestMetrics {
   final Counter operationCount;
   final Counter unsatisfiedRequestCount;
   final Counter satisfiedRequestCount;
+  final Counter serverErrorCount;
 
   final Histogram throughput;
 
@@ -107,6 +112,8 @@ public class RestRequestMetrics {
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + UNSATISFIED_REQUEST_COUNT_SUFFIX));
     satisfiedRequestCount =
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SATISFIED_REQUEST_COUNT_SUFFIX));
+    serverErrorCount =
+        metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SERVER_ERROR_COUNT_SUFFIX));
 
     throughput = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + THROUGHPUT_SUFFIX));
   }
