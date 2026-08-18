@@ -37,7 +37,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -259,75 +258,6 @@ public class AmbryIdConverterFactoryTest {
     assertEquals("Converted ID does not match expected (Callback)", expectedOutput, callback.result);
     assertTrue("Named Blob Put request should have named blob version in its internal keys",
         restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION));
-  }
-
-  @Test
-  public void ambryIdConverterNamedBlobPutClientDisconnectTest() throws Exception {
-    // Best-effort race guard: when the client has already disconnected, AmbryIdConverterFactory should NOT
-    // commit named-blob metadata (namedBlobDb.put), and should surface a client-termination exception on
-    // both the future and callback paths, while incrementing idConverterClientAbortedCount.
-    //
-    // The exception shape matters: NettyResponseChannel.getErrorResponse() checks
-    // `cause instanceof RestServiceException` BEFORE Utils.isPossibleClientTermination(cause), so throwing a
-    // RestServiceException here bypasses client-termination detection and gets classified as HTTP 500 /
-    // InternalServerErrorCount rather than HTTP 400 / ClientEarlyTerminationCount.
-    Properties properties = new Properties();
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    IdSigningService idSigningService = mock(IdSigningService.class);
-    NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
-    MetricRegistry metricRegistry = new MetricRegistry();
-    AmbryIdConverterFactory ambryIdConverterFactory =
-        new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, namedBlobDb);
-    IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
-    assertNotNull("No IdConverter returned", idConverter);
-    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
-        BlobDataType.DATACHUNK);
-
-    // Build a named-blob PUT request the same way ambryIdConverterNamedBlobTest does, then close it BEFORE
-    // convert(...) so restRequest.isOpen() returns false when the write branch is entered.
-    JSONObject requestData = new JSONObject();
-    JSONObject headers = new JSONObject();
-    headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
-    requestData.put(MockRestRequest.REST_METHOD_KEY, RestMethod.PUT.name());
-    requestData.put(MockRestRequest.URI_KEY, NAMED_BLOB_PATH);
-    requestData.put(MockRestRequest.HEADERS_KEY, headers);
-    RestRequest restRequest = new MockRestRequest(requestData, null);
-    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
-        RequestPath.parse(NAMED_BLOB_PATH, Collections.emptyMap(), Collections.emptyList(), "Ambry-test"));
-    BlobInfo blobInfo = new BlobInfo(new BlobProperties(-1, "service", accountId, containerId, false), new byte[0]);
-    restRequest.close();
-    assertFalse("Test precondition: RestRequest must be closed", restRequest.isOpen());
-
-    String metricName =
-        MetricRegistry.name(AmbryIdConverterFactory.class, "ClientAbortedCount");
-    assertTrue("ClientAbortedCount counter must be registered",
-        metricRegistry.getCounters().containsKey(metricName));
-    long beforeCount = metricRegistry.counter(metricName).getCount();
-
-    IdConversionCallback callback = new IdConversionCallback();
-    try {
-      idConverter.convert(restRequest, blobId.getID(), blobInfo.getBlobProperties(), callback).get(5, TimeUnit.SECONDS);
-      fail("ID conversion should have failed because the client disconnected");
-    } catch (ExecutionException e) {
-      Throwable cause = e.getCause();
-      assertFalse("Guard must not throw RestServiceException (would be classified as HTTP 500) but got " + cause,
-          cause instanceof RestServiceException);
-      assertTrue("Expected IOException (Future) but got " + cause, cause instanceof IOException);
-      assertTrue("Exception must be recognized by Utils.isPossibleClientTermination (Future) but got " + cause,
-          Utils.isPossibleClientTermination(cause));
-    }
-    assertNotNull("Callback exception should be set", callback.exception);
-    assertFalse(
-        "Guard must not throw RestServiceException (would be classified as HTTP 500) but got " + callback.exception,
-        callback.exception instanceof RestServiceException);
-    assertTrue("Expected IOException (Callback) but got " + callback.exception,
-        callback.exception instanceof IOException);
-    assertTrue("Exception must be recognized by Utils.isPossibleClientTermination (Callback) but got "
-        + callback.exception, Utils.isPossibleClientTermination(callback.exception));
-    verify(namedBlobDb, never()).put(any(), any(), any());
-    assertEquals("idConverterClientAbortedCount should have incremented by exactly 1", beforeCount + 1,
-        metricRegistry.counter(metricName).getCount());
   }
 
   /**

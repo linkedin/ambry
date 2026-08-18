@@ -241,7 +241,6 @@ public class FrontendMetrics {
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
   public final Histogram idConversionDownstreamCallbackTimeInMs;
-  public final Counter idConverterClientAbortedCount;
 
   // GetPeersHandler
   public final Histogram getPeersProcessingTimeInMs;
@@ -688,8 +687,6 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
     idConversionDownstreamCallbackTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "DownstreamCallbackTimeInMs"));
-    idConverterClientAbortedCount =
-        metricRegistry.counter(MetricRegistry.name(AmbryIdConverterFactory.class, "ClientAbortedCount"));
     // GetPeersHandler
     getPeersProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "ProcessingTimeInMs"));
