@@ -13,6 +13,9 @@
  */
 package com.github.ambry.frontend;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.named.NamedBlobDb;
@@ -60,6 +63,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
    * scan is idempotent.
    */
   private final Map<String, String> containerCleanupCursors = new ConcurrentHashMap<>();
+  /** Increments each time a container is deferred to the next run because its scan could not be completed. */
+  private final Counter containerCleanupDeferredCount;
 
   /**
    * Maximum number of attempts for a single stale-blob page scan before the container is deferred to the next
@@ -78,11 +83,21 @@ public class NamedBlobsCleanupRunner implements Runnable {
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds) {
-    this(router, namedBlobDb, accountService, containerDelaySeconds, SystemTime.getInstance());
+    this(router, namedBlobDb, accountService, containerDelaySeconds, new MetricRegistry());
+  }
+
+  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, MetricRegistry metricRegistry) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, SystemTime.getInstance(), metricRegistry);
   }
 
   NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds, Time time) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, time, new MetricRegistry());
+  }
+
+  NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Time time, MetricRegistry metricRegistry) {
     if (containerDelaySeconds < 0) {
       throw new IllegalArgumentException("containerDelaySeconds must not be negative");
     }
@@ -91,6 +106,11 @@ public class NamedBlobsCleanupRunner implements Runnable {
     this.accountService = accountService;
     this.containerDelaySeconds = containerDelaySeconds;
     this.time = time;
+    this.containerCleanupDeferredCount =
+        metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerDeferredCount"));
+    String cursorMapSizeGauge = MetricRegistry.name(NamedBlobsCleanupRunner.class, "CursorMapSize");
+    metricRegistry.remove(cursorMapSizeGauge);
+    metricRegistry.register(cursorMapSizeGauge, (Gauge<Integer>) containerCleanupCursors::size);
   }
 
   @Override
@@ -107,6 +127,14 @@ public class NamedBlobsCleanupRunner implements Runnable {
       logger.error("Named blob cleanup could not list containers; skipping this run", e);
       return;
     }
+
+    // Drop resume cursors for containers that are no longer eligible (deleted, or now disabled) so the in-memory map
+    // cannot grow without bound as containers are created and removed over time.
+    Set<String> eligibleCursorKeys = combinedContainers.stream()
+        .filter(c -> c.getNamedBlobMode() != Container.NamedBlobMode.DISABLED)
+        .map(NamedBlobsCleanupRunner::cursorKey)
+        .collect(Collectors.toSet());
+    containerCleanupCursors.keySet().retainAll(eligibleCursorKeys);
 
     boolean processedContainer = false;
     for (Container container : combinedContainers) {
@@ -135,6 +163,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
         // A container whose scan keeps getting killed (e.g. a bloated prefix crossing the DB long-transaction limit)
         // must not abort the whole run or kill the schedule. Defer it: the next scheduled run retries it, and the
         // remaining containers are still cleaned now.
+        containerCleanupDeferredCount.inc();
         logger.error("Deferring cleanup of container {} to the next scheduled run after repeated scan failures",
             container.getId(), e);
       }
