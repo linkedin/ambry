@@ -24,7 +24,9 @@ import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -39,7 +41,8 @@ import org.slf4j.LoggerFactory;
  * {@link #run()} never propagates an exception: a page scan that is killed by the database long-transaction guard (a
  * bloated container whose scan crosses the server-side time limit) is retried a bounded number of times, and if it
  * still fails that one container is deferred to the next scheduled run while the remaining containers are still
- * cleaned in the current run.
+ * cleaned in the current run. A deferred container resumes from its last processed page cursor on the next run
+ * (retained in memory), rather than restarting the scan from the beginning.
  */
 public class NamedBlobsCleanupRunner implements Runnable {
   private final Router router;
@@ -49,6 +52,14 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final String smallestASCII = "\0";
   private final int containerDelaySeconds;
   private final Time time;
+  /**
+   * Per-container resume cursor keyed by "{accountId}_{containerId}", retained in memory across scheduled runs so a
+   * container whose scan was killed and deferred resumes from its last processed page on the next run instead of
+   * restarting from the beginning. An entry is removed once its container is fully swept, so the next cycle starts
+   * over from the beginning. This is per-pod state; a pod restart resets to a full sweep, which is safe because the
+   * scan is idempotent.
+   */
+  private final Map<String, String> containerCleanupCursors = new ConcurrentHashMap<>();
 
   /**
    * Maximum number of attempts for a single stale-blob page scan before the container is deferred to the next
@@ -141,9 +152,15 @@ public class NamedBlobsCleanupRunner implements Runnable {
    *                   the container to the next scheduled run.
    */
   private void cleanupContainer(Container container) throws Exception {
-    logger.info("Started the cleaner for container: {}", container.getId());
-    // set blobName to be "\0" since it is the lowest ASCII value and everything is greater than it
-    String blobName = smallestASCII;
+    String cursorKey = cursorKey(container);
+    // Resume from the cursor saved by a previous run (if this container was deferred after a kill); otherwise start at
+    // "\0", the lowest ASCII value, so the scan begins at the start of the container.
+    String blobName = containerCleanupCursors.getOrDefault(cursorKey, smallestASCII);
+    if (smallestASCII.equals(blobName)) {
+      logger.info("Started the cleaner for container: {}", container.getId());
+    } else {
+      logger.info("Resuming cleanup of container {} from a saved cursor after a previous deferral", container.getId());
+    }
     NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
     do {
       staleBlobsWithLatestBlobName = pullStaleBlobsWithRetry(container, blobName);
@@ -173,8 +190,19 @@ public class NamedBlobsCleanupRunner implements Runnable {
       }
 
       blobName = staleBlobsWithLatestBlobName.getLatestBlob();
+      if (blobName != null) {
+        // Persist progress so that if a later page is killed and this container is deferred, the next run resumes
+        // here instead of restarting the container scan from the beginning.
+        containerCleanupCursors.put(cursorKey, blobName);
+      }
     } while (blobName != null);
+    // Fully swept: drop the saved cursor so the next cleanup cycle re-scans this container from the beginning.
+    containerCleanupCursors.remove(cursorKey);
     logger.info("Finished cleaning container {}", container.getId());
+  }
+
+  private static String cursorKey(Container container) {
+    return container.getParentAccountId() + "_" + container.getId();
   }
 
   /**
@@ -183,8 +211,9 @@ public class NamedBlobsCleanupRunner implements Runnable {
    * failures (connection resets, load spikes) while the cap ensures a persistently slow page defers the container
    * instead of blocking the entire run.
    *
-   * <p>Follow-ups tracked separately: resuming from a mid-container cursor across runs, adaptively shrinking the page
-   * size on repeated kills, and a covering index so the scan cannot cross the time limit in the first place.
+   * <p>Follow-ups tracked separately: adaptively shrinking the page size on repeated kills, and a covering index so
+   * the scan cannot cross the time limit in the first place. (Cross-run resume from the last processed cursor is
+   * handled by {@link #cleanupContainer}.)
    * @param container the container being cleaned.
    * @param blobName the page cursor to resume from.
    * @return the stale blobs page and the next cursor.

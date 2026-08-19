@@ -149,6 +149,59 @@ public class NamedBlobsCleanupRunnerTest {
     verify(namedBlobDb, times(1)).pullStaleBlobs(goodContainer, FIRST_BLOB_NAME);
   }
 
+  @Test
+  public void testResumesFromSavedCursorAfterKill() {
+    // On the first run the container's first page succeeds (cursor advances to "cursor1"), then the page at "cursor1"
+    // is killed and the container is deferred. The second run must resume from "cursor1", not restart at "\0".
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        Collections.singleton(container));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+
+    NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
+    when(namedBlobDb.pullStaleBlobs(eq(container), eq(FIRST_BLOB_NAME))).thenReturn(CompletableFuture.completedFuture(
+        new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.emptyList(), "cursor1")));
+    CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> killedScan = new CompletableFuture<>();
+    killedScan.completeExceptionally(new SQLException("Query execution was interrupted", "70100", 1317));
+    when(namedBlobDb.pullStaleBlobs(eq(container), eq("cursor1"))).thenReturn(killedScan);
+
+    NamedBlobsCleanupRunner runner =
+        new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0, new MockTime());
+    runner.run();
+    runner.run();
+
+    // "\0" is scanned only on the first run; the second run resumes from the saved "cursor1".
+    verify(namedBlobDb, times(1)).pullStaleBlobs(container, FIRST_BLOB_NAME);
+    // "cursor1" is attempted MAX_PULL_ATTEMPTS (3) times per run, across both runs.
+    verify(namedBlobDb, times(6)).pullStaleBlobs(container, "cursor1");
+  }
+
+  @Test
+  public void testCursorResetsAfterContainerFullySwept() {
+    // A container that is fully swept (no kill) must drop its saved cursor, so the next run restarts from "\0".
+    Container container = mockContainer((short) 2, Container.NamedBlobMode.OPTIONAL);
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        Collections.singleton(container));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+
+    NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
+    when(namedBlobDb.pullStaleBlobs(eq(container), eq(FIRST_BLOB_NAME))).thenReturn(CompletableFuture.completedFuture(
+        new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.emptyList(), "c2")));
+    when(namedBlobDb.pullStaleBlobs(eq(container), eq("c2"))).thenReturn(CompletableFuture.completedFuture(
+        new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.emptyList(), null)));
+
+    NamedBlobsCleanupRunner runner =
+        new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0, new MockTime());
+    runner.run();
+    runner.run();
+
+    // Each run does a full sweep from "\0", because the cursor is cleared once the container completes.
+    verify(namedBlobDb, times(2)).pullStaleBlobs(container, FIRST_BLOB_NAME);
+    verify(namedBlobDb, times(2)).pullStaleBlobs(container, "c2");
+  }
+
   private NamedBlobDb mockNamedBlobDb() {
     NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
     when(namedBlobDb.pullStaleBlobs(any(Container.class), eq(FIRST_BLOB_NAME))).thenReturn(
