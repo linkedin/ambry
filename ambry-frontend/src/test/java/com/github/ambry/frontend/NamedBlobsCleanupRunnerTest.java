@@ -32,6 +32,7 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -119,6 +120,33 @@ public class NamedBlobsCleanupRunnerTest {
     } finally {
       Thread.interrupted();
     }
+  }
+
+  @Test
+  public void testKilledScanDefersContainerWithoutAbortingRunOrScheduler() {
+    // A killed scan (DB long-transaction guard) surfaces as an ExecutionException from future.get(). The runner must
+    // retry the page a bounded number of times, defer the offending container, and still clean the other containers,
+    // all without letting run() throw (which would permanently suppress the scheduleAtFixedRate schedule).
+    Container goodContainer = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    Container killedContainer = mockContainer((short) 2, Container.NamedBlobMode.OPTIONAL);
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        new HashSet<>(Arrays.asList(goodContainer, killedContainer)));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+
+    NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
+    when(namedBlobDb.pullStaleBlobs(eq(goodContainer), eq(FIRST_BLOB_NAME))).thenReturn(
+        CompletableFuture.completedFuture(new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.emptyList(), null)));
+    CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> killedScan = new CompletableFuture<>();
+    killedScan.completeExceptionally(new SQLException("Query execution was interrupted", "70100", 1317));
+    when(namedBlobDb.pullStaleBlobs(eq(killedContainer), eq(FIRST_BLOB_NAME))).thenReturn(killedScan);
+
+    // run() must complete normally despite the killed scan.
+    new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0, new MockTime()).run();
+
+    // The killed container is retried up to the bounded cap, then deferred; the healthy container is still cleaned.
+    verify(namedBlobDb, times(3)).pullStaleBlobs(killedContainer, FIRST_BLOB_NAME);
+    verify(namedBlobDb, times(1)).pullStaleBlobs(goodContainer, FIRST_BLOB_NAME);
   }
 
   private NamedBlobDb mockNamedBlobDb() {
