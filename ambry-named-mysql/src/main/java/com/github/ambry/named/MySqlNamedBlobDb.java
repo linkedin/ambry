@@ -498,12 +498,19 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName) {
+    return pullStaleBlobs(container, blobName, config.queryStaleDataMaxResults);
+  }
+
+  @Override
+  public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName,
+      int maxResults) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
-      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, blobName);
+      List<StaleNamedBlob> potentialStaleNamedBlobResults =
+          getAllBlobsForContainer(connection, container, blobName, maxResults);
       int resultSize = potentialStaleNamedBlobResults.size();
       if (resultSize == 0) {
         return new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults, null);
@@ -516,7 +523,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         staleBlobsWithLatestBlobName = new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults,
             potentialStaleNamedBlobResults.get(potentialStaleNamedBlobResults.size() - 1).getBlobName());
       }
-      if (resultSize < config.queryStaleDataMaxResults) {
+      if (resultSize < maxResults) {
         staleBlobsWithLatestBlobName  = new StaleBlobsWithLatestBlobName(staleBlobsWithLatestBlobName.getStaleBlobs(), null);
       }
 
@@ -1259,14 +1266,14 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * @throws SQLException If a database access error occurs or the query fails.
    */
   private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container,
-      String latestBlobName) throws SQLException {
+      String latestBlobName, int maxResults) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
 
     try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CONTAINER)) {
       statement.setInt(1, container.getId());
       statement.setInt(2, container.getParentAccountId());
       statement.setString(3, latestBlobName);
-      statement.setInt(4, config.queryStaleDataMaxResults);
+      statement.setInt(4, maxResults);
 
       logger.info("Pulling potential stale blobs from MySql. Query {}", statement.toString());
 

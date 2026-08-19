@@ -18,6 +18,7 @@ package com.github.ambry.frontend;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -140,12 +141,15 @@ public class NamedBlobsCleanupRunnerTest {
     CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> killedScan = new CompletableFuture<>();
     killedScan.completeExceptionally(new SQLException("Query execution was interrupted", "70100", 1317));
     when(namedBlobDb.pullStaleBlobs(eq(killedContainer), eq(FIRST_BLOB_NAME))).thenReturn(killedScan);
+    when(namedBlobDb.pullStaleBlobs(eq(killedContainer), eq(FIRST_BLOB_NAME), anyInt())).thenReturn(killedScan);
 
     // run() must complete normally despite the killed scan.
     new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0, new MockTime()).run();
 
     // The killed container is retried up to the bounded cap, then deferred; the healthy container is still cleaned.
-    verify(namedBlobDb, times(3)).pullStaleBlobs(killedContainer, FIRST_BLOB_NAME);
+    // A kill is not retried at the same page size; the full page is attempted once, then the page is shrunk.
+    verify(namedBlobDb, times(1)).pullStaleBlobs(killedContainer, FIRST_BLOB_NAME);
+    verify(namedBlobDb, times(1)).pullStaleBlobs(eq(killedContainer), eq(FIRST_BLOB_NAME), anyInt());
     verify(namedBlobDb, times(1)).pullStaleBlobs(goodContainer, FIRST_BLOB_NAME);
   }
 
@@ -165,6 +169,7 @@ public class NamedBlobsCleanupRunnerTest {
     CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> killedScan = new CompletableFuture<>();
     killedScan.completeExceptionally(new SQLException("Query execution was interrupted", "70100", 1317));
     when(namedBlobDb.pullStaleBlobs(eq(container), eq("cursor1"))).thenReturn(killedScan);
+    when(namedBlobDb.pullStaleBlobs(eq(container), eq("cursor1"), anyInt())).thenReturn(killedScan);
 
     NamedBlobsCleanupRunner runner =
         new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0, new MockTime());
@@ -174,7 +179,7 @@ public class NamedBlobsCleanupRunnerTest {
     // "\0" is scanned only on the first run; the second run resumes from the saved "cursor1".
     verify(namedBlobDb, times(1)).pullStaleBlobs(container, FIRST_BLOB_NAME);
     // "cursor1" is attempted MAX_PULL_ATTEMPTS (3) times per run, across both runs.
-    verify(namedBlobDb, times(6)).pullStaleBlobs(container, "cursor1");
+    verify(namedBlobDb, times(2)).pullStaleBlobs(container, "cursor1");
   }
 
   @Test
@@ -200,6 +205,31 @@ public class NamedBlobsCleanupRunnerTest {
     // Each run does a full sweep from "\0", because the cursor is cleared once the container completes.
     verify(namedBlobDb, times(2)).pullStaleBlobs(container, FIRST_BLOB_NAME);
     verify(namedBlobDb, times(2)).pullStaleBlobs(container, "c2");
+  }
+
+  @Test
+  public void testConnectionFailureIsRetriedNotShrunk() {
+    // A connection-class failure (SQLSTATE 08*) is transient and should be retried on the same full-size page, not
+    // treated as a kill (which would shrink the page).
+    Container container = mockContainer((short) 5, Container.NamedBlobMode.OPTIONAL);
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        Collections.singleton(container));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+
+    NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
+    CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> connectionFailure = new CompletableFuture<>();
+    connectionFailure.completeExceptionally(new SQLException("Communications link failure", "08S01"));
+    CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> ok =
+        CompletableFuture.completedFuture(new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.emptyList(), null));
+    // First call fails with a connection error (retriable), the retry succeeds.
+    when(namedBlobDb.pullStaleBlobs(eq(container), eq(FIRST_BLOB_NAME))).thenReturn(connectionFailure, ok);
+
+    new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0, new MockTime()).run();
+
+    // The full-size page was retried (2 calls) and the page was never shrunk.
+    verify(namedBlobDb, times(2)).pullStaleBlobs(container, FIRST_BLOB_NAME);
+    verify(namedBlobDb, never()).pullStaleBlobs(eq(container), eq(FIRST_BLOB_NAME), anyInt());
   }
 
   private NamedBlobDb mockNamedBlobDb() {

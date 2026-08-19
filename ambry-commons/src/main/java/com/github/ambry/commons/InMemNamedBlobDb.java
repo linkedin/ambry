@@ -220,6 +220,14 @@ public class InMemNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
+  public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String latestBlob,
+      int maxResults) {
+    // The in-memory implementation is used for tests; it ignores the page size and returns the same result as the
+    // unbounded variant.
+    return pullStaleBlobs(container, latestBlob);
+  }
+
+  @Override
   public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String latestBlob) {
     CompletableFuture<StaleBlobsWithLatestBlobName> future = new CompletableFuture<>();
     List<StaleNamedBlob> resultList = new ArrayList<>();

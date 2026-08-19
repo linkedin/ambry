@@ -24,11 +24,19 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLTransientConnectionException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -65,6 +73,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final Map<String, String> containerCleanupCursors = new ConcurrentHashMap<>();
   /** Increments each time a container is deferred to the next run because its scan could not be completed. */
   private final Counter containerCleanupDeferredCount;
+  /** Increments each time a full-size page scan is killed and the runner shrinks the page to make progress. */
+  private final Counter pageScanKilledCount;
 
   /**
    * Maximum number of attempts for a single stale-blob page scan before the container is deferred to the next
@@ -76,6 +86,11 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private static final long PULL_RETRY_BACKOFF_MS = 1000L;
   /** Per-page client-side wait for a stale-blob scan. Preserves the previous {@code get(2, TimeUnit.MINUTES)} bound. */
   private static final long PULL_STALE_BLOBS_TIMEOUT_SECONDS = 120L;
+  /**
+   * Reduced page size used after a full-size page scan is killed, so the scan reads fewer rows, stays under the
+   * database time limit, and the cursor keeps moving forward through the container.
+   */
+  private static final int SHRUNK_PAGE_SIZE = 50;
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService) {
     this(router, namedBlobDb, accountService, 0);
@@ -108,6 +123,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
     this.time = time;
     this.containerCleanupDeferredCount =
         metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerDeferredCount"));
+    this.pageScanKilledCount =
+        metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "PageScanKilledCount"));
     String cursorMapSizeGauge = MetricRegistry.name(NamedBlobsCleanupRunner.class, "CursorMapSize");
     metricRegistry.remove(cursorMapSizeGauge);
     metricRegistry.register(cursorMapSizeGauge, (Gauge<Integer>) containerCleanupCursors::size);
@@ -190,9 +207,26 @@ public class NamedBlobsCleanupRunner implements Runnable {
     } else {
       logger.info("Resuming cleanup of container {} from a saved cursor after a previous deferral", container.getId());
     }
+    int pageSize = 0;  // 0 means the database default (full-size) page.
     NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
     do {
-      staleBlobsWithLatestBlobName = pullStaleBlobsWithRetry(container, blobName);
+      try {
+        staleBlobsWithLatestBlobName = pullStaleBlobsResilient(container, blobName, pageSize);
+      } catch (PageKilledException e) {
+        if (pageSize != 0) {
+          // Already at the shrunk page size and still killed: cannot make progress on this container right now.
+          // Defer it; the next scheduled run resumes from this same cursor.
+          throw new IllegalStateException(
+              "Stale-blob scan for container " + container.getId() + " was killed even at the shrunk page size", e);
+        }
+        // Shrink and retry the same cursor so the scan reads fewer rows and the cursor can still move forward,
+        // rather than re-running the same heavy query (which only adds load) or sitting on the page across runs.
+        pageScanKilledCount.inc();
+        pageSize = SHRUNK_PAGE_SIZE;
+        logger.warn("Stale-blob scan for container {} was killed at its cursor; shrinking the page to {} to make "
+            + "progress instead of retrying the same query", container.getId(), pageSize);
+        continue;
+      }
       List<StaleNamedBlob> batchStaleBlobs = staleBlobsWithLatestBlobName.getStaleBlobs();
       List<StaleNamedBlob> failedResults = new ArrayList<>();
       for (StaleNamedBlob staleBlob : batchStaleBlobs) {
@@ -235,32 +269,37 @@ public class NamedBlobsCleanupRunner implements Runnable {
   }
 
   /**
-   * Pull one page of stale blobs, retrying a bounded number of times with backoff. The database long-transaction guard
-   * can kill a scan over a container that has accumulated many versions; a brief bounded retry absorbs transient
-   * failures (connection resets, load spikes) while the cap ensures a persistently slow page defers the container
-   * instead of blocking the entire run.
-   *
-   * <p>Follow-ups tracked separately: adaptively shrinking the page size on repeated kills, and a covering index so
-   * the scan cannot cross the time limit in the first place. (Cross-run resume from the last processed cursor is
-   * handled by {@link #cleanupContainer}.)
+   * Pull one page of stale blobs. A connection-class blip (for example a reset or a pool timeout) is retried a bounded
+   * number of times with backoff. A kill or query timeout is not retried: re-running the same expensive query only
+   * adds load to an already-struggling database, so it is signalled to the caller (via {@link PageKilledException}) to
+   * shrink the page instead.
    * @param container the container being cleaned.
    * @param blobName the page cursor to resume from.
+   * @param pageSize the page size to read, or {@code 0} to use the database default (full page).
    * @return the stale blobs page and the next cursor.
+   * @throws PageKilledException if the scan was killed or timed out (the caller should shrink and retry).
    * @throws InterruptedException if the thread is interrupted while waiting or backing off.
-   * @throws Exception if the scan still fails after {@link #MAX_PULL_ATTEMPTS} attempts.
+   * @throws Exception if a retriable failure persists after {@link #MAX_PULL_ATTEMPTS} attempts.
    */
-  private NamedBlobDb.StaleBlobsWithLatestBlobName pullStaleBlobsWithRetry(Container container, String blobName)
-      throws Exception {
+  private NamedBlobDb.StaleBlobsWithLatestBlobName pullStaleBlobsResilient(Container container, String blobName,
+      int pageSize) throws Exception {
     Exception lastException = null;
     for (int attempt = 1; attempt <= MAX_PULL_ATTEMPTS; attempt++) {
       try {
-        return namedBlobDb.pullStaleBlobs(container, blobName).get(PULL_STALE_BLOBS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> future =
+            pageSize > 0 ? namedBlobDb.pullStaleBlobs(container, blobName, pageSize)
+                : namedBlobDb.pullStaleBlobs(container, blobName);
+        return future.get(PULL_STALE_BLOBS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       } catch (InterruptedException e) {
         throw e;
       } catch (Exception e) {
         lastException = e;
+        if (!isRetriable(e)) {
+          // Killed or timed out. Do not retry the same query; let the caller shrink the page instead.
+          throw new PageKilledException(e);
+        }
         if (attempt < MAX_PULL_ATTEMPTS) {
-          logger.warn("pullStaleBlobs failed for container {} (attempt {}/{}); backing off {} ms before retry",
+          logger.warn("pullStaleBlobs hit a retriable failure for container {} (attempt {}/{}); backing off {} ms",
               container.getId(), attempt, MAX_PULL_ATTEMPTS, PULL_RETRY_BACKOFF_MS, e);
           time.sleep(PULL_RETRY_BACKOFF_MS);
         }
@@ -269,5 +308,49 @@ public class NamedBlobsCleanupRunner implements Runnable {
     throw new IllegalStateException(
         "Failed to pull stale blobs for container " + container.getId() + " after " + MAX_PULL_ATTEMPTS + " attempts",
         lastException);
+  }
+
+  /**
+   * Whether the given throwable is a transient, connection-class failure worth retrying. Only the ISO/SQL
+   * "connection exception" class (SQLSTATE 08*) and JDBC's connection-failure subclasses qualify. A kill or a query
+   * timeout is deliberately not retriable, so the runner shrinks the page rather than re-running the same heavy query.
+   */
+  private static boolean isRetriable(Throwable t) {
+    Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+    Deque<Throwable> stack = new ArrayDeque<>();
+    stack.push(t);
+    while (!stack.isEmpty()) {
+      Throwable cur = stack.pop();
+      if (!seen.add(cur)) {
+        continue;
+      }
+      if (cur instanceof SQLNonTransientConnectionException || cur instanceof SQLTransientConnectionException) {
+        return true;
+      }
+      if (cur instanceof SQLException) {
+        String state = ((SQLException) cur).getSQLState();
+        if (state != null && state.startsWith("08")) {
+          return true;
+        }
+        SQLException next = ((SQLException) cur).getNextException();
+        if (next != null) {
+          stack.push(next);
+        }
+      }
+      Throwable cause = cur.getCause();
+      if (cause != null) {
+        stack.push(cause);
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Signals that a page scan was killed or timed out and should not be retried at the same page size.
+   */
+  private static class PageKilledException extends Exception {
+    PageKilledException(Throwable cause) {
+      super(cause);
+    }
   }
 }
