@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.named.NamedBlobDb;
@@ -22,6 +23,7 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -43,6 +45,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final AccountService accountService;
   private final String smallestASCII = "\0";
   private final int containerDelaySeconds;
+  private final Set<String> excludedContainers;
   private final Time time;
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService) {
@@ -51,11 +54,21 @@ public class NamedBlobsCleanupRunner implements Runnable {
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds) {
-    this(router, namedBlobDb, accountService, containerDelaySeconds, SystemTime.getInstance());
+    this(router, namedBlobDb, accountService, containerDelaySeconds, Collections.emptySet());
+  }
+
+  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Collection<String> excludedContainers) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, SystemTime.getInstance());
   }
 
   NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds, Time time) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, Collections.emptySet(), time);
+  }
+
+  NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Collection<String> excludedContainers, Time time) {
     if (containerDelaySeconds < 0) {
       throw new IllegalArgumentException("containerDelaySeconds must not be negative");
     }
@@ -63,6 +76,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
     this.namedBlobDb = namedBlobDb;
     this.accountService = accountService;
     this.containerDelaySeconds = containerDelaySeconds;
+    this.excludedContainers =
+        excludedContainers == null ? Collections.emptySet() : new HashSet<>(excludedContainers);
     this.time = time;
   }
 
@@ -79,6 +94,10 @@ public class NamedBlobsCleanupRunner implements Runnable {
       boolean processedContainer = false;
       for (Container container : combinedContainers) {
         if (container.getNamedBlobMode() == Container.NamedBlobMode.DISABLED) {
+          continue;
+        }
+        if (isExcludedFromCleanup(container)) {
+          logger.info("Skipping named blob cleanup for excluded container {}", container.getId());
           continue;
         }
         if (processedContainer && containerDelaySeconds > 0) {
@@ -134,5 +153,23 @@ public class NamedBlobsCleanupRunner implements Runnable {
     } catch (Exception e) {
       logger.error("Unexpected error occurred while cleaning up named blobs", e);
     }
+  }
+
+  /**
+   * Determines whether the given container is excluded from the named blob stale data cleanup process. Matching is by
+   * fully-qualified {@code "accountName/containerName"}. When the account cannot be resolved the container is treated
+   * as not excluded, so an unresolvable account never silently suppresses cleanup across the fleet.
+   * @param container the {@link Container} being considered for cleanup.
+   * @return {@code true} if the container should be skipped (its stale versions retained), {@code false} otherwise.
+   */
+  private boolean isExcludedFromCleanup(Container container) {
+    if (excludedContainers.isEmpty()) {
+      return false;
+    }
+    Account account = accountService.getAccountById(container.getParentAccountId());
+    if (account == null) {
+      return false;
+    }
+    return excludedContainers.contains(account.getName() + "/" + container.getName());
   }
 }
