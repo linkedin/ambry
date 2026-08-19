@@ -85,5 +85,16 @@ public class FrontendConfigTest {
     config = new FrontendConfig(new VerifiableProperties(properties));
     Assert.assertEquals("The configured excluded containers should be parsed",
         Arrays.asList("account1/container1", "account2/container2"), config.namedBlobCleanupExcludedContainers);
+
+    properties.setProperty(FrontendConfig.NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS,
+        "account1/container1, account2/container2 ,  ");
+    config = new FrontendConfig(new VerifiableProperties(properties));
+    Assert.assertEquals("Whitespace around comma-separated entries should be trimmed and blank entries dropped",
+        Arrays.asList("account1/container1", "account2/container2"), config.namedBlobCleanupExcludedContainers);
+
+    properties.setProperty(FrontendConfig.NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS, "my account/my container");
+    config = new FrontendConfig(new VerifiableProperties(properties));
+    Assert.assertEquals("Whitespace within a name must be preserved; only outer padding is trimmed",
+        Arrays.asList("my account/my container"), config.namedBlobCleanupExcludedContainers);
   }
 }

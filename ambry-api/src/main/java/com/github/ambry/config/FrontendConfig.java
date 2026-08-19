@@ -113,11 +113,13 @@ public class FrontendConfig {
   /**
    * Comma-separated list of containers to exclude from the named blob stale data cleanup process. Each entry is a
    * fully-qualified {@code "accountName/containerName"}. Excluded containers are skipped entirely by the cleanup
-   * runner, so their superseded (stale) named blob versions are retained rather than deleted. Matching is exact:
-   * entries are compared verbatim against {@code accountName/containerName}, and because account and container names
-   * may contain whitespace and other special characters, entries must not be padded with spaces around the comma
-   * separators. This is a temporary safety valve for consumers that still resolve blobs by internal blob id and
-   * depend on stale versions; the durable fix is to read blobs by name. Defaults to empty (no containers excluded).
+   * runner, so their superseded (stale) named blob versions are retained rather than deleted. Leading and trailing
+   * whitespace around each comma-separated entry is trimmed, so the list may be written as {@code "a/b, c/d"}. Matching
+   * is otherwise exact, and whitespace <em>within</em> a name is significant (Ambry historically allows whitespace and
+   * other special characters in account and container names), so {@code "my account/my container"} matches verbatim. A
+   * name whose value itself begins or ends with whitespace therefore cannot be expressed via this list and must be
+   * handled out of band. This is a temporary safety valve for consumers that still resolve blobs by internal blob id
+   * and depend on stale versions; the durable fix is to read blobs by name. Defaults to empty (no containers excluded).
    */
   @Config(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS)
   @Default("")
@@ -366,7 +368,11 @@ public class FrontendConfig {
     namedBlobCleanupContainerDelaySeconds =
         verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS, 0, 0, Integer.MAX_VALUE);
     namedBlobCleanupExcludedContainers =
-        Utils.splitString(verifiableProperties.getString(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS, ""), ",");
+        Utils.splitString(verifiableProperties.getString(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS, ""), ",")
+            .stream()
+            .map(String::trim)
+            .filter(entry -> !entry.isEmpty())
+            .collect(Collectors.toList());
     namedBlobCleanupInitialDelayMaxSeconds =
         verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS, 600, 0, Integer.MAX_VALUE);
     permanentNamedBlobInitialPutTtl =

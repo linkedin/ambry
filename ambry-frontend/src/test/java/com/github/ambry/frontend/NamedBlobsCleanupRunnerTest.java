@@ -161,9 +161,9 @@ public class NamedBlobsCleanupRunnerTest {
 
   @Test
   public void testExcludedContainerWithWhitespaceInNameIsSkipped() {
-    // Ambry historically allows whitespace (and other special characters) in account/container names. The exclusion
-    // list matches the full "accountName/containerName" verbatim, so such a name must survive config parsing
-    // (comma-split, no trimming) and still match. Parse via Utils.splitString exactly as FrontendConfig does.
+    // Ambry historically allows whitespace (and other special characters) within account/container names. The
+    // exclusion list matches the full "accountName/containerName" verbatim; config parsing trims only the outer
+    // padding around each comma-separated entry, so whitespace inside a name is preserved and still matches.
     Container excludedContainer = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL, (short) 100, "my container");
     Account account = mock(Account.class);
     when(account.getName()).thenReturn("my account");
