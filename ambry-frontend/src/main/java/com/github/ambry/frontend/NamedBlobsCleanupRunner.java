@@ -73,7 +73,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final Map<String, String> containerCleanupCursors = new ConcurrentHashMap<>();
   /** Increments each time a container is deferred to the next run because its scan could not be completed. */
   private final Counter containerCleanupDeferredCount;
-  /** Increments each time a full-size page scan is killed and the runner shrinks the page to make progress. */
+  /** Increments each time a stale-blob page scan is killed by the DB long-transaction limit (full-size or shrunk). */
   private final Counter pageScanKilledCount;
 
   /**
@@ -221,7 +221,6 @@ public class NamedBlobsCleanupRunner implements Runnable {
         }
         // Shrink and retry the same cursor so the scan reads fewer rows and the cursor can still move forward,
         // rather than re-running the same heavy query (which only adds load) or sitting on the page across runs.
-        pageScanKilledCount.inc();
         pageSize = SHRUNK_PAGE_SIZE;
         logger.warn("Stale-blob scan for container {} was killed at its cursor; shrinking the page to {} to make "
             + "progress instead of retrying the same query", container.getId(), pageSize);
@@ -295,7 +294,9 @@ public class NamedBlobsCleanupRunner implements Runnable {
       } catch (Exception e) {
         lastException = e;
         if (!isRetriable(e)) {
-          // Killed or timed out. Do not retry the same query; let the caller shrink the page instead.
+          // Killed or timed out. Count the kill here at the source (covers both the full-size and the shrunk page),
+          // then let the caller shrink the page instead of retrying the same heavy query.
+          pageScanKilledCount.inc();
           throw new PageKilledException(e);
         }
         if (attempt < MAX_PULL_ATTEMPTS) {
