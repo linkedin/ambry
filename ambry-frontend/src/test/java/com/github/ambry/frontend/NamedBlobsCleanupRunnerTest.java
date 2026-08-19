@@ -33,6 +33,7 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -156,6 +157,27 @@ public class NamedBlobsCleanupRunnerTest {
         Collections.singleton("account1/container-a"), new MockTime()).run();
 
     verify(namedBlobDb).pullStaleBlobs(container, FIRST_BLOB_NAME);
+  }
+
+  @Test
+  public void testExcludedContainerWithWhitespaceInNameIsSkipped() {
+    // Ambry historically allows whitespace (and other special characters) in account/container names. The exclusion
+    // list matches the full "accountName/containerName" verbatim, so such a name must survive config parsing
+    // (comma-split, no trimming) and still match. Parse via Utils.splitString exactly as FrontendConfig does.
+    Container excludedContainer = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL, (short) 100, "my container");
+    Account account = mock(Account.class);
+    when(account.getName()).thenReturn("my account");
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getAccountById((short) 100)).thenReturn(account);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        Collections.singleton(excludedContainer));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+    NamedBlobDb namedBlobDb = mockNamedBlobDb();
+
+    new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0,
+        Utils.splitString("my account/my container", ","), new MockTime()).run();
+
+    verify(namedBlobDb, never()).pullStaleBlobs(excludedContainer, FIRST_BLOB_NAME);
   }
 
   private NamedBlobDb mockNamedBlobDb() {
