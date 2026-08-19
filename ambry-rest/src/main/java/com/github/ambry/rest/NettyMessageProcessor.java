@@ -84,6 +84,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private volatile NettyRequest request = null;
   private volatile NettyResponseChannel responseChannel = null;
   private volatile boolean requestContentFullyReceived = false;
+  // Set once the termination of the current request has been recorded, so that channelInactive() and
+  // userEventTriggered() cannot both record the same termination. Reset in resetState() for the next request.
+  private volatile boolean clientTerminationRecorded = false;
 
   // variables that live for one channelRead0
   private volatile Long lastChannelReadTime = null;
@@ -138,7 +141,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     logger.trace("Channel {} inactive", ctx.channel());
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
-      logger.error("Request {} was aborted because the channel {} became inactive", request.getUri(), ctx.channel());
+      long timeInFlightMs = recordClientTermination();
+      logger.error("Request {} was aborted because the channel {} became inactive after {} ms", request.getUri(),
+          ctx.channel(), timeInFlightMs);
       onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
     } else {
       close();
@@ -212,6 +217,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
+        long timeInFlightMs = recordClientTermination();
+        logger.error("Request {} was aborted after {} ms because the channel {} was idle", request.getUri(),
+            timeInFlightMs, ctx.channel());
         onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
       } else {
         close();
@@ -425,8 +433,29 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     request = null;
     lastChannelReadTime = null;
     requestContentFullyReceived = false;
+    clientTerminationRecorded = false;
     responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
     logger.trace("Refreshed state for channel {}", ctx.channel());
+  }
+
+  /**
+   * Records the time the in flight request has been alive for in
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs}, at most once per request.
+   * <p/>
+   * Both {@link #channelInactive(ChannelHandlerContext)} and {@link #userEventTriggered(ChannelHandlerContext, Object)}
+   * can observe the same client termination, and which of them finds the request still open depends on the transport:
+   * a real event loop defers {@code fireChannelInactive} to a later task, by which time the request has been closed,
+   * whereas {@link io.netty.channel.embedded.EmbeddedChannel} runs it inline while the request is still open. Recording
+   * once per request keeps the metric correct on either.
+   * @return the time in ms that the request has been in flight for.
+   */
+  private long recordClientTermination() {
+    long timeInFlightMs = request.getMetricsTracker().getTimeSinceRequestReceivedInMs();
+    if (!clientTerminationRecorded) {
+      clientTerminationRecorded = true;
+      nettyMetrics.clientTerminatedRequestTimeInMs.update(timeInFlightMs);
+    }
+    return timeInFlightMs;
   }
 
   /**

@@ -333,6 +333,15 @@ public class RestRequestMetricsTracker {
   }
 
   /**
+   * @return time in ms that has elapsed since this request was received, or {@code 0} if it was never marked as
+   *         received.
+   */
+  public long getTimeSinceRequestReceivedInMs() {
+    return nioMetricsTracker.requestReceivedTime == 0 ? 0
+        : System.currentTimeMillis() - nioMetricsTracker.requestReceivedTime;
+  }
+
+  /**
    * Creates a default {@link RestRequestMetrics} in case {@link #injectMetrics(RestRequestMetrics)} is never
    * called on an instance of {@link RestRequestMetricsTracker}.
    * @param metricRegistry the {@link MetricRegistry} to use to register the created metrics.
