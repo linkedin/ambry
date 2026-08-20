@@ -111,15 +111,16 @@ public class FrontendConfig {
   public final int namedBlobCleanupContainerDelaySeconds;
 
   /**
-   * Comma-separated list of containers to exclude from the named blob stale data cleanup process. Each entry is a
-   * fully-qualified {@code "accountName/containerName"}. Excluded containers are skipped entirely by the cleanup
-   * runner, so their superseded (stale) named blob versions are retained rather than deleted. Leading and trailing
-   * whitespace around each comma-separated entry is trimmed, so the list may be written as {@code "a/b, c/d"}. Matching
-   * is otherwise exact, and whitespace <em>within</em> a name is significant (Ambry historically allows whitespace and
-   * other special characters in account and container names), so {@code "my account/my container"} matches verbatim. A
-   * name whose value itself begins or ends with whitespace therefore cannot be expressed via this list and must be
-   * handled out of band. This is a temporary safety valve for consumers that still resolve blobs by internal blob id
-   * and depend on stale versions; the durable fix is to read blobs by name. Defaults to empty (no containers excluded).
+   * Comma-separated list of entries to exclude from the named blob stale data cleanup process. Each entry is either a
+   * bare {@code "accountName"} (which exempts every container in that account) or a fully-qualified
+   * {@code "accountName/containerName"} (which exempts a single container). Excluded targets are skipped entirely by the
+   * cleanup runner, so their superseded (stale) named blob versions are retained rather than deleted. Leading and
+   * trailing whitespace around each comma-separated entry is trimmed, so the list may be written as {@code "a, b/c"}.
+   * Matching is otherwise exact, and whitespace <em>within</em> a name is significant (Ambry historically allows
+   * whitespace and other special characters in account and container names), so {@code "my account/my container"}
+   * matches verbatim. A name whose value itself begins or ends with whitespace therefore cannot be expressed via this
+   * list and must be handled out of band. This is a temporary safety valve for consumers that still resolve blobs by
+   * internal blob id and depend on stale versions; the durable fix is to read blobs by name. Defaults to empty.
    */
   @Config(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS)
   @Default("")
