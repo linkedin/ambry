@@ -97,4 +97,22 @@ public class FrontendConfigTest {
     Assert.assertEquals("Whitespace within a name must be preserved; only outer padding is trimmed",
         Arrays.asList("my account/my container"), config.namedBlobCleanupExcludedContainers);
   }
+
+  @Test
+  public void testNamedBlobCleanupExcludedAccounts() {
+    Properties properties = new Properties();
+    FrontendConfig config = new FrontendConfig(new VerifiableProperties(properties));
+    Assert.assertTrue("No accounts should be excluded from cleanup by default",
+        config.namedBlobCleanupExcludedAccounts.isEmpty());
+
+    properties.setProperty(FrontendConfig.NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS, "account1, account2 ,  ");
+    config = new FrontendConfig(new VerifiableProperties(properties));
+    Assert.assertEquals("The configured excluded accounts should be parsed and trimmed",
+        Arrays.asList("account1", "account2"), config.namedBlobCleanupExcludedAccounts);
+
+    properties.setProperty(FrontendConfig.NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS, "my account");
+    config = new FrontendConfig(new VerifiableProperties(properties));
+    Assert.assertEquals("Whitespace within an account name must be preserved; only outer padding is trimmed",
+        Arrays.asList("my account"), config.namedBlobCleanupExcludedAccounts);
+  }
 }

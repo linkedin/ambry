@@ -65,6 +65,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final String smallestASCII = "\0";
   private final int containerDelaySeconds;
   private final Set<String> excludedContainers;
+  private final Set<String> excludedAccounts;
   private final Time time;
   /**
    * Per-container resume cursor keyed by "{accountId}_{containerId}", retained in memory across scheduled runs so a
@@ -111,8 +112,15 @@ public class NamedBlobsCleanupRunner implements Runnable {
 
   public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds, Collection<String> excludedContainers, MetricRegistry metricRegistry) {
-    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, SystemTime.getInstance(),
+    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, Collections.emptySet(),
         metricRegistry);
+  }
+
+  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Collection<String> excludedContainers, Collection<String> excludedAccounts,
+      MetricRegistry metricRegistry) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, excludedAccounts,
+        SystemTime.getInstance(), metricRegistry);
   }
 
   NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
@@ -122,11 +130,20 @@ public class NamedBlobsCleanupRunner implements Runnable {
 
   NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds, Collection<String> excludedContainers, Time time) {
-    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, time, new MetricRegistry());
+    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, Collections.emptySet(), time,
+        new MetricRegistry());
   }
 
   NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
-      int containerDelaySeconds, Collection<String> excludedContainers, Time time, MetricRegistry metricRegistry) {
+      int containerDelaySeconds, Collection<String> excludedContainers, Collection<String> excludedAccounts,
+      Time time) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, excludedAccounts, time,
+        new MetricRegistry());
+  }
+
+  NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Collection<String> excludedContainers, Collection<String> excludedAccounts, Time time,
+      MetricRegistry metricRegistry) {
     if (containerDelaySeconds < 0) {
       throw new IllegalArgumentException("containerDelaySeconds must not be negative");
     }
@@ -136,6 +153,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
     this.containerDelaySeconds = containerDelaySeconds;
     this.excludedContainers =
         excludedContainers == null ? Collections.emptySet() : new HashSet<>(excludedContainers);
+    this.excludedAccounts = excludedAccounts == null ? Collections.emptySet() : new HashSet<>(excludedAccounts);
     this.time = time;
     this.containerCleanupFailedCount =
         metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerFailedCount"));
@@ -367,21 +385,25 @@ public class NamedBlobsCleanupRunner implements Runnable {
   }
 
   /**
-   * Determines whether the given container is excluded from the named blob stale data cleanup process. Matching is by
-   * fully-qualified {@code "accountName/containerName"}. When the account cannot be resolved the container is treated
-   * as not excluded, so an unresolvable account never silently suppresses cleanup across the fleet.
+   * Determines whether the given container is excluded from the named blob stale data cleanup process. A container is
+   * excluded if its parent account is listed in the account-level exclusions, or if its fully-qualified
+   * {@code "accountName/containerName"} is listed in the container-level exclusions. When the account cannot be
+   * resolved the container is treated as not excluded, so an unresolvable account never silently suppresses cleanup
+   * across the fleet.
    * @param container the {@link Container} being considered for cleanup.
    * @return {@code true} if the container should be skipped (its stale versions retained), {@code false} otherwise.
    */
   private boolean isExcludedFromCleanup(Container container) {
-    if (excludedContainers.isEmpty()) {
+    if (excludedAccounts.isEmpty() && excludedContainers.isEmpty()) {
       return false;
     }
     Account account = accountService.getAccountById(container.getParentAccountId());
     if (account == null) {
       return false;
     }
-    return excludedContainers.contains(account.getName() + "/" + container.getName());
+    String accountName = account.getName();
+    return excludedAccounts.contains(accountName) || excludedContainers.contains(
+        accountName + "/" + container.getName());
   }
 
   /**

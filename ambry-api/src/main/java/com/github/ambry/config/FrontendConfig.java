@@ -54,6 +54,8 @@ public class FrontendConfig {
       PREFIX + "named.blob.cleanup.container.delay.seconds";
   public static final String NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS =
       PREFIX + "named.blob.cleanup.excluded.containers";
+  public static final String NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS =
+      PREFIX + "named.blob.cleanup.excluded.accounts";
   public static final String NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS =
       PREFIX + "named.blob.cleanup.initial.delay.max.seconds";
 
@@ -124,6 +126,19 @@ public class FrontendConfig {
   @Config(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS)
   @Default("")
   public final List<String> namedBlobCleanupExcludedContainers;
+
+  /**
+   * Comma-separated list of accounts to exclude, in their entirety, from the named blob stale data cleanup process.
+   * Each entry is an {@code "accountName"}; every container under a listed account is skipped, so their superseded
+   * (stale) named blob versions are retained rather than deleted. This is the account-level counterpart to
+   * {@link #namedBlobCleanupExcludedContainers}: use it to exempt a whole account instead of naming each container.
+   * The same parsing rules apply -- leading/trailing whitespace around each comma-separated entry is trimmed,
+   * whitespace within a name is significant, and a name that itself begins or ends with whitespace cannot be expressed
+   * here. Defaults to empty (no accounts excluded).
+   */
+  @Config(NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS)
+  @Default("")
+  public final List<String> namedBlobCleanupExcludedAccounts;
 
   /**
    * Upper bound (in seconds) on the randomized initial delay before the first named blob cleanup run after startup.
@@ -369,6 +384,12 @@ public class FrontendConfig {
         verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS, 0, 0, Integer.MAX_VALUE);
     namedBlobCleanupExcludedContainers =
         Utils.splitString(verifiableProperties.getString(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS, ""), ",")
+            .stream()
+            .map(String::trim)
+            .filter(entry -> !entry.isEmpty())
+            .collect(Collectors.toList());
+    namedBlobCleanupExcludedAccounts =
+        Utils.splitString(verifiableProperties.getString(NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS, ""), ",")
             .stream()
             .map(String::trim)
             .filter(entry -> !entry.isEmpty())
