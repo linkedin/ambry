@@ -40,7 +40,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -283,8 +285,18 @@ public class NamedBlobsCleanupRunner implements Runnable {
           throw new IllegalStateException("Stale-blob scan for container " + container.getId()
               + " was killed even at the shrunk page size; deferring after " + blobNameSkips + " skips this run", e);
         }
-        String stuckBlobName =
-            namedBlobDb.getFirstBlobName(container, blobName).get(GET_FIRST_BLOB_NAME_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        String stuckBlobName;
+        try {
+          stuckBlobName = namedBlobDb.getFirstBlobName(container, blobName)
+              .get(GET_FIRST_BLOB_NAME_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException | ExecutionException lookupException) {
+          // The cheap skip-ahead lookup itself failed (for example a query timeout). Log the specific cause so it is
+          // visible in the logs, then defer the container to the next run instead of losing the reason.
+          logger.warn("getFirstBlobName lookup failed for container {} at cursor {} while trying to skip a killed blob "
+              + "name; deferring to the next scheduled run", container.getId(), blobName, lookupException);
+          throw new IllegalStateException(
+              "Skip-ahead getFirstBlobName lookup failed for container " + container.getId(), lookupException);
+        }
         if (stuckBlobName == null) {
           // Nothing at or after the cursor to skip to: defer rather than drop the cursor, so the next run resumes here.
           throw new IllegalStateException(
