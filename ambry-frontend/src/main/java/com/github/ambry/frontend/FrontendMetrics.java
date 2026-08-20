@@ -241,7 +241,6 @@ public class FrontendMetrics {
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
   public final Histogram idConversionDownstreamCallbackTimeInMs;
-  public final Counter idConverterClientAbortedCount;
 
   // GetPeersHandler
   public final Histogram getPeersProcessingTimeInMs;
@@ -302,6 +301,7 @@ public class FrontendMetrics {
   public final Counter copyDatasetVersionError;
   public final Counter deleteDatasetVersionOutOfRetentionError;
   public final Counter deleteDatasetVersionIfUploadFailCount;
+  public final Counter namedBlobCleanupUncaughtErrorCount;
   public final Meter addDatasetVersionRate;
   public final Meter getDatasetVersionRate;
   public final Meter deleteDatasetVersionRate;
@@ -688,8 +688,6 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
     idConversionDownstreamCallbackTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "DownstreamCallbackTimeInMs"));
-    idConverterClientAbortedCount =
-        metricRegistry.counter(MetricRegistry.name(AmbryIdConverterFactory.class, "ClientAbortedCount"));
     // GetPeersHandler
     getPeersProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "ProcessingTimeInMs"));
@@ -786,6 +784,8 @@ public class FrontendMetrics {
         MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionOutOfRetentionError"));
     deleteDatasetVersionIfUploadFailCount =
         metricRegistry.counter(MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionIfUploadFailCount"));
+    namedBlobCleanupUncaughtErrorCount = metricRegistry.counter(
+        MetricRegistry.name(FrontendRestRequestService.class, "NamedBlobCleanupUncaughtErrorCount"));
     addDatasetVersionRate =
         metricRegistry.meter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionRate"));
     getDatasetVersionRate = metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionRate"));

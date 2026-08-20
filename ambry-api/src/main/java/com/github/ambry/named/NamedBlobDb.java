@@ -114,6 +114,12 @@ public interface NamedBlobDb extends Closeable {
   CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName);
 
   /**
+   * Pull the stale blobs that need to be cleaned up, reading at most {@code maxResults} rows. A smaller page lets a
+   * caller make forward progress on a container whose full-size page scan crosses the database long-transaction limit.
+   */
+  CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName, int maxResults);
+
+  /**
    * Cleanup the stale blobs records
    */
   CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords);

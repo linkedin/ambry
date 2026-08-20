@@ -256,7 +256,8 @@ class FrontendRestRequestService implements RestRequestService {
             accountAndContainerInjector);
     namedBlobsCleanupRunner =
         new NamedBlobsCleanupRunner(router, namedBlobDb, accountService,
-            frontendConfig.namedBlobCleanupContainerDelaySeconds, frontendConfig.namedBlobCleanupExcludedContainers);
+            frontendConfig.namedBlobCleanupContainerDelaySeconds, frontendConfig.namedBlobCleanupExcludedContainers,
+            frontendMetrics.getMetricRegistry());
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
       // Bound the randomized initial delay: a large cleanup interval combined with frequent pod restarts (each
@@ -265,8 +266,20 @@ class FrontendRestRequestService implements RestRequestService {
       int initialDelayBoundSeconds =
           Math.min(frontendConfig.namedBlobCleanupSeconds, frontendConfig.namedBlobCleanupInitialDelayMaxSeconds);
       int initialDelayInSeconds = initialDelayBoundSeconds > 0 ? random.nextInt(initialDelayBoundSeconds) : 0;
+      // scheduleAtFixedRate() permanently suppresses all future executions if a single run throws. The runner is
+      // already hardened to not propagate exceptions, but wrap it defensively so no unexpected Throwable can ever
+      // silently stop the periodic named blob cleanup.
+      Runnable safeNamedBlobsCleanupRunner = () -> {
+        try {
+          namedBlobsCleanupRunner.run();
+        } catch (Throwable t) {
+          // This guard should never fire: run() is hardened not to propagate. A non-zero count signals a regression.
+          frontendMetrics.namedBlobCleanupUncaughtErrorCount.inc();
+          logger.error("Named blob cleanup run threw; suppressing to keep the periodic schedule alive", t);
+        }
+      };
       namedBlobsCleanupTask =
-          namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, initialDelayInSeconds,
+          namedBlobsCleanupScheduler.scheduleAtFixedRate(safeNamedBlobsCleanupRunner, initialDelayInSeconds,
               frontendConfig.namedBlobCleanupSeconds, TimeUnit.SECONDS);
       logger.info("Named Blob Stale Data Cleanup Process has started with {} seconds initial delay",
           initialDelayInSeconds);
