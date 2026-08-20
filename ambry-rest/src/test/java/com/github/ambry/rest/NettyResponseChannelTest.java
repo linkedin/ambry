@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
+import com.github.ambry.frontend.ContainerMetrics;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
@@ -684,6 +685,68 @@ public class NettyResponseChannelTest {
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(brMetricName).getCount());
     assertEquals("Client terminations should have been tracked", cetBeforeCount + 1,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(cetMetricName).getCount());
+  }
+
+  /**
+   * Tests that a client initiated termination is recorded against the request's container, and that it continues to
+   * count towards the bad request and client error counts it has always counted towards.
+   */
+  @Test
+  public void clientEarlyTerminationContainerMetricsTest() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    MockNettyMessageProcessor.containerMetricsToInject =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    try {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST,
+          TestingUri.OnResponseCompleteWithEarlyClientTermination.toString(), null);
+      HttpUtil.setKeepAlive(httpRequest, false);
+
+      channel.writeInbound(httpRequest);
+      // empty the channel so that the request is fully completed and its metrics recorded.
+      while (channel.readOutbound() != null) {
+      }
+
+      String metricPrefix = ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
+      assertEquals("Client termination should have been recorded against the container", 1,
+          metricRegistry.getCounters().get(metricPrefix + "ClientAbortCount").getCount());
+      // A client termination is reported to the client as 400, and this change deliberately leaves that reporting
+      // alone so that no existing per container series changes value.
+      assertEquals("Client terminations should still count towards the container's bad request count", 1,
+          metricRegistry.getCounters().get(metricPrefix + "BadRequestCount").getCount());
+      assertEquals("Client terminations should still count towards the container's client error count", 1,
+          metricRegistry.getCounters().get(metricPrefix + "ClientErrorCount").getCount());
+    } finally {
+      MockNettyMessageProcessor.containerMetricsToInject = null;
+    }
+  }
+
+  /**
+   * Tests that a request that completes normally is not recorded as a client abort.
+   */
+  @Test
+  public void noClientAbortRecordedOnNormalCompletionTest() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    MockNettyMessageProcessor.containerMetricsToInject =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    try {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      HttpRequest httpRequest =
+          RestTestUtils.createRequest(HttpMethod.POST, TestingUri.ImmediateResponseComplete.toString(), null);
+      HttpUtil.setKeepAlive(httpRequest, false);
+
+      channel.writeInbound(httpRequest);
+      while (channel.readOutbound() != null) {
+      }
+
+      String metricPrefix = ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
+      assertEquals("A successful request should not be recorded as a client abort", 0,
+          metricRegistry.getCounters().get(metricPrefix + "ClientAbortCount").getCount());
+      assertEquals("A successful request should have been recorded as a success", 1,
+          metricRegistry.getCounters().get(metricPrefix + "SuccessCount").getCount());
+    } finally {
+      MockNettyMessageProcessor.containerMetricsToInject = null;
+    }
   }
 
   /**
@@ -1394,6 +1457,11 @@ enum TestingUri {
  */
 class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
+  /**
+   * If non-null, is injected into every request handled, so that a test can observe the per container metrics that
+   * the request produces. Tests that set this must reset it to {@code null} afterwards.
+   */
+  static ContainerMetrics containerMetricsToInject = null;
   static final String CUSTOM_HEADER_NAME = "customHeader";
   static final String STATUS_HEADER_NAME = "status";
   static final String REST_SERVICE_ERROR_CODE_HEADER_NAME = "restServiceErrorCode";
@@ -1463,6 +1531,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
             : new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet());
     restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics, PERFORMANCE_CONFIG, this.nettyConfig);
     restResponseChannel.setRequest(request);
+    if (containerMetricsToInject != null) {
+      request.getMetricsTracker().injectContainerMetrics(containerMetricsToInject);
+    }
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     TestingUri uri = TestingUri.getTestingURI(request.getUri());
     switch (uri) {

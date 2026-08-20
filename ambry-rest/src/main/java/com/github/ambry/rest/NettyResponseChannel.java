@@ -115,6 +115,7 @@ class NettyResponseChannel implements RestResponseChannel {
   // temp variable to hold the error response status which will be overwritten on responseStatus if the error response
   // was successfully sent
   private ResponseStatus errorResponseStatus = null;
+  private boolean clientAborted = false;
 
   /**
    * A {@link ChannelFutureListener} that closes the {@link Channel} which is
@@ -442,6 +443,9 @@ class NettyResponseChannel implements RestResponseChannel {
       responseStatus = errorResponseStatus;
     }
     restRequestMetricsTracker.setResponseStatus(responseStatus);
+    if (clientAborted) {
+      restRequestMetricsTracker.markClientAborted();
+    }
     boolean shouldSkipCheck = false;
     switch (method) {
       case GET:
@@ -620,6 +624,9 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.clientEarlyTerminationCount.inc();
       status = HttpResponseStatus.BAD_REQUEST;
       errorResponseStatus = ResponseStatus.BadRequest;
+      // The 400 above is what the client is told, and it is also what ContainerMetrics counts, which leaves aborts
+      // indistinguishable from genuine bad requests per container. Flag it so a separate count can be kept.
+      clientAborted = true;
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;

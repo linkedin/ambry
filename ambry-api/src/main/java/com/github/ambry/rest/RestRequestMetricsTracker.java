@@ -59,6 +59,7 @@ public class RestRequestMetricsTracker {
   private boolean failed = false;
   private boolean satisfied = true;
   private boolean serverError = false;
+  private boolean clientAborted = false;
   private ResponseStatus responseStatus = ResponseStatus.Ok;
 
   private long bytesTransferred = 0;
@@ -264,6 +265,14 @@ public class RestRequestMetricsTracker {
     this.containerMetrics = containerMetrics;
   }
 
+  /**
+   * Marks that the client abandoned this request before it completed. A client termination is reported to the client
+   * as 400, so without this the abort is indistinguishable from a genuine bad request in the per-container counts.
+   */
+  public void markClientAborted() {
+    clientAborted = true;
+  }
+
   // Exposed for test
   public ContainerMetrics getContainerMetrics() {
     return containerMetrics;
@@ -295,6 +304,9 @@ public class RestRequestMetricsTracker {
         }
         if (containerMetrics != null) {
           containerMetrics.recordMetrics(nioMetricsTracker.roundTripTimeInMs, responseStatus, bytesTransferred);
+          if (clientAborted) {
+            containerMetrics.recordClientAbort();
+          }
         }
         if (satisfied) {
           metrics.satisfiedRequestCount.inc();

@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.frontend.ContainerMetrics;
 import java.util.Map;
 import java.util.Random;
 import org.junit.Test;
@@ -108,6 +109,47 @@ public class RestRequestMetricsTrackerTest {
         metricRegistry.getCounters()
             .get(metricPrefix + RestRequestMetrics.UNSATISFIED_REQUEST_COUNT_SUFFIX)
             .getCount());
+  }
+
+  /**
+   * Tests that a client abort is counted separately from the {@link ResponseStatus#BadRequest} it is reported as,
+   * without changing the value of any existing per-container series.
+   */
+  @Test
+  public void clientAbortCountedSeparatelyFromBadRequestTest() {
+    clientAbortTest(true);
+    clientAbortTest(false);
+  }
+
+  /**
+   * Records a {@link ResponseStatus#BadRequest} against a container, optionally marking it as a client abort, and
+   * checks the resulting counters.
+   * @param clientAborted if {@code true}, {@link RestRequestMetricsTracker#markClientAborted()} is called.
+   */
+  private void clientAbortTest(boolean clientAborted) {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    requestMetrics.injectMetrics(new RestRequestMetrics(getClass(), "ClientAbortTest", metricRegistry));
+    requestMetrics.injectContainerMetrics(
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null));
+    // A client termination is reported to the client as 400, so this is the status an aborted request arrives with.
+    requestMetrics.setResponseStatus(ResponseStatus.BadRequest);
+    if (clientAborted) {
+      requestMetrics.markClientAborted();
+    }
+
+    requestMetrics.recordMetrics();
+
+    String metricPrefix = ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
+    assertEquals("Client abort count is not as expected", clientAborted ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ClientAbortCount").getCount());
+    // The point of the separate counter is that these two keep their existing meaning, so that no dashboard built on
+    // them changes value when this ships. Aborts are subtracted out using ClientAbortCount instead.
+    assertEquals("Aborts must keep counting towards the bad request count", 1,
+        metricRegistry.getCounters().get(metricPrefix + "BadRequestCount").getCount());
+    assertEquals("Aborts must keep counting towards the client error count", 1,
+        metricRegistry.getCounters().get(metricPrefix + "ClientErrorCount").getCount());
   }
 
   /**

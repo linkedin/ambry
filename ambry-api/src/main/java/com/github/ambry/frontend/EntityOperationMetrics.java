@@ -49,6 +49,11 @@ public class EntityOperationMetrics {
   // 410
   protected final Counter goneCount;
 
+  // Requests the client abandoned before they completed. These are also counted in clientErrorCount and
+  // badRequestCount, because a client termination is reported to the client as 400, so this counter is what lets a
+  // dashboard subtract aborts back out of those two rather than mistake them for genuine client errors.
+  protected final Counter clientAbortCount;
+
   protected final Counter totalCount;
 
   protected final Histogram throughput;
@@ -80,6 +85,7 @@ public class EntityOperationMetrics {
     forbiddenCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "ForbiddenCount"));
     notFoundCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "NotFoundCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "GoneCount"));
+    clientAbortCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "ClientAbortCount"));
     String qpsMetricPrefix = entityName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
     totalCount = metricRegistry.counter(MetricRegistry.name(ownerClass, qpsMetricPrefix + "totalCount"));
 
@@ -122,5 +128,14 @@ public class EntityOperationMetrics {
     } else if (responseStatus.isServerError()) {
       serverErrorCount.inc();
     }
+  }
+
+  /**
+   * Records that the client abandoned a request on this entity before it completed. Kept separate from
+   * {@link #recordMetrics} because a client abort has no status of its own: it is reported as 400, and so is already
+   * counted as a client error by the time this is called.
+   */
+  public void recordClientAbort() {
+    clientAbortCount.inc();
   }
 }
