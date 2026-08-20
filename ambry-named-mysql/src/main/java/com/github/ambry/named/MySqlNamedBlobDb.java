@@ -167,6 +167,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           + "ORDER BY %s ASC, %s DESC " + "LIMIT ?", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, VERSION, BLOB_STATE,
       MODIFIED_TS, DELETED_TS, NAMED_BLOBS_V2, BLOB_NAME, VERSION);
 
+  private static final String GET_FIRST_BLOB_NAME = String.format(
+      "SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s >= ? ORDER BY %s ASC, %s ASC LIMIT 1", BLOB_NAME,
+      NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_NAME, VERSION);
+
   private final AccountService accountService;
   private final String localDatacenter;
   private final List<String> remoteDatacenters;
@@ -529,6 +533,25 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleBlobsWithLatestBlobName;
+    }, transactionStateTracker);
+  }
+
+  @Override
+  public CompletableFuture<String> getFirstBlobName(Container container, String blobNameFrom) {
+    TransactionStateTracker transactionStateTracker =
+        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+    return executeGenericTransactionAsync(true, (connection) -> {
+      try (PreparedStatement statement = connection.prepareStatement(GET_FIRST_BLOB_NAME)) {
+        statement.setInt(1, container.getParentAccountId());
+        statement.setInt(2, container.getId());
+        statement.setString(3, blobNameFrom);
+        try (ResultSet resultSet = statement.executeQuery()) {
+          if (resultSet.next()) {
+            return resultSet.getString(1);
+          }
+          return null;
+        }
+      }
     }, transactionStateTracker);
   }
 

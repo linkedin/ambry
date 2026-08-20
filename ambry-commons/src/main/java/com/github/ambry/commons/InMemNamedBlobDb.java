@@ -228,6 +228,23 @@ public class InMemNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
+  public CompletableFuture<String> getFirstBlobName(Container container, String blobNameFrom) {
+    String containerName = container.getName();
+    String first = null;
+    for (String accountName : allRecords.keySet()) {
+      TreeMap<String, List<NamedBlobRow>> rowsPerContainer = allRecords.get(accountName).get(containerName);
+      if (rowsPerContainer == null) {
+        continue;
+      }
+      String candidate = rowsPerContainer.ceilingKey(blobNameFrom);
+      if (candidate != null && (first == null || candidate.compareTo(first) < 0)) {
+        first = candidate;
+      }
+    }
+    return CompletableFuture.completedFuture(first);
+  }
+
+  @Override
   public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String latestBlob) {
     CompletableFuture<StaleBlobsWithLatestBlobName> future = new CompletableFuture<>();
     List<StaleNamedBlob> resultList = new ArrayList<>();

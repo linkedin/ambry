@@ -120,6 +120,16 @@ public interface NamedBlobDb extends Closeable {
   CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName, int maxResults);
 
   /**
+   * Returns the first (lowest) blob name in the container at or after {@code blobNameFrom}, or {@code null} if the
+   * container has no such blob. A cheap index-only point lookup used by the cleanup runner to advance its cursor past a
+   * blob name whose stale-version scan repeatedly crosses the database long-transaction limit, so the rest of the
+   * container can still be cleaned.
+   * @param container the container to look in.
+   * @param blobNameFrom the inclusive lower-bound blob name.
+   */
+  CompletableFuture<String> getFirstBlobName(Container container, String blobNameFrom);
+
+  /**
    * Cleanup the stale blobs records
    */
   CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords);
