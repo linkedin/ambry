@@ -291,6 +291,34 @@ public class NamedBlobsCleanupRunnerTest {
     verify(namedBlobDb, never()).pullStaleBlobs(excludedContainer, FIRST_BLOB_NAME);
   }
 
+  @Test
+  public void testExcludedAccountSkipsAllItsContainers() {
+    // An account-level exclusion skips every container under that account, while containers in other accounts are
+    // still cleaned.
+    Container excludedA = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL, (short) 100, "container-a");
+    Container excludedB = mockContainer((short) 2, Container.NamedBlobMode.OPTIONAL, (short) 100, "container-b");
+    Container otherAccountContainer =
+        mockContainer((short) 3, Container.NamedBlobMode.OPTIONAL, (short) 200, "container-c");
+    Account excludedAccount = mock(Account.class);
+    when(excludedAccount.getName()).thenReturn("account1");
+    Account otherAccount = mock(Account.class);
+    when(otherAccount.getName()).thenReturn("account2");
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getAccountById((short) 100)).thenReturn(excludedAccount);
+    when(accountService.getAccountById((short) 200)).thenReturn(otherAccount);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        new HashSet<>(Arrays.asList(excludedA, excludedB, otherAccountContainer)));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+    NamedBlobDb namedBlobDb = mockNamedBlobDb();
+
+    new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0, Collections.emptySet(),
+        Collections.singleton("account1"), new MockTime()).run();
+
+    verify(namedBlobDb, never()).pullStaleBlobs(excludedA, FIRST_BLOB_NAME);
+    verify(namedBlobDb, never()).pullStaleBlobs(excludedB, FIRST_BLOB_NAME);
+    verify(namedBlobDb).pullStaleBlobs(otherAccountContainer, FIRST_BLOB_NAME);
+  }
+
   private NamedBlobDb mockNamedBlobDb() {
     NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
     when(namedBlobDb.pullStaleBlobs(any(Container.class), eq(FIRST_BLOB_NAME))).thenReturn(
