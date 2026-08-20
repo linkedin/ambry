@@ -52,6 +52,8 @@ public class FrontendConfig {
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS =
       PREFIX + "named.blob.cleanup.container.delay.seconds";
+  public static final String NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS =
+      PREFIX + "named.blob.cleanup.excluded.containers";
   public static final String NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS =
       PREFIX + "named.blob.cleanup.initial.delay.max.seconds";
 
@@ -107,6 +109,21 @@ public class FrontendConfig {
   @Config(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS)
   @Default("0")
   public final int namedBlobCleanupContainerDelaySeconds;
+
+  /**
+   * Comma-separated list of containers to exclude from the named blob stale data cleanup process. Each entry is a
+   * fully-qualified {@code "accountName/containerName"}. Excluded containers are skipped entirely by the cleanup
+   * runner, so their superseded (stale) named blob versions are retained rather than deleted. Leading and trailing
+   * whitespace around each comma-separated entry is trimmed, so the list may be written as {@code "a/b, c/d"}. Matching
+   * is otherwise exact, and whitespace <em>within</em> a name is significant (Ambry historically allows whitespace and
+   * other special characters in account and container names), so {@code "my account/my container"} matches verbatim. A
+   * name whose value itself begins or ends with whitespace therefore cannot be expressed via this list and must be
+   * handled out of band. This is a temporary safety valve for consumers that still resolve blobs by internal blob id
+   * and depend on stale versions; the durable fix is to read blobs by name. Defaults to empty (no containers excluded).
+   */
+  @Config(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS)
+  @Default("")
+  public final List<String> namedBlobCleanupExcludedContainers;
 
   /**
    * Upper bound (in seconds) on the randomized initial delay before the first named blob cleanup run after startup.
@@ -350,6 +367,12 @@ public class FrontendConfig {
     namedBlobCleanupSeconds = verifiableProperties.getInt("frontend.named.blob.cleanup.seconds", 60 * 60 * 24 * 7);
     namedBlobCleanupContainerDelaySeconds =
         verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS, 0, 0, Integer.MAX_VALUE);
+    namedBlobCleanupExcludedContainers =
+        Utils.splitString(verifiableProperties.getString(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS, ""), ",")
+            .stream()
+            .map(String::trim)
+            .filter(entry -> !entry.isEmpty())
+            .collect(Collectors.toList());
     namedBlobCleanupInitialDelayMaxSeconds =
         verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS, 600, 0, Integer.MAX_VALUE);
     permanentNamedBlobInitialPutTtl =

@@ -27,12 +27,14 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -232,6 +234,63 @@ public class NamedBlobsCleanupRunnerTest {
     verify(namedBlobDb, never()).pullStaleBlobs(eq(container), eq(FIRST_BLOB_NAME), anyInt());
   }
 
+  @Test
+  public void testExcludedContainersAreSkipped() {
+    Container excludedContainer = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL, (short) 100, "container-a");
+    Container includedContainer = mockContainer((short) 2, Container.NamedBlobMode.OPTIONAL, (short) 100, "container-b");
+    Account account = mock(Account.class);
+    when(account.getName()).thenReturn("account1");
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getAccountById((short) 100)).thenReturn(account);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        new HashSet<>(Arrays.asList(excludedContainer, includedContainer)));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+    NamedBlobDb namedBlobDb = mockNamedBlobDb();
+
+    new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0,
+        Collections.singleton("account1/container-a"), new MockTime()).run();
+
+    verify(namedBlobDb, never()).pullStaleBlobs(excludedContainer, FIRST_BLOB_NAME);
+    verify(namedBlobDb).pullStaleBlobs(includedContainer, FIRST_BLOB_NAME);
+  }
+
+  @Test
+  public void testContainerProcessedWhenAccountUnresolvedDespiteExclusionList() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL, (short) 200, "container-a");
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getAccountById((short) 200)).thenReturn(null);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        Collections.singleton(container));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+    NamedBlobDb namedBlobDb = mockNamedBlobDb();
+
+    new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0,
+        Collections.singleton("account1/container-a"), new MockTime()).run();
+
+    verify(namedBlobDb).pullStaleBlobs(container, FIRST_BLOB_NAME);
+  }
+
+  @Test
+  public void testExcludedContainerWithWhitespaceInNameIsSkipped() {
+    // Ambry historically allows whitespace (and other special characters) within account/container names. The
+    // exclusion list matches the full "accountName/containerName" verbatim; config parsing trims only the outer
+    // padding around each comma-separated entry, so whitespace inside a name is preserved and still matches.
+    Container excludedContainer = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL, (short) 100, "my container");
+    Account account = mock(Account.class);
+    when(account.getName()).thenReturn("my account");
+    AccountService accountService = mock(AccountService.class);
+    when(accountService.getAccountById((short) 100)).thenReturn(account);
+    when(accountService.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        Collections.singleton(excludedContainer));
+    when(accountService.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+    NamedBlobDb namedBlobDb = mockNamedBlobDb();
+
+    new NamedBlobsCleanupRunner(mock(Router.class), namedBlobDb, accountService, 0,
+        Utils.splitString("my account/my container", ","), new MockTime()).run();
+
+    verify(namedBlobDb, never()).pullStaleBlobs(excludedContainer, FIRST_BLOB_NAME);
+  }
+
   private NamedBlobDb mockNamedBlobDb() {
     NamedBlobDb namedBlobDb = mock(NamedBlobDb.class);
     when(namedBlobDb.pullStaleBlobs(any(Container.class), eq(FIRST_BLOB_NAME))).thenReturn(
@@ -244,6 +303,13 @@ public class NamedBlobsCleanupRunnerTest {
     Container container = mock(Container.class);
     when(container.getId()).thenReturn(id);
     when(container.getNamedBlobMode()).thenReturn(namedBlobMode);
+    return container;
+  }
+
+  private Container mockContainer(short id, Container.NamedBlobMode namedBlobMode, short parentAccountId, String name) {
+    Container container = mockContainer(id, namedBlobMode);
+    when(container.getParentAccountId()).thenReturn(parentAccountId);
+    when(container.getName()).thenReturn(name);
     return container;
   }
 }

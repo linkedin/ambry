@@ -256,7 +256,8 @@ class FrontendRestRequestService implements RestRequestService {
             accountAndContainerInjector);
     namedBlobsCleanupRunner =
         new NamedBlobsCleanupRunner(router, namedBlobDb, accountService,
-            frontendConfig.namedBlobCleanupContainerDelaySeconds, frontendMetrics.getMetricRegistry());
+            frontendConfig.namedBlobCleanupContainerDelaySeconds, frontendConfig.namedBlobCleanupExcludedContainers,
+            frontendMetrics.getMetricRegistry());
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
       // Bound the randomized initial delay: a large cleanup interval combined with frequent pod restarts (each
