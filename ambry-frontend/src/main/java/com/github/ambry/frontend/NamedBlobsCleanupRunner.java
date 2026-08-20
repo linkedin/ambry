@@ -71,8 +71,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
    * scan is idempotent.
    */
   private final Map<String, String> containerCleanupCursors = new ConcurrentHashMap<>();
-  /** Increments each time a container is deferred to the next run because its scan could not be completed. */
-  private final Counter containerCleanupDeferredCount;
+  /** Increments each time a container fails cleanup (its scan could not be completed) and is retried on the next run. */
+  private final Counter containerCleanupFailedCount;
   /** Increments each time a stale-blob page scan is killed by the DB long-transaction limit (full-size or shrunk). */
   private final Counter pageScanKilledCount;
 
@@ -121,8 +121,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
     this.accountService = accountService;
     this.containerDelaySeconds = containerDelaySeconds;
     this.time = time;
-    this.containerCleanupDeferredCount =
-        metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerDeferredCount"));
+    this.containerCleanupFailedCount =
+        metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerFailedCount"));
     this.pageScanKilledCount =
         metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "PageScanKilledCount"));
     String cursorMapSizeGauge = MetricRegistry.name(NamedBlobsCleanupRunner.class, "CursorMapSize");
@@ -178,11 +178,11 @@ public class NamedBlobsCleanupRunner implements Runnable {
         return;
       } catch (Exception e) {
         // A container whose scan keeps getting killed (e.g. a bloated prefix crossing the DB long-transaction limit)
-        // must not abort the whole run or kill the schedule. Defer it: the next scheduled run retries it, and the
-        // remaining containers are still cleaned now.
-        containerCleanupDeferredCount.inc();
-        logger.error("Deferring cleanup of container {} to the next scheduled run after repeated scan failures",
-            container.getId(), e);
+        // must not abort the whole run or kill the schedule. Count it as failed and retry it on the next scheduled
+        // run; the remaining containers are still cleaned now.
+        containerCleanupFailedCount.inc();
+        logger.error("Cleanup failed for container {}; retrying it on the next scheduled run after repeated scan "
+            + "failures", container.getId(), e);
       }
     }
     logger.info("Named Blobs Cleanup Runner is completed");

@@ -272,6 +272,8 @@ class FrontendRestRequestService implements RestRequestService {
         try {
           namedBlobsCleanupRunner.run();
         } catch (Throwable t) {
+          // This guard should never fire: run() is hardened not to propagate. A non-zero count signals a regression.
+          frontendMetrics.namedBlobCleanupUncaughtErrorCount.inc();
           logger.error("Named blob cleanup run threw; suppressing to keep the periodic schedule alive", t);
         }
       };
