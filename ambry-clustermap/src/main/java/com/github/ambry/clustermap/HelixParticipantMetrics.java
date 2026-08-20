@@ -21,7 +21,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -29,7 +28,6 @@ import java.util.concurrent.TimeUnit;
  */
 class HelixParticipantMetrics {
   private static final String stateTransitionMetricTemplate = "State-Transition-Partition-%s-from-%s-to-%s";
-  private static final long STALE_BOOTSTRAP_THRESHOLD_MS = TimeUnit.HOURS.toMillis(4);
 
   private final boolean enablePartitionStateTransitionMetrics;
 
@@ -158,18 +156,12 @@ class HelixParticipantMetrics {
 
   /**
    * Compute the maximum time any partition has been in BOOTSTRAP state.
-   * Cleans up entries older than the stale threshold.
    */
   private long computeMaxTimeInBootstrap() {
     long now = System.currentTimeMillis();
     long maxDuration = 0;
     for (Map.Entry<String, Long> entry : bootstrapStartTimeMs.entrySet()) {
-      long duration = now - entry.getValue();
-      if (duration > STALE_BOOTSTRAP_THRESHOLD_MS) {
-        bootstrapStartTimeMs.remove(entry.getKey(), entry.getValue());
-        continue;
-      }
-      maxDuration = Math.max(maxDuration, duration);
+      maxDuration = Math.max(maxDuration, now - entry.getValue());
     }
     return maxDuration;
   }
