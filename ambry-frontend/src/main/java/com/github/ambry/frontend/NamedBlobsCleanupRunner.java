@@ -367,9 +367,11 @@ public class NamedBlobsCleanupRunner implements Runnable {
   }
 
   /**
-   * Determines whether the given container is excluded from the named blob stale data cleanup process. Matching is by
-   * fully-qualified {@code "accountName/containerName"}. When the account cannot be resolved the container is treated
-   * as not excluded, so an unresolvable account never silently suppresses cleanup across the fleet.
+   * Determines whether the given container is excluded from the named blob stale data cleanup process. An entry in the
+   * configured list matches either as a bare {@code "accountName"} (which exempts every container in that account) or as
+   * a fully-qualified {@code "accountName/containerName"} (which exempts a single container). When the account cannot be
+   * resolved the container is treated as not excluded, so an unresolvable account never silently suppresses cleanup
+   * across the fleet.
    * @param container the {@link Container} being considered for cleanup.
    * @return {@code true} if the container should be skipped (its stale versions retained), {@code false} otherwise.
    */
@@ -381,7 +383,11 @@ public class NamedBlobsCleanupRunner implements Runnable {
     if (account == null) {
       return false;
     }
-    return excludedContainers.contains(account.getName() + "/" + container.getName());
+    String accountName = account.getName();
+    // A bare "accountName" entry exempts every container in the account; an "accountName/containerName" entry
+    // exempts only that container.
+    return excludedContainers.contains(accountName) || excludedContainers.contains(
+        accountName + "/" + container.getName());
   }
 
   /**
