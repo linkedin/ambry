@@ -1234,7 +1234,13 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         readyRetentionDays > 0 ? new Timestamp(now - TimeUnit.DAYS.toMillis(readyRetentionDays)) : null;
 
     StaleNamedBlob keepBlob = blobList.get(0);
-    // Number of READY versions seen so far in the current blob-name group (the latest READY is rank 1).
+    // Number of READY versions seen so far in the current blob-name group (the latest READY is rank 1). Note this rank
+    // is per invocation, i.e. per page: the caller pages the container via getAllBlobsForContainer (LIMIT
+    // queryStaleDataMaxResults), so a blob name with more READY versions than one page is ranked within each page, not
+    // across the whole blob name. This is safe: the page cursor is "blob_name >= ..." and already-cleaned rows are
+    // filtered out by deleted_ts, so each subsequent page re-ranks from the newest surviving version and converges.
+    // The worst case is extra passes / temporary over-retention, never over-deletion (the newest N are always rank
+    // 1..N and are never marked stale).
     int readyVersionsSeen = keepBlob.getBlobState() == NamedBlobState.READY ? 1 : 0;
     for (int i = 1; i < blobList.size(); i++) {
       StaleNamedBlob currentBlob = blobList.get(i);

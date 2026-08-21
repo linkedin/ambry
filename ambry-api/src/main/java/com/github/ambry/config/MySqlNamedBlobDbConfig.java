@@ -126,10 +126,13 @@ public class MySqlNamedBlobDbConfig {
   /**
    * The maximum number of most-recent versions to keep per named blob during stale-data cleanup. Superseded (stale)
    * versions ranked beyond this many newest versions are cleaned up. Must be at least 1 (the current/latest version is
-   * always retained). Default 5.
+   * always retained). <p>Defaults to 1, which preserves the legacy keep-only-the-latest-READY behavior so an upgrade
+   * does not change cleanup fleet-wide. A larger value (5 is the recommended target) is meant to be ramped in
+   * per-fabric via config, together with {@link #staleReadyDataRetentionDays}, once the storage/table-growth impact
+   * has been reviewed.
    */
   @Config(STALE_DATA_RETENTION_VERSIONS)
-  @Default("5")
+  @Default("1")
   public final int staleDataRetentionVersions;
 
   /**
@@ -137,10 +140,12 @@ public class MySqlNamedBlobDbConfig {
    * cleanup. A stale READY version older than this is cleaned up regardless of the version count. The current (latest)
    * version is always retained regardless of age. This governs only completed (READY) versions -- incomplete
    * IN_PROGRESS uploads are governed separately by {@link #staleDataRetentionDays}. 0 disables age-based cleanup
-   * (retain stale versions by count only). Default 180.
+   * (retain stale versions by count only). <p>Defaults to 0 (disabled) so an upgrade preserves the legacy behavior;
+   * an age window (180 is the recommended target) is meant to be ramped in per-fabric via config, together with
+   * {@link #staleDataRetentionVersions}.
    */
   @Config(STALE_READY_DATA_RETENTION_DAYS)
-  @Default("180")
+  @Default("0")
   public final int staleReadyDataRetentionDays;
 
   /**
@@ -205,9 +210,9 @@ public class MySqlNamedBlobDbConfig {
     this.staleDataRetentionDays =
         verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
     this.staleDataRetentionVersions =
-        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_VERSIONS, 5, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_VERSIONS, 1, 1, Integer.MAX_VALUE);
     this.staleReadyDataRetentionDays =
-        verifiableProperties.getIntInRange(STALE_READY_DATA_RETENTION_DAYS, 180, 0, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(STALE_READY_DATA_RETENTION_DAYS, 0, 0, Integer.MAX_VALUE);
     this.listQueryTimeoutSeconds =
         verifiableProperties.getIntInRange(LIST_QUERY_TIMEOUT_SECONDS, 0, 0, Integer.MAX_VALUE);
     this.transactionIsolationLevel =

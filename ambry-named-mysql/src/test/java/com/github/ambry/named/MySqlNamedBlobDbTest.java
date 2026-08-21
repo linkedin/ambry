@@ -479,6 +479,12 @@ public class MySqlNamedBlobDbTest {
         new java.sql.Timestamp(now - ageMillis));
   }
 
+  private StaleNamedBlob inProgressVersion(String blobName, long version, long ageMillis) {
+    long now = System.currentTimeMillis();
+    return new StaleNamedBlob((short) 1, (short) 1, blobName, "blobId-" + version, version, null,
+        NamedBlobState.IN_PROGRESS, new java.sql.Timestamp(now - ageMillis));
+  }
+
   private Set<Long> staleVersionSet(List<StaleNamedBlob> stale) {
     Set<Long> versions = new HashSet<>();
     for (StaleNamedBlob b : stale) {
@@ -533,6 +539,41 @@ public class MySqlNamedBlobDbTest {
     blobs.add(readyVersion("a", 1, 3 * day));
     Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 1, 0).getStaleBlobs());
     assertEquals(new HashSet<>(Arrays.asList(2L, 1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionCountResetsAcrossBlobNames() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // Two blob names, each with 3 READY versions (version-DESC within a name; the list is name-ASC then version-DESC).
+    // Distinct version numbers so the assertion can tell them apart.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 30, day));
+    blobs.add(readyVersion("a", 20, 2 * day));
+    blobs.add(readyVersion("a", 10, 3 * day));
+    blobs.add(readyVersion("b", 3, day));
+    blobs.add(readyVersion("b", 2, 2 * day));
+    blobs.add(readyVersion("b", 1, 3 * day));
+    // Keep newest 2 per name; the 3rd of each name is stale. If the rank did not reset at the name boundary, b's
+    // versions would be ranked beyond 2 and wrongly cleaned.
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 2, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(10L, 1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionCounterOnlyAdvancesOnReadyVersions() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // One blob name with READY and IN_PROGRESS versions interleaved (version-DESC): v5 READY (latest), v4 IN_PROGRESS,
+    // v3 READY, v2 IN_PROGRESS, v1 READY. With retentionVersions=2 the READY rank must count only READY versions, so
+    // v3 is rank 2 (kept) and v1 is rank 3 (cleaned); the IN_PROGRESS versions (superseded by the latest READY) are
+    // cleaned and must not advance the READY rank.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 5, day));
+    blobs.add(inProgressVersion("a", 4, day));
+    blobs.add(readyVersion("a", 3, day));
+    blobs.add(inProgressVersion("a", 2, day));
+    blobs.add(readyVersion("a", 1, day));
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 2, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(4L, 2L, 1L)), stale);
   }
 
   @Test
