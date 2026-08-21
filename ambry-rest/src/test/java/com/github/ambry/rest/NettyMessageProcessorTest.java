@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
@@ -507,7 +508,8 @@ public class NettyMessageProcessorTest {
 
   /**
    * Tests that a request still in flight when the channel goes inactive is recorded in
-   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} with the time it had been in flight for.
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} with the time it had been in flight for, and not in the
+   * idle histogram.
    */
   @Test
   public void testAbortedRequestRecordsTimeInFlight() {
@@ -528,13 +530,18 @@ public class NettyMessageProcessorTest {
 
     assertEquals("Termination of the in-flight request should have been recorded exactly once", 1,
         nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
-    assertRecordedTimeInFlight(nettyMetrics, testStartMs);
+    assertEquals("A client termination should not also be recorded as an idle termination", 0,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+    assertRecordedTimeInFlight(nettyMetrics.clientTerminatedRequestTimeInMs, testStartMs);
   }
 
   /**
    * Tests that a request still in flight when the channel is closed for being idle is recorded in
-   * {@link NettyMetrics#clientTerminatedRequestTimeInMs}, since an idle timeout aborts the longest-lived requests and
-   * would otherwise be missing from the distribution.
+   * {@link NettyMetrics#idleTerminatedRequestTimeInMs}, since an idle timeout aborts the longest-lived requests and
+   * would otherwise be missing from the distribution. It is kept separate from
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} because every idle termination lands at approximately the
+   * configured idle timeout, which would otherwise manufacture a fixed-deadline spike in the client abort
+   * distribution.
    */
   @Test
   public void testIdleChannelAbortRecordsTimeInFlight() {
@@ -550,8 +557,10 @@ public class NettyMessageProcessorTest {
     channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
 
     assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+    assertEquals("An idle termination should not also be recorded as a client termination", 0,
         nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
-    assertRecordedTimeInFlight(nettyMetrics, testStartMs);
+    assertRecordedTimeInFlight(nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
   }
 
   /**
@@ -599,8 +608,10 @@ public class NettyMessageProcessorTest {
       }).sync();
 
       assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
+          nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("The deferred channelInactive should not double record the same termination", 0,
           nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
-      assertRecordedTimeInFlight(nettyMetrics, testStartMs);
+      assertRecordedTimeInFlight(nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
     } finally {
       group.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
     }
@@ -620,6 +631,8 @@ public class NettyMessageProcessorTest {
 
     assertEquals("A channel that never carried a request should record nothing", 0,
         nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    assertEquals("A channel that never carried a request should record no idle termination either", 0,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
   }
 
   // helpers
@@ -638,14 +651,14 @@ public class NettyMessageProcessorTest {
   }
 
   /**
-   * Asserts that the single time in flight recorded in {@link NettyMetrics#clientTerminatedRequestTimeInMs} is bounded
-   * below by {@link #MIN_IN_FLIGHT_MS} and above by the time the test itself has taken. The upper bound is what
+   * Asserts that the single time in flight recorded in {@code histogram} is bounded below by
+   * {@link #MIN_IN_FLIGHT_MS} and above by the time the test itself has taken. The upper bound is what
    * distinguishes an elapsed time from a wall clock timestamp.
-   * @param nettyMetrics the {@link NettyMetrics} the value was recorded in.
+   * @param histogram the {@link Histogram} the value was recorded in.
    * @param testStartMs the value of {@link System#currentTimeMillis()} from before the request was sent.
    */
-  private static void assertRecordedTimeInFlight(NettyMetrics nettyMetrics, long testStartMs) {
-    long recordedMs = nettyMetrics.clientTerminatedRequestTimeInMs.getSnapshot().getMin();
+  private static void assertRecordedTimeInFlight(Histogram histogram, long testStartMs) {
+    long recordedMs = histogram.getSnapshot().getMin();
     long testDurationMs = System.currentTimeMillis() - testStartMs;
     assertTrue("Time in flight " + recordedMs + " ms should be at least the " + MIN_IN_FLIGHT_MS
         + " ms the request was held for", recordedMs >= MIN_IN_FLIGHT_MS);

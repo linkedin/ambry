@@ -53,6 +53,7 @@ public class NettyMetrics {
   public final Histogram sslChannelActiveToFirstMessageReceiveTimeInMs;
   public final Histogram requestChunkProcessingTimeInMs;
   public final Histogram clientTerminatedRequestTimeInMs;
+  public final Histogram idleTerminatedRequestTimeInMs;
   // NettyResponseChannel
   public final Histogram channelWriteFailureProcessingTimeInMs;
   public final Histogram chunkDispenseTimeInMs;
@@ -193,6 +194,8 @@ public class NettyMetrics {
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "RequestChunkProcessingTimeInMs"));
     clientTerminatedRequestTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(NettyMessageProcessor.class, "ClientTerminatedRequestTimeInMs"));
+    idleTerminatedRequestTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(NettyMessageProcessor.class, "IdleTerminatedRequestTimeInMs"));
     // NettyResponseChannel
     channelWriteFailureProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteFailureProcessingTimeInMs"));
