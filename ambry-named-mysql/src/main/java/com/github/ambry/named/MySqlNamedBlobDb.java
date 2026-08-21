@@ -522,7 +522,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
       Container.ContainerStatus status = container.getStatus();
       if (status == Container.ContainerStatus.ACTIVE) {
-        staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+        staleBlobsWithLatestBlobName =
+            getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays,
+                config.staleDataRetentionVersions, config.staleReadyDataRetentionDays);
       } else {
         staleBlobsWithLatestBlobName = new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults,
             potentialStaleNamedBlobResults.get(potentialStaleNamedBlobResults.size() - 1).getBlobName());
@@ -1206,20 +1208,40 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * At the end, if the last considered blob is IN_PROGRESS and older than the cutoff, it is also marked stale.
    *
    * @param blobList      The list of StaleNamedBlob objects to process. Should be sorted by blob name and timestamp.
-   * @param cutoffDays    The number of days used to calculate the cutoff timestamp for staleness.
+   * @param cutoffDays    The number of days used to calculate the cutoff timestamp for IN_PROGRESS staleness.
+   * @param retentionVersions The number of most-recent versions to keep per blob name; stale versions ranked beyond
+   *                      this are cleaned up. Always at least 1 (the current version is retained).
+   * @param readyRetentionDays The maximum age (days) of a stale READY version to keep; older stale versions are
+   *                      cleaned up regardless of the version count. 0 disables age-based cleanup.
    * @return A StaleBlobsWithLatestBlobName object containing the list of stale blobs
    *                      and the name of the latest blob considered.
    */
-  public StaleBlobsWithLatestBlobName getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutoffDays) {
+  public StaleBlobsWithLatestBlobName getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutoffDays,
+      int retentionVersions, int readyRetentionDays) {
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
     if (blobList.isEmpty()) {
       return new StaleBlobsWithLatestBlobName(staleBlobs, null);
     }
 
-    long cutoffTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(cutoffDays);
-    Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
+    long now = System.currentTimeMillis();
+    // cutoffTimestamp (from cutoffDays / staleDataRetentionDays) governs IN_PROGRESS (incomplete-upload) staleness.
+    Timestamp cutoffTimestamp = new Timestamp(now - TimeUnit.DAYS.toMillis(cutoffDays));
+    // readyRetentionCutoff (from readyRetentionDays / staleReadyDataRetentionDays) governs superseded READY versions:
+    // a stale READY version is cleaned up when it is ranked beyond the newest retentionVersions, or (when
+    // readyRetentionDays > 0) when it is older than that many days. The current (latest) version is always kept.
+    int versionsToKeep = Math.max(retentionVersions, 1);
+    Timestamp readyRetentionCutoff =
+        readyRetentionDays > 0 ? new Timestamp(now - TimeUnit.DAYS.toMillis(readyRetentionDays)) : null;
 
     StaleNamedBlob keepBlob = blobList.get(0);
+    // Number of READY versions seen so far in the current blob-name group (the latest READY is rank 1). Note this rank
+    // is per invocation, i.e. per page: the caller pages the container via getAllBlobsForContainer (LIMIT
+    // queryStaleDataMaxResults), so a blob name with more READY versions than one page is ranked within each page, not
+    // across the whole blob name. This is safe: the page cursor is "blob_name >= ..." and already-cleaned rows are
+    // filtered out by deleted_ts, so each subsequent page re-ranks from the newest surviving version and converges.
+    // The worst case is extra passes / temporary over-retention, never over-deletion (the newest N are always rank
+    // 1..N and are never marked stale).
+    int readyVersionsSeen = keepBlob.getBlobState() == NamedBlobState.READY ? 1 : 0;
     for (int i = 1; i < blobList.size(); i++) {
       StaleNamedBlob currentBlob = blobList.get(i);
 
@@ -1228,6 +1250,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           staleBlobs.add(keepBlob);
         }
         keepBlob = currentBlob;
+        readyVersionsSeen = currentBlob.getBlobState() == NamedBlobState.READY ? 1 : 0;
         continue;
       }
 
@@ -1241,8 +1264,15 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           staleBlobs.add(keepBlob);
         }
         keepBlob = currentBlob;
+        readyVersionsSeen = 1;
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.READY) {
-        staleBlobs.add(currentBlob);
+        readyVersionsSeen++;
+        boolean beyondVersionLimit = readyVersionsSeen > versionsToKeep;
+        boolean olderThanRetention =
+            readyRetentionCutoff != null && currentBlobModifiedTS.before(readyRetentionCutoff);
+        if (beyondVersionLimit || olderThanRetention) {
+          staleBlobs.add(currentBlob);
+        }
       } else if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.IN_PROGRESS) {
         if (keepBlobModifiedTS.after(cutoffTimestamp) && currentBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(currentBlob);

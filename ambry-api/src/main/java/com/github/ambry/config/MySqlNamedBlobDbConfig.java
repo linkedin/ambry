@@ -32,6 +32,8 @@ public class MySqlNamedBlobDbConfig {
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
+  public static final String STALE_DATA_RETENTION_VERSIONS = PREFIX + "stale.data.retention.versions";
+  public static final String STALE_READY_DATA_RETENTION_DAYS = PREFIX + "stale.ready.data.retention.days";
   public static final String LIST_QUERY_TIMEOUT_SECONDS = PREFIX + "list.query.timeout.seconds";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
@@ -112,11 +114,39 @@ public class MySqlNamedBlobDbConfig {
   public final int queryStaleDataMaxResults;
 
   /**
-   * The maximum number of days for a stale blob to say uncleaned.
+   * The maximum age, in days, of a stale <b>IN_PROGRESS</b> (incomplete upload) version to keep during stale-data
+   * cleanup. A superseded IN_PROGRESS version older than this is cleaned up. This governs only IN_PROGRESS versions
+   * (abandoned/failed uploads); superseded completed (READY) versions are governed separately by
+   * {@link #staleReadyDataRetentionDays}. Default 5.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
   @Default("5")
   public final int staleDataRetentionDays;
+
+  /**
+   * The maximum number of most-recent versions to keep per named blob during stale-data cleanup. Superseded (stale)
+   * versions ranked beyond this many newest versions are cleaned up. Must be at least 1 (the current/latest version is
+   * always retained). <p>Defaults to 1, which preserves the legacy keep-only-the-latest-READY behavior so an upgrade
+   * does not change cleanup fleet-wide. A larger value (5 is the recommended target) is meant to be ramped in
+   * per-fabric via config, together with {@link #staleReadyDataRetentionDays}, once the storage/table-growth impact
+   * has been reviewed.
+   */
+  @Config(STALE_DATA_RETENTION_VERSIONS)
+  @Default("1")
+  public final int staleDataRetentionVersions;
+
+  /**
+   * The maximum age, in days, of a superseded (stale) <b>READY</b> (completed) version to keep during stale-data
+   * cleanup. A stale READY version older than this is cleaned up regardless of the version count. The current (latest)
+   * version is always retained regardless of age. This governs only completed (READY) versions -- incomplete
+   * IN_PROGRESS uploads are governed separately by {@link #staleDataRetentionDays}. 0 disables age-based cleanup
+   * (retain stale versions by count only). <p>Defaults to 0 (disabled) so an upgrade preserves the legacy behavior;
+   * an age window (180 is the recommended target) is meant to be ramped in per-fabric via config, together with
+   * {@link #staleDataRetentionVersions}.
+   */
+  @Config(STALE_READY_DATA_RETENTION_DAYS)
+  @Default("0")
+  public final int staleReadyDataRetentionDays;
 
   /**
    * Per-statement timeout (in seconds) applied to LIST queries via {@link java.sql.Statement#setQueryTimeout(int)}.
@@ -179,6 +209,10 @@ public class MySqlNamedBlobDbConfig {
         verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays =
         verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
+    this.staleDataRetentionVersions =
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_VERSIONS, 1, 1, Integer.MAX_VALUE);
+    this.staleReadyDataRetentionDays =
+        verifiableProperties.getIntInRange(STALE_READY_DATA_RETENTION_DAYS, 0, 0, Integer.MAX_VALUE);
     this.listQueryTimeoutSeconds =
         verifiableProperties.getIntInRange(LIST_QUERY_TIMEOUT_SECONDS, 0, 0, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
