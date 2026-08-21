@@ -473,6 +473,68 @@ public class MySqlNamedBlobDbTest {
     return staleNamedBlobsList;
   }
 
+  private StaleNamedBlob readyVersion(String blobName, long version, long ageMillis) {
+    long now = System.currentTimeMillis();
+    return new StaleNamedBlob((short) 1, (short) 1, blobName, "blobId-" + version, version, null, NamedBlobState.READY,
+        new java.sql.Timestamp(now - ageMillis));
+  }
+
+  private Set<Long> staleVersionSet(List<StaleNamedBlob> stale) {
+    Set<Long> versions = new HashSet<>();
+    for (StaleNamedBlob b : stale) {
+      versions.add(b.getVersion());
+    }
+    return versions;
+  }
+
+  @Test
+  public void testStaleRetentionKeepsNewestNVersions() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // 6 READY versions of one blob (version-DESC): v6 (newest, 1d old) .. v1 (oldest, 6d old), all within 180 days.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    for (long v = 6; v >= 1; v--) {
+      blobs.add(readyVersion("a", v, (7 - v) * day));
+    }
+    // Keep newest 3 (v6, v5, v4); clean up v3, v2, v1 (beyond the version limit). Age-based cleanup disabled.
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 3, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(3L, 2L, 1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionCleansVersionsOlderThanRetentionDays() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // v3 latest (10d old), v2 (100d old), v1 (200d old); high version limit so only the age rule applies.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 3, 10 * day));
+    blobs.add(readyVersion("a", 2, 100 * day));
+    blobs.add(readyVersion("a", 1, 200 * day));
+    // 180-day rule: v1 (200d) is cleaned; v2 (100d) kept; latest v3 always kept.
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 5, 180).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionAlwaysKeepsLatestEvenIfOld() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // A single READY version 300 days old is the current version; it must never be cleaned up.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 1, 300 * day));
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 5, 180).getStaleBlobs());
+    assertEquals(new HashSet<Long>(), stale);
+  }
+
+  @Test
+  public void testStaleRetentionKeepsOnlyLatestWhenVersionsIsOne() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // Legacy behavior: retentionVersions=1 with age disabled keeps only the latest READY version.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 3, day));
+    blobs.add(readyVersion("a", 2, 2 * day));
+    blobs.add(readyVersion("a", 1, 3 * day));
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 1, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(2L, 1L)), stale);
+  }
+
   @Test
   public void testUpdateBlobTtlAndStateToReady() throws Exception {
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));

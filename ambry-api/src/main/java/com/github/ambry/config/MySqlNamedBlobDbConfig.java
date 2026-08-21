@@ -32,6 +32,8 @@ public class MySqlNamedBlobDbConfig {
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
+  public static final String STALE_DATA_RETENTION_VERSIONS = PREFIX + "stale.data.retention.versions";
+  public static final String STALE_READY_DATA_RETENTION_DAYS = PREFIX + "stale.ready.data.retention.days";
   public static final String LIST_QUERY_TIMEOUT_SECONDS = PREFIX + "list.query.timeout.seconds";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
@@ -119,6 +121,24 @@ public class MySqlNamedBlobDbConfig {
   public final int staleDataRetentionDays;
 
   /**
+   * The maximum number of most-recent versions to keep per named blob during stale-data cleanup. Superseded (stale)
+   * versions ranked beyond this many newest versions are cleaned up. Must be at least 1 (the current/latest version is
+   * always retained). Default 5.
+   */
+  @Config(STALE_DATA_RETENTION_VERSIONS)
+  @Default("5")
+  public final int staleDataRetentionVersions;
+
+  /**
+   * The maximum age, in days, of a superseded (stale) READY version to keep during stale-data cleanup. Stale versions
+   * older than this are cleaned up regardless of the version count. The current (latest) version is always retained
+   * regardless of age. 0 disables age-based cleanup (retain stale versions by count only). Default 180.
+   */
+  @Config(STALE_READY_DATA_RETENTION_DAYS)
+  @Default("180")
+  public final int staleReadyDataRetentionDays;
+
+  /**
    * Per-statement timeout (in seconds) applied to LIST queries via {@link java.sql.Statement#setQueryTimeout(int)}.
    * Guards against a LIST scanning an unexpectedly large container: when the budget is exceeded the JDBC driver
    * issues a clean cancel and the server throws a {@link java.sql.SQLException} (e.g. MySQLTimeoutException),
@@ -179,6 +199,10 @@ public class MySqlNamedBlobDbConfig {
         verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays =
         verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
+    this.staleDataRetentionVersions =
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_VERSIONS, 5, 1, Integer.MAX_VALUE);
+    this.staleReadyDataRetentionDays =
+        verifiableProperties.getIntInRange(STALE_READY_DATA_RETENTION_DAYS, 180, 0, Integer.MAX_VALUE);
     this.listQueryTimeoutSeconds =
         verifiableProperties.getIntInRange(LIST_QUERY_TIMEOUT_SECONDS, 0, 0, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
