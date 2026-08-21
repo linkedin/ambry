@@ -539,9 +539,10 @@ public class NettyMessageProcessorTest {
    * Tests that a request still in flight when the channel is closed for being idle is recorded in
    * {@link NettyMetrics#idleTerminatedRequestTimeInMs}, since an idle timeout aborts the longest-lived requests and
    * would otherwise be missing from the distribution. It is kept separate from
-   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} because every idle termination lands at approximately the
-   * configured idle timeout, which would otherwise manufacture a fixed-deadline spike in the client abort
-   * distribution.
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} because the two have different causes: an idle termination is
+   * the server enforcing its own timeout, and so cannot be observed sooner than that timeout, whereas a client
+   * termination can happen at any point. Pooling them would inject a floor at the idle timeout into a distribution
+   * whose signal is at the low end.
    */
   @Test
   public void testIdleChannelAbortRecordsTimeInFlight() {
@@ -575,16 +576,15 @@ public class NettyMessageProcessorTest {
     EventLoopGroup group = new DefaultEventLoopGroup(1);
     LocalAddress address = new LocalAddress("idle-abort-" + REQUEST_ID_GENERATOR.incrementAndGet());
     AtomicReference<Channel> serverChannel = new AtomicReference<>();
-    CountDownLatch serverChannelInitialized = new CountDownLatch(1);
+    CountDownLatch requestReceived = new CountDownLatch(1);
     try {
       new ServerBootstrap().group(group).channel(LocalServerChannel.class)
           .childHandler(new ChannelInitializer<LocalChannel>() {
             @Override
             protected void initChannel(LocalChannel channel) {
-              channel.pipeline().addLast(new ChunkedWriteHandler(),
+              channel.pipeline().addLast(new ChunkedWriteHandler(), new RequestReceivedProbe(requestReceived),
                   new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler));
               serverChannel.set(channel);
-              serverChannelInitialized.countDown();
             }
           }).bind(address).sync();
       Channel client = new Bootstrap().group(group).channel(LocalChannel.class)
@@ -592,8 +592,10 @@ public class NettyMessageProcessorTest {
 
       long testStartMs = System.currentTimeMillis();
       client.writeAndFlush(RestTestUtils.createRequest(HttpMethod.GET, "/", null)).sync();
-      assertTrue("Server side channel should have been initialized",
-          serverChannelInitialized.await(5, TimeUnit.SECONDS));
+      // The write future completes before the peer read is delivered, so it establishes nothing about the server. Wait
+      // for the probe instead: it counts down only after the processor has constructed the request and marked it
+      // received, which is the point the recorded time in flight is measured from.
+      assertTrue("Server side should have received the request", requestReceived.await(5, TimeUnit.SECONDS));
       Channel server = serverChannel.get();
       awaitClockAdvance(MIN_IN_FLIGHT_MS);
 
@@ -942,6 +944,31 @@ public class NettyMessageProcessorTest {
     void completeContinueWrite() {
       if (heldPromise != null) {
         heldPromise.setSuccess();
+      }
+    }
+  }
+
+  /**
+   * A {@link ChannelInboundHandlerAdapter} that signals when the handler after it has finished processing an
+   * {@link HttpRequest}. It is placed immediately before the {@link NettyMessageProcessor} under test and counts down
+   * only after {@code fireChannelRead} returns, so the countdown is ordered after the processor has constructed the
+   * {@link NettyRequest} and marked it received. A test that timed its window from the client's write future instead
+   * would race the server: {@code LocalChannel.doWrite} completes the write promise before delivering the peer read.
+   */
+  private static class RequestReceivedProbe extends ChannelInboundHandlerAdapter {
+    private final CountDownLatch requestReceived;
+
+    RequestReceivedProbe(CountDownLatch requestReceived) {
+      this.requestReceived = requestReceived;
+    }
+
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+      // Determined before forwarding because the handler after this one releases the message.
+      boolean isRequest = msg instanceof HttpRequest;
+      ctx.fireChannelRead(msg);
+      if (isRequest) {
+        requestReceived.countDown();
       }
     }
   }

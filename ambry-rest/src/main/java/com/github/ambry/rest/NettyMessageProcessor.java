@@ -444,13 +444,16 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
 
   /**
    * Records the time the in flight request has been alive for in {@code histogram}, at most once per request.
+   * {@link #resetState(ChannelHandlerContext)} re-arms the guard before each request, so a keepalive channel records
+   * once per request rather than once per connection.
    * <p/>
-   * Both {@link #channelInactive(ChannelHandlerContext)} and {@link #userEventTriggered(ChannelHandlerContext, Object)}
-   * can observe the same termination, and which of them finds the request still open depends on the transport:
-   * a real event loop defers {@code fireChannelInactive} to a later task, by which time the request has been closed,
-   * whereas {@link io.netty.channel.embedded.EmbeddedChannel} runs it inline while the request is still open. A single
-   * flag guards both call sites, so a request is recorded exactly once, into whichever histogram observed the
-   * termination first, and can never be counted in both.
+   * The guard is what prevents a double count, not what assigns the bucket. Bucketing is decided by which handler
+   * observes the request still open, and that depends on the transport: a real event loop defers
+   * {@code fireChannelInactive} to a later task, by which time an idle abort has already closed the request, whereas
+   * {@link io.netty.channel.embedded.EmbeddedChannel} runs it inline while the request is still open. On a real
+   * transport an idle abort is therefore only ever seen by
+   * {@link #userEventTriggered(ChannelHandlerContext, Object)}; the guard covers the inline case so the two histograms
+   * stay disjoint on every transport.
    * @param histogram the {@link Histogram} to record the elapsed time into.
    * @return the time in ms that the request has been in flight for.
    */
