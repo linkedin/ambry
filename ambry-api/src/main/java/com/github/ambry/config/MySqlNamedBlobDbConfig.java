@@ -114,7 +114,10 @@ public class MySqlNamedBlobDbConfig {
   public final int queryStaleDataMaxResults;
 
   /**
-   * The maximum number of days for a stale blob to say uncleaned.
+   * The maximum age, in days, of a stale <b>IN_PROGRESS</b> (incomplete upload) version to keep during stale-data
+   * cleanup. A superseded IN_PROGRESS version older than this is cleaned up. This governs only IN_PROGRESS versions
+   * (abandoned/failed uploads); superseded completed (READY) versions are governed separately by
+   * {@link #staleReadyDataRetentionDays}. Default 5.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
   @Default("5")
@@ -130,9 +133,11 @@ public class MySqlNamedBlobDbConfig {
   public final int staleDataRetentionVersions;
 
   /**
-   * The maximum age, in days, of a superseded (stale) READY version to keep during stale-data cleanup. Stale versions
-   * older than this are cleaned up regardless of the version count. The current (latest) version is always retained
-   * regardless of age. 0 disables age-based cleanup (retain stale versions by count only). Default 180.
+   * The maximum age, in days, of a superseded (stale) <b>READY</b> (completed) version to keep during stale-data
+   * cleanup. A stale READY version older than this is cleaned up regardless of the version count. The current (latest)
+   * version is always retained regardless of age. This governs only completed (READY) versions -- incomplete
+   * IN_PROGRESS uploads are governed separately by {@link #staleDataRetentionDays}. 0 disables age-based cleanup
+   * (retain stale versions by count only). Default 180.
    */
   @Config(STALE_READY_DATA_RETENTION_DAYS)
   @Default("180")

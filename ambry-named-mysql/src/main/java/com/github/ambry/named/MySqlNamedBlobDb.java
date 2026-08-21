@@ -1224,8 +1224,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     }
 
     long now = System.currentTimeMillis();
+    // cutoffTimestamp (from cutoffDays / staleDataRetentionDays) governs IN_PROGRESS (incomplete-upload) staleness.
     Timestamp cutoffTimestamp = new Timestamp(now - TimeUnit.DAYS.toMillis(cutoffDays));
-    // A stale READY version is cleaned up when it is ranked beyond the newest retentionVersions, or (when
+    // readyRetentionCutoff (from readyRetentionDays / staleReadyDataRetentionDays) governs superseded READY versions:
+    // a stale READY version is cleaned up when it is ranked beyond the newest retentionVersions, or (when
     // readyRetentionDays > 0) when it is older than that many days. The current (latest) version is always kept.
     int versionsToKeep = Math.max(retentionVersions, 1);
     Timestamp readyRetentionCutoff =
