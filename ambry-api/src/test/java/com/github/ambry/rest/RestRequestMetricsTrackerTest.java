@@ -139,6 +139,35 @@ public class RestRequestMetricsTrackerTest {
     }
   }
 
+  /**
+   * Tests {@link RestRequestMetricsTracker#getTimeSinceRequestReceivedInMs()}. Unlike
+   * {@link RestRequestMetricsTracker.NioMetricsTracker#markFirstByteSent()} and
+   * {@link RestRequestMetricsTracker.NioMetricsTracker#markRequestCompleted()}, it returns {@code 0} rather than
+   * throwing when the request was never marked as received, because its callers are diagnostic paths that must not be
+   * turned into failures.
+   */
+  @Test
+  public void testTimeSinceRequestReceived() {
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    assertEquals("Time since request received should be 0 when the request was never marked received", 0,
+        requestMetrics.getTimeSinceRequestReceivedInMs());
+
+    long beforeMs = System.currentTimeMillis();
+    requestMetrics.nioMetricsTracker.markRequestReceived();
+    // Busy wait so that the elapsed time is provably non-zero. Thread.sleep() is not used for test synchronization.
+    long deadlineMs = System.currentTimeMillis() + 2;
+    while (System.currentTimeMillis() < deadlineMs) {
+      Thread.yield();
+    }
+
+    long timeSinceReceivedMs = requestMetrics.getTimeSinceRequestReceivedInMs();
+    assertTrue("Time since request received " + timeSinceReceivedMs + " ms should have advanced past 0",
+        timeSinceReceivedMs > 0);
+    // An elapsed time, unlike a wall clock timestamp, cannot exceed the time this test has been running for.
+    assertTrue("Time since request received " + timeSinceReceivedMs + " ms should not exceed the elapsed test time",
+        timeSinceReceivedMs <= System.currentTimeMillis() - beforeMs);
+  }
+
   // commonCaseTest() helpers
 
   /**

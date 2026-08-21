@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
@@ -29,12 +30,22 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.TestUtils;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.channel.local.LocalAddress;
+import io.netty.channel.local.LocalChannel;
+import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpContent;
@@ -57,6 +68,7 @@ import io.netty.handler.codec.http.multipart.HttpDataFactory;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -69,6 +81,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Test;
 
@@ -91,6 +104,9 @@ public class NettyMessageProcessorTest {
   private static final NettyConfig NETTY_CONFIG = new NettyConfig(new VerifiableProperties(new Properties()));
   private static final PerformanceConfig PERFORMANCE_CONFIG =
       new PerformanceConfig(new VerifiableProperties(new Properties()));
+  // Minimum time a request is held in flight before it is terminated, so that the recorded duration is provably
+  // non-zero rather than merely non-negative.
+  private static final long MIN_IN_FLIGHT_MS = 2;
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -490,8 +506,167 @@ public class NettyMessageProcessorTest {
     compareContent(receivedContent, Collections.singletonList(content));
   }
 
+  /**
+   * Tests that a request still in flight when the channel goes inactive is recorded in
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} with the time it had been in flight for, and not in the
+   * idle histogram.
+   */
+  @Test
+  public void testAbortedRequestRecordsTimeInFlight() {
+    // A dedicated NettyMetrics keeps this assertion independent of the shared static instance other tests use.
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    long testStartMs = System.currentTimeMillis();
+    // A request whose terminating LastHttpContent never arrives is left open, i.e. still in flight.
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+    assertEquals("Nothing should have been recorded while the request is still in flight", 0,
+        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    awaitClockAdvance(MIN_IN_FLIGHT_MS);
+
+    channel.close().awaitUninterruptibly();
+
+    assertEquals("Termination of the in-flight request should have been recorded exactly once", 1,
+        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    assertEquals("A client termination should not also be recorded as an idle termination", 0,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+    assertRecordedTimeInFlight(nettyMetrics.clientTerminatedRequestTimeInMs, testStartMs);
+  }
+
+  /**
+   * Tests that a request still in flight when the channel is closed for being idle is recorded in
+   * {@link NettyMetrics#idleTerminatedRequestTimeInMs}, since an idle timeout aborts the longest-lived requests and
+   * would otherwise be missing from the distribution. It is kept separate from
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} because the two have different causes: an idle termination is
+   * the server enforcing its own timeout, and so cannot be observed sooner than that timeout, whereas a client
+   * termination can happen at any point. Pooling them would inject a floor at the idle timeout into a distribution
+   * whose signal is at the low end.
+   */
+  @Test
+  public void testIdleChannelAbortRecordsTimeInFlight() {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    long testStartMs = System.currentTimeMillis();
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+    awaitClockAdvance(MIN_IN_FLIGHT_MS);
+
+    channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
+
+    assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+    assertEquals("An idle termination should not also be recorded as a client termination", 0,
+        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    assertRecordedTimeInFlight(nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
+  }
+
+  /**
+   * Tests that an idle timeout abort records the time the request was in flight for on a real event loop, where
+   * {@code fireChannelInactive} is deferred to a later task and the request is already closed by the time
+   * {@link NettyMessageProcessor#channelInactive} runs. {@link EmbeddedChannel} runs that task inline and so cannot
+   * exercise this ordering.
+   */
+  @Test
+  public void testIdleChannelAbortOnRealEventLoopRecordsTimeInFlight() throws Exception {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    EventLoopGroup group = new DefaultEventLoopGroup(1);
+    LocalAddress address = new LocalAddress("idle-abort-" + REQUEST_ID_GENERATOR.incrementAndGet());
+    AtomicReference<Channel> serverChannel = new AtomicReference<>();
+    CountDownLatch requestReceived = new CountDownLatch(1);
+    try {
+      new ServerBootstrap().group(group).channel(LocalServerChannel.class)
+          .childHandler(new ChannelInitializer<LocalChannel>() {
+            @Override
+            protected void initChannel(LocalChannel channel) {
+              channel.pipeline().addLast(new ChunkedWriteHandler(), new RequestReceivedProbe(requestReceived),
+                  new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler));
+              serverChannel.set(channel);
+            }
+          }).bind(address).sync();
+      Channel client = new Bootstrap().group(group).channel(LocalChannel.class)
+          .handler(new ChannelInboundHandlerAdapter()).connect(address).sync().channel();
+
+      long testStartMs = System.currentTimeMillis();
+      client.writeAndFlush(RestTestUtils.createRequest(HttpMethod.GET, "/", null)).sync();
+      // The write future completes before the peer read is delivered, so it establishes nothing about the server. Wait
+      // for the probe instead: it counts down only after the processor has constructed the request and marked it
+      // received, which is the point the recorded time in flight is measured from.
+      assertTrue("Server side should have received the request", requestReceived.await(5, TimeUnit.SECONDS));
+      Channel server = serverChannel.get();
+      awaitClockAdvance(MIN_IN_FLIGHT_MS);
+
+      server.eventLoop().submit(() -> server.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT))
+          .sync();
+      assertTrue("Server side channel should have been closed by the idle timeout",
+          server.closeFuture().await(5, TimeUnit.SECONDS));
+      // channelInactive is queued behind the close, so drain the loop before reading the metric.
+      server.eventLoop().submit(() -> {
+      }).sync();
+      server.eventLoop().submit(() -> {
+      }).sync();
+
+      assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
+          nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("The deferred channelInactive should not double record the same termination", 0,
+          nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertRecordedTimeInFlight(nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
+    } finally {
+      group.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+    }
+  }
+
+  /**
+   * Tests that closing a channel with no request in flight records nothing.
+   */
+  @Test
+  public void testInactiveChannelWithNoRequestInFlightRecordsNothing() {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    channel.close().awaitUninterruptibly();
+
+    assertEquals("A channel that never carried a request should record nothing", 0,
+        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    assertEquals("A channel that never carried a request should record no idle termination either", 0,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+  }
+
   // helpers
   // general
+
+  /**
+   * Busy waits until {@link System#currentTimeMillis()} has advanced by at least {@code durationMs}. Used instead of
+   * {@link Thread#sleep(long)}, which cannot return early but is disallowed for test synchronization.
+   * @param durationMs the number of ms the clock must advance by.
+   */
+  private static void awaitClockAdvance(long durationMs) {
+    long deadlineMs = System.currentTimeMillis() + durationMs;
+    while (System.currentTimeMillis() < deadlineMs) {
+      Thread.yield();
+    }
+  }
+
+  /**
+   * Asserts that the single time in flight recorded in {@code histogram} is bounded below by
+   * {@link #MIN_IN_FLIGHT_MS} and above by the time the test itself has taken. The upper bound is what
+   * distinguishes an elapsed time from a wall clock timestamp.
+   * @param histogram the {@link Histogram} the value was recorded in.
+   * @param testStartMs the value of {@link System#currentTimeMillis()} from before the request was sent.
+   */
+  private static void assertRecordedTimeInFlight(Histogram histogram, long testStartMs) {
+    long recordedMs = histogram.getSnapshot().getMin();
+    long testDurationMs = System.currentTimeMillis() - testStartMs;
+    assertTrue("Time in flight " + recordedMs + " ms should be at least the " + MIN_IN_FLIGHT_MS
+        + " ms the request was held for", recordedMs >= MIN_IN_FLIGHT_MS);
+    assertTrue("Time in flight " + recordedMs + " ms should not exceed the " + testDurationMs
+        + " ms the test has taken", recordedMs <= testDurationMs);
+  }
 
   /**
    * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link NettyMessageProcessor}.
@@ -769,6 +944,31 @@ public class NettyMessageProcessorTest {
     void completeContinueWrite() {
       if (heldPromise != null) {
         heldPromise.setSuccess();
+      }
+    }
+  }
+
+  /**
+   * A {@link ChannelInboundHandlerAdapter} that signals when the handler after it has finished processing an
+   * {@link HttpRequest}. It is placed immediately before the {@link NettyMessageProcessor} under test and counts down
+   * only after {@code fireChannelRead} returns, so the countdown is ordered after the processor has constructed the
+   * {@link NettyRequest} and marked it received. A test that timed its window from the client's write future instead
+   * would race the server: {@code LocalChannel.doWrite} completes the write promise before delivering the peer read.
+   */
+  private static class RequestReceivedProbe extends ChannelInboundHandlerAdapter {
+    private final CountDownLatch requestReceived;
+
+    RequestReceivedProbe(CountDownLatch requestReceived) {
+      this.requestReceived = requestReceived;
+    }
+
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+      // Determined before forwarding because the handler after this one releases the message.
+      boolean isRequest = msg instanceof HttpRequest;
+      ctx.fireChannelRead(msg);
+      if (isRequest) {
+        requestReceived.countDown();
       }
     }
   }
