@@ -134,6 +134,16 @@ public class MysqlRepairRequestsDbTest {
       List<RepairRequestRecord> recordFromStore = dbRecords.getFirst();
       Set<Long> partitionsNeedRepairUpdated;
       Map<String, RepairRequestRecord> orgRecords = records.get((int) id.getId());
+      // getPartitionsNeedRepair only returns partitions with foreign TtlUpdateRequest
+      // rows, while getRepairRequestsExcludingHost also returns DeleteRequest rows.
+      // Only assert the partition was listed for repair when a foreign TTL update exists.
+      boolean hasForeignTtlUpdate = false;
+      for (RepairRequestRecord record : recordFromStore) {
+        if (record.getOperationType() == TtlUpdateRequest) {
+          hasForeignTtlUpdate = true;
+          break;
+        }
+      }
       if (recordFromStore.size() > 0) {
         for (RepairRequestRecord record : recordFromStore) {
           RepairRequestRecord org = orgRecords.get(record.getBlobId());
@@ -144,9 +154,14 @@ public class MysqlRepairRequestsDbTest {
           repairRequestsDb.removeRepairRequests(record.getBlobId(), record.getOperationType());
         }
         partitionsNeedRepairUpdated = repairRequestsDb.getPartitionsNeedRepair(thisNodeName, thisNodePort, partitions);
-        assertTrue(partitionsNeedRepair.contains(id.getId()));
-        assertFalse(partitionsNeedRepairUpdated.contains(id.getId()));
-        assertEquals(partitionsNeedRepair.size(), partitionsNeedRepairUpdated.size() + 1);
+        if (hasForeignTtlUpdate) {
+          assertTrue(partitionsNeedRepair.contains(id.getId()));
+          assertFalse(partitionsNeedRepairUpdated.contains(id.getId()));
+          assertEquals(partitionsNeedRepair.size(), partitionsNeedRepairUpdated.size() + 1);
+        } else {
+          assertEquals(partitionsNeedRepairUpdated, partitionsNeedRepair);
+          assertFalse(partitionsNeedRepairUpdated.contains(id.getId()));
+        }
       } else {
         partitionsNeedRepairUpdated = repairRequestsDb.getPartitionsNeedRepair(thisNodeName, thisNodePort, partitions);
         assertEquals(partitionsNeedRepairUpdated, partitionsNeedRepair);
