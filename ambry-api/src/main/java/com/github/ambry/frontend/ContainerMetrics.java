@@ -52,10 +52,10 @@ public class ContainerMetrics extends EntityOperationMetrics {
   }
 
   @Override
-  public void recordClientAbort() {
-    super.recordClientAbort();
+  public void recordClientAbort(ResponseStatus responseStatus) {
+    super.recordClientAbort(responseStatus);
     if (accountMetrics != null) {
-      accountMetrics.recordClientAbort();
+      accountMetrics.recordClientAbort(responseStatus);
     }
   }
 }

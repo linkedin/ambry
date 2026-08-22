@@ -49,10 +49,12 @@ public class EntityOperationMetrics {
   // 410
   protected final Counter goneCount;
 
-  // Requests the client abandoned before they completed. These are also counted in clientErrorCount and
-  // badRequestCount, because a client termination is reported to the client as 400, so this counter is what lets a
-  // dashboard subtract aborts back out of those two rather than mistake them for genuine client errors.
+  // Requests whose remote client termination was observed before they completed. These remain counted under their
+  // existing response status as well.
   protected final Counter clientAbortCount;
+  // The subset of clientAbortCount whose existing response status is 5xx. This is the only abort count that can be
+  // subtracted from serverErrorCount.
+  protected final Counter serverErrorClientAbortCount;
 
   protected final Counter totalCount;
 
@@ -86,6 +88,8 @@ public class EntityOperationMetrics {
     notFoundCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "NotFoundCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "GoneCount"));
     clientAbortCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "ClientAbortCount"));
+    serverErrorClientAbortCount =
+        metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "ServerErrorClientAbortCount"));
     String qpsMetricPrefix = entityName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
     totalCount = metricRegistry.counter(MetricRegistry.name(ownerClass, qpsMetricPrefix + "totalCount"));
 
@@ -131,11 +135,13 @@ public class EntityOperationMetrics {
   }
 
   /**
-   * Records that the client abandoned a request on this entity before it completed. Kept separate from
-   * {@link #recordMetrics} because a client abort has no status of its own: it is reported as 400, and so is already
-   * counted as a client error by the time this is called.
+   * Records a proven remote client termination without changing the request's existing status classification.
+   * @param responseStatus the status already recorded for the request.
    */
-  public void recordClientAbort() {
+  public void recordClientAbort(ResponseStatus responseStatus) {
     clientAbortCount.inc();
+    if (responseStatus.isServerError()) {
+      serverErrorClientAbortCount.inc();
+    }
   }
 }

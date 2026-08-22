@@ -142,9 +142,14 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     logger.trace("Channel {} inactive", ctx.channel());
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
-      long timeInFlightMs = recordTermination(nettyMetrics.clientTerminatedRequestTimeInMs);
-      logger.error("Request {} was aborted because the channel {} became inactive after {} ms", request.getUri(),
-          ctx.channel(), timeInFlightMs);
+      if (!terminationRecorded && !PublicAccessLogHandler.isServerCloseInitiated(ctx.channel())) {
+        long timeInFlightMs = recordClientTermination();
+        logger.error("Request {} was aborted because the remote channel {} became inactive after {} ms",
+            request.getUri(), ctx.channel(), timeInFlightMs);
+      } else {
+        logger.trace("Channel {} became inactive after the server had started closing request {}", ctx.channel(),
+            request.getUri());
+      }
       onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
     } else {
       close();
@@ -444,7 +449,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
 
   /**
    * Records the time the in flight request has been alive for in {@code histogram}, at most once per request.
-   * {@link #resetState(ChannelHandlerContext)} re-arms the guard before each request, so a keepalive channel records
+   * {@link #resetState()} re-arms the guard before each request, so a keepalive channel records
    * once per request rather than once per connection.
    * <p/>
    * The guard is what prevents a double count, not what assigns the bucket. Bucketing is decided by which handler
@@ -462,6 +467,19 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     if (!terminationRecorded) {
       terminationRecorded = true;
       histogram.update(timeInFlightMs);
+    }
+    return timeInFlightMs;
+  }
+
+  /**
+   * Records a remote client termination at most once across channel inactivity and response-write failure paths.
+   * @return the time in ms that the request has been in flight for.
+   */
+  private long recordClientTermination() {
+    long timeInFlightMs = request.getMetricsTracker().getTimeSinceRequestReceivedInMs();
+    terminationRecorded = true;
+    if (request.getMetricsTracker().markClientAborted()) {
+      nettyMetrics.clientTerminatedRequestTimeInMs.update(timeInFlightMs);
     }
     return timeInFlightMs;
   }

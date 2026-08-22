@@ -112,31 +112,34 @@ public class RestRequestMetricsTrackerTest {
   }
 
   /**
-   * Tests that a client abort is counted separately from the {@link ResponseStatus#BadRequest} it is reported as,
-   * without changing the value of any existing per-container series.
+   * Tests that a client abort is counted separately from its existing status, including the server-error-only subset,
+   * without changing any existing per-container series.
    */
   @Test
-  public void clientAbortCountedSeparatelyFromBadRequestTest() {
-    clientAbortTest(true);
-    clientAbortTest(false);
+  public void testClientAbortCountedSeparatelyFromExistingStatus() {
+    clientAbortTest(ResponseStatus.BadRequest, true, 0);
+    clientAbortTest(ResponseStatus.InternalServerError, true, 1);
+    clientAbortTest(ResponseStatus.BadRequest, false, 0);
   }
 
   /**
-   * Records a {@link ResponseStatus#BadRequest} against a container, optionally marking it as a client abort, and
-   * checks the resulting counters.
+   * Records a status against a container, optionally marking it as a client abort, and checks the resulting counters.
+   * @param responseStatus the existing request status.
    * @param clientAborted if {@code true}, {@link RestRequestMetricsTracker#markClientAborted()} is called.
+   * @param expectedServerErrorClientAbortCount the expected 5xx abort subset.
    */
-  private void clientAbortTest(boolean clientAborted) {
+  private void clientAbortTest(ResponseStatus responseStatus, boolean clientAborted,
+      long expectedServerErrorClientAbortCount) {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
     requestMetrics.injectMetrics(new RestRequestMetrics(getClass(), "ClientAbortTest", metricRegistry));
     requestMetrics.injectContainerMetrics(
         new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null));
-    // A client termination is reported to the client as 400, so this is the status an aborted request arrives with.
-    requestMetrics.setResponseStatus(ResponseStatus.BadRequest);
+    requestMetrics.setResponseStatus(responseStatus);
     if (clientAborted) {
-      requestMetrics.markClientAborted();
+      assertTrue("The first termination path should mark the request", requestMetrics.markClientAborted());
+      assertFalse("A second termination path should not mark the request again", requestMetrics.markClientAborted());
     }
 
     requestMetrics.recordMetrics();
@@ -144,12 +147,17 @@ public class RestRequestMetricsTrackerTest {
     String metricPrefix = ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
     assertEquals("Client abort count is not as expected", clientAborted ? 1 : 0,
         metricRegistry.getCounters().get(metricPrefix + "ClientAbortCount").getCount());
-    // The point of the separate counter is that these two keep their existing meaning, so that no dashboard built on
-    // them changes value when this ships. Aborts are subtracted out using ClientAbortCount instead.
-    assertEquals("Aborts must keep counting towards the bad request count", 1,
+    assertEquals("Server-error client abort count is not as expected", expectedServerErrorClientAbortCount,
+        metricRegistry.getCounters().get(metricPrefix + "ServerErrorClientAbortCount").getCount());
+    assertEquals("Bad request count should retain the original status classification",
+        responseStatus == ResponseStatus.BadRequest ? 1 : 0,
         metricRegistry.getCounters().get(metricPrefix + "BadRequestCount").getCount());
-    assertEquals("Aborts must keep counting towards the client error count", 1,
+    assertEquals("Client error count should retain the original status classification",
+        responseStatus.isClientError() ? 1 : 0,
         metricRegistry.getCounters().get(metricPrefix + "ClientErrorCount").getCount());
+    assertEquals("Server error count should retain the original status classification",
+        responseStatus.isServerError() ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ServerErrorCount").getCount());
   }
 
   /**

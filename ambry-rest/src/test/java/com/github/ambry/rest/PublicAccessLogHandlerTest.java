@@ -122,6 +122,26 @@ public class PublicAccessLogHandlerTest {
   }
 
   /**
+   * Tests that both outbound channel termination APIs mark the close as server initiated.
+   */
+  @Test
+  public void testServerInitiatedCloseMarker() {
+    EmbeddedChannel channel = createChannel(false);
+    Assert.assertFalse("A newly active channel should have no server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+    channel.disconnect().awaitUninterruptibly();
+    Assert.assertTrue("Outbound disconnect should set the server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+
+    channel = createChannel(false);
+    Assert.assertFalse("A newly active channel should have no server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+    channel.close().awaitUninterruptibly();
+    Assert.assertTrue("Outbound close should set the server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+  }
+
+  /**
    * Tests for the request handling flow for close
    * @throws Exception
    */

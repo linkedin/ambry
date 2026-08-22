@@ -34,31 +34,35 @@ public class ContainerMetricsTest {
    * dashboard could see aborts in its bad request count with no way to subtract them back out.
    */
   @Test
-  public void clientAbortIsRecordedForContainerAndAccountTest() {
+  public void testClientAbortIsRecordedForContainerAndAccount() {
     MetricRegistry metricRegistry = new MetricRegistry();
     AccountMetrics accountMetrics = new AccountMetrics(ACCOUNT_NAME, OPERATION_TYPE, metricRegistry, false);
     ContainerMetrics containerMetrics =
         new ContainerMetrics(ACCOUNT_NAME, CONTAINER_NAME, OPERATION_TYPE, metricRegistry, false, accountMetrics);
 
-    containerMetrics.recordClientAbort();
+    containerMetrics.recordClientAbort(ResponseStatus.BadRequest);
 
     assertEquals("Container should have recorded the abort", 1, containerCounter(metricRegistry, "ClientAbortCount"));
     assertEquals("Account should have recorded the abort", 1, accountCounter(metricRegistry, "ClientAbortCount"));
+    assertEquals("A 4xx abort should not be counted as a server-error abort", 0,
+        containerCounter(metricRegistry, "ServerErrorClientAbortCount"));
+    assertEquals("The account should not record a 4xx abort as a server-error abort", 0,
+        accountCounter(metricRegistry, "ServerErrorClientAbortCount"));
   }
 
   /**
    * Tests that recording an abort touches nothing but the abort counters. The status counters are fed separately by
-   * {@link ContainerMetrics#recordMetrics}, which still sees the 400 that the abort is reported as.
+   * {@link ContainerMetrics#recordMetrics}.
    */
   @Test
-  public void clientAbortDoesNotDisturbStatusCountersTest() {
+  public void testClientAbortDoesNotDisturbStatusCounters() {
     MetricRegistry metricRegistry = new MetricRegistry();
     AccountMetrics accountMetrics = new AccountMetrics(ACCOUNT_NAME, OPERATION_TYPE, metricRegistry, false);
     ContainerMetrics containerMetrics =
         new ContainerMetrics(ACCOUNT_NAME, CONTAINER_NAME, OPERATION_TYPE, metricRegistry, false, accountMetrics);
 
     containerMetrics.recordMetrics(10, ResponseStatus.BadRequest, 0);
-    containerMetrics.recordClientAbort();
+    containerMetrics.recordClientAbort(ResponseStatus.BadRequest);
 
     assertEquals("Abort should be counted once", 1, containerCounter(metricRegistry, "ClientAbortCount"));
     assertEquals("Bad request count should be unchanged by the abort counter", 1,
@@ -67,6 +71,32 @@ public class ContainerMetricsTest {
         containerCounter(metricRegistry, "ClientErrorCount"));
     assertEquals("A client abort is not a server error", 0, containerCounter(metricRegistry, "ServerErrorCount"));
     assertEquals("A client abort is not a success", 0, containerCounter(metricRegistry, "SuccessCount"));
+  }
+
+  /**
+   * Tests that a proven client abort already classified as 5xx is emitted in the subset that can be subtracted from
+   * server errors, without changing the existing server error count.
+   */
+  @Test
+  public void testServerErrorClientAbortIsRecordedForContainerAndAccount() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    AccountMetrics accountMetrics = new AccountMetrics(ACCOUNT_NAME, OPERATION_TYPE, metricRegistry, false);
+    ContainerMetrics containerMetrics =
+        new ContainerMetrics(ACCOUNT_NAME, CONTAINER_NAME, OPERATION_TYPE, metricRegistry, false, accountMetrics);
+
+    containerMetrics.recordMetrics(10, ResponseStatus.InternalServerError, 0);
+    containerMetrics.recordClientAbort(ResponseStatus.InternalServerError);
+
+    assertEquals("Container should have recorded the abort", 1, containerCounter(metricRegistry, "ClientAbortCount"));
+    assertEquals("Container should have recorded the server-error abort subset", 1,
+        containerCounter(metricRegistry, "ServerErrorClientAbortCount"));
+    assertEquals("Container server error count should retain its existing value", 1,
+        containerCounter(metricRegistry, "ServerErrorCount"));
+    assertEquals("Account should have recorded the abort", 1, accountCounter(metricRegistry, "ClientAbortCount"));
+    assertEquals("Account should have recorded the server-error abort subset", 1,
+        accountCounter(metricRegistry, "ServerErrorClientAbortCount"));
+    assertEquals("Account server error count should retain its existing value", 1,
+        accountCounter(metricRegistry, "ServerErrorCount"));
   }
 
   /**

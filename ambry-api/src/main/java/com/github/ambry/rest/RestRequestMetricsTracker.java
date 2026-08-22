@@ -59,7 +59,7 @@ public class RestRequestMetricsTracker {
   private boolean failed = false;
   private boolean satisfied = true;
   private boolean serverError = false;
-  private boolean clientAborted = false;
+  private final AtomicBoolean clientAborted = new AtomicBoolean(false);
   private ResponseStatus responseStatus = ResponseStatus.Ok;
 
   private long bytesTransferred = 0;
@@ -266,11 +266,11 @@ public class RestRequestMetricsTracker {
   }
 
   /**
-   * Marks that the client abandoned this request before it completed. A client termination is reported to the client
-   * as 400, so without this the abort is indistinguishable from a genuine bad request in the per-container counts.
+   * Marks that a network boundary observed the remote client terminate this request.
+   * @return {@code true} if this call marked the request, or {@code false} if another termination path already did.
    */
-  public void markClientAborted() {
-    clientAborted = true;
+  public boolean markClientAborted() {
+    return clientAborted.compareAndSet(false, true);
   }
 
   // Exposed for test
@@ -304,8 +304,8 @@ public class RestRequestMetricsTracker {
         }
         if (containerMetrics != null) {
           containerMetrics.recordMetrics(nioMetricsTracker.roundTripTimeInMs, responseStatus, bytesTransferred);
-          if (clientAborted) {
-            containerMetrics.recordClientAbort();
+          if (clientAborted.get()) {
+            containerMetrics.recordClientAbort(responseStatus);
           }
         }
         if (satisfied) {

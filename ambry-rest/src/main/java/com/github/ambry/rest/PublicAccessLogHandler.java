@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -23,6 +24,7 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.util.AttributeKey;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
@@ -43,6 +45,8 @@ import static com.github.ambry.rest.RestUtils.*;
  */
 public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private static final int SAN_DNS_FIELD_ID = 2;
+  private static final AttributeKey<Boolean> SERVER_CLOSE_INITIATED =
+      AttributeKey.valueOf(PublicAccessLogHandler.class.getName() + ".serverCloseInitiated");
   private final PublicAccessLogger publicAccessLogger;
   private final NettyMetrics nettyMetrics;
   private long requestArrivalTimeInMs;
@@ -149,6 +153,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
 
   @Override
   public void disconnect(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
+    markServerCloseInitiated(ctx.channel());
     if (request != null) {
       logError(" : Channel disconnected while request in progress.");
     }
@@ -157,10 +162,28 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
 
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
+    markServerCloseInitiated(ctx.channel());
     if (request != null) {
       logError(" : Channel closed while request in progress.");
     }
     super.close(ctx, future);
+  }
+
+  /**
+   * @param channel the channel to inspect.
+   * @return {@code true} if an outbound handler initiated closure of {@code channel}.
+   */
+  static boolean isServerCloseInitiated(Channel channel) {
+    return Boolean.TRUE.equals(channel.attr(SERVER_CLOSE_INITIATED).get());
+  }
+
+  /**
+   * Records server close intent before Netty makes the channel inactive. A close initiated by the remote peer does not
+   * traverse the outbound pipeline and therefore does not set this attribute.
+   * @param channel the channel being closed.
+   */
+  private static void markServerCloseInitiated(Channel channel) {
+    channel.attr(SERVER_CLOSE_INITIATED).set(true);
   }
 
   /**
