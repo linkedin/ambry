@@ -810,6 +810,153 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests that a failure while writing streamed response content records the client abort through the progressive
+   * write callback.
+   */
+  @Test
+  public void streamedResponseWriteFailureRecordsClientAbortTest() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    MockNettyMessageProcessor.containerMetricsToInject =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    EmbeddedChannel channel = null;
+    try {
+      MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+      channel =
+          new EmbeddedChannel(new FailingChunkContentWriteHandler(), new ChunkedWriteHandler(), processor);
+      long durationCountBefore = processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount();
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+      HttpUtil.setKeepAlive(httpRequest, false);
+
+      channel.writeInbound(httpRequest);
+      channel.writeInbound(createContent("@@randomContent@@@", true));
+      channel.runPendingTasks();
+
+      assertEquals("Expected one streamed-content callback", 1, processor.writeCallbacksToVerify.size());
+      ChannelWriteCallback callback = processor.writeCallbacksToVerify.get(0);
+      callback.compareWithFuture();
+      assertTrue("The failed content write should retain a recognizable client-termination exception",
+          Utils.isPossibleClientTermination(callback.exception));
+      assertEquals("The failed streamed write should record one client abort", 1,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("A successful response should not enter the server-error abort subset", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount").getCount());
+      assertEquals("The streamed-write path should record the termination duration exactly once",
+          durationCountBefore + 1, processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount());
+    } finally {
+      MockNettyMessageProcessor.containerMetricsToInject = null;
+      if (channel != null) {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  /**
+   * Tests that a synthetic closed-channel exception used to clean up a stray post-completion write does not claim the
+   * request's client-termination outcome.
+   */
+  @Test
+  public void syntheticCleanupFailureDoesNotRecordClientAbortTest() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    MockNettyMessageProcessor.containerMetricsToInject =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    EmbeddedChannel channel = null;
+    try {
+      channel = createEmbeddedChannel();
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      long durationCountBefore = processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount();
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+      HttpUtil.setKeepAlive(httpRequest, true);
+
+      channel.writeInbound(httpRequest);
+      channel.writeInbound(createContent("@@randomContent@@@", true));
+      channel.runPendingTasks();
+      verifyCallbacks(processor);
+      NettyRequest request = processor.getRequest();
+      NettyResponseChannel responseChannel = processor.getRestResponseChannel();
+      Object outbound;
+      while ((outbound = channel.readOutbound()) != null) {
+        ReferenceCountUtil.release(outbound);
+      }
+      assertFalse("The completed request should be closed", request.isOpen());
+      assertTrue("A keep-alive response should leave the network channel active", channel.isActive());
+      assertEquals("The completed request should retain its success classification", 1,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "SuccessCount").getCount());
+
+      Future<Long> strayWrite = responseChannel.write(ByteBuffer.allocate(1), null);
+      try {
+        strayWrite.get(1, TimeUnit.SECONDS);
+        fail("The stray write should fail during synthetic cleanup");
+      } catch (ExecutionException e) {
+        assertTrue("The cleanup should return a closed-channel failure",
+            Utils.isPossibleClientTermination(e.getCause()));
+      }
+
+      // Normal completion already sealed the request metrics, so claim the tracker outcome directly to prove that the
+      // synthetic cleanup path did not consume it.
+      assertTrue("Synthetic cleanup must leave the request termination outcome unclaimed",
+          request.getMetricsTracker().markIdleTimeoutTermination());
+      assertEquals("Synthetic cleanup should not record a client abort", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("Synthetic cleanup should not record a client-termination duration", durationCountBefore,
+          processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount());
+    } finally {
+      MockNettyMessageProcessor.containerMetricsToInject = null;
+      if (channel != null) {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  /**
+   * Tests that a local content-length validation failure supplied through the progressive write future is not
+   * attributed to a remote client termination.
+   */
+  @Test
+  public void nonClientWriteFailureDoesNotRecordClientAbortTest() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    MockNettyMessageProcessor.containerMetricsToInject =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    EmbeddedChannel channel = null;
+    try {
+      channel = createEmbeddedChannel();
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      long durationCountBefore = processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount();
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+      HttpUtil.setKeepAlive(httpRequest, false);
+
+      channel.writeInbound(httpRequest);
+      NettyRequest request = processor.getRequest();
+      NettyResponseChannel responseChannel = processor.getRestResponseChannel();
+      responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 1);
+
+      Future<Long> writeFuture = responseChannel.write(ByteBuffer.wrap(MockNettyMessageProcessor.CHUNK), null);
+      try {
+        writeFuture.get(1, TimeUnit.SECONDS);
+        fail("Writing more than Content-Length should fail");
+      } catch (ExecutionException e) {
+        assertTrue("The write should fail with the local content-length validation error",
+            e.getCause() instanceof IllegalStateException);
+        assertTrue("The failure should identify the Content-Length overflow",
+            e.getCause().getMessage().contains("greater than Content-Length set [1]"));
+      }
+
+      assertTrue("A local validation failure must leave the request termination outcome unclaimed",
+          request.getMetricsTracker().markIdleTimeoutTermination());
+      assertEquals("A local validation failure should not record a client abort", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("A local validation failure should not enter the server-error abort subset", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount").getCount());
+      assertEquals("A local validation failure should not record a client-termination duration", durationCountBefore,
+          processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount());
+    } finally {
+      MockNettyMessageProcessor.containerMetricsToInject = null;
+      if (channel != null) {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  /**
    * Tests that request-lifecycle state alone is not treated as client-abort provenance.
    */
   @Test
@@ -1860,6 +2007,14 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     return nettyMetrics;
   }
 
+  NettyRequest getRequest() {
+    return request;
+  }
+
+  NettyResponseChannel getRestResponseChannel() {
+    return restResponseChannel;
+  }
+
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
     this.ctx = ctx;
@@ -2313,6 +2468,24 @@ class FailingResponseWriteHandler extends ChannelOutboundHandlerAdapter {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
     if (msg instanceof HttpResponse && ((HttpResponse) msg).status().equals(statusToFail)) {
+      ReferenceCountUtil.release(msg);
+      promise.setFailure(new ClosedChannelException());
+    } else {
+      ctx.write(msg, promise);
+    }
+  }
+}
+
+/**
+ * Fails the first streamed {@link HttpContent} write while allowing response metadata to complete.
+ */
+class FailingChunkContentWriteHandler extends ChannelOutboundHandlerAdapter {
+  private boolean failed;
+
+  @Override
+  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+    if (!failed && msg instanceof HttpContent && !(msg instanceof HttpResponse)) {
+      failed = true;
       ReferenceCountUtil.release(msg);
       promise.setFailure(new ClosedChannelException());
     } else {
