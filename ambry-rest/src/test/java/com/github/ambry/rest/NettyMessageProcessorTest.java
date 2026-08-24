@@ -587,6 +587,8 @@ public class NettyMessageProcessorTest {
 
       assertFalse("A remote close must not be marked as server initiated",
           PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertFalse("A remote close must not be classified as a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
       assertEquals("Termination of the in-flight request should have been recorded exactly once", 1,
           fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
       assertEquals("A client termination should not also be recorded as an idle termination", 0,
@@ -614,11 +616,41 @@ public class NettyMessageProcessorTest {
 
       assertTrue("The outbound close should be marked as server initiated",
           PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertTrue("The outbound close should be classified as a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
       assertEquals("A server close should not record a client-termination duration", 0,
           fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
       assertEquals("A server close should not record a client abort", 0,
           fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
       assertEquals("A server close should not enter the server-error abort subset", 0,
+          fixture.metricRegistry.getCounters()
+              .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
+              .getCount());
+    }
+  }
+
+  /**
+   * Tests that event-loop shutdown is not attributed to the client even though Netty's unsafe close bypasses outbound
+   * handlers and therefore cannot set the normal close marker.
+   */
+  @Test
+  public void testServiceShutdownDoesNotRecordClientAbort() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      fixture.sendOpenRequest();
+      fixture.markServiceDown();
+
+      fixture.closeServerWithoutPipeline();
+      fixture.awaitServerCloseAndDrain();
+
+      assertFalse("The unsafe shutdown close should bypass the outbound close marker",
+          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertTrue("Service-down state should still identify a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("Service shutdown should not record a client-termination duration", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("Service shutdown should not record a client abort", 0,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("Service shutdown should not enter the server-error abort subset", 0,
           fixture.metricRegistry.getCounters()
               .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
               .getCount());
@@ -674,7 +706,7 @@ public class NettyMessageProcessorTest {
       fixture.awaitServerCloseAndDrain();
 
       assertTrue("The idle timeout should close the channel through the outbound server path",
-          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
       assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
           fixture.nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
       assertEquals("The deferred channelInactive should not double record the same termination", 0,
@@ -682,6 +714,58 @@ public class NettyMessageProcessorTest {
       assertEquals("An idle timeout should not record a client abort", 0,
           fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
       assertRecordedTimeInFlight(fixture.nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
+    }
+  }
+
+  /**
+   * Tests that an idle timeout remains the sole termination cause when failing the in-progress response invokes the
+   * response-write listener.
+   */
+  @Test
+   public void testIdleDuringStreamingResponseDoesNotRecordClientAbort() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    ContainerMetrics containerMetrics =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    CountDownLatch responseStarted = new CountDownLatch(1);
+    RestRequestHandler streamingRequestHandler = new RestRequestHandler() {
+      @Override
+      public void start() {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+        restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+        restResponseChannel.write(ByteBuffer.allocate(1), null);
+        responseStarted.countDown();
+      }
+    };
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, streamingRequestHandler);
+    EmbeddedChannel channel =
+        new EmbeddedChannel(new PublicAccessLogHandler(
+            new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics),
+            new ChunkedWriteHandler(), processor);
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
+      assertTrue("The response should have started synchronously", responseStarted.await(5, TimeUnit.SECONDS));
+
+      channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
+
+      assertEquals("The idle timeout should record exactly one duration", 1,
+          nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("Failing the streaming response should not also record a client duration", 0,
+          nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("An idle timeout should not record a client abort", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+    } finally {
+      channel.finishAndReleaseAll();
     }
   }
 
@@ -1062,6 +1146,7 @@ public class NettyMessageProcessorTest {
   private static class RealChannelFixture implements AutoCloseable {
     private final MetricRegistry metricRegistry = new MetricRegistry();
     private final NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    private final RestServerState restServerState = new RestServerState("/healthCheck");
     private final EventLoopGroup group = new DefaultEventLoopGroup(1);
     private final AtomicReference<Channel> serverChannel = new AtomicReference<>();
     private final CountDownLatch serverInitialized = new CountDownLatch(1);
@@ -1071,6 +1156,7 @@ public class NettyMessageProcessorTest {
 
     RealChannelFixture() throws Exception {
       RestRequestMetricsTracker.setDefaults(metricRegistry);
+      restServerState.markServiceUp();
       ContainerMetrics containerMetrics =
           new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
       HoldingRequestHandler requestHandler = new HoldingRequestHandler(containerMetrics, requestHandled);
@@ -1082,7 +1168,7 @@ public class NettyMessageProcessorTest {
             protected void initChannel(LocalChannel channel) {
               channel.pipeline()
                   .addLast(new PublicAccessLogHandler(
-                      new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics))
+                      new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics, restServerState))
                   .addLast(new ChunkedWriteHandler())
                   .addLast(new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler));
               serverChannel.set(channel);
@@ -1110,6 +1196,14 @@ public class NettyMessageProcessorTest {
 
     Channel server() {
       return serverChannel.get();
+    }
+
+    void markServiceDown() {
+      restServerState.markServiceDown();
+    }
+
+    void closeServerWithoutPipeline() throws Exception {
+      server().eventLoop().submit(() -> server().unsafe().close(server().voidPromise())).sync();
     }
 
     void awaitServerCloseAndDrain() throws Exception {

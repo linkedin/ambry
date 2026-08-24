@@ -13,7 +13,6 @@
  */
 package com.github.ambry.rest;
 
-import com.codahale.metrics.Histogram;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.utils.Utils;
@@ -85,9 +84,6 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private volatile NettyRequest request = null;
   private volatile NettyResponseChannel responseChannel = null;
   private volatile boolean requestContentFullyReceived = false;
-  // Set once the termination of the current request has been recorded, so that channelInactive() and
-  // userEventTriggered() cannot both record the same termination. Reset in resetState() for the next request.
-  private volatile boolean terminationRecorded = false;
 
   // variables that live for one channelRead0
   private volatile Long lastChannelReadTime = null;
@@ -142,10 +138,15 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     logger.trace("Channel {} inactive", ctx.channel());
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
-      if (!terminationRecorded && !PublicAccessLogHandler.isServerCloseInitiated(ctx.channel())) {
+      if (!PublicAccessLogHandler.isServerTermination(ctx.channel())) {
         long timeInFlightMs = recordClientTermination();
-        logger.error("Request {} was aborted because the remote channel {} became inactive after {} ms",
-            request.getUri(), ctx.channel(), timeInFlightMs);
+        if (timeInFlightMs >= 0) {
+          logger.error("Request {} was aborted because the remote channel {} became inactive after {} ms",
+              request.getUri(), ctx.channel(), timeInFlightMs);
+        } else {
+          logger.trace("Request {} termination had already been recorded when channel {} became inactive",
+              request.getUri(), ctx.channel());
+        }
       } else {
         logger.trace("Channel {} became inactive after the server had started closing request {}", ctx.channel(),
             request.getUri());
@@ -224,7 +225,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         // Fold the request detail into the existing idle line rather than emitting a second, error level line for the
         // same event. Idle client disconnects are routine, and IdleTerminatedRequestTimeInMs already carries the
         // timing signal; the URI here is what lets a specific idle abort be correlated with the access log.
-        long timeInFlightMs = recordTermination(nettyMetrics.idleTerminatedRequestTimeInMs);
+        long timeInFlightMs = recordIdleTermination();
         logger.info("Channel {} has been idle for {} seconds. Closing it. Request {} had been in flight for {} ms",
             ctx.channel(), nettyConfig.nettyServerIdleTimeSeconds, request.getUri(), timeInFlightMs);
         onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
@@ -442,31 +443,19 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     request = null;
     lastChannelReadTime = null;
     requestContentFullyReceived = false;
-    terminationRecorded = false;
     responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
     logger.trace("Refreshed state for channel {}", ctx.channel());
   }
 
   /**
-   * Records the time the in flight request has been alive for in {@code histogram}, at most once per request.
-   * {@link #resetState()} re-arms the guard before each request, so a keepalive channel records
-   * once per request rather than once per connection.
-   * <p/>
-   * The guard is what prevents a double count, not what assigns the bucket. Bucketing is decided by which handler
-   * observes the request still open, and that depends on the transport: a real event loop defers
-   * {@code fireChannelInactive} to a later task, by which time an idle abort has already closed the request, whereas
-   * {@link io.netty.channel.embedded.EmbeddedChannel} runs it inline while the request is still open. On a real
-   * transport an idle abort is therefore only ever seen by
-   * {@link #userEventTriggered(ChannelHandlerContext, Object)}; the guard covers the inline case so the two histograms
-   * stay disjoint on every transport.
-   * @param histogram the {@link Histogram} to record the elapsed time into.
+   * Records the time the in-flight request has been alive for if the idle timeout wins the request-scoped termination
+   * race.
    * @return the time in ms that the request has been in flight for.
    */
-  private long recordTermination(Histogram histogram) {
+  private long recordIdleTermination() {
     long timeInFlightMs = request.getMetricsTracker().getTimeSinceRequestReceivedInMs();
-    if (!terminationRecorded) {
-      terminationRecorded = true;
-      histogram.update(timeInFlightMs);
+    if (request.getMetricsTracker().markIdleTimeoutTermination()) {
+      nettyMetrics.idleTerminatedRequestTimeInMs.update(timeInFlightMs);
     }
     return timeInFlightMs;
   }
@@ -477,11 +466,11 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    */
   private long recordClientTermination() {
     long timeInFlightMs = request.getMetricsTracker().getTimeSinceRequestReceivedInMs();
-    terminationRecorded = true;
-    if (request.getMetricsTracker().markClientAborted()) {
+    if (request.getMetricsTracker().markClientAborted(false)) {
       nettyMetrics.clientTerminatedRequestTimeInMs.update(timeInFlightMs);
+      return timeInFlightMs;
     }
-    return timeInFlightMs;
+    return -1;
   }
 
   /**

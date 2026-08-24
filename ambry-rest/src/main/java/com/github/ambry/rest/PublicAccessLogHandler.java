@@ -47,8 +47,11 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private static final int SAN_DNS_FIELD_ID = 2;
   private static final AttributeKey<Boolean> SERVER_CLOSE_INITIATED =
       AttributeKey.valueOf(PublicAccessLogHandler.class.getName() + ".serverCloseInitiated");
+  private static final AttributeKey<RestServerState> REST_SERVER_STATE =
+      AttributeKey.valueOf(PublicAccessLogHandler.class.getName() + ".restServerState");
   private final PublicAccessLogger publicAccessLogger;
   private final NettyMetrics nettyMetrics;
+  private final RestServerState restServerState;
   private long requestArrivalTimeInMs;
   private long requestLastChunkArrivalTimeInMs;
   private long responseFirstChunkStartTimeInMs;
@@ -63,9 +66,23 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private static final Logger logger = LogManager.getLogger(PublicAccessLogHandler.class);
 
   public PublicAccessLogHandler(PublicAccessLogger publicAccessLogger, NettyMetrics nettyMetrics) {
+    this(publicAccessLogger, nettyMetrics, null);
+  }
+
+  PublicAccessLogHandler(PublicAccessLogger publicAccessLogger, NettyMetrics nettyMetrics,
+      RestServerState restServerState) {
     this.publicAccessLogger = publicAccessLogger;
     this.nettyMetrics = nettyMetrics;
+    this.restServerState = restServerState;
     reset();
+  }
+
+  @Override
+  public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+    if (restServerState != null) {
+      ctx.channel().attr(REST_SERVER_STATE).set(restServerState);
+    }
+    super.handlerAdded(ctx);
   }
 
   @Override
@@ -175,6 +192,15 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
    */
   static boolean isServerCloseInitiated(Channel channel) {
     return Boolean.TRUE.equals(channel.attr(SERVER_CLOSE_INITIATED).get());
+  }
+
+  /**
+   * @param channel the channel to inspect.
+   * @return {@code true} if the server initiated closure through the pipeline or the REST service is down.
+   */
+  static boolean isServerTermination(Channel channel) {
+    RestServerState restServerState = channel.attr(REST_SERVER_STATE).get();
+    return isServerCloseInitiated(channel) || restServerState != null && !restServerState.isServiceUp();
   }
 
   /**

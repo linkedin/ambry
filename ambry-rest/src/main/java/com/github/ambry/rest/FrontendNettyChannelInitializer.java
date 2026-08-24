@@ -97,7 +97,8 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
         // for health check request handling
         .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
         // for public access logging
-        .addLast("publicAccessLogHandler", new PublicAccessLogHandler(publicAccessLogger, nettyMetrics))
+        .addLast("publicAccessLogHandler",
+            new PublicAccessLogHandler(publicAccessLogger, nettyMetrics, restServerState))
         // for detecting connections that have been idle too long - probably because of an error.
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
         // for safe writing of chunks for responses

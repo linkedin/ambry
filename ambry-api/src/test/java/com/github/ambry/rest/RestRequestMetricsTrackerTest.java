@@ -117,18 +117,37 @@ public class RestRequestMetricsTrackerTest {
    */
   @Test
   public void testClientAbortCountedSeparatelyFromExistingStatus() {
-    clientAbortTest(ResponseStatus.BadRequest, true, 0);
-    clientAbortTest(ResponseStatus.InternalServerError, true, 1);
-    clientAbortTest(ResponseStatus.BadRequest, false, 0);
+    clientAbortTest(ResponseStatus.BadRequest, true, false, 0);
+    clientAbortTest(ResponseStatus.InternalServerError, true, false, 0);
+    clientAbortTest(ResponseStatus.InternalServerError, true, true, 1);
+    clientAbortTest(ResponseStatus.BadRequest, false, false, 0);
+  }
+
+  /**
+   * Tests that idle timeout and client-abort paths share one request-scoped termination winner.
+   */
+  @Test
+  public void testRequestTerminationReasonRecordedOnlyOnce() {
+    RestRequestMetricsTracker idleFirst = new RestRequestMetricsTracker();
+    assertTrue("The idle path should claim an unrecorded termination", idleFirst.markIdleTimeoutTermination());
+    assertFalse("A later client path should not relabel the idle termination", idleFirst.markClientAborted(false));
+
+    RestRequestMetricsTracker clientFirst = new RestRequestMetricsTracker();
+    assertTrue("The client path should claim an unrecorded termination", clientFirst.markClientAborted(false));
+    assertFalse("A later idle path should not relabel the client termination",
+        clientFirst.markIdleTimeoutTermination());
+    assertFalse("A second client path should not record the request again", clientFirst.markClientAborted(true));
   }
 
   /**
    * Records a status against a container, optionally marking it as a client abort, and checks the resulting counters.
    * @param responseStatus the existing request status.
-   * @param clientAborted if {@code true}, {@link RestRequestMetricsTracker#markClientAborted()} is called.
+   * @param clientAborted if {@code true}, {@link RestRequestMetricsTracker#markClientAborted(boolean)} is called.
+   * @param clientAbortCausedServerError whether the abort caused the request's server-error classification.
    * @param expectedServerErrorClientAbortCount the expected 5xx abort subset.
    */
   private void clientAbortTest(ResponseStatus responseStatus, boolean clientAborted,
+      boolean clientAbortCausedServerError,
       long expectedServerErrorClientAbortCount) {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
@@ -138,8 +157,10 @@ public class RestRequestMetricsTrackerTest {
         new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null));
     requestMetrics.setResponseStatus(responseStatus);
     if (clientAborted) {
-      assertTrue("The first termination path should mark the request", requestMetrics.markClientAborted());
-      assertFalse("A second termination path should not mark the request again", requestMetrics.markClientAborted());
+      assertTrue("The first termination path should mark the request",
+          requestMetrics.markClientAborted(clientAbortCausedServerError));
+      assertFalse("A second termination path should not mark the request again",
+          requestMetrics.markClientAborted(clientAbortCausedServerError));
     }
 
     requestMetrics.recordMetrics();

@@ -190,28 +190,19 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.channelStatusInconsistentCount.inc();
         writeException = new ClosedChannelException();
       } else {
-        // Channel is confirmed inactive — client disconnected. Tag with a recognizable message so
-        // isPossibleClientTermination() can identify this, since raw ClosedChannelException has no message.
-        // Only tag GET requests where write() is used to stream blob data back to the client.
-        // PUT/POST retain their existing bare ClosedChannelException and status mapping.
+        // The channel is inactive. Record client provenance only when no server termination evidence exists, while
+        // retaining the existing method-specific exception and status mapping below.
         logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed.", ctx.channel());
         ClosedChannelException closedChannelException = new ClosedChannelException();
-        boolean clientTermination = recordClientTerminationOnWriteFailure(closedChannelException);
+        boolean clientAbortCausedServerError =
+            request != null && request.getRestMethod() != RestMethod.GET && !isServerErrorResponse();
+        recordClientTerminationOnWriteFailure(closedChannelException, clientAbortCausedServerError);
         writeFuture.addListener(new CleanupCallback(closedChannelException));
         if (request != null && request.getRestMethod() == RestMethod.GET) {
           nettyMetrics.clientChannelClosedOnWriteCount.inc();
           writeException = new IOException(Utils.CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG, closedChannelException);
-          if (clientTermination) {
-            errorResponseStatus = ResponseStatus.BadRequest;
-          }
         } else {
           writeException = closedChannelException;
-          if (clientTermination) {
-            // onResponseComplete() fails writeFuture before constructing the error response. Its cleanup listener can
-            // therefore close and record the request reentrantly, so preserve the status this exception already maps
-            // to before that listener can run.
-            errorResponseStatus = ResponseStatus.InternalServerError;
-          }
         }
       }
       FutureResult<Long> future = new FutureResult<Long>();
@@ -855,7 +846,7 @@ class NettyResponseChannel implements RestResponseChannel {
     try {
       nettyMetrics.channelWriteError.inc();
       if (networkWriteFailed) {
-        recordClientTerminationOnWriteFailure(cause);
+        recordClientTerminationOnWriteFailure(cause, false);
       }
       Exception exception;
       if (!(cause instanceof Exception)) {
@@ -881,17 +872,16 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Records a client termination when a network write supplies both the close evidence and an eligible cause. A late
-   * failure while writing a server-error response is excluded so it cannot relabel the original 5xx as client-caused.
+   * Records a client termination when a network write supplies both the close evidence and an eligible cause.
    * @param cause the outbound write failure.
+   * @param clientAbortCausedServerError {@code true} if this abort can cause the request's 5xx classification.
    */
-  private boolean recordClientTerminationOnWriteFailure(Throwable cause) {
-    boolean clientTermination = request != null && !PublicAccessLogHandler.isServerCloseInitiated(ctx.channel())
-        && !isServerErrorResponse() && isClientTerminationWriteFailure(cause);
-    if (clientTermination && request.getMetricsTracker().markClientAborted()) {
+  private void recordClientTerminationOnWriteFailure(Throwable cause, boolean clientAbortCausedServerError) {
+    boolean clientTermination = request != null && !PublicAccessLogHandler.isServerTermination(ctx.channel())
+        && isClientTerminationWriteFailure(cause);
+    if (clientTermination && request.getMetricsTracker().markClientAborted(clientAbortCausedServerError)) {
       nettyMetrics.clientTerminatedRequestTimeInMs.update(request.getMetricsTracker().getTimeSinceRequestReceivedInMs());
     }
-    return clientTermination;
   }
 
   /**

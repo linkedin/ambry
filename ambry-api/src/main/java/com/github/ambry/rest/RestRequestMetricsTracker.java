@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.frontend.ContainerMetrics;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -59,10 +60,18 @@ public class RestRequestMetricsTracker {
   private boolean failed = false;
   private boolean satisfied = true;
   private boolean serverError = false;
-  private final AtomicBoolean clientAborted = new AtomicBoolean(false);
+  private final AtomicReference<RequestTerminationReason> requestTerminationReason =
+      new AtomicReference<>(RequestTerminationReason.NONE);
   private ResponseStatus responseStatus = ResponseStatus.Ok;
 
   private long bytesTransferred = 0;
+
+  private enum RequestTerminationReason {
+    NONE,
+    IDLE_TIMEOUT,
+    CLIENT_ABORT,
+    CLIENT_ABORT_CAUSED_SERVER_ERROR
+  }
 
   /**
    * Tracker for updating NIO related metrics.
@@ -266,11 +275,23 @@ public class RestRequestMetricsTracker {
   }
 
   /**
-   * Marks that a network boundary observed the remote client terminate this request.
-   * @return {@code true} if this call marked the request, or {@code false} if another termination path already did.
+   * Marks that the server's idle timeout terminated this request.
+   * @return {@code true} if this call claimed the request termination, or {@code false} if another path already did.
    */
-  public boolean markClientAborted() {
-    return clientAborted.compareAndSet(false, true);
+  public boolean markIdleTimeoutTermination() {
+    return requestTerminationReason.compareAndSet(RequestTerminationReason.NONE,
+        RequestTerminationReason.IDLE_TIMEOUT);
+  }
+
+  /**
+   * Marks that a network boundary observed the remote client terminate this request.
+   * @param clientAbortCausedServerError {@code true} if this abort can cause the request's 5xx classification.
+   * @return {@code true} if this call claimed the request termination, or {@code false} if another path already did.
+   */
+  public boolean markClientAborted(boolean clientAbortCausedServerError) {
+    RequestTerminationReason reason = clientAbortCausedServerError
+        ? RequestTerminationReason.CLIENT_ABORT_CAUSED_SERVER_ERROR : RequestTerminationReason.CLIENT_ABORT;
+    return requestTerminationReason.compareAndSet(RequestTerminationReason.NONE, reason);
   }
 
   // Exposed for test
@@ -304,8 +325,11 @@ public class RestRequestMetricsTracker {
         }
         if (containerMetrics != null) {
           containerMetrics.recordMetrics(nioMetricsTracker.roundTripTimeInMs, responseStatus, bytesTransferred);
-          if (clientAborted.get()) {
-            containerMetrics.recordClientAbort(responseStatus);
+          RequestTerminationReason terminationReason = requestTerminationReason.get();
+          if (terminationReason == RequestTerminationReason.CLIENT_ABORT
+              || terminationReason == RequestTerminationReason.CLIENT_ABORT_CAUSED_SERVER_ERROR) {
+            containerMetrics.recordClientAbort(responseStatus,
+                terminationReason == RequestTerminationReason.CLIENT_ABORT_CAUSED_SERVER_ERROR);
           }
         }
         if (satisfied) {

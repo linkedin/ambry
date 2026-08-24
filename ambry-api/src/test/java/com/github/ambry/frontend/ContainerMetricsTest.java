@@ -40,7 +40,7 @@ public class ContainerMetricsTest {
     ContainerMetrics containerMetrics =
         new ContainerMetrics(ACCOUNT_NAME, CONTAINER_NAME, OPERATION_TYPE, metricRegistry, false, accountMetrics);
 
-    containerMetrics.recordClientAbort(ResponseStatus.BadRequest);
+    containerMetrics.recordClientAbort(ResponseStatus.BadRequest, false);
 
     assertEquals("Container should have recorded the abort", 1, containerCounter(metricRegistry, "ClientAbortCount"));
     assertEquals("Account should have recorded the abort", 1, accountCounter(metricRegistry, "ClientAbortCount"));
@@ -62,7 +62,7 @@ public class ContainerMetricsTest {
         new ContainerMetrics(ACCOUNT_NAME, CONTAINER_NAME, OPERATION_TYPE, metricRegistry, false, accountMetrics);
 
     containerMetrics.recordMetrics(10, ResponseStatus.BadRequest, 0);
-    containerMetrics.recordClientAbort(ResponseStatus.BadRequest);
+    containerMetrics.recordClientAbort(ResponseStatus.BadRequest, false);
 
     assertEquals("Abort should be counted once", 1, containerCounter(metricRegistry, "ClientAbortCount"));
     assertEquals("Bad request count should be unchanged by the abort counter", 1,
@@ -85,7 +85,7 @@ public class ContainerMetricsTest {
         new ContainerMetrics(ACCOUNT_NAME, CONTAINER_NAME, OPERATION_TYPE, metricRegistry, false, accountMetrics);
 
     containerMetrics.recordMetrics(10, ResponseStatus.InternalServerError, 0);
-    containerMetrics.recordClientAbort(ResponseStatus.InternalServerError);
+    containerMetrics.recordClientAbort(ResponseStatus.InternalServerError, true);
 
     assertEquals("Container should have recorded the abort", 1, containerCounter(metricRegistry, "ClientAbortCount"));
     assertEquals("Container should have recorded the server-error abort subset", 1,
@@ -97,6 +97,32 @@ public class ContainerMetricsTest {
         accountCounter(metricRegistry, "ServerErrorClientAbortCount"));
     assertEquals("Account server error count should retain its existing value", 1,
         accountCounter(metricRegistry, "ServerErrorCount"));
+  }
+
+  /**
+   * Tests that a client disconnect while an existing server error is being written is not placed in the subset used to
+   * discount client-caused server errors.
+   */
+  @Test
+  public void testExistingServerErrorClientAbortIsNotSubtractable() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    AccountMetrics accountMetrics = new AccountMetrics(ACCOUNT_NAME, OPERATION_TYPE, metricRegistry, false);
+    ContainerMetrics containerMetrics =
+        new ContainerMetrics(ACCOUNT_NAME, CONTAINER_NAME, OPERATION_TYPE, metricRegistry, false, accountMetrics);
+
+    containerMetrics.recordMetrics(10, ResponseStatus.InternalServerError, 0);
+    containerMetrics.recordClientAbort(ResponseStatus.InternalServerError, false);
+
+    assertEquals("Container should have recorded the general abort", 1,
+        containerCounter(metricRegistry, "ClientAbortCount"));
+    assertEquals("A disconnect while writing an existing 5xx is not subtractable", 0,
+        containerCounter(metricRegistry, "ServerErrorClientAbortCount"));
+    assertEquals("Container server error count should retain its existing value", 1,
+        containerCounter(metricRegistry, "ServerErrorCount"));
+    assertEquals("Account should have recorded the general abort", 1,
+        accountCounter(metricRegistry, "ClientAbortCount"));
+    assertEquals("The account should not subtract an existing server error", 0,
+        accountCounter(metricRegistry, "ServerErrorClientAbortCount"));
   }
 
   /**

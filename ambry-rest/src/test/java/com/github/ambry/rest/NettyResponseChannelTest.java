@@ -22,6 +22,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -30,15 +32,22 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelProgressivePromise;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultChannelProgressivePromise;
+import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.channel.local.LocalAddress;
+import io.netty.channel.local.LocalChannel;
+import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
@@ -78,6 +87,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -97,6 +107,7 @@ import static org.mockito.Mockito.*;
 public class NettyResponseChannelTest {
   private static final String CONTAINER_METRIC_PREFIX =
       ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
+  private static final AtomicLong LOCAL_CHANNEL_ID = new AtomicLong(0);
   private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   @Before
@@ -760,11 +771,11 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Tests that a client disconnect while a genuine 500 response is being written does not relabel that server error as
-   * client-caused.
+   * Tests that a client disconnect while a genuine 500 response is being written records the general abort signal
+   * without placing the existing server error in the subtractable subset.
    */
   @Test
-  public void serverErrorResponseWriteFailureDoesNotRecordClientAbortTest() throws Exception {
+  public void serverErrorResponseWriteFailureRecordsGeneralClientAbortTest() throws Exception {
     MetricRegistry metricRegistry = new MetricRegistry();
     MockNettyMessageProcessor.containerMetricsToInject =
         new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
@@ -784,12 +795,12 @@ public class NettyResponseChannelTest {
 
       assertEquals("The original server error should remain visible", 1,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorCount").getCount());
-      assertEquals("A late response-write disconnect should not relabel the server error", 0,
+      assertEquals("The failed network write should record the general client abort", 1,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
       assertEquals("A late response-write disconnect should not enter the subtractable 5xx subset", 0,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount").getCount());
-      assertEquals("No client-termination duration should be recorded for the genuine server error",
-          durationCountBefore, processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("The failed network write should record the client-termination duration",
+          durationCountBefore + 1, processor.getNettyMetrics().clientTerminatedRequestTimeInMs.getCount());
     } finally {
       MockNettyMessageProcessor.containerMetricsToInject = null;
       if (channel != null) {
@@ -835,12 +846,11 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Tests the proven 5xx abort path: an inactive POST channel makes {@link NettyResponseChannel#write(ByteBuffer,
-   * Callback)} return a bare {@link ClosedChannelException}, which retains its existing 500 classification while the
-   * network observation supplies the separate abort provenance.
+   * Tests that the inline inactive POST cleanup retains its existing success metric classification while recording
+   * separate client-abort provenance.
    */
   @Test
-  public void inactivePostWriteRecordsServerErrorClientAbortTest() throws Exception {
+  public void inactivePostWritePreservesInlineStatusMetricsTest() throws Exception {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
@@ -872,10 +882,12 @@ public class NettyResponseChannelTest {
 
       assertEquals("The inactive network write should be recorded as a client abort", 1,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
-      assertEquals("The 5xx abort should enter the subtractable subset", 1,
+      assertEquals("No 5xx was recorded in this ordering, so the subtractable subset should remain empty", 0,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount").getCount());
-      assertEquals("The existing server error count should remain unchanged", 1,
+      assertEquals("The inactive write should not synthesize a server error metric", 0,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorCount").getCount());
+      assertEquals("The existing inline success classification should remain unchanged", 1,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "SuccessCount").getCount());
       assertEquals("The inactive write should record one client-termination duration", 1,
           nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
     } finally {
@@ -884,17 +896,85 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Tests that the same inactive POST write is not attributed to the client when an outbound server disconnect set the
-   * channel provenance marker first.
+   * Tests that an inactive POST whose completion runs off the event loop retains its existing 5xx classification and
+   * enters the subtractable client-abort subset.
+   */
+  @Test
+  public void inactivePostWriteRecordsRetainedServerErrorSubsetOffEventLoopTest() throws Exception {
+     verifyInactivePostWriteOffEventLoop(ResponseStatus.Ok, 1);
+   }
+
+   /**
+    * Tests that a disconnect while writing an existing 5xx is recorded only in the general abort counter.
+    */
+   @Test
+   public void inactivePostWriteDoesNotDiscountExistingServerErrorOffEventLoopTest() throws Exception {
+     verifyInactivePostWriteOffEventLoop(ResponseStatus.InternalServerError, 0);
+   }
+
+   private void verifyInactivePostWriteOffEventLoop(ResponseStatus initialStatus,
+       long expectedServerErrorClientAbortCount) throws Exception {
+     MetricRegistry metricRegistry = new MetricRegistry();
+     RestRequestMetricsTracker.setDefaults(metricRegistry);
+     NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    try (RealInactiveChannelFixture fixture = new RealInactiveChannelFixture()) {
+      VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+      NettyResponseChannel responseChannel =
+          new NettyResponseChannel(new MockChannelHandlerContext(fixture.server()), nettyMetrics,
+              new PerformanceConfig(verifiableProperties), new NettyConfig(verifiableProperties));
+      NettyRequest request =
+          new NettyRequest(RestTestUtils.createRequest(HttpMethod.POST, "/", null), fixture.server(), nettyMetrics,
+              Collections.emptySet());
+      request.getMetricsTracker().injectContainerMetrics(
+          new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null));
+      responseChannel.setRequest(request);
+      if (initialStatus != ResponseStatus.Ok) {
+        responseChannel.setStatus(initialStatus);
+      }
+      fixture.closeClientAndDrainServer();
+
+      Exception writeException;
+      try {
+        responseChannel.write(ByteBuffer.allocate(1), null).get();
+        fail("The inactive channel write should have failed");
+        return;
+      } catch (ExecutionException e) {
+        writeException = (Exception) e.getCause();
+      }
+      responseChannel.onResponseComplete(writeException);
+      fixture.drainServerEventLoop();
+
+      assertEquals("The inactive network write should be recorded as a client abort", 1,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("The subtractable subset should reflect whether the abort caused the 5xx",
+          expectedServerErrorClientAbortCount,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount").getCount());
+      assertEquals("The existing off-event-loop server error classification should remain unchanged", 1,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorCount").getCount());
+      assertEquals("The inactive write should record one client-termination duration", 1,
+          nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    }
+  }
+
+  /**
+   * Tests that an inactive POST write is not attributed to the client for either an outbound server disconnect or
+   * service shutdown.
    */
   @Test
   public void serverInitiatedInactivePostWriteDoesNotRecordClientAbortTest() throws Exception {
+    verifyServerTerminatedInactivePostWriteDoesNotRecordClientAbort(false);
+    verifyServerTerminatedInactivePostWriteDoesNotRecordClientAbort(true);
+  }
+
+  private void verifyServerTerminatedInactivePostWriteDoesNotRecordClientAbort(boolean serviceDown) throws Exception {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    RestServerState restServerState = new RestServerState("/healthCheck");
+    restServerState.markServiceUp();
     EmbeddedChannel channel =
         new EmbeddedChannel(new PublicAccessLogHandler(
-            new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics),
+            new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics, restServerState),
             new ChunkedWriteHandler());
     try {
       VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
@@ -907,9 +987,20 @@ public class NettyResponseChannelTest {
       request.getMetricsTracker().injectContainerMetrics(
           new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null));
       responseChannel.setRequest(request);
-      channel.disconnect().awaitUninterruptibly();
-      assertTrue("The outbound disconnect should set the server close marker",
-          PublicAccessLogHandler.isServerCloseInitiated(channel));
+      if (serviceDown) {
+        restServerState.markServiceDown();
+        ChannelPromise closePromise = channel.newPromise();
+        channel.unsafe().close(closePromise);
+        closePromise.awaitUninterruptibly();
+        assertFalse("The unsafe shutdown close should bypass the outbound marker",
+            PublicAccessLogHandler.isServerCloseInitiated(channel));
+      } else {
+        channel.disconnect().awaitUninterruptibly();
+        assertTrue("The outbound disconnect should set the server close marker",
+            PublicAccessLogHandler.isServerCloseInitiated(channel));
+      }
+      assertTrue("Both paths should be classified as server terminations",
+          PublicAccessLogHandler.isServerTermination(channel));
 
       Exception writeException;
       try {
@@ -1514,6 +1605,69 @@ public class NettyResponseChannelTest {
     }
     assertEquals(httpRequest.method() + " request server error tracking is incorrect", expectedStatus.code() >= 500,
         MockNettyRequest.mockTracker.isServerError());
+  }
+
+  /**
+   * Real event-loop fixture used to exercise deferred promise-listener notification after a remote close.
+   */
+  private static class RealInactiveChannelFixture implements AutoCloseable {
+    private final EventLoopGroup group = new DefaultEventLoopGroup(1);
+    private final AtomicReference<Channel> serverChannel = new AtomicReference<>();
+    private final CountDownLatch serverInitialized = new CountDownLatch(1);
+    private final Channel listener;
+    private final Channel client;
+
+    RealInactiveChannelFixture() throws Exception {
+      LocalAddress address = new LocalAddress("response-client-abort-" + LOCAL_CHANNEL_ID.incrementAndGet());
+      listener = new ServerBootstrap().group(group)
+          .channel(LocalServerChannel.class)
+          .childHandler(new ChannelInitializer<LocalChannel>() {
+            @Override
+            protected void initChannel(LocalChannel channel) {
+              channel.pipeline().addLast(new ChunkedWriteHandler());
+              serverChannel.set(channel);
+              serverInitialized.countDown();
+            }
+          })
+          .bind(address)
+          .sync()
+          .channel();
+      client = new Bootstrap().group(group)
+          .channel(LocalChannel.class)
+          .handler(new ChannelInboundHandlerAdapter())
+          .connect(address)
+          .sync()
+          .channel();
+      assertTrue("Server child channel should have initialized", serverInitialized.await(5, TimeUnit.SECONDS));
+    }
+
+    Channel server() {
+      return serverChannel.get();
+    }
+
+    void closeClientAndDrainServer() throws Exception {
+      client.close().sync();
+      assertTrue("Server side channel should have closed", server().closeFuture().await(5, TimeUnit.SECONDS));
+      drainServerEventLoop();
+    }
+
+    void drainServerEventLoop() throws Exception {
+      server().eventLoop().submit(() -> {
+      }).sync();
+      server().eventLoop().submit(() -> {
+      }).sync();
+    }
+
+    @Override
+    public void close() throws Exception {
+      client.close().awaitUninterruptibly();
+      Channel server = serverChannel.get();
+      if (server != null) {
+        server.close().awaitUninterruptibly();
+      }
+      listener.close().awaitUninterruptibly();
+      group.shutdownGracefully().sync();
+    }
   }
 }
 
@@ -2257,15 +2411,15 @@ class ChannelWriteCallback implements Callback<Long> {
  * Mock class for ChannelHandlerContext used in channelInactiveTest.
  */
 class MockChannelHandlerContext implements ChannelHandlerContext {
-  private final EmbeddedChannel embeddedChannel;
+  private final Channel channel;
 
-  MockChannelHandlerContext(EmbeddedChannel embeddedChannel) {
-    this.embeddedChannel = embeddedChannel;
+  MockChannelHandlerContext(Channel channel) {
+    this.channel = channel;
   }
 
   @Override
   public Channel channel() {
-    return embeddedChannel;
+    return channel;
   }
 
   @Override
@@ -2430,7 +2584,7 @@ class MockChannelHandlerContext implements ChannelHandlerContext {
 
   @Override
   public ChannelProgressivePromise newProgressivePromise() {
-    return new DefaultChannelProgressivePromise(embeddedChannel);
+    return new DefaultChannelProgressivePromise(channel);
   }
 
   @Override
@@ -2450,7 +2604,7 @@ class MockChannelHandlerContext implements ChannelHandlerContext {
 
   @Override
   public ChannelPipeline pipeline() {
-    return embeddedChannel.pipeline();
+    return channel.pipeline();
   }
 
   @Override

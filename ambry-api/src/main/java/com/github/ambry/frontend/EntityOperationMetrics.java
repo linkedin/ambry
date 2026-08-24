@@ -52,8 +52,8 @@ public class EntityOperationMetrics {
   // Requests whose remote client termination was observed before they completed. These remain counted under their
   // existing response status as well.
   protected final Counter clientAbortCount;
-  // The subset of clientAbortCount whose existing response status is 5xx. This is the only abort count that can be
-  // subtracted from serverErrorCount.
+  // The subset of clientAbortCount where the abort caused the request's recorded 5xx classification. This is the only
+  // abort count that can be subtracted from serverErrorCount.
   protected final Counter serverErrorClientAbortCount;
 
   protected final Counter totalCount;
@@ -137,10 +137,12 @@ public class EntityOperationMetrics {
   /**
    * Records a proven remote client termination without changing the request's existing status classification.
    * @param responseStatus the status already recorded for the request.
+   * @param clientAbortCausedServerError {@code true} if the abort caused a server-error classification rather than
+   *                                     merely occurring while an existing server error was being written.
    */
-  public void recordClientAbort(ResponseStatus responseStatus) {
+  public void recordClientAbort(ResponseStatus responseStatus, boolean clientAbortCausedServerError) {
     clientAbortCount.inc();
-    if (responseStatus.isServerError()) {
+    if (clientAbortCausedServerError && responseStatus.isServerError()) {
       serverErrorClientAbortCount.inc();
     }
   }
