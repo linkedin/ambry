@@ -116,6 +116,10 @@ class NettyResponseChannel implements RestResponseChannel {
   // temp variable to hold the error response status which will be overwritten on responseStatus if the error response
   // was successfully sent
   private ResponseStatus errorResponseStatus = null;
+  // set by getErrorResponse() when the failure is a generic (non-RestServiceException, non-client-termination)
+  // internal error. Used by maybeSendErrorResponse() to attribute the internalServerErrorCount /
+  // internalServerErrorAfterResponseCommittedCount metrics based on whether the error actually reached the wire.
+  private boolean isGenericInternalError = false;
 
   /**
    * A {@link ChannelFutureListener} that closes the {@link Channel} which is
@@ -584,8 +588,21 @@ class NettyResponseChannel implements RestResponseChannel {
     long processingStartTime = System.currentTimeMillis();
     boolean responseSent = false;
     logger.trace("Sending error response to client on channel {}", ctx.channel());
+    isGenericInternalError = false;
     FullHttpResponse errorResponse = getErrorResponse(exception);
-    if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
+    boolean writtenToWire = maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener());
+    if (isGenericInternalError) {
+      if (writtenToWire) {
+        // a 500 that actually made it onto the wire.
+        nettyMetrics.internalServerErrorCount.inc();
+      } else {
+        // response metadata (e.g. a 200) was already committed to the client before this failure occurred, so the
+        // 500 constructed here never reaches the wire. Tracked separately so alerts on internalServerErrorCount
+        // reflect only errors actually seen by the client, not this already-committed-response case.
+        nettyMetrics.internalServerErrorAfterResponseCommittedCount.inc();
+      }
+    }
+    if (writtenToWire) {
       logger.trace("Scheduled error response sending on channel {}", ctx.channel());
       responseStatus = errorResponseStatus;
       responseSent = true;
@@ -640,7 +657,7 @@ class NettyResponseChannel implements RestResponseChannel {
       status = HttpResponseStatus.BAD_REQUEST;
       errorResponseStatus = ResponseStatus.BadRequest;
     } else {
-      nettyMetrics.internalServerErrorCount.inc();
+      isGenericInternalError = true;
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
     }

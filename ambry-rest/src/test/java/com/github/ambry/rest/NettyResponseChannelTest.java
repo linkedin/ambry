@@ -702,6 +702,58 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests that {@link NettyMetrics#internalServerErrorCount} is only incremented when the error response actually
+   * reaches the wire, and that {@link NettyMetrics#internalServerErrorAfterResponseCommittedCount} is incremented
+   * instead when a generic internal failure occurs after response metadata (e.g. a 200) has already been committed
+   * to the client.
+   */
+  @Test
+  public void internalServerErrorMetricSplitTest() throws Exception {
+    String iseMetricName = MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount");
+    String iseAfterCommitMetricName =
+        MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorAfterResponseCommittedCount");
+    long iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
+    long iseAfterCommitBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount();
+
+    // generic exception before any response metadata has been sent -> should count towards internalServerErrorCount
+    // (the 500 actually reaches the wire).
+    EmbeddedChannel channel = createEmbeddedChannel();
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.OnResponseCompleteWithNonRestException.toString(),
+            null));
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    if (!(response instanceof FullHttpResponse)) {
+      while (channel.readOutbound() != null) {
+      }
+    }
+    assertEquals("internalServerErrorCount should have been tracked", iseBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
+    assertEquals("internalServerErrorAfterResponseCommittedCount should not have changed", iseAfterCommitBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount());
+
+    // generic exception after response metadata (200) has already been committed -> should count towards
+    // internalServerErrorAfterResponseCommittedCount instead, since the 500 never reaches the wire.
+    iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
+    iseAfterCommitBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount();
+    channel = createEmbeddedChannel();
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidway.toString(), null));
+    response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    while (channel.readOutbound() != null) {
+    }
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
+    assertEquals("internalServerErrorCount should not have changed", iseBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
+    assertEquals("internalServerErrorAfterResponseCommittedCount should have been tracked",
+        iseAfterCommitBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount());
+  }
+
+  /**
    * Tests that a recognizable client-termination exception without a network-boundary observation does not record a
    * per-container client abort.
    */
