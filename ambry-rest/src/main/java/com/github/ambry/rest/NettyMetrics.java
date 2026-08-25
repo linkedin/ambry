@@ -107,6 +107,8 @@ public class NettyMetrics {
   public final Counter watermarkOverflowCount;
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
+  public final Histogram clientTerminatedWholeBlobRequestBytesReceived;
+  public final Histogram clientTerminatedDeclaredWholeBlobSizeInBytes;
   public final Counter idleConnectionCloseCount;
   public final Counter processorErrorAfterCloseCount;
   public final Counter processorExceptionCaughtCount;
@@ -287,6 +289,10 @@ public class NettyMetrics {
     // NettyMessageProcessor
     channelReadIntervalInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));
+    clientTerminatedWholeBlobRequestBytesReceived = metricRegistry.histogram(
+        MetricRegistry.name(NettyMessageProcessor.class, "ClientTerminatedWholeBlobRequestBytesReceived"));
+    clientTerminatedDeclaredWholeBlobSizeInBytes = metricRegistry.histogram(
+        MetricRegistry.name(NettyMessageProcessor.class, "ClientTerminatedDeclaredWholeBlobSizeInBytes"));
     idleConnectionCloseCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionCloseCount"));
     processorErrorAfterCloseCount =

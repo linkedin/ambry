@@ -33,6 +33,8 @@ import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetricsClassifier;
+import com.github.ambry.rest.RestRequestMetricsClassifier.RequestSizeCategory;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestResponseChannel;
@@ -70,7 +72,7 @@ import static com.github.ambry.utils.Utils.*;
  * This is an Ambry frontend specific implementation of {@link RestRequestService}.
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
-class FrontendRestRequestService implements RestRequestService {
+class FrontendRestRequestService implements RestRequestService, RestRequestMetricsClassifier {
   static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
   private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final Router router;
@@ -321,6 +323,50 @@ class FrontendRestRequestService implements RestRequestService {
   }
 
   @Override
+  public RequestSizeCategory classifyRequestSize(RestRequest restRequest) {
+    RestMethod restMethod = restRequest.getRestMethod();
+    if (restMethod != RestMethod.POST && restMethod != RestMethod.PUT) {
+      return RequestSizeCategory.OTHER;
+    }
+    try {
+      RequestPath requestPath =
+          RequestPath.parse(restRequest.getPath(), restRequest.getArgs(), frontendConfig.pathPrefixesToRemove,
+              clusterName);
+      if (RestUtils.isChunkUpload(restRequest.getArgs())) {
+        return RequestSizeCategory.CHUNK;
+      }
+      boolean isS3Request = RestUtils.isS3Prefix(restRequest);
+      if (isS3Request) {
+        if (restMethod != RestMethod.PUT) {
+          return RequestSizeCategory.OTHER;
+        }
+        String[] pathSegments = RestUtils.splitPath(restRequest.getPath());
+        if (pathSegments.length != 4 || pathSegments[1].isEmpty() || pathSegments[2].isEmpty()
+            || pathSegments[3].isEmpty()) {
+          return RequestSizeCategory.OTHER;
+        }
+        // S3_REQUEST is added during routing and may be removed after 100-continue, so classify from the raw prefix.
+        return restRequest.getArgs().containsKey(RestUtils.UPLOAD_ID_QUERY_PARAM)
+            ? RequestSizeCategory.MULTIPART_PART : RequestSizeCategory.WHOLE_BLOB;
+      }
+      if (!RestUtils.isUploadRequest(restRequest, requestPath)) {
+        return RequestSizeCategory.OTHER;
+      }
+      return restMethod == RestMethod.PUT && isDatasetVersionCopy(restRequest, requestPath)
+          ? RequestSizeCategory.OTHER : RequestSizeCategory.WHOLE_BLOB;
+    } catch (RestServiceException | IllegalArgumentException e) {
+      logger.debug("Could not classify request {} for termination size metrics", restRequest.getUri(), e);
+      return RequestSizeCategory.OTHER;
+    }
+  }
+
+  private static boolean isDatasetVersionCopy(RestRequest restRequest, RequestPath requestPath)
+      throws RestServiceException {
+    return RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())
+        && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getTargetVersion() != null;
+  }
+
+  @Override
   public void handleGet(final RestRequest restRequest, final RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
       if (requestPath.matchesOperation(Operations.GET_PEERS)) {
@@ -410,8 +456,7 @@ class FrontendRestRequestService implements RestRequestService {
         if (isS3Request(restRequest)) {
           s3PutHandler.handle(restRequest, restResponseChannel,
               (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
-        } else if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())
-            && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getTargetVersion() != null) {
+        } else if (isDatasetVersionCopy(restRequest, requestPath)) {
           copyDatasetVersionHandler.handle(restRequest, restResponseChannel,
               (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
         } else {

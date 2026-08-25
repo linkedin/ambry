@@ -91,6 +91,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private final ChunkedWriteHandler chunkedWriteHandler;
   private final PerformanceConfig perfConfig;
   private final NettyConfig nettyConfig;
+  private final ClientTerminationRecorder clientTerminationRecorder;
 
   private static final Logger logger = LoggerFactory.getLogger(NettyResponseChannel.class);
   private final HttpResponse responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
@@ -144,10 +145,26 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics, PerformanceConfig performanceConfig,
       NettyConfig nettyConfig) {
+    this(ctx, nettyMetrics, performanceConfig, nettyConfig, null);
+  }
+
+  /**
+   * Create an instance of NettyResponseChannel with a shared client-termination recorder.
+   * @param ctx the {@link ChannelHandlerContext} to use.
+   * @param nettyMetrics the {@link NettyMetrics} instance to use.
+   * @param performanceConfig the configuration object to use for performance evaluation.
+   * @param nettyConfig the configuration object to use for netty related config.
+   * @param clientTerminationRecorder records the winning client-termination outcome, or {@code null} to use the
+   *                                  response channel's default duration-only recorder.
+   */
+  NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics, PerformanceConfig performanceConfig,
+      NettyConfig nettyConfig, ClientTerminationRecorder clientTerminationRecorder) {
     this.ctx = ctx;
     this.nettyMetrics = nettyMetrics;
     this.perfConfig = performanceConfig;
     this.nettyConfig = nettyConfig;
+    this.clientTerminationRecorder =
+        clientTerminationRecorder == null ? this::recordClientTerminationMetrics : clientTerminationRecorder;
     chunkedWriteHandler = ctx.pipeline().get(ChunkedWriteHandler.class);
     writeFuture = ctx.newProgressivePromise();
     logger.trace("Instantiated NettyResponseChannel");
@@ -879,9 +896,20 @@ class NettyResponseChannel implements RestResponseChannel {
   private void recordClientTerminationOnWriteFailure(Throwable cause, boolean clientAbortCausedServerError) {
     boolean clientTermination = request != null && !PublicAccessLogHandler.isServerTermination(ctx.channel())
         && isClientTerminationWriteFailure(cause);
-    if (clientTermination && request.getMetricsTracker().markClientAborted(clientAbortCausedServerError)) {
+    if (clientTermination) {
+      clientTerminationRecorder.record(request, clientAbortCausedServerError);
+    }
+  }
+
+  private void recordClientTerminationMetrics(NettyRequest request, boolean clientAbortCausedServerError) {
+    if (request.getMetricsTracker().markClientAborted(clientAbortCausedServerError)) {
       nettyMetrics.clientTerminatedRequestTimeInMs.update(request.getMetricsTracker().getTimeSinceRequestReceivedInMs());
     }
+  }
+
+  @FunctionalInterface
+  interface ClientTerminationRecorder {
+    void record(NettyRequest request, boolean clientAbortCausedServerError);
   }
 
   /**
