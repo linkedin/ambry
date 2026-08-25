@@ -47,7 +47,8 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * These are the scaling units of the server and can be scaled up and down independently of any other component.
  */
-class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
+class AsyncRequestResponseHandler
+    implements RestRequestHandler, RestResponseHandler, RestRequestMetricsClassifier {
   private final RequestResponseHandlerMetrics metrics;
 
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<>();
@@ -165,6 +166,13 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
           "Requests cannot be handled because the AsyncRequestResponseHandler is not available",
           RestServiceErrorCode.ServiceUnavailable);
     }
+  }
+
+  @Override
+  public RequestSizeCategory classifyRequestSize(RestRequest restRequest) {
+    return restRequestService instanceof RestRequestMetricsClassifier
+        ? ((RestRequestMetricsClassifier) restRequestService).classifyRequestSize(restRequest)
+        : RequestSizeCategory.OTHER;
   }
 
   /**

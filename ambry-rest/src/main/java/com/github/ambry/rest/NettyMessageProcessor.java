@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
+import com.github.ambry.rest.RestRequestMetricsClassifier.RequestSizeCategory;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -72,6 +73,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
   private final RestRequestHandler requestHandler;
+  private final RestRequestMetricsClassifier requestMetricsClassifier;
   private static final Logger logger = LoggerFactory.getLogger(NettyMessageProcessor.class);
 
   // variables that will live through the life of the channel.
@@ -84,6 +86,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private volatile NettyRequest request = null;
   private volatile NettyResponseChannel responseChannel = null;
   private volatile boolean requestContentFullyReceived = false;
+  private volatile RequestSizeCategory requestSizeCategory = RequestSizeCategory.OTHER;
 
   // variables that live for one channelRead0
   private volatile Long lastChannelReadTime = null;
@@ -102,6 +105,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     this.nettyConfig = nettyConfig;
     this.performanceConfig = performanceConfig;
     this.requestHandler = requestHandler;
+    requestMetricsClassifier =
+        requestHandler instanceof RestRequestMetricsClassifier ? (RestRequestMetricsClassifier) requestHandler : null;
     logger.trace("Instantiated NettyMessageProcessor");
   }
 
@@ -139,10 +144,11 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
       if (!PublicAccessLogHandler.isServerTermination(ctx.channel())) {
-        long timeInFlightMs = recordClientTermination();
+        long timeInFlightMs = recordClientTermination(request, false);
         if (timeInFlightMs >= 0) {
-          logger.error("Request {} was aborted because the remote channel {} became inactive after {} ms",
-              request.getUri(), ctx.channel(), timeInFlightMs);
+          logger.error("Request {} was aborted because the remote channel {} became inactive after {} ms, "
+                  + "{} request bytes received, declared request size {}, size category {}", request.getUri(),
+              ctx.channel(), timeInFlightMs, request.getBytesReceived(), describeDeclaredSize(), requestSizeCategory);
         } else {
           logger.trace("Request {} termination had already been recorded when channel {} became inactive",
               request.getUri(), ctx.channel());
@@ -226,8 +232,15 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         // same event. Idle client disconnects are routine, and IdleTerminatedRequestTimeInMs already carries the
         // timing signal; the URI here is what lets a specific idle abort be correlated with the access log.
         long timeInFlightMs = recordIdleTermination();
-        logger.info("Channel {} has been idle for {} seconds. Closing it. Request {} had been in flight for {} ms",
-            ctx.channel(), nettyConfig.nettyServerIdleTimeSeconds, request.getUri(), timeInFlightMs);
+        if (timeInFlightMs >= 0) {
+          logger.info("Channel {} has been idle for {} seconds. Closing it. Request {} had been in flight for {} ms, "
+                  + "{} request bytes received, declared request size {}, size category {}", ctx.channel(),
+              nettyConfig.nettyServerIdleTimeSeconds, request.getUri(), timeInFlightMs, request.getBytesReceived(),
+              describeDeclaredSize(), requestSizeCategory);
+        } else {
+          logger.info("Channel {} has been idle for {} seconds. Closing it. Request {} termination was already recorded",
+              ctx.channel(), nettyConfig.nettyServerIdleTimeSeconds, request.getUri());
+        }
         onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
       } else {
         logger.info("Channel {} has been idle for {} seconds. Closing it", ctx.channel(),
@@ -403,7 +416,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         if (hasContinueAndIsPutOrPost) {
           request.setArg(EXPECT, "");
           removeInternalKeyFromRequest();
-          responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
+          responseChannel = newResponseChannel();
           // FIXME: The request could be accepted as ctor arg to NettyResponseChannel to avoid null pointers
           responseChannel.setRequest(request);
         }
@@ -443,8 +456,15 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     request = null;
     lastChannelReadTime = null;
     requestContentFullyReceived = false;
-    responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
+    requestSizeCategory = RequestSizeCategory.OTHER;
+    responseChannel = newResponseChannel();
     logger.trace("Refreshed state for channel {}", ctx.channel());
+  }
+
+  private NettyResponseChannel newResponseChannel() {
+    return new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig,
+        (terminatedRequest, clientAbortCausedServerError) ->
+            recordClientTermination(terminatedRequest, clientAbortCausedServerError));
   }
 
   /**
@@ -455,22 +475,69 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private long recordIdleTermination() {
     long timeInFlightMs = request.getMetricsTracker().getTimeSinceRequestReceivedInMs();
     if (request.getMetricsTracker().markIdleTimeoutTermination()) {
+      requestSizeCategory = classifyRequestSize(request);
       nettyMetrics.idleTerminatedRequestTimeInMs.update(timeInFlightMs);
+      return timeInFlightMs;
     }
-    return timeInFlightMs;
+    return -1;
   }
 
   /**
    * Records a remote client termination at most once across channel inactivity and response-write failure paths.
    * @return the time in ms that the request has been in flight for.
    */
-  private long recordClientTermination() {
-    long timeInFlightMs = request.getMetricsTracker().getTimeSinceRequestReceivedInMs();
-    if (request.getMetricsTracker().markClientAborted(false)) {
+  private long recordClientTermination(NettyRequest terminatedRequest, boolean clientAbortCausedServerError) {
+    long timeInFlightMs = terminatedRequest.getMetricsTracker().getTimeSinceRequestReceivedInMs();
+    if (terminatedRequest.getMetricsTracker().markClientAborted(clientAbortCausedServerError)) {
+      RequestSizeCategory sizeCategory = classifyRequestSize(terminatedRequest);
+      // A stale response channel on a keepalive connection must not overwrite the current request's log category.
+      if (terminatedRequest == request) {
+        requestSizeCategory = sizeCategory;
+      }
       nettyMetrics.clientTerminatedRequestTimeInMs.update(timeInFlightMs);
+      if (sizeCategory == RequestSizeCategory.WHOLE_BLOB) {
+        nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.update(terminatedRequest.getBytesReceived());
+        long declaredSize = terminatedRequest.getSize();
+        if (declaredSize >= 0 && isDeclaredSizeWholeBlobSize(terminatedRequest)) {
+          nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.update(declaredSize);
+        }
+      }
       return timeInFlightMs;
     }
     return -1;
+  }
+
+  /**
+   * Renders the size the client declared for the current request for logging. Note that a chunked upload that sends no
+   * {@code x-ambry-blob-size} header and no {@code Content-Length} has no declared size at all.
+   * @return the declared size in bytes, or {@code "unknown"} if the client did not declare one.
+   */
+  private String describeDeclaredSize() {
+    long declaredSize = request.getSize();
+    return declaredSize >= 0 ? String.valueOf(declaredSize) : "unknown";
+  }
+
+  private boolean isDeclaredSizeWholeBlobSize(NettyRequest terminatedRequest) {
+    // For multipart/form-data, Content-Length describes the MIME envelope. Only x-ambry-blob-size describes the blob.
+    return !(terminatedRequest instanceof NettyMultipartRequest)
+        || terminatedRequest.getArgs().containsKey(RestUtils.Headers.BLOB_SIZE);
+  }
+
+  private RequestSizeCategory classifyRequestSize(NettyRequest request) {
+    if (requestMetricsClassifier == null) {
+      return RequestSizeCategory.OTHER;
+    }
+    try {
+      RequestSizeCategory category = requestMetricsClassifier.classifyRequestSize(request);
+      if (category == null) {
+        logger.warn("Request size classifier returned null for request {}", request.getUri());
+        return RequestSizeCategory.OTHER;
+      }
+      return category;
+    } catch (RuntimeException e) {
+      logger.warn("Could not classify request {} for termination size metrics", request.getUri(), e);
+      return RequestSizeCategory.OTHER;
+    }
   }
 
   /**

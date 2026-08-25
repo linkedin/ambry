@@ -914,7 +914,16 @@ public class RestUtils {
    * @return
    */
   public static boolean isUploadRequest(RestRequest restRequest) {
-    RequestPath requestPath = RestUtils.getRequestPath(restRequest);
+    return isUploadRequest(restRequest, RestUtils.getRequestPath(restRequest));
+  }
+
+  /**
+   * Return true when the request and already-parsed path represent a blob upload.
+   * @param restRequest the {@link RestRequest}.
+   * @param requestPath the parsed request path.
+   * @return {@code true} if this request uploads a blob.
+   */
+  public static boolean isUploadRequest(RestRequest restRequest, RequestPath requestPath) {
     RestMethod method = restRequest.getRestMethod();
     // For POST request, when the operation is "", it's upload
     // For PUT request, when the operation is named blob, it's named upload upload. However, we have to exclude the

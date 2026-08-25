@@ -62,6 +62,7 @@ import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetricsClassifier.RequestSizeCategory;
 import com.github.ambry.rest.RestRequestMetricsTracker;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
@@ -274,6 +275,66 @@ public class FrontendRestRequestServiceTest {
   public void startShutDownTest() throws InstantiationException {
     frontendRestRequestService.start();
     frontendRestRequestService.shutdown();
+  }
+
+  /**
+   * Tests the synchronous request-size classification used by transport termination metrics.
+   */
+  @Test
+  public void requestSizeClassificationTest() throws Exception {
+    JSONObject chunkHeaders = new JSONObject().put(RestUtils.Headers.CHUNK_UPLOAD, true);
+    JSONObject datasetVersionHeaders =
+        new JSONObject().put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    JSONObject namedStitchHeaders =
+        new JSONObject().put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, RestUtils.STITCH);
+    String prefixedPath = "/media/" + clusterName;
+    String s3Path = "/" + Operations.S3;
+    Object[][] testCases = {
+        {RestMethod.POST, prefixedPath + "/", null, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.POST, prefixedPath + "/", chunkHeaders, RequestSizeCategory.CHUNK},
+        {RestMethod.POST, prefixedPath + "/", datasetVersionHeaders, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.POST, prefixedPath + "/" + Operations.STITCH, null, RequestSizeCategory.OTHER},
+        {RestMethod.POST, prefixedPath + "/" + Operations.ACCOUNTS, null, RequestSizeCategory.OTHER},
+        {RestMethod.POST, prefixedPath + "/" + Operations.ACCOUNTS_CONTAINERS_DATASETS, null,
+            RequestSizeCategory.OTHER},
+        {RestMethod.POST, s3Path + "/account/container?uploads", null, RequestSizeCategory.OTHER},
+        {RestMethod.POST, s3Path + "/account/container/blob?uploads", null, RequestSizeCategory.OTHER},
+        {RestMethod.POST,
+            s3Path + "/account/container/blob?" + RestUtils.UPLOAD_ID_QUERY_PARAM + "=upload-id", null,
+            RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/blob", null,
+            RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/blob", namedStitchHeaders,
+            RequestSizeCategory.OTHER},
+        {RestMethod.PUT, s3Path + "/account/container/blob", null, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.PUT, s3Path + "/account/container/blob?" + RestUtils.UPLOAD_ID_QUERY_PARAM + "=upload-id", null,
+            RequestSizeCategory.MULTIPART_PART},
+        {RestMethod.PUT, s3Path + "/account", null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, s3Path + "/account/container", null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + s3Path + "/account/container/blob", null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.UPDATE_TTL, null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.UNDELETE, null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/dataset/1",
+            datasetVersionHeaders, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.PUT,
+            prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/dataset/1?" + DatasetVersionPath.OP
+                + "=" + DatasetVersionPath.RENAME + "&" + DatasetVersionPath.TARGET_VERSION + "=2",
+            datasetVersionHeaders, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/unrecognized", null, RequestSizeCategory.OTHER},
+        {RestMethod.GET, prefixedPath + "/", null, RequestSizeCategory.OTHER}};
+
+    for (Object[] testCase : testCases) {
+      RestMethod restMethod = (RestMethod) testCase[0];
+      String uri = (String) testCase[1];
+      JSONObject headers = (JSONObject) testCase[2];
+      RequestSizeCategory expectedCategory = (RequestSizeCategory) testCase[3];
+      RestRequest request = createRestRequest(restMethod, uri, headers, null);
+      Map<String, Object> argsBeforeClassification = new HashMap<>(request.getArgs());
+      assertEquals(restMethod + " " + uri + " was classified incorrectly", expectedCategory,
+          frontendRestRequestService.classifyRequestSize(request));
+      assertEquals("Request classification should not mutate request args", argsBeforeClassification,
+          request.getArgs());
+    }
   }
 
   /**
@@ -4788,4 +4849,3 @@ class FrontendTestUrlSigningServiceFactory implements UrlSigningServiceFactory {
     };
   }
 }
-
