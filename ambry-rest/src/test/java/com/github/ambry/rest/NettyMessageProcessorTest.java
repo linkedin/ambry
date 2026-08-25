@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.ContainerMetrics;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationBlobType;
@@ -72,6 +73,7 @@ import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,6 +96,8 @@ import static org.junit.Assert.*;
  * Unit tests for {@link NettyMessageProcessor}.
  */
 public class NettyMessageProcessorTest {
+  private static final String CONTAINER_METRIC_PREFIX =
+      ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
   private final InMemoryRouter router;
   private final RestRequestService restRequestService;
   private final MockRestRequestResponseHandler requestHandler;
@@ -507,32 +511,150 @@ public class NettyMessageProcessorTest {
   }
 
   /**
+   * Tests that a failed 100-Continue response write records one client abort and one termination duration even though
+   * the interim response channel has already completed.
+   */
+  @Test
+  public void testContinueResponseWriteFailureRecordsClientAbortOnce() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    ContainerMetrics containerMetrics =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    Properties properties = new Properties();
+    properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
+    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
+    RestRequestHandler continueRequestHandler = new RestRequestHandler() {
+      @Override
+      public void start() {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
+          throws RestServiceException {
+        restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+        restResponseChannel.setStatus(ResponseStatus.Continue);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        restResponseChannel.onResponseComplete(null);
+      }
+    };
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, nettyConfig, PERFORMANCE_CONFIG, continueRequestHandler);
+    EmbeddedChannel channel =
+        new EmbeddedChannel(new PublicAccessLogHandler(new MockPublicAccessLogger(new String[0], new String[0], false),
+            nettyMetrics), new FailingContinueWriteHandler(), new ChunkedWriteHandler(), processor);
+    try {
+      HttpHeaders headers = new DefaultHttpHeaders();
+      headers.set(EXPECT, CONTINUE);
+      HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/s3/", headers);
+      httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "continueWriteFailureTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+
+      channel.writeInbound(httpRequest);
+      channel.runPendingTasks();
+
+      assertEquals("The failed continue write should record one client abort", 1,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("The continue response should not enter the server-error abort subset", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount").getCount());
+      assertEquals("The failed continue write should record the termination duration exactly once", 1,
+          nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  /**
    * Tests that a request still in flight when the channel goes inactive is recorded in
    * {@link NettyMetrics#clientTerminatedRequestTimeInMs} with the time it had been in flight for, and not in the
    * idle histogram.
    */
   @Test
-  public void testAbortedRequestRecordsTimeInFlight() {
-    // A dedicated NettyMetrics keeps this assertion independent of the shared static instance other tests use.
-    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    NettyMessageProcessor processor =
-        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
-    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+  public void testAbortedRequestRecordsTimeInFlight() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      long testStartMs = System.currentTimeMillis();
+      fixture.sendOpenRequest();
+      assertEquals("Nothing should have been recorded while the request is still in flight", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      awaitClockAdvance(MIN_IN_FLIGHT_MS);
 
-    long testStartMs = System.currentTimeMillis();
-    // A request whose terminating LastHttpContent never arrives is left open, i.e. still in flight.
-    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
-    assertEquals("Nothing should have been recorded while the request is still in flight", 0,
-        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
-    awaitClockAdvance(MIN_IN_FLIGHT_MS);
+      fixture.client.close().sync();
+      fixture.awaitServerCloseAndDrain();
 
-    channel.close().awaitUninterruptibly();
+      assertFalse("A remote close must not be marked as server initiated",
+          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertFalse("A remote close must not be classified as a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("Termination of the in-flight request should have been recorded exactly once", 1,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("A client termination should not also be recorded as an idle termination", 0,
+          fixture.nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("The remote close should record one per-container client abort", 1,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("The 400-classified remote close should not enter the server-error abort subset", 0,
+          fixture.metricRegistry.getCounters()
+              .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
+              .getCount());
+      assertRecordedTimeInFlight(fixture.nettyMetrics.clientTerminatedRequestTimeInMs, testStartMs);
+    }
+  }
 
-    assertEquals("Termination of the in-flight request should have been recorded exactly once", 1,
-        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
-    assertEquals("A client termination should not also be recorded as an idle termination", 0,
-        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
-    assertRecordedTimeInFlight(nettyMetrics.clientTerminatedRequestTimeInMs, testStartMs);
+  /**
+   * Tests that a server-initiated close still cleans up an open request but is not attributed to the remote client.
+   */
+  @Test
+  public void testServerInitiatedCloseDoesNotRecordClientAbort() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      fixture.sendOpenRequest();
+
+      fixture.server().close().sync();
+      fixture.awaitServerCloseAndDrain();
+
+      assertTrue("The outbound close should be marked as server initiated",
+          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertTrue("The outbound close should be classified as a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("A server close should not record a client-termination duration", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("A server close should not record a client abort", 0,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("A server close should not enter the server-error abort subset", 0,
+          fixture.metricRegistry.getCounters()
+              .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
+              .getCount());
+    }
+  }
+
+  /**
+   * Tests that event-loop shutdown is not attributed to the client even though Netty's unsafe close bypasses outbound
+   * handlers and therefore cannot set the normal close marker.
+   */
+  @Test
+  public void testServiceShutdownDoesNotRecordClientAbort() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      fixture.sendOpenRequest();
+      fixture.markServiceDown();
+
+      fixture.closeServerWithoutPipeline();
+      fixture.awaitServerCloseAndDrain();
+
+      assertFalse("The unsafe shutdown close should bypass the outbound close marker",
+          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertTrue("Service-down state should still identify a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("Service shutdown should not record a client-termination duration", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("Service shutdown should not record a client abort", 0,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("Service shutdown should not enter the server-error abort subset", 0,
+          fixture.metricRegistry.getCounters()
+              .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
+              .getCount());
+    }
   }
 
   /**
@@ -572,50 +694,78 @@ public class NettyMessageProcessorTest {
    */
   @Test
   public void testIdleChannelAbortOnRealEventLoopRecordsTimeInFlight() throws Exception {
-    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    EventLoopGroup group = new DefaultEventLoopGroup(1);
-    LocalAddress address = new LocalAddress("idle-abort-" + REQUEST_ID_GENERATOR.incrementAndGet());
-    AtomicReference<Channel> serverChannel = new AtomicReference<>();
-    CountDownLatch requestReceived = new CountDownLatch(1);
-    try {
-      new ServerBootstrap().group(group).channel(LocalServerChannel.class)
-          .childHandler(new ChannelInitializer<LocalChannel>() {
-            @Override
-            protected void initChannel(LocalChannel channel) {
-              channel.pipeline().addLast(new ChunkedWriteHandler(), new RequestReceivedProbe(requestReceived),
-                  new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler));
-              serverChannel.set(channel);
-            }
-          }).bind(address).sync();
-      Channel client = new Bootstrap().group(group).channel(LocalChannel.class)
-          .handler(new ChannelInboundHandlerAdapter()).connect(address).sync().channel();
-
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
       long testStartMs = System.currentTimeMillis();
-      client.writeAndFlush(RestTestUtils.createRequest(HttpMethod.GET, "/", null)).sync();
-      // The write future completes before the peer read is delivered, so it establishes nothing about the server. Wait
-      // for the probe instead: it counts down only after the processor has constructed the request and marked it
-      // received, which is the point the recorded time in flight is measured from.
-      assertTrue("Server side should have received the request", requestReceived.await(5, TimeUnit.SECONDS));
-      Channel server = serverChannel.get();
+      fixture.sendOpenRequest();
       awaitClockAdvance(MIN_IN_FLIGHT_MS);
 
-      server.eventLoop().submit(() -> server.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT))
+      fixture.server()
+          .eventLoop()
+          .submit(() -> fixture.server().pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT))
           .sync();
-      assertTrue("Server side channel should have been closed by the idle timeout",
-          server.closeFuture().await(5, TimeUnit.SECONDS));
-      // channelInactive is queued behind the close, so drain the loop before reading the metric.
-      server.eventLoop().submit(() -> {
-      }).sync();
-      server.eventLoop().submit(() -> {
-      }).sync();
+      fixture.awaitServerCloseAndDrain();
 
+      assertTrue("The idle timeout should close the channel through the outbound server path",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
       assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
-          nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+          fixture.nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
       assertEquals("The deferred channelInactive should not double record the same termination", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("An idle timeout should not record a client abort", 0,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertRecordedTimeInFlight(fixture.nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
+    }
+  }
+
+  /**
+   * Tests that an idle timeout remains the sole termination cause when failing the in-progress response invokes the
+   * response-write listener.
+   */
+  @Test
+   public void testIdleDuringStreamingResponseDoesNotRecordClientAbort() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    ContainerMetrics containerMetrics =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    CountDownLatch responseStarted = new CountDownLatch(1);
+    RestRequestHandler streamingRequestHandler = new RestRequestHandler() {
+      @Override
+      public void start() {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+        restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+        restResponseChannel.write(ByteBuffer.allocate(1), null);
+        responseStarted.countDown();
+      }
+    };
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, streamingRequestHandler);
+    EmbeddedChannel channel =
+        new EmbeddedChannel(new PublicAccessLogHandler(
+            new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics),
+            new ChunkedWriteHandler(), processor);
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
+      assertTrue("The response should have started synchronously", responseStarted.await(5, TimeUnit.SECONDS));
+
+      channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
+
+      assertEquals("The idle timeout should record exactly one duration", 1,
+          nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("Failing the streaming response should not also record a client duration", 0,
           nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
-      assertRecordedTimeInFlight(nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
+      assertEquals("An idle timeout should not record a client abort", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
     } finally {
-      group.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+      channel.finishAndReleaseAll();
     }
   }
 
@@ -949,27 +1099,127 @@ public class NettyMessageProcessorTest {
   }
 
   /**
-   * A {@link ChannelInboundHandlerAdapter} that signals when the handler after it has finished processing an
-   * {@link HttpRequest}. It is placed immediately before the {@link NettyMessageProcessor} under test and counts down
-   * only after {@code fireChannelRead} returns, so the countdown is ordered after the processor has constructed the
-   * {@link NettyRequest} and marked it received. A test that timed its window from the client's write future instead
-   * would race the server: {@code LocalChannel.doWrite} completes the write promise before delivering the peer read.
+   * Fails the 100-Continue write through its promise, matching an asynchronous response-write failure.
    */
-  private static class RequestReceivedProbe extends ChannelInboundHandlerAdapter {
-    private final CountDownLatch requestReceived;
-
-    RequestReceivedProbe(CountDownLatch requestReceived) {
-      this.requestReceived = requestReceived;
-    }
-
+  private static class FailingContinueWriteHandler extends ChannelOutboundHandlerAdapter {
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
-      // Determined before forwarding because the handler after this one releases the message.
-      boolean isRequest = msg instanceof HttpRequest;
-      ctx.fireChannelRead(msg);
-      if (isRequest) {
-        requestReceived.countDown();
+    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+      if (msg instanceof FullHttpResponse && ((FullHttpResponse) msg).status().equals(HttpResponseStatus.CONTINUE)) {
+        ReferenceCountUtil.release(msg);
+        promise.setFailure(new ClosedChannelException());
+      } else {
+        ctx.write(msg, promise);
       }
     }
   }
+
+  /**
+   * Holds a request open after injecting the container metrics used by the termination tests.
+   */
+  private static class HoldingRequestHandler implements RestRequestHandler {
+    private final ContainerMetrics containerMetrics;
+    private final CountDownLatch requestHandled;
+
+    HoldingRequestHandler(ContainerMetrics containerMetrics, CountDownLatch requestHandled) {
+      this.containerMetrics = containerMetrics;
+      this.requestHandled = requestHandled;
+    }
+
+    @Override
+    public void start() {
+    }
+
+    @Override
+    public void shutdown() {
+    }
+
+    @Override
+    public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+      restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+      requestHandled.countDown();
+    }
+  }
+
+  /**
+   * Production-shaped local transport used to distinguish remote close from outbound server close.
+   */
+  private static class RealChannelFixture implements AutoCloseable {
+    private final MetricRegistry metricRegistry = new MetricRegistry();
+    private final NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    private final RestServerState restServerState = new RestServerState("/healthCheck");
+    private final EventLoopGroup group = new DefaultEventLoopGroup(1);
+    private final AtomicReference<Channel> serverChannel = new AtomicReference<>();
+    private final CountDownLatch serverInitialized = new CountDownLatch(1);
+    private final CountDownLatch requestHandled = new CountDownLatch(1);
+    private final Channel listener;
+    private final Channel client;
+
+    RealChannelFixture() throws Exception {
+      RestRequestMetricsTracker.setDefaults(metricRegistry);
+      restServerState.markServiceUp();
+      ContainerMetrics containerMetrics =
+          new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+      HoldingRequestHandler requestHandler = new HoldingRequestHandler(containerMetrics, requestHandled);
+      LocalAddress address = new LocalAddress("client-abort-" + REQUEST_ID_GENERATOR.incrementAndGet());
+      listener = new ServerBootstrap().group(group)
+          .channel(LocalServerChannel.class)
+          .childHandler(new ChannelInitializer<LocalChannel>() {
+            @Override
+            protected void initChannel(LocalChannel channel) {
+              channel.pipeline()
+                  .addLast(new PublicAccessLogHandler(
+                      new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics, restServerState))
+                  .addLast(new ChunkedWriteHandler())
+                  .addLast(new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler));
+              serverChannel.set(channel);
+              serverInitialized.countDown();
+            }
+          })
+          .bind(address)
+          .sync()
+          .channel();
+      client = new Bootstrap().group(group)
+          .channel(LocalChannel.class)
+          .handler(new ChannelInboundHandlerAdapter())
+          .connect(address)
+          .sync()
+          .channel();
+      assertTrue("Server child channel should have initialized", serverInitialized.await(5, TimeUnit.SECONDS));
+    }
+
+    void sendOpenRequest() throws Exception {
+      HttpRequest request = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+      HttpUtil.setKeepAlive(request, true);
+      client.writeAndFlush(request).sync();
+      assertTrue("Request handler should have received the request", requestHandled.await(5, TimeUnit.SECONDS));
+    }
+
+    Channel server() {
+      return serverChannel.get();
+    }
+
+    void markServiceDown() {
+      restServerState.markServiceDown();
+    }
+
+    void closeServerWithoutPipeline() throws Exception {
+      server().eventLoop().submit(() -> server().unsafe().close(server().voidPromise())).sync();
+    }
+
+    void awaitServerCloseAndDrain() throws Exception {
+      assertTrue("Server side channel should have closed", server().closeFuture().await(5, TimeUnit.SECONDS));
+      server().eventLoop().submit(() -> {
+      }).sync();
+      server().eventLoop().submit(() -> {
+      }).sync();
+    }
+
+    @Override
+    public void close() throws Exception {
+      client.close().awaitUninterruptibly();
+      listener.close().awaitUninterruptibly();
+      group.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+    }
+  }
+
 }

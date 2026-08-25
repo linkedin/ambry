@@ -190,17 +190,19 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.channelStatusInconsistentCount.inc();
         writeException = new ClosedChannelException();
       } else {
-        // Channel is confirmed inactive — client disconnected. Tag with a recognizable message so
-        // isPossibleClientTermination() can identify this, since raw ClosedChannelException has no message.
-        // Only tag GET requests where write() is used to stream blob data back to the client.
-        // For PUT/POST, write failures are already handled by handleChannelWriteFailure().
+        // The channel is inactive. Record client provenance only when no server termination evidence exists, while
+        // retaining the existing method-specific exception and status mapping below.
         logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed.", ctx.channel());
-        writeFuture.addListener(new CleanupCallback(new ClosedChannelException()));
+        ClosedChannelException closedChannelException = new ClosedChannelException();
+        boolean clientAbortCausedServerError =
+            request != null && request.getRestMethod() != RestMethod.GET && !isServerErrorResponse();
+        recordClientTerminationOnWriteFailure(closedChannelException, clientAbortCausedServerError);
+        writeFuture.addListener(new CleanupCallback(closedChannelException));
         if (request != null && request.getRestMethod() == RestMethod.GET) {
           nettyMetrics.clientChannelClosedOnWriteCount.inc();
-          writeException = new IOException(Utils.CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG, new ClosedChannelException());
+          writeException = new IOException(Utils.CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG, closedChannelException);
         } else {
-          writeException = new ClosedChannelException();
+          writeException = closedChannelException;
         }
       }
       FutureResult<Long> future = new FutureResult<Long>();
@@ -828,9 +830,24 @@ class NettyResponseChannel implements RestResponseChannel {
    *                                 error is propagated through the netty pipeline.
    */
   private void handleChannelWriteFailure(Throwable cause, boolean propagateErrorIfRequired) {
+    handleChannelWriteFailure(cause, propagateErrorIfRequired, false);
+  }
+
+  /**
+   * Handles post-mortem of writes that have failed.
+   * @param cause the cause of the failure.
+   * @param propagateErrorIfRequired if {@code true} and {@code cause} is not an instance of {@link Exception}, the
+   *                                 error is propagated through the netty pipeline.
+   * @param networkWriteFailed {@code true} if an outbound write future supplied {@code cause}.
+   */
+  private void handleChannelWriteFailure(Throwable cause, boolean propagateErrorIfRequired,
+      boolean networkWriteFailed) {
     long writeFailureProcessingStartTime = System.currentTimeMillis();
     try {
       nettyMetrics.channelWriteError.inc();
+      if (networkWriteFailed) {
+        recordClientTerminationOnWriteFailure(cause, false);
+      }
       Exception exception;
       if (!(cause instanceof Exception)) {
         logger.warn("Encountered a throwable on channel write failure", cause);
@@ -852,6 +869,34 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteFailureProcessingTimeInMs.update(
           System.currentTimeMillis() - writeFailureProcessingStartTime);
     }
+  }
+
+  /**
+   * Records a client termination when a network write supplies both the close evidence and an eligible cause.
+   * @param cause the outbound write failure.
+   * @param clientAbortCausedServerError {@code true} if this abort can cause the request's 5xx classification.
+   */
+  private void recordClientTerminationOnWriteFailure(Throwable cause, boolean clientAbortCausedServerError) {
+    boolean clientTermination = request != null && !PublicAccessLogHandler.isServerTermination(ctx.channel())
+        && isClientTerminationWriteFailure(cause);
+    if (clientTermination && request.getMetricsTracker().markClientAborted(clientAbortCausedServerError)) {
+      nettyMetrics.clientTerminatedRequestTimeInMs.update(request.getMetricsTracker().getTimeSinceRequestReceivedInMs());
+    }
+  }
+
+  /**
+   * @return {@code true} if the response already represents a server error.
+   */
+  private boolean isServerErrorResponse() {
+    return responseStatus.isServerError() || errorResponseStatus != null && errorResponseStatus.isServerError();
+  }
+
+  /**
+   * @param cause the outbound write failure.
+   * @return {@code true} if {@code cause} is a transport close recognized as a possible client termination.
+   */
+  private static boolean isClientTerminationWriteFailure(Throwable cause) {
+    return cause instanceof ClosedChannelException || Utils.isPossibleClientTermination(cause);
   }
 
   /**
@@ -1122,7 +1167,7 @@ class NettyResponseChannel implements RestResponseChannel {
         logger.trace("Response sending complete on channel {}", ctx.channel());
         completeRequest(request == null || !request.isKeepAlive(), false, true);
       } else {
-        handleChannelWriteFailure(future.cause(), true);
+        handleChannelWriteFailure(future.cause(), true, true);
       }
     }
   }
@@ -1163,7 +1208,7 @@ class NettyResponseChannel implements RestResponseChannel {
           ctx.writeAndFlush(new ChunkDispenser(), writeFuture);
         }
       } else {
-        handleChannelWriteFailure(future.cause(), true);
+        handleChannelWriteFailure(future.cause(), true, true);
       }
       long responseAfterWriteProcessingTime = System.currentTimeMillis() - writeFinishTime;
       long channelWriteTime = writeFinishTime - responseWriteStartTime;
@@ -1189,7 +1234,7 @@ class NettyResponseChannel implements RestResponseChannel {
       if (future.isSuccess()) {
         completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), true, true);
       } else {
-        handleChannelWriteFailure(future.cause(), true);
+        handleChannelWriteFailure(future.cause(), true, true);
       }
       long responseAfterWriteProcessingTime = System.currentTimeMillis() - writeFinishTime;
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);

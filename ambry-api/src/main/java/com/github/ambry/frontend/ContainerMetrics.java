@@ -50,4 +50,12 @@ public class ContainerMetrics extends EntityOperationMetrics {
       accountMetrics.recordMetrics(roundTripTimeInMs, responseStatus, bytesTransferred);
     }
   }
+
+  @Override
+  public void recordClientAbort(ResponseStatus responseStatus, boolean clientAbortCausedServerError) {
+    super.recordClientAbort(responseStatus, clientAbortCausedServerError);
+    if (accountMetrics != null) {
+      accountMetrics.recordClientAbort(responseStatus, clientAbortCausedServerError);
+    }
+  }
 }

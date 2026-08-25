@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.frontend.ContainerMetrics;
 import java.util.Map;
 import java.util.Random;
 import org.junit.Test;
@@ -108,6 +109,76 @@ public class RestRequestMetricsTrackerTest {
         metricRegistry.getCounters()
             .get(metricPrefix + RestRequestMetrics.UNSATISFIED_REQUEST_COUNT_SUFFIX)
             .getCount());
+  }
+
+  /**
+   * Tests that a client abort is counted separately from its existing status, including the server-error-only subset,
+   * without changing any existing per-container series.
+   */
+  @Test
+  public void testClientAbortCountedSeparatelyFromExistingStatus() {
+    clientAbortTest(ResponseStatus.BadRequest, true, false, 0);
+    clientAbortTest(ResponseStatus.InternalServerError, true, false, 0);
+    clientAbortTest(ResponseStatus.InternalServerError, true, true, 1);
+    clientAbortTest(ResponseStatus.BadRequest, false, false, 0);
+  }
+
+  /**
+   * Tests that idle timeout and client-abort paths share one request-scoped termination winner.
+   */
+  @Test
+  public void testRequestTerminationReasonRecordedOnlyOnce() {
+    RestRequestMetricsTracker idleFirst = new RestRequestMetricsTracker();
+    assertTrue("The idle path should claim an unrecorded termination", idleFirst.markIdleTimeoutTermination());
+    assertFalse("A later client path should not relabel the idle termination", idleFirst.markClientAborted(false));
+
+    RestRequestMetricsTracker clientFirst = new RestRequestMetricsTracker();
+    assertTrue("The client path should claim an unrecorded termination", clientFirst.markClientAborted(false));
+    assertFalse("A later idle path should not relabel the client termination",
+        clientFirst.markIdleTimeoutTermination());
+    assertFalse("A second client path should not record the request again", clientFirst.markClientAborted(true));
+  }
+
+  /**
+   * Records a status against a container, optionally marking it as a client abort, and checks the resulting counters.
+   * @param responseStatus the existing request status.
+   * @param clientAborted if {@code true}, {@link RestRequestMetricsTracker#markClientAborted(boolean)} is called.
+   * @param clientAbortCausedServerError whether the abort caused the request's server-error classification.
+   * @param expectedServerErrorClientAbortCount the expected 5xx abort subset.
+   */
+  private void clientAbortTest(ResponseStatus responseStatus, boolean clientAborted,
+      boolean clientAbortCausedServerError,
+      long expectedServerErrorClientAbortCount) {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    requestMetrics.injectMetrics(new RestRequestMetrics(getClass(), "ClientAbortTest", metricRegistry));
+    requestMetrics.injectContainerMetrics(
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null));
+    requestMetrics.setResponseStatus(responseStatus);
+    if (clientAborted) {
+      assertTrue("The first termination path should mark the request",
+          requestMetrics.markClientAborted(clientAbortCausedServerError));
+      assertFalse("A second termination path should not mark the request again",
+          requestMetrics.markClientAborted(clientAbortCausedServerError));
+    }
+
+    requestMetrics.recordMetrics();
+
+    String metricPrefix = ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
+    assertEquals("Client abort count is not as expected", clientAborted ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ClientAbortCount").getCount());
+    assertEquals("Server-error client abort count is not as expected", expectedServerErrorClientAbortCount,
+        metricRegistry.getCounters().get(metricPrefix + "ServerErrorClientAbortCount").getCount());
+    assertEquals("Bad request count should retain the original status classification",
+        responseStatus == ResponseStatus.BadRequest ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "BadRequestCount").getCount());
+    assertEquals("Client error count should retain the original status classification",
+        responseStatus.isClientError() ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ClientErrorCount").getCount());
+    assertEquals("Server error count should retain the original status classification",
+        responseStatus.isServerError() ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ServerErrorCount").getCount());
   }
 
   /**
