@@ -116,10 +116,6 @@ class NettyResponseChannel implements RestResponseChannel {
   // temp variable to hold the error response status which will be overwritten on responseStatus if the error response
   // was successfully sent
   private ResponseStatus errorResponseStatus = null;
-  // set by getErrorResponse() when the failure is a generic (non-RestServiceException, non-client-termination)
-  // internal error. Used by maybeSendErrorResponse() to attribute the internalServerErrorCount /
-  // internalServerErrorAfterResponseCommittedCount metrics based on whether the error actually reached the wire.
-  private boolean isGenericInternalError = false;
 
   /**
    * A {@link ChannelFutureListener} that closes the {@link Channel} which is
@@ -588,21 +584,10 @@ class NettyResponseChannel implements RestResponseChannel {
     long processingStartTime = System.currentTimeMillis();
     boolean responseSent = false;
     logger.trace("Sending error response to client on channel {}", ctx.channel());
-    isGenericInternalError = false;
+    // capture before getErrorResponse()/maybeWriteResponseMetadata() run, since the latter may flip this to true.
+    boolean responseMetadataAlreadySent = responseMetadataWriteInitiated.get();
     FullHttpResponse errorResponse = getErrorResponse(exception);
-    boolean writtenToWire = maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener());
-    if (isGenericInternalError) {
-      if (writtenToWire) {
-        // a 500 that actually made it onto the wire.
-        nettyMetrics.internalServerErrorCount.inc();
-      } else {
-        // response metadata (e.g. a 200) was already committed to the client before this failure occurred, so the
-        // 500 constructed here never reaches the wire. Tracked separately so alerts on internalServerErrorCount
-        // reflect only errors actually seen by the client, not this already-committed-response case.
-        nettyMetrics.internalServerErrorAfterResponseCommittedCount.inc();
-      }
-    }
-    if (writtenToWire) {
+    if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
       logger.trace("Scheduled error response sending on channel {}", ctx.channel());
       responseStatus = errorResponseStatus;
       responseSent = true;
@@ -610,8 +595,29 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.errorResponseProcessingTimeInMs.update(processingTime);
     } else {
       logger.debug("Could not send error response on channel {}", ctx.channel());
+      if (responseMetadataAlreadySent && errorResponseStatus == ResponseStatus.InternalServerError
+          && isOfflineServiceRequest()) {
+        // response metadata (e.g. a 200) was already committed to the client before this failure occurred, so the
+        // 500 constructed above never reached the wire. internalServerErrorCount was still incremented above,
+        // unconditionally, exactly as before this change. This is purely additive visibility into how often known
+        // offline (e.g. composite router secondary/parity-check) callers hit this already-committed-response case.
+        nettyMetrics.offlineInternalServerErrorOnlyCount.inc();
+      }
     }
     return responseSent;
+  }
+
+  /**
+   * @return {@code true} if the current request's {@link RestUtils.Headers#SERVICE_ID} matches one of the
+   * configured offline (e.g. composite router secondary/parity-check) service IDs. {@code false} if there is no
+   * current request, no service ID on it, or no offline service IDs are configured.
+   */
+  private boolean isOfflineServiceRequest() {
+    if (request == null || nettyConfig.nettyServerOfflineServiceIds.isEmpty()) {
+      return false;
+    }
+    Object serviceId = request.getArgs().get(RestUtils.Headers.SERVICE_ID);
+    return serviceId != null && nettyConfig.nettyServerOfflineServiceIds.contains(serviceId.toString());
   }
 
   /**
@@ -657,7 +663,7 @@ class NettyResponseChannel implements RestResponseChannel {
       status = HttpResponseStatus.BAD_REQUEST;
       errorResponseStatus = ResponseStatus.BadRequest;
     } else {
-      isGenericInternalError = true;
+      nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
     }

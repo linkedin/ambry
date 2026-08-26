@@ -131,7 +131,11 @@ public class NettyMetrics {
   public final Counter unauthorizedCount;
   public final Counter goneCount;
   public final Counter internalServerErrorCount;
-  public final Counter internalServerErrorAfterResponseCommittedCount;
+  // incremented when a generic internal-error 500 could not be delivered to the client because response metadata
+  // (e.g. a 200) had already been committed for a streamed GET, and the request's service ID identifies it as a
+  // known offline (e.g. composite router secondary/parity-check) caller. internalServerErrorCount is still
+  // incremented unconditionally for these, same as before; this is purely additive visibility.
+  public final Counter offlineInternalServerErrorOnlyCount;
   public final Counter serviceUnavailableErrorCount;
   public final Counter hostLevelThrottledCount;
   public final Counter insufficientCapacityErrorCount;
@@ -326,8 +330,8 @@ public class NettyMetrics {
     goneCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "GoneCount"));
     internalServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount"));
-    internalServerErrorAfterResponseCommittedCount = metricRegistry.counter(
-        MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorAfterResponseCommittedCount"));
+    offlineInternalServerErrorOnlyCount = metricRegistry.counter(
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineInternalServerErrorOnlyCount"));
     serviceUnavailableErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ServiceUnavailableErrorCount"));
     hostLevelThrottledCount =

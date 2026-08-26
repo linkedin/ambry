@@ -702,26 +702,35 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Tests that {@link NettyMetrics#internalServerErrorCount} is only incremented when the error response actually
-   * reaches the wire, and that {@link NettyMetrics#internalServerErrorAfterResponseCommittedCount} is incremented
-   * instead when a generic internal failure occurs after response metadata (e.g. a 200) has already been committed
-   * to the client.
+   * Tests that {@link NettyMetrics#internalServerErrorCount} is incremented unconditionally for generic internal
+   * errors (same as before), and that {@link NettyMetrics#offlineInternalServerErrorOnlyCount} is additionally
+   * incremented only when a generic internal failure occurs after response metadata (e.g. a 200) has already been
+   * committed to the client AND the request's {@link RestUtils.Headers#SERVICE_ID} identifies it as a configured
+   * offline (e.g. composite router secondary/parity-check) caller.
    */
   @Test
-  public void internalServerErrorMetricSplitTest() throws Exception {
+  public void offlineInternalServerErrorOnlyCountTest() throws Exception {
+    String offlineServiceId = "ambry-offline-parity-checker";
+    NettyConfig nettyConfigWithOfflineServiceId = new NettyConfig(new VerifiableProperties(new Properties() {
+      {
+        setProperty(NettyConfig.NETTY_SERVER_OFFLINE_SERVICE_IDS, offlineServiceId);
+      }
+    }));
     String iseMetricName = MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount");
-    String iseAfterCommitMetricName =
-        MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorAfterResponseCommittedCount");
+    String offlineIseMetricName =
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineInternalServerErrorOnlyCount");
     long iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
-    long iseAfterCommitBeforeCount =
-        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount();
+    long offlineIseBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineIseMetricName).getCount();
 
-    // generic exception before any response metadata has been sent -> should count towards internalServerErrorCount
-    // (the 500 actually reaches the wire).
-    EmbeddedChannel channel = createEmbeddedChannel();
+    // generic exception before any response metadata has been sent -> internalServerErrorCount tracked, no offline
+    // metric change even though the request is from the configured offline service ID, since the 500 reached the
+    // wire.
+    HttpHeaders offlineServiceHeaders = new DefaultHttpHeaders().set(RestUtils.Headers.SERVICE_ID, offlineServiceId);
+    EmbeddedChannel channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
     channel.writeInbound(
         RestTestUtils.createRequest(HttpMethod.GET, TestingUri.OnResponseCompleteWithNonRestException.toString(),
-            null));
+            offlineServiceHeaders));
     HttpResponse response = channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
     if (!(response instanceof FullHttpResponse)) {
@@ -730,15 +739,35 @@ public class NettyResponseChannelTest {
     }
     assertEquals("internalServerErrorCount should have been tracked", iseBeforeCount + 1,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
-    assertEquals("internalServerErrorAfterResponseCommittedCount should not have changed", iseAfterCommitBeforeCount,
-        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount());
+    assertEquals("offlineInternalServerErrorOnlyCount should not have changed", offlineIseBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineIseMetricName).getCount());
 
-    // generic exception after response metadata (200) has already been committed -> should count towards
-    // internalServerErrorAfterResponseCommittedCount instead, since the 500 never reaches the wire.
+    // generic exception after response metadata (200) already committed, request from the configured offline
+    // service ID -> internalServerErrorCount is still tracked exactly as before, and offlineInternalServerErrorOnlyCount
+    // is additionally tracked since the 500 never reached the wire.
     iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
-    iseAfterCommitBeforeCount =
-        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount();
-    channel = createEmbeddedChannel();
+    offlineIseBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineIseMetricName).getCount();
+    channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidway.toString(),
+            offlineServiceHeaders));
+    response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    while (channel.readOutbound() != null) {
+    }
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
+    assertEquals("internalServerErrorCount should still have been tracked", iseBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
+    assertEquals("offlineInternalServerErrorOnlyCount should have been tracked", offlineIseBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineIseMetricName).getCount());
+
+    // same already-committed-response scenario, but request is NOT from a configured offline service ID ->
+    // internalServerErrorCount is still tracked, but offlineInternalServerErrorOnlyCount should not change.
+    iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
+    offlineIseBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineIseMetricName).getCount();
+    channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
     channel.writeInbound(
         RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidway.toString(), null));
     response = channel.readOutbound();
@@ -746,11 +775,10 @@ public class NettyResponseChannelTest {
     while (channel.readOutbound() != null) {
     }
     assertFalse("Channel is not closed at the remote end", channel.isActive());
-    assertEquals("internalServerErrorCount should not have changed", iseBeforeCount,
+    assertEquals("internalServerErrorCount should still have been tracked", iseBeforeCount + 1,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
-    assertEquals("internalServerErrorAfterResponseCommittedCount should have been tracked",
-        iseAfterCommitBeforeCount + 1,
-        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseAfterCommitMetricName).getCount());
+    assertEquals("offlineInternalServerErrorOnlyCount should not have changed", offlineIseBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineIseMetricName).getCount());
   }
 
   /**
@@ -1414,6 +1442,17 @@ public class NettyResponseChannelTest {
   private EmbeddedChannel createEmbeddedChannel() {
     ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    return new EmbeddedChannel(chunkedWriteHandler, processor);
+  }
+
+  /**
+   * Same as {@link #createEmbeddedChannel()}, but with the given {@code nettyConfig} injected into the
+   * {@link MockNettyMessageProcessor}, instead of the default one.
+   */
+  private EmbeddedChannel createEmbeddedChannel(NettyConfig nettyConfig) {
+    ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    processor.setNettyConfig(nettyConfig);
     return new EmbeddedChannel(chunkedWriteHandler, processor);
   }
 
