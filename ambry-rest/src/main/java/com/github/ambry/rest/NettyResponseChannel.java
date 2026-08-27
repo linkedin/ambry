@@ -584,8 +584,6 @@ class NettyResponseChannel implements RestResponseChannel {
     long processingStartTime = System.currentTimeMillis();
     boolean responseSent = false;
     logger.trace("Sending error response to client on channel {}", ctx.channel());
-    // capture before getErrorResponse()/maybeWriteResponseMetadata() run, since the latter may flip this to true.
-    boolean responseMetadataAlreadySent = responseMetadataWriteInitiated.get();
     FullHttpResponse errorResponse = getErrorResponse(exception);
     if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
       logger.trace("Scheduled error response sending on channel {}", ctx.channel());
@@ -595,7 +593,13 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.errorResponseProcessingTimeInMs.update(processingTime);
     } else {
       logger.debug("Could not send error response on channel {}", ctx.channel());
-      if (responseMetadataAlreadySent && errorResponseStatus == ResponseStatus.InternalServerError
+      // Check the flag *after* the write attempt above, not before: response metadata can be committed
+      // concurrently by a writer on another thread (e.g. a router content-write callback), so reading the flag
+      // before the CAS attempt above is racy and can miss an already-committed response that was in fact
+      // committed by that other writer just before/around our own CAS attempt failed. Reading it here is safe
+      // because by the time maybeWriteResponseMetadata() returns, the flag is guaranteed to be true if *any*
+      // writer (this one or a concurrent one) has ever successfully committed metadata.
+      if (responseMetadataWriteInitiated.get() && errorResponseStatus == ResponseStatus.InternalServerError
           && isOfflineServiceRequest()) {
         // response metadata (e.g. a 200) was already committed to the client before this failure occurred, so the
         // 500 constructed above never reached the wire. internalServerErrorCount was still incremented above,
