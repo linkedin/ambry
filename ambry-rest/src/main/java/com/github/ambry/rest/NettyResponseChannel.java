@@ -610,9 +610,16 @@ class NettyResponseChannel implements RestResponseChannel {
           // unconditionally, exactly as before this change. This is purely additive visibility into how often known
           // offline (e.g. composite router secondary/parity-check) callers hit this already-committed-response case.
           nettyMetrics.offlineInternalServerErrorOnlyCount.inc();
-        } else if (errorResponseStatus == ResponseStatus.ServiceUnavailable && !errorResponseIsHostLevelThrottled) {
-          // same as above, but for a genuine (non-throttler-driven) 503 that never reached the wire.
-          nettyMetrics.offlineServiceUnavailableOnlyCount.inc();
+        } else if (errorResponseStatus == ResponseStatus.ServiceUnavailable) {
+          if (errorResponseIsHostLevelThrottled) {
+            // same as above, but the drop was host-level-throttled rather than a genuine service-unavailable
+            // failure; tracked separately, matching how hostLevelThrottledCount is kept separate from
+            // serviceUnavailableErrorCount.
+            nettyMetrics.offlineHostLevelThrottledOnlyCount.inc();
+          } else {
+            // same as above, but for a genuine (non-throttler-driven) 503 that never reached the wire.
+            nettyMetrics.offlineServiceUnavailableOnlyCount.inc();
+          }
         }
       }
     }

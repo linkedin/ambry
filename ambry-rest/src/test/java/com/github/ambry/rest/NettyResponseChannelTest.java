@@ -786,7 +786,8 @@ public class NettyResponseChannelTest {
    * host-level-throttled) 503 could not be delivered to the client because response metadata (e.g. a 200) had
    * already been committed, AND the request's {@link RestUtils.Headers#SERVICE_ID} identifies it as a configured
    * offline caller. Host-level-throttled drops, which share the 503 wire status, must be excluded, matching how
-   * {@link NettyMetrics#serviceUnavailableErrorCount} itself already excludes them.
+   * {@link NettyMetrics#serviceUnavailableErrorCount} itself already excludes them; those are instead tracked via
+   * {@link NettyMetrics#offlineHostLevelThrottledOnlyCount}.
    */
   @Test
   public void offlineServiceUnavailableOnlyCountTest() throws Exception {
@@ -798,12 +799,16 @@ public class NettyResponseChannelTest {
     }));
     String offlineSuMetricName =
         MetricRegistry.name(NettyResponseChannel.class, "OfflineServiceUnavailableOnlyCount");
+    String offlineHltMetricName =
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineHostLevelThrottledOnlyCount");
     HttpHeaders offlineServiceHeaders = new DefaultHttpHeaders().set(RestUtils.Headers.SERVICE_ID, offlineServiceId);
 
     // genuine ServiceUnavailable after response metadata (200) already committed, request from the configured
     // offline service ID -> offlineServiceUnavailableOnlyCount is tracked since the 503 never reached the wire.
     long offlineSuBeforeCount =
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount();
+    long offlineHltBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineHltMetricName).getCount();
     EmbeddedChannel channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
     channel.writeInbound(
         RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidwayServiceUnavailable.toString(),
@@ -815,11 +820,16 @@ public class NettyResponseChannelTest {
     assertFalse("Channel is not closed at the remote end", channel.isActive());
     assertEquals("offlineServiceUnavailableOnlyCount should have been tracked", offlineSuBeforeCount + 1,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount());
+    assertEquals("offlineHostLevelThrottledOnlyCount should not have changed", offlineHltBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineHltMetricName).getCount());
 
     // host-level-throttled drop after response metadata already committed, request from the configured offline
-    // service ID -> offlineServiceUnavailableOnlyCount should NOT change, since throttler-driven drops are excluded.
+    // service ID -> offlineServiceUnavailableOnlyCount should NOT change (throttler-driven drops are excluded from
+    // it), but offlineHostLevelThrottledOnlyCount should be tracked instead.
     offlineSuBeforeCount =
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount();
+    offlineHltBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineHltMetricName).getCount();
     channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
     channel.writeInbound(
         RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidwayHostLevelThrottled.toString(),
@@ -831,6 +841,8 @@ public class NettyResponseChannelTest {
     assertFalse("Channel is not closed at the remote end", channel.isActive());
     assertEquals("offlineServiceUnavailableOnlyCount should not have changed", offlineSuBeforeCount,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount());
+    assertEquals("offlineHostLevelThrottledOnlyCount should have been tracked", offlineHltBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineHltMetricName).getCount());
 
     // same genuine-ServiceUnavailable-after-commit scenario, but request is NOT from a configured offline service
     // ID -> offlineServiceUnavailableOnlyCount should not change.
@@ -847,6 +859,22 @@ public class NettyResponseChannelTest {
     assertFalse("Channel is not closed at the remote end", channel.isActive());
     assertEquals("offlineServiceUnavailableOnlyCount should not have changed", offlineSuBeforeCount,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount());
+
+    // same host-level-throttled-after-commit scenario, but request is NOT from a configured offline service ID ->
+    // offlineHostLevelThrottledOnlyCount should not change.
+    offlineHltBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineHltMetricName).getCount();
+    channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidwayHostLevelThrottled.toString(),
+            null));
+    response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    while (channel.readOutbound() != null) {
+    }
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
+    assertEquals("offlineHostLevelThrottledOnlyCount should not have changed", offlineHltBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineHltMetricName).getCount());
   }
 
   /**

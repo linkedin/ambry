@@ -141,6 +141,10 @@ public class NettyMetrics {
   public final Counter offlineServiceUnavailableOnlyCount;
   public final Counter serviceUnavailableErrorCount;
   public final Counter hostLevelThrottledCount;
+  // same as offlineServiceUnavailableOnlyCount above, but specifically for host-level-throttled drops that could
+  // not be delivered to the client, matching how hostLevelThrottledCount itself is tracked separately from
+  // serviceUnavailableErrorCount.
+  public final Counter offlineHostLevelThrottledOnlyCount;
   public final Counter insufficientCapacityErrorCount;
   public final Counter preconditionFailedErrorCount;
   public final Counter methodNotAllowedErrorCount;
@@ -341,6 +345,8 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ServiceUnavailableErrorCount"));
     hostLevelThrottledCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "HostLevelThrottledCount"));
+    offlineHostLevelThrottledOnlyCount = metricRegistry.counter(
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineHostLevelThrottledOnlyCount"));
     insufficientCapacityErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InsufficientCapacityErrorCount"));
     preconditionFailedErrorCount =
