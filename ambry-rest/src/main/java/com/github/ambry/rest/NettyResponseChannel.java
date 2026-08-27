@@ -116,6 +116,10 @@ class NettyResponseChannel implements RestResponseChannel {
   // temp variable to hold the error response status which will be overwritten on responseStatus if the error response
   // was successfully sent
   private ResponseStatus errorResponseStatus = null;
+  // set alongside errorResponseStatus in getErrorResponse() when the 503 being built is a host-level-throttled
+  // drop rather than a genuine service-unavailable error, so callers can exclude it the same way
+  // serviceUnavailableErrorCount already does.
+  private boolean errorResponseIsHostLevelThrottled = false;
 
   /**
    * A {@link ChannelFutureListener} that closes the {@link Channel} which is
@@ -599,13 +603,17 @@ class NettyResponseChannel implements RestResponseChannel {
       // committed by that other writer just before/around our own CAS attempt failed. Reading it here is safe
       // because by the time maybeWriteResponseMetadata() returns, the flag is guaranteed to be true if *any*
       // writer (this one or a concurrent one) has ever successfully committed metadata.
-      if (responseMetadataWriteInitiated.get() && errorResponseStatus == ResponseStatus.InternalServerError
-          && isOfflineServiceRequest()) {
-        // response metadata (e.g. a 200) was already committed to the client before this failure occurred, so the
-        // 500 constructed above never reached the wire. internalServerErrorCount was still incremented above,
-        // unconditionally, exactly as before this change. This is purely additive visibility into how often known
-        // offline (e.g. composite router secondary/parity-check) callers hit this already-committed-response case.
-        nettyMetrics.offlineInternalServerErrorOnlyCount.inc();
+      if (responseMetadataWriteInitiated.get() && isOfflineServiceRequest()) {
+        if (errorResponseStatus == ResponseStatus.InternalServerError) {
+          // response metadata (e.g. a 200) was already committed to the client before this failure occurred, so the
+          // 500 constructed above never reached the wire. internalServerErrorCount was still incremented above,
+          // unconditionally, exactly as before this change. This is purely additive visibility into how often known
+          // offline (e.g. composite router secondary/parity-check) callers hit this already-committed-response case.
+          nettyMetrics.offlineInternalServerErrorOnlyCount.inc();
+        } else if (errorResponseStatus == ResponseStatus.ServiceUnavailable && !errorResponseIsHostLevelThrottled) {
+          // same as above, but for a genuine (non-throttler-driven) 503 that never reached the wire.
+          nettyMetrics.offlineServiceUnavailableOnlyCount.inc();
+        }
       }
     }
     return responseSent;
@@ -634,6 +642,7 @@ class NettyResponseChannel implements RestResponseChannel {
     RestServiceErrorCode restServiceErrorCode = null;
     String errReason = null;
     Map<String, String> errHeaders = null;
+    errorResponseIsHostLevelThrottled = false;
     if (cause instanceof RestServiceException) {
       RestServiceException restServiceException = (RestServiceException) cause;
       restServiceErrorCode = restServiceException.getErrorCode();
@@ -645,6 +654,7 @@ class NettyResponseChannel implements RestResponseChannel {
         // here skips the ServiceUnavailable counter increment getHttpResponseStatus would do.
         nettyMetrics.hostLevelThrottledCount.inc();
         status = HttpResponseStatus.SERVICE_UNAVAILABLE;
+        errorResponseIsHostLevelThrottled = true;
       } else {
         status = getHttpResponseStatus(errorResponseStatus);
       }

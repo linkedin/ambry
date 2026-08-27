@@ -136,6 +136,9 @@ public class NettyMetrics {
   // known offline (e.g. composite router secondary/parity-check) caller. internalServerErrorCount is still
   // incremented unconditionally for these, same as before; this is purely additive visibility.
   public final Counter offlineInternalServerErrorOnlyCount;
+  // same as offlineInternalServerErrorOnlyCount above, but for a 503 that could not be delivered to the client.
+  // excludes host-level-throttled drops, matching how serviceUnavailableErrorCount itself excludes them.
+  public final Counter offlineServiceUnavailableOnlyCount;
   public final Counter serviceUnavailableErrorCount;
   public final Counter hostLevelThrottledCount;
   public final Counter insufficientCapacityErrorCount;
@@ -332,6 +335,8 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount"));
     offlineInternalServerErrorOnlyCount = metricRegistry.counter(
         MetricRegistry.name(NettyResponseChannel.class, "OfflineInternalServerErrorOnlyCount"));
+    offlineServiceUnavailableOnlyCount = metricRegistry.counter(
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineServiceUnavailableOnlyCount"));
     serviceUnavailableErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ServiceUnavailableErrorCount"));
     hostLevelThrottledCount =

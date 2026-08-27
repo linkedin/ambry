@@ -782,6 +782,74 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests that {@link NettyMetrics#offlineServiceUnavailableOnlyCount} is incremented only when a genuine (non
+   * host-level-throttled) 503 could not be delivered to the client because response metadata (e.g. a 200) had
+   * already been committed, AND the request's {@link RestUtils.Headers#SERVICE_ID} identifies it as a configured
+   * offline caller. Host-level-throttled drops, which share the 503 wire status, must be excluded, matching how
+   * {@link NettyMetrics#serviceUnavailableErrorCount} itself already excludes them.
+   */
+  @Test
+  public void offlineServiceUnavailableOnlyCountTest() throws Exception {
+    String offlineServiceId = "ambry-offline-parity-checker";
+    NettyConfig nettyConfigWithOfflineServiceId = new NettyConfig(new VerifiableProperties(new Properties() {
+      {
+        setProperty(NettyConfig.NETTY_SERVER_OFFLINE_SERVICE_IDS, offlineServiceId);
+      }
+    }));
+    String offlineSuMetricName =
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineServiceUnavailableOnlyCount");
+    HttpHeaders offlineServiceHeaders = new DefaultHttpHeaders().set(RestUtils.Headers.SERVICE_ID, offlineServiceId);
+
+    // genuine ServiceUnavailable after response metadata (200) already committed, request from the configured
+    // offline service ID -> offlineServiceUnavailableOnlyCount is tracked since the 503 never reached the wire.
+    long offlineSuBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount();
+    EmbeddedChannel channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidwayServiceUnavailable.toString(),
+            offlineServiceHeaders));
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    while (channel.readOutbound() != null) {
+    }
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
+    assertEquals("offlineServiceUnavailableOnlyCount should have been tracked", offlineSuBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount());
+
+    // host-level-throttled drop after response metadata already committed, request from the configured offline
+    // service ID -> offlineServiceUnavailableOnlyCount should NOT change, since throttler-driven drops are excluded.
+    offlineSuBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount();
+    channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidwayHostLevelThrottled.toString(),
+            offlineServiceHeaders));
+    response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    while (channel.readOutbound() != null) {
+    }
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
+    assertEquals("offlineServiceUnavailableOnlyCount should not have changed", offlineSuBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount());
+
+    // same genuine-ServiceUnavailable-after-commit scenario, but request is NOT from a configured offline service
+    // ID -> offlineServiceUnavailableOnlyCount should not change.
+    offlineSuBeforeCount =
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount();
+    channel = createEmbeddedChannel(nettyConfigWithOfflineServiceId);
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidwayServiceUnavailable.toString(),
+            null));
+    response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    while (channel.readOutbound() != null) {
+    }
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
+    assertEquals("offlineServiceUnavailableOnlyCount should not have changed", offlineSuBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(offlineSuMetricName).getCount());
+  }
+
+  /**
    * Tests that a recognizable client-termination exception without a network-boundary observation does not record a
    * per-container client abort.
    */
@@ -1977,6 +2045,17 @@ enum TestingUri {
    */
   ResponseFailureMidway,
   /**
+   * Response sending fails midway through a write with a {@link RestServiceException} mapping to
+   * {@link ResponseStatus#ServiceUnavailable}.
+   */
+  ResponseFailureMidwayServiceUnavailable,
+  /**
+   * Response sending fails midway through a write with a {@link RestServiceException} using
+   * {@link RestServiceErrorCode#HostLevelThrottled}, which shares the 503 wire status with
+   * {@link ResponseStatus#ServiceUnavailable} but should be excluded from the offline-only 503 metric.
+   */
+  ResponseFailureMidwayHostLevelThrottled,
+  /**
    * When this request is received, a response with {@link RestUtils.Headers#CONTENT_LENGTH} set is returned.
    * The value of the header {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} is used to determine the number
    * of chunks (each equal to {@link MockNettyMessageProcessor#CHUNK}) to return.
@@ -2216,6 +2295,24 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
                 callback));
         writeCallbacksToVerify.add(callback);
         restResponseChannel.onResponseComplete(new Exception());
+        // this should close the channel and the test will check for that.
+        break;
+      case ResponseFailureMidwayServiceUnavailable:
+        callback = new ChannelWriteCallback();
+        callback.setFuture(restResponseChannel.write(
+            ByteBuffer.wrap(TestingUri.ResponseFailureMidwayServiceUnavailable.toString().getBytes()), callback));
+        writeCallbacksToVerify.add(callback);
+        restResponseChannel.onResponseComplete(
+            new RestServiceException("service unavailable midway", RestServiceErrorCode.ServiceUnavailable));
+        // this should close the channel and the test will check for that.
+        break;
+      case ResponseFailureMidwayHostLevelThrottled:
+        callback = new ChannelWriteCallback();
+        callback.setFuture(restResponseChannel.write(
+            ByteBuffer.wrap(TestingUri.ResponseFailureMidwayHostLevelThrottled.toString().getBytes()), callback));
+        writeCallbacksToVerify.add(callback);
+        restResponseChannel.onResponseComplete(
+            new RestServiceException("host level throttled midway", RestServiceErrorCode.HostLevelThrottled));
         // this should close the channel and the test will check for that.
         break;
       case ResponseWithContentLength:
