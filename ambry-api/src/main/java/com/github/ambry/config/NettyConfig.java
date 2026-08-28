@@ -18,6 +18,7 @@ import com.github.ambry.rest.RestUtils;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 
 /**
@@ -180,7 +181,8 @@ public class NettyConfig {
    * A comma separated list of {@link com.github.ambry.rest.RestUtils.Headers#SERVICE_ID} values that identify known
    * offline (e.g. composite router secondary/parity-check) callers, as configured for those callers elsewhere (e.g.
    * the composite router config). Used to attribute 500s that never reach the wire (because response metadata was
-   * already committed) to a dedicated offline-only metric instead of dropping that visibility entirely.
+   * already committed) to a dedicated offline-only metric instead of dropping that visibility entirely. Ids are
+   * trimmed of surrounding whitespace and empty entries are dropped, so surrounding spaces after a comma are fine.
    */
   @Config(NETTY_SERVER_OFFLINE_SERVICE_IDS)
   @Default("")
@@ -202,8 +204,14 @@ public class NettyConfig {
             Integer.MAX_VALUE);
     nettyServerDenyListedQueryParams = new HashSet<>(
         Arrays.asList(verifiableProperties.getString(NETTY_SERVER_DENY_LISTED_QUERY_PARAMS, "").split(",")));
-    nettyServerOfflineServiceIds = new HashSet<>(
-        Arrays.asList(verifiableProperties.getString(NETTY_SERVER_OFFLINE_SERVICE_IDS, "").split(",")));
+    // trim whitespace around each id and drop empty entries so an unconfigured (or trailing-comma) value
+    // yields a truly empty set rather than a set containing "" or " "-padded ids that can never match a
+    // real service id via isOfflineServiceRequest()'s exact Set.contains(...) check.
+    nettyServerOfflineServiceIds = Arrays.stream(verifiableProperties.getString(NETTY_SERVER_OFFLINE_SERVICE_IDS, "")
+        .split(","))
+        .map(String::trim)
+        .filter(id -> !id.isEmpty())
+        .collect(Collectors.toSet());
     nettyMultipartPostMaxSizeBytes =
         verifiableProperties.getLongInRange(NETTY_MULTIPART_POST_MAX_SIZE_BYTES, 20 * 1024 * 1024, 0, Long.MAX_VALUE);
     nettyServerSslFactory = verifiableProperties.getString(SSL_FACTORY_KEY, "");
