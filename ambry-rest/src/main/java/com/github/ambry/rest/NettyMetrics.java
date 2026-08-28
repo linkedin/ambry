@@ -131,8 +131,20 @@ public class NettyMetrics {
   public final Counter unauthorizedCount;
   public final Counter goneCount;
   public final Counter internalServerErrorCount;
+  // incremented when a generic internal-error 500 could not be delivered to the client because response metadata
+  // (e.g. a 200) had already been committed for a streamed GET, and the request's service ID identifies it as a
+  // known offline (e.g. composite router secondary/parity-check) caller. internalServerErrorCount is still
+  // incremented unconditionally for these, same as before; this is purely additive visibility.
+  public final Counter offlineInternalServerErrorOnlyCount;
+  // same as offlineInternalServerErrorOnlyCount above, but for a 503 that could not be delivered to the client.
+  // excludes host-level-throttled drops, matching how serviceUnavailableErrorCount itself excludes them.
+  public final Counter offlineServiceUnavailableOnlyCount;
   public final Counter serviceUnavailableErrorCount;
   public final Counter hostLevelThrottledCount;
+  // same as offlineServiceUnavailableOnlyCount above, but specifically for host-level-throttled drops that could
+  // not be delivered to the client, matching how hostLevelThrottledCount itself is tracked separately from
+  // serviceUnavailableErrorCount.
+  public final Counter offlineHostLevelThrottledOnlyCount;
   public final Counter insufficientCapacityErrorCount;
   public final Counter preconditionFailedErrorCount;
   public final Counter methodNotAllowedErrorCount;
@@ -325,10 +337,16 @@ public class NettyMetrics {
     goneCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "GoneCount"));
     internalServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount"));
+    offlineInternalServerErrorOnlyCount = metricRegistry.counter(
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineInternalServerErrorOnlyCount"));
+    offlineServiceUnavailableOnlyCount = metricRegistry.counter(
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineServiceUnavailableOnlyCount"));
     serviceUnavailableErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ServiceUnavailableErrorCount"));
     hostLevelThrottledCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "HostLevelThrottledCount"));
+    offlineHostLevelThrottledOnlyCount = metricRegistry.counter(
+        MetricRegistry.name(NettyResponseChannel.class, "OfflineHostLevelThrottledOnlyCount"));
     insufficientCapacityErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InsufficientCapacityErrorCount"));
     preconditionFailedErrorCount =

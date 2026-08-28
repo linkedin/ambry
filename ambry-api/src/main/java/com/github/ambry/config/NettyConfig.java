@@ -14,9 +14,11 @@
 package com.github.ambry.config;
 
 import com.github.ambry.rest.RestRequestService;
+import com.github.ambry.rest.RestUtils;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 
 /**
@@ -41,6 +43,7 @@ public class NettyConfig {
   public static final String NETTY_METRICS_STOP_WAIT_TIMEOUT_SECONDS = "netty.metrics.stop.wait.timeout.seconds";
   public static final String NETTY_SERVER_CLOSE_DELAY_TIMEOUT_MS = "netty.server.close.delay.timeout.ms";
   public static final String NETTY_ENABLE_ONE_HUNDRED_CONTINUE = "netty.enable.one.hundred.continue";
+  public static final String NETTY_SERVER_OFFLINE_SERVICE_IDS = "netty.server.offline.service.ids";
 
   /**
    * Number of netty boss threads.
@@ -174,6 +177,17 @@ public class NettyConfig {
   @Default("false")
   public final boolean nettyEnableOneHundredContinue;
 
+  /**
+   * A comma separated list of {@link com.github.ambry.rest.RestUtils.Headers#SERVICE_ID} values that identify known
+   * offline (e.g. composite router secondary/parity-check) callers, as configured for those callers elsewhere (e.g.
+   * the composite router config). Used to attribute 500s that never reach the wire (because response metadata was
+   * already committed) to a dedicated offline-only metric instead of dropping that visibility entirely. Ids are
+   * trimmed of surrounding whitespace and empty entries are dropped, so surrounding spaces after a comma are fine.
+   */
+  @Config(NETTY_SERVER_OFFLINE_SERVICE_IDS)
+  @Default("")
+  public final Set<String> nettyServerOfflineServiceIds;
+
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt(NETTY_SERVER_BOSS_THREAD_COUNT, 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt(NETTY_SERVER_IDLE_TIME_SECONDS, 60);
@@ -190,6 +204,14 @@ public class NettyConfig {
             Integer.MAX_VALUE);
     nettyServerDenyListedQueryParams = new HashSet<>(
         Arrays.asList(verifiableProperties.getString(NETTY_SERVER_DENY_LISTED_QUERY_PARAMS, "").split(",")));
+    // trim whitespace around each id and drop empty entries so an unconfigured (or trailing-comma) value
+    // yields a truly empty set rather than a set containing "" or " "-padded ids that can never match a
+    // real service id via isOfflineServiceRequest()'s exact Set.contains(...) check.
+    nettyServerOfflineServiceIds = Arrays.stream(verifiableProperties.getString(NETTY_SERVER_OFFLINE_SERVICE_IDS, "")
+        .split(","))
+        .map(String::trim)
+        .filter(id -> !id.isEmpty())
+        .collect(Collectors.toSet());
     nettyMultipartPostMaxSizeBytes =
         verifiableProperties.getLongInRange(NETTY_MULTIPART_POST_MAX_SIZE_BYTES, 20 * 1024 * 1024, 0, Long.MAX_VALUE);
     nettyServerSslFactory = verifiableProperties.getString(SSL_FACTORY_KEY, "");
