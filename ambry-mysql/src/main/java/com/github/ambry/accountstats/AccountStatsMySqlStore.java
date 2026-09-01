@@ -29,6 +29,7 @@ import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 import com.github.ambry.utils.JsonUtil;
+import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
@@ -423,9 +424,27 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
+  public Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState>
+      queryMonthlyAggregatedAccountStorageStatsAndState() throws Exception {
+    long startTimeMs = System.currentTimeMillis();
+    Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState> result =
+        aggregatedAccountReportsDao.queryMonthlySnapshotAndStateForCluster(clusterName);
+    storeMetrics.queryMonthlyAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return result;
+  }
+
+  @Override
   public String queryRecordedMonth() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     String result = aggregatedAccountReportsDao.queryMonthForCluster(clusterName);
+    storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return result;
+  }
+
+  @Override
+  public AggregatedAccountReportsState queryAggregatedAccountReportsState() throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    AggregatedAccountReportsState result = aggregatedAccountReportsDao.queryStateForCluster(clusterName);
     storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
   }
@@ -439,9 +458,21 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   @Override
   public void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception {
     long startTimeMs = System.currentTimeMillis();
-    aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
-    aggregatedAccountReportsDao.updateMonth(clusterName, monthValue);
+    aggregatedAccountReportsDao.replaceMonthlySnapshotForCluster(clusterName, monthValue);
     storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
+  public boolean updateAggregatedAccountReportsState(AggregatedAccountReportsState expectedState, String monthValue,
+      long aggregationTimeMs, String recoveryMonth, boolean takeSnapshot, boolean deleteInvalidData) throws Exception {
+    long startTimeMs = System.currentTimeMillis();
+    boolean updated =
+        aggregatedAccountReportsDao.updateAggregationStateForCluster(expectedState, clusterName, monthValue,
+            aggregationTimeMs, recoveryMonth, takeSnapshot, deleteInvalidData);
+    if (takeSnapshot) {
+      storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    }
+    return updated;
   }
 
   @Override

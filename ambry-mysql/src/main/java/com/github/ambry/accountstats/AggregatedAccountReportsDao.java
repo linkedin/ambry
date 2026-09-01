@@ -15,11 +15,14 @@ package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
+import com.github.ambry.utils.Pair;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Objects;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
@@ -54,7 +57,7 @@ public class AggregatedAccountReportsDao {
   public static final String UPDATED_AT_COLUMN = "updatedAt";
   public static final String MONTH_COLUMN = "month";
 
-  private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
+  private static final Logger logger = LoggerFactory.getLogger(AggregatedAccountReportsDao.class);
   private static final String insertSql = String.format(
       "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=?, %s=?, %s=NOW()",
       AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
@@ -80,9 +83,27 @@ public class AggregatedAccountReportsDao {
   private static final String queryMonthSqlForCluster =
       String.format("SELECT %s FROM %s WHERE %s = ?", MONTH_COLUMN, AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
           CLUSTER_NAME_COLUMN);
+  private static final String queryStateSqlForCluster = String.format(
+      "SELECT %s, lastAggregationTimeMs, monthlyBaselineRecoveryMonth, snapshotVersion FROM %s WHERE %s = ?",
+      MONTH_COLUMN, AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN);
+  private static final String queryStateForUpdateSqlForCluster = queryStateSqlForCluster + " FOR UPDATE";
   private static final String insertMonthSql =
       String.format("INSERT INTO %s (%s, %s) VALUES (?, ?) ON DUPLICATE KEY UPDATE %s=?",
           AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN, MONTH_COLUMN, MONTH_COLUMN);
+  private static final String updateAggregationProgressSql = String.format(
+      "INSERT INTO %s (%s, %s, lastAggregationTimeMs, monthlyBaselineRecoveryMonth, snapshotVersion) "
+          + "VALUES (?, '', ?, ?, 0) ON DUPLICATE KEY UPDATE lastAggregationTimeMs=?, "
+          + "monthlyBaselineRecoveryMonth=?",
+      AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN, MONTH_COLUMN);
+  private static final String updateSnapshotAndAggregationProgressSql = String.format(
+      "INSERT INTO %s (%s, %s, lastAggregationTimeMs, monthlyBaselineRecoveryMonth, snapshotVersion) "
+          + "VALUES (?, ?, ?, ?, 1) ON DUPLICATE KEY UPDATE %s=?, lastAggregationTimeMs=?, "
+          + "monthlyBaselineRecoveryMonth=?, snapshotVersion=snapshotVersion+1",
+      AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN, MONTH_COLUMN, MONTH_COLUMN);
+  private static final String updateSnapshotSql = String.format(
+      "INSERT INTO %s (%s, %s, snapshotVersion) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE %s=?, "
+          + "snapshotVersion=snapshotVersion+1",
+      AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN, MONTH_COLUMN, MONTH_COLUMN);
   private static final String deleteSql =
       String.format("DELETE FROM %s WHERE %s = ? AND %s = ? AND %s = ?", AGGREGATED_ACCOUNT_REPORTS_TABLE,
           CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
@@ -198,29 +219,34 @@ public class AggregatedAccountReportsDao {
   private void queryContainerUsageForClusterInternal(boolean forMonthly, String clusterName,
       AggregatedContainerStorageStatsFunction func) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      String sqlStatement = forMonthly ? queryMonthlyUsageSqlForCluster : queryUsageSqlForCluster;
-      try (PreparedStatement queryStatement = connection.prepareStatement(sqlStatement)) {
-        long startTimeMs = System.currentTimeMillis();
-        queryStatement.setString(1, clusterName);
-        try (ResultSet resultSet = queryStatement.executeQuery()) {
-          while (resultSet.next()) {
-            int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
-            int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
-            long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-            final long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
-            final long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
-            func.apply((short) accountId,
-                new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs));
-          }
-        }
-        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        metrics.readSuccessCount.inc();
-      }
+      queryContainerUsageForClusterInternal(connection, forMonthly, clusterName, func);
     } catch (SQLException e) {
       metrics.readFailureCount.inc();
       logger.error(String.format("Failed to execute query on %s, with parameter %s", AGGREGATED_ACCOUNT_REPORTS_TABLE,
           clusterName), e);
       throw e;
+    }
+  }
+
+  private void queryContainerUsageForClusterInternal(Connection connection, boolean forMonthly, String clusterName,
+      AggregatedContainerStorageStatsFunction func) throws SQLException {
+    String sqlStatement = forMonthly ? queryMonthlyUsageSqlForCluster : queryUsageSqlForCluster;
+    try (PreparedStatement queryStatement = connection.prepareStatement(sqlStatement)) {
+      long startTimeMs = System.currentTimeMillis();
+      queryStatement.setString(1, clusterName);
+      try (ResultSet resultSet = queryStatement.executeQuery()) {
+        while (resultSet.next()) {
+          int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
+          int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
+          long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
+          final long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
+          final long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
+          func.apply((short) accountId,
+              new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs));
+        }
+      }
+      metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      metrics.readSuccessCount.inc();
     }
   }
 
@@ -231,19 +257,24 @@ public class AggregatedAccountReportsDao {
    */
   void copyAggregatedUsageToMonthlyAggregatedTableForCluster(String clusterName) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      try (PreparedStatement queryStatement = connection.prepareStatement(copySqlForCluster)) {
-        long startTimeMs = System.currentTimeMillis();
-        queryStatement.setString(1, clusterName);
-        queryStatement.executeUpdate();
-        metrics.copyTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        metrics.copySuccessCount.inc();
-      }
+      copyAggregatedUsageToMonthlyAggregatedTableForCluster(connection, clusterName);
     } catch (SQLException e) {
       metrics.copyFailureCount.inc();
       logger.error(
           String.format("Failed to execute copy on %s, with parameter %s", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
               clusterName), e);
       throw e;
+    }
+  }
+
+  private void copyAggregatedUsageToMonthlyAggregatedTableForCluster(Connection connection, String clusterName)
+      throws SQLException {
+    try (PreparedStatement queryStatement = connection.prepareStatement(copySqlForCluster)) {
+      long startTimeMs = System.currentTimeMillis();
+      queryStatement.setString(1, clusterName);
+      queryStatement.executeUpdate();
+      metrics.copyTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      metrics.copySuccessCount.inc();
     }
   }
 
@@ -254,18 +285,23 @@ public class AggregatedAccountReportsDao {
    */
   void deleteAggregatedUsageFromMonthlyAggregatedTableForCluster(String clusterName) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteMonthlySqlForCluster)) {
-        long startTimeMs = System.currentTimeMillis();
-        deleteStatement.setString(1, clusterName);
-        deleteStatement.executeUpdate();
-        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        metrics.writeSuccessCount.inc();
-      }
+      deleteAggregatedUsageFromMonthlyAggregatedTableForCluster(connection, clusterName);
     } catch (SQLException e) {
       metrics.writeFailureCount.inc();
       logger.error("Failed to execute delete on {}, with parameter {}", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
           clusterName, e);
       throw e;
+    }
+  }
+
+  private void deleteAggregatedUsageFromMonthlyAggregatedTableForCluster(Connection connection, String clusterName)
+      throws SQLException {
+    try (PreparedStatement deleteStatement = connection.prepareStatement(deleteMonthlySqlForCluster)) {
+      long startTimeMs = System.currentTimeMillis();
+      deleteStatement.setString(1, clusterName);
+      deleteStatement.executeUpdate();
+      metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      metrics.writeSuccessCount.inc();
     }
   }
 
@@ -296,6 +332,227 @@ public class AggregatedAccountReportsDao {
               clusterName), e);
       throw e;
     }
+  }
+
+  /**
+   * Return aggregation task state for a cluster.
+   * @param clusterName the cluster name.
+   * @return persisted task state.
+   * @throws SQLException
+   */
+  AggregatedAccountReportsState queryStateForCluster(String clusterName) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      return queryStateForCluster(connection, clusterName);
+    } catch (SQLException e) {
+      metrics.readFailureCount.inc();
+      logger.error("Failed to query aggregation state for cluster {}", clusterName, e);
+      throw e;
+    }
+  }
+
+  private AggregatedAccountReportsState queryStateForCluster(Connection connection, String clusterName)
+      throws SQLException {
+    return queryStateForCluster(connection, clusterName, false);
+  }
+
+  private AggregatedAccountReportsState queryStateForCluster(Connection connection, String clusterName,
+      boolean forUpdate) throws SQLException {
+    String query = forUpdate ? queryStateForUpdateSqlForCluster : queryStateSqlForCluster;
+    try (PreparedStatement queryStatement = connection.prepareStatement(query)) {
+      long startTimeMs = System.currentTimeMillis();
+      queryStatement.setString(1, clusterName);
+      try (ResultSet resultSet = queryStatement.executeQuery()) {
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
+        if (resultSet.next()) {
+          long lastAggregationTimeMs = resultSet.getLong("lastAggregationTimeMs");
+          Long nullableLastAggregationTimeMs = resultSet.wasNull() ? null : lastAggregationTimeMs;
+          return new AggregatedAccountReportsState(resultSet.getString(MONTH_COLUMN), nullableLastAggregationTimeMs,
+              resultSet.getString("monthlyBaselineRecoveryMonth"), resultSet.getLong("snapshotVersion"));
+        }
+      }
+      return new AggregatedAccountReportsState("", null, null, 0);
+    }
+  }
+
+  /**
+   * Query a monthly snapshot and its state from one repeatable-read transaction.
+   * @param expectedState state used to decide this transition.
+   * @param clusterName the cluster name.
+   * @return monthly stats paired with the state identifying the same committed snapshot.
+   * @throws SQLException
+   */
+  Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState> queryMonthlySnapshotAndStateForCluster(
+      String clusterName) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      boolean autoCommit = connection.getAutoCommit();
+      int transactionIsolation = connection.getTransactionIsolation();
+      SQLException transactionFailure = null;
+      try {
+        connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        connection.setAutoCommit(false);
+        AggregatedAccountReportsState state = queryStateForCluster(connection, clusterName);
+        AggregatedAccountStorageStats stats = new AggregatedAccountStorageStats(null);
+        queryContainerUsageForClusterInternal(connection, true, clusterName,
+            (accountId, containerStats) -> stats.addContainerStorageStats(accountId, containerStats));
+        connection.commit();
+        return new Pair<>(stats, state);
+      } catch (SQLException e) {
+        transactionFailure = e;
+        try {
+          connection.rollback();
+        } catch (SQLException rollbackException) {
+          e.addSuppressed(rollbackException);
+        }
+        throw e;
+      } finally {
+        try {
+          restoreConnectionState(connection, autoCommit, transactionIsolation);
+        } catch (SQLException restoreException) {
+          if (transactionFailure != null) {
+            transactionFailure.addSuppressed(restoreException);
+          } else {
+            throw restoreException;
+          }
+        }
+      }
+    } catch (SQLException e) {
+      metrics.readFailureCount.inc();
+      logger.error("Failed to query monthly snapshot and state for cluster {}", clusterName, e);
+      throw e;
+    }
+  }
+
+  /**
+   * Atomically update aggregation progress and optionally replace the monthly snapshot.
+   * @param clusterName the cluster name.
+   * @param monthValue current month.
+   * @param aggregationTimeMs completion time of the current aggregation.
+   * @param recoveryMonth pending recovery month, or {@code null}.
+   * @param takeSnapshot whether to update the monthly snapshot.
+   * @param deleteInvalidData whether to remove rows absent from the current aggregate.
+   * @throws SQLException
+   */
+  boolean updateAggregationStateForCluster(AggregatedAccountReportsState expectedState, String clusterName,
+      String monthValue, long aggregationTimeMs, String recoveryMonth, boolean takeSnapshot, boolean deleteInvalidData)
+      throws SQLException {
+    boolean[] updated = {false};
+    runTransaction(connection -> {
+      if (!expectedState.equals(queryStateForCluster(connection, clusterName, true))) {
+        return;
+      }
+      if (takeSnapshot) {
+        if (deleteInvalidData) {
+          deleteAggregatedUsageFromMonthlyAggregatedTableForCluster(connection, clusterName);
+        }
+        copyAggregatedUsageToMonthlyAggregatedTableForCluster(connection, clusterName);
+      }
+      String sql = takeSnapshot ? updateSnapshotAndAggregationProgressSql : updateAggregationProgressSql;
+      try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        statement.setString(1, clusterName);
+        int parameterIndex = 2;
+        if (takeSnapshot) {
+          statement.setString(parameterIndex++, monthValue);
+        }
+        statement.setLong(parameterIndex++, aggregationTimeMs);
+        setNullableString(statement, parameterIndex++, recoveryMonth);
+        if (takeSnapshot) {
+          statement.setString(parameterIndex++, monthValue);
+        }
+        statement.setLong(parameterIndex++, aggregationTimeMs);
+        setNullableString(statement, parameterIndex, recoveryMonth);
+        statement.executeUpdate();
+      }
+      updated[0] = true;
+    });
+    return updated[0];
+  }
+
+  /**
+   * Atomically replace a monthly snapshot and update its month and version.
+   * @param clusterName the cluster name.
+   * @param monthValue snapshot month.
+   * @throws SQLException
+   */
+  void replaceMonthlySnapshotForCluster(String clusterName, String monthValue) throws SQLException {
+    runTransaction(connection -> {
+      copyAggregatedUsageToMonthlyAggregatedTableForCluster(connection, clusterName);
+      try (PreparedStatement statement = connection.prepareStatement(updateSnapshotSql)) {
+        statement.setString(1, clusterName);
+        statement.setString(2, monthValue);
+        statement.setString(3, monthValue);
+        statement.executeUpdate();
+      }
+    });
+  }
+
+  private void setNullableString(PreparedStatement statement, int parameterIndex, String value) throws SQLException {
+    if (value == null) {
+      statement.setNull(parameterIndex, Types.VARCHAR);
+    } else {
+      statement.setString(parameterIndex, value);
+    }
+  }
+
+  private void runTransaction(SqlTransaction transaction) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      boolean autoCommit = connection.getAutoCommit();
+      SQLException transactionFailure = null;
+      try {
+        connection.setAutoCommit(false);
+        transaction.run(connection);
+        connection.commit();
+      } catch (SQLException e) {
+        transactionFailure = e;
+        try {
+          connection.rollback();
+        } catch (SQLException rollbackException) {
+          e.addSuppressed(rollbackException);
+        }
+        throw e;
+      } finally {
+        try {
+          connection.setAutoCommit(autoCommit);
+        } catch (SQLException restoreException) {
+          if (transactionFailure != null) {
+            transactionFailure.addSuppressed(restoreException);
+          } else {
+            throw restoreException;
+          }
+        }
+      }
+    } catch (SQLException e) {
+      metrics.writeFailureCount.inc();
+      logger.error("Failed to update aggregated account report state transactionally", e);
+      throw e;
+    }
+  }
+
+  private void restoreConnectionState(Connection connection, boolean autoCommit, int transactionIsolation)
+      throws SQLException {
+    SQLException failure = null;
+    try {
+      connection.setAutoCommit(autoCommit);
+    } catch (SQLException e) {
+      failure = e;
+    }
+    try {
+      connection.setTransactionIsolation(transactionIsolation);
+    } catch (SQLException e) {
+      if (failure == null) {
+        failure = e;
+      } else {
+        failure.addSuppressed(e);
+      }
+    }
+    if (failure != null) {
+      throw failure;
+    }
+  }
+
+  @FunctionalInterface
+  private interface SqlTransaction {
+    void run(Connection connection) throws SQLException;
   }
 
   /**

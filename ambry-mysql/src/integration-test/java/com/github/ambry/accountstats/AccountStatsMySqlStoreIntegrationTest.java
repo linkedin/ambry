@@ -434,9 +434,12 @@ public class AccountStatsMySqlStoreIntegrationTest {
     // fetch the month and it should return empty string
     Assert.assertEquals("", mySqlStore.queryRecordedMonth());
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
-    AggregatedAccountStorageStats monthlyAggregatedAccountStorageStats =
-        mySqlStore.queryMonthlyAggregatedAccountStorageStats();
+    Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState> monthlySnapshot =
+        mySqlStore.queryMonthlyAggregatedAccountStorageStatsAndState();
+    AggregatedAccountStorageStats monthlyAggregatedAccountStorageStats = monthlySnapshot.getFirst();
     assertEquals(currentAggregatedStats.getStorageStats(), monthlyAggregatedAccountStorageStats.getStorageStats());
+    assertEquals(monthValue, monthlySnapshot.getSecond().getMonth());
+    assertEquals(1, monthlySnapshot.getSecond().getSnapshotVersion());
     String obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 
@@ -446,8 +449,11 @@ public class AccountStatsMySqlStoreIntegrationTest {
         StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 0, 10, 10, 10000L, 2, 10));
     mySqlStore.storeAggregatedAccountStorageStats(currentAggregatedStats);
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
-    monthlyAggregatedAccountStorageStats = mySqlStore.queryMonthlyAggregatedAccountStorageStats();
+    monthlySnapshot = mySqlStore.queryMonthlyAggregatedAccountStorageStatsAndState();
+    monthlyAggregatedAccountStorageStats = monthlySnapshot.getFirst();
     assertEquals(currentAggregatedStats.getStorageStats(), monthlyAggregatedAccountStorageStats.getStorageStats());
+    assertEquals(monthValue, monthlySnapshot.getSecond().getMonth());
+    assertEquals(2, monthlySnapshot.getSecond().getSnapshotVersion());
     obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 

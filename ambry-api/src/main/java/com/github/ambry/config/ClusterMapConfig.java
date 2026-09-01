@@ -39,6 +39,8 @@ public class ClusterMapConfig {
       "clustermap.enable.delete.invalid.data.in.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
+  public static final String MONTHLY_ACCOUNT_REPORT_RECOVERY_GAP_HOURS =
+      "clustermap.monthly.account.report.recovery.gap.hours";
   public static final String ENABLE_PROPERTY_STORE_CLEAN_UP_TASK =
       "clustermap.enable.property.store.clean.up.task";
   public static final String DELETE_DATA_FROM_DATANODE_CONFIG_IN_PROPERTY_STORE_CLEAN_UP_TASK =
@@ -371,6 +373,13 @@ public class ClusterMapConfig {
   public final boolean clustermapEnableAggregatedMonthlyAccountReport;
 
   /**
+   * Aggregation gap that defers a month-boundary snapshot for one recovery cycle.
+   */
+  @Config(MONTHLY_ACCOUNT_REPORT_RECOVERY_GAP_HOURS)
+  @Default("16")
+  public final int clustermapMonthlyAccountReportRecoveryGapHours;
+
+  /**
    * True to enable deleting invalid aggregated data in mysql aggregation task.
    */
   @Config(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK)
@@ -509,6 +518,8 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean("clustermap.enable.partition.state.transition.metrics", false);
     clustermapEnableAggregatedMonthlyAccountReport =
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
+    clustermapMonthlyAccountReportRecoveryGapHours =
+        verifiableProperties.getIntInRange(MONTHLY_ACCOUNT_REPORT_RECOVERY_GAP_HOURS, 16, 1, Integer.MAX_VALUE);
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
     clustermapEnablePropertyStoreCleanUpTask =
