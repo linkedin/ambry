@@ -18,6 +18,7 @@ import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
+import com.github.ambry.utils.Pair;
 import java.util.Map;
 import java.util.Set;
 
@@ -94,6 +95,14 @@ public interface AccountStatsStore {
   AggregatedAccountStorageStats queryMonthlyAggregatedAccountStorageStats() throws Exception;
 
   /**
+   * Return the monthly aggregated storage stats and the state that identifies the same committed snapshot.
+   * @return monthly stats paired with their transactionally consistent state.
+   * @throws Exception
+   */
+  Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState>
+      queryMonthlyAggregatedAccountStorageStatsAndState() throws Exception;
+
+  /**
    * Return the month value of the current container storage snapshot.
    * @return The month value for current snapshot, like "2020-01". Empty string will be returned if there is no record.
    * @throws Exception
@@ -101,11 +110,32 @@ public interface AccountStatsStore {
   String queryRecordedMonth() throws Exception;
 
   /**
+   * Return persisted aggregation task state.
+   * @return aggregation task state, with an empty month if no state has been recorded.
+   * @throws Exception
+   */
+  AggregatedAccountReportsState queryAggregatedAccountReportsState() throws Exception;
+
+  /**
    * Taking a snapshot of current aggregated stats and update the month value.
    * @param monthValue The month in string format, like "2020-01".
    * @throws Exception
    */
   void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception;
+
+  /**
+   * Atomically update aggregation progress and optionally replace the monthly snapshot.
+   * @param monthValue current month in {@code yyyy-MM} format.
+   * @param expectedState state used to decide this transition.
+   * @param aggregationTimeMs completion time of the current successful aggregation.
+   * @param recoveryMonth month waiting for a recovery snapshot, or {@code null}.
+   * @param takeSnapshot whether to copy the current aggregate into the monthly snapshot.
+   * @param deleteInvalidData whether rows absent from the current aggregate should be removed from the snapshot.
+   * @return {@code true} if the expected state was current and the update was committed.
+   * @throws Exception
+   */
+  boolean updateAggregatedAccountReportsState(AggregatedAccountReportsState expectedState, String monthValue,
+      long aggregationTimeMs, String recoveryMonth, boolean takeSnapshot, boolean deleteInvalidData) throws Exception;
 
   /**
    * Delete the snapshot of latest aggregated account stats. This is usually used to prepare for the new snapshot.

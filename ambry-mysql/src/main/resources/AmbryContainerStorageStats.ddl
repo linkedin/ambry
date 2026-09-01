@@ -89,11 +89,31 @@ CREATE TABLE IF NOT EXISTS MonthlyAggregatedAccountReports LIKE AggregatedAccoun
  */
 CREATE TABLE IF NOT EXISTS AggregatedAccountReportsMonth
 (
-    clusterName VARCHAR(25) NOT NULL PRIMARY KEY,
-    month       VARCHAR(25) NOT NULL
+    clusterName                    VARCHAR(25) NOT NULL PRIMARY KEY,
+    month                          VARCHAR(25) NOT NULL,
+    lastAggregationTimeMs          BIGINT      NULL DEFAULT NULL,
+    monthlyBaselineRecoveryMonth   VARCHAR(25) NULL DEFAULT NULL,
+    snapshotVersion                BIGINT      NOT NULL DEFAULT 0
 )
     CHARACTER SET utf8
     COLLATE utf8_bin;
+
+/**
+  Existing deployments must apply this backward-compatible expansion before deploying code that reads the new columns.
+  Old binaries name the columns they use and safely ignore these nullable/defaulted additions.
+
+  ALTER TABLE AggregatedAccountReportsMonth
+    ADD lastAggregationTimeMs BIGINT NULL DEFAULT NULL,
+    ADD monthlyBaselineRecoveryMonth VARCHAR(25) NULL DEFAULT NULL,
+    ADD snapshotVersion BIGINT NOT NULL DEFAULT 0;
+
+  lastAggregationTimeMs intentionally starts as NULL. The first aggregation after rollout initializes it without
+  triggering recovery, because AggregatedAccountReports.updatedAt tracks row changes rather than task completion.
+
+  Rollout order is required: apply this DDL, deploy the versioned aggregation task to every eligible host and allow
+  in-flight old tasks to finish, then deploy quota readers. An old aggregation task can rewrite a same-month snapshot
+  without incrementing snapshotVersion, so readers must not rely on version polling while old snapshot writers remain.
+ */
 
 /**
  * This table is created to keep a list of partition class names. In "prod" cluster, we have "default".

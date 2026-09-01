@@ -17,6 +17,7 @@ import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import com.github.ambry.utils.Pair;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -38,6 +39,9 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   private AggregatedAccountStorageStats aggregatedAccountStats = null;
   private AggregatedAccountStorageStats monthlyAggregatedAccountStats = null;
   private String currentMonth;
+  private Long lastAggregationTimeMs;
+  private String monthlyBaselineRecoveryMonth;
+  private long snapshotVersion;
 
   private AggregatedPartitionClassStorageStats aggregatedPartitionClassStats = null;
 
@@ -116,14 +120,42 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
+  public Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState>
+      queryMonthlyAggregatedAccountStorageStatsAndState() throws Exception {
+    return new Pair<>(monthlyAggregatedAccountStats, queryAggregatedAccountReportsState());
+  }
+
+  @Override
   public String queryRecordedMonth() throws Exception {
     return currentMonth;
+  }
+
+  @Override
+  public AggregatedAccountReportsState queryAggregatedAccountReportsState() throws Exception {
+    return new AggregatedAccountReportsState(currentMonth == null ? "" : currentMonth, lastAggregationTimeMs,
+        monthlyBaselineRecoveryMonth, snapshotVersion);
   }
 
   @Override
   public void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception {
     currentMonth = monthValue;
     monthlyAggregatedAccountStats = aggregatedAccountStats;
+    snapshotVersion++;
+  }
+
+  @Override
+  public synchronized boolean updateAggregatedAccountReportsState(AggregatedAccountReportsState expectedState,
+      String monthValue, long aggregationTimeMs, String recoveryMonth, boolean takeSnapshot, boolean deleteInvalidData)
+      throws Exception {
+    if (!expectedState.equals(queryAggregatedAccountReportsState())) {
+      return false;
+    }
+    lastAggregationTimeMs = aggregationTimeMs;
+    monthlyBaselineRecoveryMonth = recoveryMonth;
+    if (takeSnapshot) {
+      takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
+    }
+    return true;
   }
 
   @Override
