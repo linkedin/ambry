@@ -615,6 +615,41 @@ public class NettyResponseChannelTest {
     channel.close();
   }
 
+  @Test
+  public void testNotFoundAccountingOnResponseComplete() throws Exception {
+    for (boolean useException : new boolean[]{false, true}) {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      try {
+        channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+        MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+        RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "GetBlob", new MetricRegistry());
+        processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+        NettyResponseChannel responseChannel = processor.getRestResponseChannel();
+        long globalNotFoundBefore = processor.getNettyMetrics().notFoundCount.getCount();
+        RestServiceException exception = new RestServiceException("missing blob", RestServiceErrorCode.NotFound);
+        if (!useException) {
+          responseChannel.setStatus(ResponseStatus.NotFound);
+        }
+        responseChannel.onResponseComplete(useException ? exception : null);
+        HttpResponse response = channel.readOutbound();
+        try {
+          assertEquals(HttpResponseStatus.NOT_FOUND, response.status());
+        } finally {
+          ReferenceCountUtil.release(response);
+        }
+        assertEquals(1, metrics.notFoundCount.getCount());
+        responseChannel.onResponseComplete(exception);
+        processor.getRequest().getMetricsTracker().recordMetrics();
+        assertEquals(1, metrics.notFoundCount.getCount());
+        assertEquals(1, metrics.operationCount.getCount());
+        assertEquals(0, metrics.serverErrorCount.getCount());
+        assertEquals(globalNotFoundBefore + 1, processor.getNettyMetrics().notFoundCount.getCount());
+      } finally {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
   /**
    * Tests that tracking headers are copied over correctly for error responses.
    */

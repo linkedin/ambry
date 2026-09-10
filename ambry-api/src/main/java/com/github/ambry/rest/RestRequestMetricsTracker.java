@@ -340,6 +340,9 @@ public class RestRequestMetricsTracker {
         if (serverError) {
           metrics.serverErrorCount.inc();
         }
+        if (responseStatus == ResponseStatus.NotFound) {
+          metrics.notFoundCount.inc();
+        }
 
         // Only add throughput metrics when the request is successful and bytes were actually transfered over the wire.
         // Recording throughput during failure could mean we incorrectly report throughput as something higher than normal since

@@ -24,6 +24,15 @@ import com.codahale.metrics.MetricRegistry;
  * </p>
  * It is expected that each request type will have it's own instance of RestRequestMetrics and the same instance is
  * used to track all requests of that type.
+ * <p/>
+ * {@code <requestType>NotFoundCount} counts recorded HTTP 404 responses. Its matching denominator is
+ * {@code <requestType>Count}, also equal to {@code SatisfiedRequestCount + UnsatisfiedRequestCount} for that type.
+ * Satisfaction includes performance thresholds and server-error classification.
+ * Frontend object GETs use {@code GetBlob}, HEADs use {@code HeadBlob}, and named/S3 listings use {@code ListBlobs}.
+ * GET/HEAD metrics belong to {@code FrontendRestRequestService}; listings belong to {@code NamedBlobListHandler}.
+ * For a 404 ratio across transports and encryption modes, sum counter deltas over the same interval for the base,
+ * {@code Ssl}, {@code Encrypted}, and {@code SslEncrypted} variants that exist, then divide summed 404s by summed counts.
+ * GET encryption classification occurs after blob metadata is returned; lookup misses use the base or {@code Ssl} variant.
  */
 public class RestRequestMetrics {
   static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTimeInMs";
@@ -47,6 +56,7 @@ public class RestRequestMetrics {
   // Tracked separately from UNSATISFIED_REQUEST_COUNT_SUFFIX so that alerts can be configured on 5xx server errors
   // specifically, without being diluted by requests that are unsatisfied for other reasons (e.g. missed thresholds).
   static final String SERVER_ERROR_COUNT_SUFFIX = "ServerErrorCount";
+  static final String NOT_FOUND_COUNT_SUFFIX = "NotFoundCount";
 
   static final String THROUGHPUT_SUFFIX = "Throughput";
 
@@ -67,6 +77,7 @@ public class RestRequestMetrics {
   final Counter unsatisfiedRequestCount;
   final Counter satisfiedRequestCount;
   final Counter serverErrorCount;
+  final Counter notFoundCount;
 
   final Histogram throughput;
 
@@ -114,6 +125,7 @@ public class RestRequestMetrics {
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SATISFIED_REQUEST_COUNT_SUFFIX));
     serverErrorCount =
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SERVER_ERROR_COUNT_SUFFIX));
+    notFoundCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + NOT_FOUND_COUNT_SUFFIX));
 
     throughput = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + THROUGHPUT_SUFFIX));
   }

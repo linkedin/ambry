@@ -28,6 +28,44 @@ import static org.junit.Assert.*;
  */
 public class RestRequestMetricsTrackerTest {
 
+  @Test
+  public void testNotFoundCountUsesRecordedStatus() {
+    for (ResponseStatus status : ResponseStatus.values()) {
+      for (boolean failed : new boolean[]{false, true}) {
+        for (boolean satisfied : new boolean[]{false, true}) {
+          MetricRegistry registry = new MetricRegistry();
+          RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "GetBlob", registry);
+          RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+          tracker.injectMetrics(metrics);
+          tracker.setResponseStatus(ResponseStatus.NotFound);
+          tracker.setResponseStatus(status);
+          if (failed) {
+            tracker.markFailure();
+          }
+          if (!satisfied) {
+            tracker.markUnsatisfied();
+          }
+          if (status.isServerError()) {
+            tracker.markServerError();
+          }
+          assertSame(metrics.notFoundCount,
+              registry.getCounters().get(MetricRegistry.name(getClass(), "GetBlobNotFoundCount")));
+          assertEquals(0, metrics.notFoundCount.getCount());
+          tracker.recordMetrics();
+          tracker.setResponseStatus(status == ResponseStatus.NotFound ? ResponseStatus.Ok : ResponseStatus.NotFound);
+          tracker.recordMetrics();
+          assertEquals(status.toString(), status == ResponseStatus.NotFound ? 1 : 0, metrics.notFoundCount.getCount());
+          assertEquals(1, metrics.operationCount.getCount());
+          assertEquals(1, metrics.operationRate.getCount());
+          assertEquals(failed ? 1 : 0, metrics.operationError.getCount());
+          assertEquals(satisfied ? 1 : 0, metrics.satisfiedRequestCount.getCount());
+          assertEquals(satisfied ? 0 : 1, metrics.unsatisfiedRequestCount.getCount());
+          assertEquals(status.isServerError() ? 1 : 0, metrics.serverErrorCount.getCount());
+        }
+      }
+    }
+  }
+
   /**
    * Tests the common case uses of {@link RestRequestMetricsTracker} i.e. with and without a custom
    * {@link RestRequestMetrics}.

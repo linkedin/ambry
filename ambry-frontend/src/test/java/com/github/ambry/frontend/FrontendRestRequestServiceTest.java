@@ -267,6 +267,68 @@ public class FrontendRestRequestServiceTest {
     router.close();
   }
 
+  @Test
+  public void testNotFoundMetricsFollowS3Routing() throws Exception {
+    refContainer = new ContainerBuilder(refContainer).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
+    accountService.updateAccounts(
+        Collections.singletonList(new AccountBuilder(refAccount).addOrUpdateContainer(refContainer).build()));
+    CompletableFuture<NamedBlobRecord> missingBlob = new CompletableFuture<>();
+    missingBlob.completeExceptionally(new RestServiceException("missing name", RestServiceErrorCode.NotFound));
+    when(namedBlobDb.get(any(), any(), any(), any(), anyBoolean())).thenReturn(missingBlob);
+    CompletableFuture<Page<NamedBlobRecord>> missingListing = new CompletableFuture<>();
+    missingListing.completeExceptionally(new RestServiceException("missing listing", RestServiceErrorCode.NotFound));
+    when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(missingListing);
+    String bucket = "/s3/" + refAccount.getName() + "/" + refContainer.getName();
+    for (boolean ssl : new boolean[]{false, true}) {
+      for (String operation : new String[]{"GetBlob", "HeadBlob", "ListBlobs", "RouterGet"}) {
+        boolean routerGet = operation.equals("RouterGet");
+        RestMethod method = operation.equals("HeadBlob") ? RestMethod.HEAD : RestMethod.GET;
+        String uri = routerGet ? "/" + referenceBlobIdStr
+            : bucket + (operation.equals("ListBlobs") ? "?list-type=2" : "/missing");
+        RestRequest request = spy(createRestRequest(method, uri, null, null));
+        doReturn(ssl).when(request).isSslUsed();
+        Map<String, Long> before = metricRegistry.getCounters().entrySet().stream()
+            .filter(entry -> entry.getKey().endsWith("NotFoundCount"))
+            .filter(entry -> entry.getKey().startsWith(FrontendRestRequestService.class.getName() + ".")
+                || entry.getKey().startsWith(NamedBlobListHandler.class.getName() + "."))
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getCount()));
+        MockRestResponseChannel response = verifyOperationFailure(request, RestServiceErrorCode.NotFound);
+        assertEquals(ResponseStatus.NotFound, response.getStatus());
+        request.getMetricsTracker().setResponseStatus(response.getStatus());
+        request.getMetricsTracker().recordMetrics();
+        request.close();
+        String expectedMetric = MetricRegistry.name(
+            operation.equals("ListBlobs") ? NamedBlobListHandler.class : FrontendRestRequestService.class,
+            (routerGet ? "GetBlob" : operation) + (ssl ? "Ssl" : "") + "NotFoundCount");
+        before.forEach((name, count) -> assertEquals(name, count + (name.equals(expectedMetric) ? 1 : 0),
+            metricRegistry.getCounters().get(name).getCount()));
+        assertTrue(expectedMetric, before.containsKey(expectedMetric));
+      }
+    }
+    verify(namedBlobDb, times(4)).get(any(), any(), eq("missing"), any(), anyBoolean());
+    verify(namedBlobDb, times(2)).list(any(), any(), any(), any(), any());
+  }
+
+  @Test
+  public void testNotFoundMetricsIsolateTransportAndEncryptionVariants() {
+    for (boolean ssl : new boolean[]{false, true}) {
+      for (boolean encrypted : new boolean[]{false, true}) {
+        String selected = MetricRegistry.name(FrontendRestRequestService.class,
+            "GetBlob" + (ssl ? "Ssl" : "") + (encrypted ? "Encrypted" : "") + "NotFoundCount");
+        Map<String, Long> before = metricRegistry.getCounters().entrySet().stream()
+            .filter(entry -> entry.getKey().endsWith("NotFoundCount"))
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getCount()));
+        RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+        tracker.injectMetrics(frontendMetrics.getBlobMetricsGroup.getRestRequestMetrics(ssl, encrypted));
+        tracker.setResponseStatus(ResponseStatus.NotFound);
+        tracker.recordMetrics();
+        before.forEach((name, count) -> assertEquals(name, count + (name.equals(selected) ? 1 : 0),
+            metricRegistry.getCounters().get(name).getCount()));
+        assertTrue(selected, before.containsKey(selected));
+      }
+    }
+  }
+
   /**
    * Tests basic startup and shutdown functionality (no exceptions).
    * @throws InstantiationException
