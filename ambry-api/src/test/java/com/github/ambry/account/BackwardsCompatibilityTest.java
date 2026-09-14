@@ -159,7 +159,7 @@ public class BackwardsCompatibilityTest {
   // When you add a new field to a class, add it here too. This is the change-detector.
 
   private static final Set<String> EXPECTED_MIGRATION_CONFIG_FIELDS = Set.of(
-      "overrideAccountMigrationConfig", "writeRamp", "readRamp", "listRamp"
+      "overrideAccountMigrationConfig", "writeRamp", "readRamp", "listRamp", "deleteRamp"
   );
 
   private static final Set<String> EXPECTED_WRITE_RAMP_FIELDS = Set.of(
@@ -177,6 +177,12 @@ public class BackwardsCompatibilityTest {
   private static final Set<String> EXPECTED_LIST_RAMP_FIELDS = Set.of(
       "forceDisableListFromSecondary", "shadowListPct", "serveListFromSecondaryPct",
       "disableFallbackToPrimary"
+  );
+
+  private static final Set<String> EXPECTED_DELETE_RAMP_FIELDS = Set.of(
+      "forceDisableDualDelete", "dualDeleteAsyncPct",
+      "dualDeleteSyncPctNonStrict", "dualDeleteSyncPctStrict",
+      "deleteOnlyToSecondary"
   );
 
   // Note: "secondaryEnabled" is a computed getter (Account#isSecondaryEnabled()) that Jackson serializes
@@ -246,6 +252,19 @@ public class BackwardsCompatibilityTest {
   }
 
   /**
+   * Verify that MigrationConfig snapshots without the deleteRamp field (all existing production data)
+   * still deserialize correctly. The missing deleteRamp field must default to null.
+   */
+  @Test
+  public void testMigrationConfigSnapshotWithoutDeleteRamp() throws Exception {
+    MigrationConfig config = objectMapper.readValue(MIGRATION_CONFIG_SNAPSHOT_JSON, MigrationConfig.class);
+    assertNull("deleteRamp should be null when absent from JSON", config.getDeleteRamp());
+
+    config = objectMapper.readValue(MIGRATION_CONFIG_V1_SNAPSHOT_JSON, MigrationConfig.class);
+    assertNull("deleteRamp should be null when absent from V1 JSON", config.getDeleteRamp());
+  }
+
+  /**
    * FIELD SET REGRESSION: Verify that serialized MigrationConfig contains exactly the expected fields.
    * If a new field is added to any ramp class, this test will fail, alerting the developer to:
    *   1. Update the expected field set
@@ -257,7 +276,8 @@ public class BackwardsCompatibilityTest {
     MigrationConfig config = new MigrationConfig(true,
         new MigrationConfig.WriteRamp(false, 50.0, 30.0, 20.0, true),
         new MigrationConfig.ReadRamp(false, 40.0, 60.0, 10.0, 5.0, true, 25.0),
-        new MigrationConfig.ListRamp(false, 70.0, 80.0, true));
+        new MigrationConfig.ListRamp(false, 70.0, 80.0, true),
+        new MigrationConfig.DeleteRamp(false, 40.0, 20.0, 10.0, true));
 
     String json = objectMapper.writeValueAsString(config);
     JsonNode root = objectMapper.readTree(json);
@@ -278,6 +298,10 @@ public class BackwardsCompatibilityTest {
     Set<String> actualListRampFields = fieldNames(root.get("listRamp"));
     assertEquals("ListRamp fields changed. Update EXPECTED_LIST_RAMP_FIELDS and add a backwards compat test.",
         EXPECTED_LIST_RAMP_FIELDS, actualListRampFields);
+
+    Set<String> actualDeleteRampFields = fieldNames(root.get("deleteRamp"));
+    assertEquals("DeleteRamp fields changed. Update EXPECTED_DELETE_RAMP_FIELDS and add a backwards compat test.",
+        EXPECTED_DELETE_RAMP_FIELDS, actualDeleteRampFields);
   }
 
   // ==================== Account Tests ====================

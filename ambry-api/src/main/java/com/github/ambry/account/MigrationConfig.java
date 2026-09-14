@@ -40,6 +40,10 @@ public class MigrationConfig {
   @JsonProperty(LIST_RAMP_KEY)
   private ListRamp listRamp;
 
+  public static final String DELETE_RAMP_KEY = "deleteRamp";
+  @JsonProperty(DELETE_RAMP_KEY)
+  private DeleteRamp deleteRamp;
+
   // Write ramp config.
   @JsonIgnoreProperties(ignoreUnknown = true)
   public static class WriteRamp {
@@ -289,9 +293,95 @@ public class MigrationConfig {
     }
   }
 
+  // Delete ramp config.
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public static class DeleteRamp {
+    @JsonProperty("forceDisableDualDelete")
+    private boolean forceDisableDualDelete;
+
+    @JsonProperty("dualDeleteAsyncPct")
+    private double dualDeleteAsyncPct;
+
+    @JsonProperty("dualDeleteSyncPctNonStrict")
+    private double dualDeleteSyncPctNonStrict;
+
+    @JsonProperty("dualDeleteSyncPctStrict")
+    private double dualDeleteSyncPctStrict;
+
+    @JsonProperty("deleteOnlyToSecondary")
+    private boolean deleteOnlyToSecondary;
+
+    @JsonCreator
+    public DeleteRamp(
+        @JsonProperty("forceDisableDualDelete") boolean forceDisableDualDelete,
+        @JsonProperty("dualDeleteAsyncPct") double dualDeleteAsyncPct,
+        @JsonProperty("dualDeleteSyncPctNonStrict") double dualDeleteSyncPctNonStrict,
+        @JsonProperty("dualDeleteSyncPctStrict") double dualDeleteSyncPctStrict,
+        @JsonProperty("deleteOnlyToSecondary") boolean deleteOnlyToSecondary) {
+      this.forceDisableDualDelete = forceDisableDualDelete;
+      this.dualDeleteAsyncPct = dualDeleteAsyncPct;
+      this.dualDeleteSyncPctNonStrict = dualDeleteSyncPctNonStrict;
+      this.dualDeleteSyncPctStrict = dualDeleteSyncPctStrict;
+      this.deleteOnlyToSecondary = deleteOnlyToSecondary;
+    }
+
+    // Default constructor for DeleteRamp
+    public DeleteRamp() {
+      this.forceDisableDualDelete = false;
+      this.dualDeleteAsyncPct = 0.0;
+      this.dualDeleteSyncPctNonStrict = 0.0;
+      this.dualDeleteSyncPctStrict = 0.0;
+      this.deleteOnlyToSecondary = false;
+    }
+
+    // Getters
+    public boolean isForceDisableDualDelete() {
+      return forceDisableDualDelete;
+    }
+
+    public double getDualDeleteAsyncPct() {
+      return dualDeleteAsyncPct;
+    }
+
+    public double getDualDeleteSyncPctNonStrict() {
+      return dualDeleteSyncPctNonStrict;
+    }
+
+    public double getDualDeleteSyncPctStrict() {
+      return dualDeleteSyncPctStrict;
+    }
+
+    public boolean isDeleteOnlyToSecondary() {
+      return deleteOnlyToSecondary;
+    }
+
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      DeleteRamp that = (DeleteRamp) o;
+      return forceDisableDualDelete == that.forceDisableDualDelete &&
+          Double.compare(that.dualDeleteAsyncPct, dualDeleteAsyncPct) == 0 &&
+          Double.compare(that.dualDeleteSyncPctNonStrict, dualDeleteSyncPctNonStrict) == 0 &&
+          Double.compare(that.dualDeleteSyncPctStrict, dualDeleteSyncPctStrict) == 0 &&
+          deleteOnlyToSecondary == that.deleteOnlyToSecondary;
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(forceDisableDualDelete, dualDeleteAsyncPct,
+          dualDeleteSyncPctNonStrict, dualDeleteSyncPctStrict, deleteOnlyToSecondary);
+    }
+  }
+
   // Default migration config.
   public MigrationConfig() {
-    this(false, new WriteRamp(), new ReadRamp(), new ListRamp());
+    this(false, new WriteRamp(), new ReadRamp(), new ListRamp(), null);
+  }
+
+  // Backward-compatible constructor without deleteRamp.
+  public MigrationConfig(boolean overrideAccountMigrationConfig, WriteRamp writeRamp, ReadRamp readRamp,
+      ListRamp listRamp) {
+    this(overrideAccountMigrationConfig, writeRamp, readRamp, listRamp, null);
   }
 
   @JsonCreator
@@ -299,11 +389,13 @@ public class MigrationConfig {
       @JsonProperty(OVERRIDE_ACCOUNT_MIGRATION_CONFIG) boolean overrideAccountMigrationConfig,
       @JsonProperty(WRITE_RAMP_KEY) WriteRamp writeRamp,
       @JsonProperty(READ_RAMP_KEY) ReadRamp readRamp,
-      @JsonProperty(LIST_RAMP_KEY) ListRamp listRamp) {
+      @JsonProperty(LIST_RAMP_KEY) ListRamp listRamp,
+      @JsonProperty(DELETE_RAMP_KEY) DeleteRamp deleteRamp) {
     this.overrideAccountMigrationConfig = overrideAccountMigrationConfig;
     this.writeRamp = writeRamp;
     this.readRamp = readRamp;
     this.listRamp = listRamp;
+    this.deleteRamp = deleteRamp;
   }
 
   public boolean isOverrideAccountMigrationConfig() {
@@ -322,6 +414,10 @@ public class MigrationConfig {
     return listRamp;
   }
 
+  public DeleteRamp getDeleteRamp() {
+    return deleteRamp;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
@@ -330,11 +426,12 @@ public class MigrationConfig {
     return overrideAccountMigrationConfig == that.overrideAccountMigrationConfig &&
         java.util.Objects.equals(writeRamp, that.writeRamp) &&
         java.util.Objects.equals(readRamp, that.readRamp) &&
-        java.util.Objects.equals(listRamp, that.listRamp);
+        java.util.Objects.equals(listRamp, that.listRamp) &&
+        java.util.Objects.equals(deleteRamp, that.deleteRamp);
   }
 
   @Override
   public int hashCode() {
-    return java.util.Objects.hash(overrideAccountMigrationConfig, writeRamp, readRamp, listRamp);
+    return java.util.Objects.hash(overrideAccountMigrationConfig, writeRamp, readRamp, listRamp, deleteRamp);
   }
 }
