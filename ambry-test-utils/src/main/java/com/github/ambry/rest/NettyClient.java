@@ -40,8 +40,8 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.Closeable;
-import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -57,7 +57,7 @@ public class NettyClient implements Closeable {
 
   private final EventLoopGroup group = new NioEventLoopGroup();
   private final Bootstrap b = new Bootstrap();
-  private final Queue<HttpObject> responseParts = new LinkedList<HttpObject>();
+  private final Queue<HttpObject> responseParts = new ConcurrentLinkedQueue<HttpObject>();
   private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
   private final RequestSender requestSender = new RequestSender();
   private final WriteResultListener writeResultListener = new WriteResultListener();
