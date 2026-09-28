@@ -68,6 +68,20 @@ public interface AccountStatsStore {
   HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHost(String hostname, int port) throws Exception;
 
   /**
+   * Return a host report only when it was completely published at or after {@code minimumReportTimestampMs} and did
+   * not change while being read. Implementations without durable publication state must return {@code null}.
+   * @param hostname The hostname.
+   * @param port The port number.
+   * @param minimumReportTimestampMs the earliest acceptable report generation time.
+   * @return a stable completed report, or {@code null} when one is not available.
+   * @throws Exception
+   */
+  default HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHostForRecovery(String hostname, int port,
+      long minimumReportTimestampMs) throws Exception {
+    return null;
+  }
+
+  /**
    * Returns the aggregated account storage stats in {@link AggregatedAccountStorageStats}.
    * @return An {@link AggregatedAccountStorageStats} represents the aggregated account stats.
    * @throws Exception

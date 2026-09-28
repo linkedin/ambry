@@ -62,7 +62,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
   public static final String[] TABLES =
-      {AccountReportsDao.ACCOUNT_REPORTS_TABLE, AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE,
+      {AccountReportsDao.ACCOUNT_REPORTS_TABLE, HostAccountReportsStateDao.HOST_ACCOUNT_REPORTS_STATE_TABLE,
+          AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE,
           AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
           AggregatedAccountReportsDao.MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
           PartitionClassReportsDao.PARTITION_CLASS_NAMES_TABLE, PartitionClassReportsDao.PARTITIONS_TABLE,
@@ -70,6 +71,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
 
   private final DataSource dataSource;
   private final AccountReportsDao accountReportsDao;
+  private final HostAccountReportsStateDao hostAccountReportsStateDao;
   private final AggregatedAccountReportsDao aggregatedAccountReportsDao;
   private final PartitionClassReportsDao partitionClassReportsDao;
   private final HostnameHelper hostnameHelper;
@@ -173,6 +175,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     MySqlMetrics mySqlMetrics = new MySqlMetrics(AccountStatsMySqlStore.class, registry);
     this.dataSource = dataSource;
     accountReportsDao = new AccountReportsDao(dataSource, mySqlMetrics);
+    hostAccountReportsStateDao = new HostAccountReportsStateDao(dataSource, mySqlMetrics);
     aggregatedAccountReportsDao = new AggregatedAccountReportsDao(dataSource, mySqlMetrics);
     partitionClassReportsDao = new PartitionClassReportsDao(dataSource, mySqlMetrics);
     this.hostnameHelper = hostnameHelper;
@@ -193,6 +196,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   @Override
   public void storeHostAccountStorageStats(HostAccountStorageStatsWrapper statsWrapper) throws Exception {
+    HostAccountReportsStateDao.State reportState =
+        hostAccountReportsStateDao.markReportStarted(clusterName, hostname, statsWrapper.getHeader().getTimestamp(),
+            statsWrapper.getStats().getStorageStats().keySet().stream().sorted().map(String::valueOf)
+                .collect(Collectors.joining(",")));
     AccountReportsDao.StorageBatchUpdater batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
@@ -235,6 +242,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     storeMetrics.insertAccountStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
 
     deleteContainerAccountStats(prevPartitionMap, currPartitionMap);
+    hostAccountReportsStateDao.markReportComplete(clusterName, hostname, reportState.getReportVersion());
     storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     previousHostAccountStorageStatsWrapper = statsWrapper;
     writeStatsToLocalBackupFile();
@@ -245,6 +253,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     long startTimeMs = System.currentTimeMillis();
     hostname = hostnameHelper.simplifyHostname(hostname, port);
     accountReportsDao.deleteStorageUsageForHost(clusterName, hostname);
+    hostAccountReportsStateDao.deleteState(clusterName, hostname);
     storeMetrics.deleteAccountStatsHostTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
@@ -336,6 +345,29 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       throws SQLException {
     queryHostname = hostnameHelper.simplifyHostname(queryHostname, port);
     return queryHostAccountStorageStatsBySimplifiedHostName(queryHostname);
+  }
+
+  @Override
+  public HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHostForRecovery(String queryHostname, int port,
+      long minimumReportTimestampMs) throws SQLException {
+    queryHostname = hostnameHelper.simplifyHostname(queryHostname, port);
+    HostAccountReportsStateDao.State before = hostAccountReportsStateDao.queryState(clusterName, queryHostname);
+    if (before == null || !before.isComplete() || before.getReportTimestampMs() < minimumReportTimestampMs) {
+      return null;
+    }
+    HostAccountStorageStatsWrapper statsWrapper = queryHostAccountStorageStatsBySimplifiedHostName(queryHostname);
+    HostAccountReportsStateDao.State after = hostAccountReportsStateDao.queryState(clusterName, queryHostname);
+    if (!before.equals(after)) {
+      return null;
+    }
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> storageStats =
+        new HashMap<>(statsWrapper.getStats().getStorageStats());
+    if (!before.getReportedPartitions().isEmpty()) {
+      for (String partitionId : before.getReportedPartitions().split(",")) {
+        storageStats.putIfAbsent(Long.parseLong(partitionId), Collections.emptyMap());
+      }
+    }
+    return new HostAccountStorageStatsWrapper(statsWrapper.getHeader(), new HostAccountStorageStats(storageStats));
   }
 
   /**

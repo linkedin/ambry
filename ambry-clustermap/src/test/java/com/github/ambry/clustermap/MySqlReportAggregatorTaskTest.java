@@ -19,16 +19,25 @@ import com.github.ambry.accountstats.AggregatedAccountReportsState;
 import com.github.ambry.accountstats.InmemoryAccountStatsStore;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.HostAccountStorageStatsWrapper;
+import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
+import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.utils.MockTime;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
+import org.apache.helix.model.IdealState;
+import org.apache.helix.task.TaskResult;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -69,7 +78,10 @@ public class MySqlReportAggregatorTaskTest {
     assertEquals(CURRENT_MONTH, deferredState.getMonthlyBaselineRecoveryMonth());
     assertEquals(1, deferredState.getSnapshotVersion());
 
-    task.updateMonthlySnapshot(deferredState);
+    task.updateMonthlySnapshot(deferredState, false);
+    assertEquals(deferredState, store.queryAggregatedAccountReportsState());
+
+    task.updateMonthlySnapshot(deferredState, true);
     AggregatedAccountReportsState recoveredState = store.queryAggregatedAccountReportsState();
     assertEquals(CURRENT_MONTH, recoveredState.getMonth());
     assertNull(recoveredState.getMonthlyBaselineRecoveryMonth());
@@ -160,6 +172,44 @@ public class MySqlReportAggregatorTaskTest {
   }
 
   @Test
+  public void testRecoveryWaitsForFreshCompletedPartitionCoverage() throws Exception {
+    long recoveryStartTimeMs = CURRENT_TIME_MS - TimeUnit.HOURS.toMillis(1);
+    Map<String, HostAccountStorageStatsWrapper> hostStats = new HashMap<>();
+    hostStats.put("host1_12345", createHostStats(1, CURRENT_TIME_MS));
+    hostStats.put("host2_12345", createHostStats(2, recoveryStartTimeMs - 1));
+    InmemoryAccountStatsStore store =
+        new InmemoryAccountStatsStore("test", "unused", hostStats, Collections.emptyMap());
+    store.storeAggregatedAccountStorageStats(new AggregatedAccountStorageStats());
+    store.updateAggregatedAccountReportsState(store.queryAggregatedAccountReportsState(), CURRENT_MONTH,
+        recoveryStartTimeMs, CURRENT_MONTH, true, false);
+
+    IdealState idealState = mock(IdealState.class);
+    when(idealState.getPartitionSet()).thenReturn(new HashSet<>(java.util.Arrays.asList("1", "2")));
+    HelixAdmin helixAdmin = mock(HelixAdmin.class);
+    when(helixAdmin.getInstancesInCluster("test"))
+        .thenReturn(java.util.Arrays.asList("host1_12345", "host2_12345"));
+    when(helixAdmin.getResourcesInCluster("test")).thenReturn(Collections.singletonList("resource"));
+    when(helixAdmin.getResourceIdealState("test", "resource")).thenReturn(idealState);
+    HelixManager manager = mock(HelixManager.class);
+    when(manager.getClusterName()).thenReturn("test");
+    when(manager.getClusterManagmentTool()).thenReturn(helixAdmin);
+    MySqlReportAggregatorTask task =
+        new MySqlReportAggregatorTask(manager, 60, StatsReportType.ACCOUNT_REPORT, store, null, createConfig(),
+            new MetricRegistry(), new MockTime(CURRENT_TIME_MS));
+
+    assertEquals(TaskResult.Status.COMPLETED, task.run().getStatus());
+    AggregatedAccountReportsState pendingState = store.queryAggregatedAccountReportsState();
+    assertEquals(CURRENT_MONTH, pendingState.getMonthlyBaselineRecoveryMonth());
+    assertEquals(1, pendingState.getSnapshotVersion());
+
+    hostStats.put("host2_12345", createHostStats(2, CURRENT_TIME_MS));
+    assertEquals(TaskResult.Status.COMPLETED, task.run().getStatus());
+    AggregatedAccountReportsState recoveredState = store.queryAggregatedAccountReportsState();
+    assertNull(recoveredState.getMonthlyBaselineRecoveryMonth());
+    assertEquals(2, recoveredState.getSnapshotVersion());
+  }
+
+  @Test
   public void testStaleConcurrentTaskCannotRearmRecovery() throws Exception {
     AccountStatsStore store = mock(AccountStatsStore.class);
     AggregatedAccountReportsState staleState =
@@ -207,5 +257,17 @@ public class MySqlReportAggregatorTaskTest {
     properties.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, "12345");
     properties.setProperty(ClusterMapConfig.ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, "true");
     return new ClusterMapConfig(new VerifiableProperties(properties));
+  }
+
+  private HostAccountStorageStatsWrapper createHostStats(long partitionId, long timestampMs) {
+    Map<Short, ContainerStorageStats> containerStats = new HashMap<>();
+    containerStats.put((short) 1, new ContainerStorageStats((short) 1, 100, 100, 1));
+    Map<Short, Map<Short, ContainerStorageStats>> accountStats = new HashMap<>();
+    accountStats.put((short) 1, containerStats);
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> partitionStats = new HashMap<>();
+    partitionStats.put(partitionId, accountStats);
+    return new HostAccountStorageStatsWrapper(
+        new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestampMs, 1, 1, Collections.emptyList()),
+        new HostAccountStorageStats(partitionStats));
   }
 }

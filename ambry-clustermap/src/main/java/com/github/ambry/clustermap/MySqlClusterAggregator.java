@@ -25,7 +25,9 @@ import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +58,11 @@ public class MySqlClusterAggregator {
    * @throws IOException
    */
   Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregateHostAccountStorageStatsWrappers(
+      AccountStorageStatsIterator accountStorageStatsIterator) throws IOException {
+    return aggregateHostAccountStorageStatsWrappersWithPartitionIds(accountStorageStatsIterator).getAggregatedStats();
+  }
+
+  AccountStatsAggregationResult aggregateHostAccountStorageStatsWrappersWithPartitionIds(
       AccountStorageStatsIterator accountStorageStatsIterator) throws IOException {
 
     Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> combinedHostAccountStorageStatsMap = new HashMap<>();
@@ -94,7 +101,8 @@ public class MySqlClusterAggregator {
       logger.trace("Aggregated combined {}", mapper.writeValueAsString(combinedAggregated));
       logger.trace("Aggregated selected {}", mapper.writeValueAsString(selectedAggregated));
     }
-    return new Pair<>(combinedAggregated, selectedAggregated);
+    return new AccountStatsAggregationResult(new Pair<>(combinedAggregated, selectedAggregated),
+        new HashSet<>(selectedHostAccountStorageStatsMap.keySet()));
   }
 
   /**
@@ -341,5 +349,24 @@ public class MySqlClusterAggregator {
         .flatMap(containerMap -> containerMap.values().stream().map(ContainerStorageStats::getPhysicalStorageUsage))
         .mapToLong(l -> l)
         .sum();
+  }
+
+  static class AccountStatsAggregationResult {
+    private final Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedStats;
+    private final Set<Long> selectedPartitionIds;
+
+    AccountStatsAggregationResult(Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedStats,
+        Set<Long> selectedPartitionIds) {
+      this.aggregatedStats = aggregatedStats;
+      this.selectedPartitionIds = selectedPartitionIds;
+    }
+
+    Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> getAggregatedStats() {
+      return aggregatedStats;
+    }
+
+    Set<Long> getSelectedPartitionIds() {
+      return selectedPartitionIds;
+    }
   }
 }

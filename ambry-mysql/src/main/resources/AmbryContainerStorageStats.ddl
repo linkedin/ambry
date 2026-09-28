@@ -36,6 +36,24 @@ CREATE TABLE IF NOT EXISTS AccountReports
     COLLATE utf8_bin;
 
 /**
+ * This table brackets host report publication so recovery aggregation can distinguish a stable complete report from
+ * legacy, failed, or concurrently changing AccountReports rows.
+ */
+CREATE TABLE IF NOT EXISTS HostAccountReportsState
+(
+    clusterName       VARCHAR(25) NOT NULL,
+    hostname          VARCHAR(30) NOT NULL,
+    reportTimestampMs BIGINT      NOT NULL,
+    reportVersion     BIGINT      NOT NULL,
+    isComplete        BOOLEAN     NOT NULL,
+    reportedPartitions TEXT       NOT NULL,
+
+    PRIMARY KEY (clusterName, hostname)
+)
+    CHARACTER SET utf8
+    COLLATE utf8_bin;
+
+/**
   We have to add physicalStorageUsage and numberOfBlobs to the existing AccountReports table.
   We would like to set physicalStorageUsage's value to be the same as storageUsage and the numberOfBlobs to be 0
 

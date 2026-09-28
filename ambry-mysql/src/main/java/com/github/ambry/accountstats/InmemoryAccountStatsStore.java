@@ -100,6 +100,14 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
+  public HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHostForRecovery(String hostname, int port,
+      long minimumReportTimestampMs) {
+    HostAccountStorageStatsWrapper statsWrapper = queryHostAccountStorageStatsByHost(hostname, port);
+    return statsWrapper != null && statsWrapper.getHeader().getTimestamp() >= minimumReportTimestampMs ? statsWrapper
+        : null;
+  }
+
+  @Override
   public AggregatedAccountStorageStats queryAggregatedAccountStorageStats() throws Exception {
     return aggregatedAccountStats;
   }
