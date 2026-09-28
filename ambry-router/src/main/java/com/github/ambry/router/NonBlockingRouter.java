@@ -34,6 +34,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.rest.DeleteRequestMetrics;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
@@ -566,7 +567,7 @@ public class NonBlockingRouter implements Router {
       if (blobId == null) {
         throw new IllegalArgumentException("blobId must not be null");
       }
-      proceedWithDelete(blobId, serviceId, callback, futureResult, quotaChargeCallback);
+      proceedWithDelete(blobId, serviceId, callback, futureResult, quotaChargeCallback, null);
     } else {
       try {
         String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(true);
@@ -580,7 +581,8 @@ public class NonBlockingRouter implements Router {
             } else {
               List<String> blobIds = Arrays.stream(convertedBlobId.split(",")).collect(Collectors.toList());
               if (blobIds.size() == 1) {
-                proceedWithDelete(blobIds.get(0), serviceId, callback, futureResult, quotaChargeCallback);
+                proceedWithDelete(blobIds.get(0), serviceId, callback, futureResult, quotaChargeCallback,
+                    restRequest.getMetricsTracker().getDeleteRequestTracker());
               } else {
                 Function<Exception, Exception> allowNotFound = ex -> ex != null && ex instanceof RouterException
                     && ((RouterException) ex).getErrorCode() == RouterErrorCode.BlobDoesNotExist ? null : ex;
@@ -590,7 +592,8 @@ public class NonBlockingRouter implements Router {
                         allowNotFound, NonBlockingRouter.this);
                 for (String blobId : blobIds) {
                   proceedWithDelete(blobId, serviceId, tracker.getCallback(blobId),
-                      BatchOperationCallbackTracker.DUMMY_FUTURE, quotaChargeCallback);
+                      BatchOperationCallbackTracker.DUMMY_FUTURE, quotaChargeCallback,
+                      restRequest.getMetricsTracker().getDeleteRequestTracker());
                 }
               }
             }
@@ -613,7 +616,8 @@ public class NonBlockingRouter implements Router {
    * Helper method to perform delete once the blob Id is available.
    */
   private void proceedWithDelete(String blobId, String serviceId, Callback<Void> callback,
-      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback,
+      DeleteRequestMetrics.Tracker deleteRequestTracker) {
     currentOperationsCount.incrementAndGet();
     routerMetrics.deleteBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
@@ -633,7 +637,8 @@ public class NonBlockingRouter implements Router {
         // Can skip attemptChunkDeletes if we can determine this is not a metadata blob
         boolean attemptChunkDeletes = isMaybeMetadataBlob(blobId);
         getOperationController().deleteBlob(blobId, serviceId, futureResult,
-            new BlobOperationCallbackWrapper<>(blobId, callback), attemptChunkDeletes, quotaChargeCallback);
+            new BlobOperationCallbackWrapper<>(blobId, callback), attemptChunkDeletes, quotaChargeCallback,
+            deleteRequestTracker);
         if (!attemptChunkDeletes) {
           routerMetrics.skippedGetBlobCount.inc();
         }
@@ -830,7 +835,7 @@ public class NonBlockingRouter implements Router {
                 logger.error("Background delete operation failed with exception", exception);
               }
               currentBackgroundOperationsCount.decrementAndGet();
-            }, false, deleteRequest.getQuotaChargeCallback());
+            }, false, deleteRequest.getQuotaChargeCallback(), null);
         submitted = true;
       } catch (RuntimeException e) {
         routerMetrics.backgroundDeleterSubmitFailureCount.inc();

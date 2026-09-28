@@ -30,6 +30,7 @@ import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.repair.RepairRequestRecord;
 import com.github.ambry.repair.RepairRequestsDb;
+import com.github.ambry.rest.DeleteRequestMetrics;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -89,6 +90,7 @@ class DeleteOperation {
   private final String originatingDcName;
 
   private final RepairRequestsDb repairRequestsDb;
+  private final DeleteRequestMetrics.Tracker deleteRequestTracker;
 
   /**
    * Instantiates a {@link DeleteOperation}.
@@ -105,7 +107,8 @@ class DeleteOperation {
    */
   DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       ResponseHandler responsehandler, BlobId blobId, String serviceId, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter,
+      DeleteRequestMetrics.Tracker deleteRequestTracker) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -128,6 +131,7 @@ class DeleteOperation {
     this.nonBlockingRouter = nonBlockingRouter;
     this.replicateBlobCallback = null;
     this.repairRequestsDb = nonBlockingRouter.getRepairRequestsDb();
+    this.deleteRequestTracker = deleteRequestTracker;
   }
 
   /**
@@ -160,6 +164,9 @@ class DeleteOperation {
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+        if (deleteRequestTracker != null) {
+          deleteRequestTracker.markRemoteAttempt();
+        }
         logger.trace("Making request with correlationId {} to a remote replica {} in {} ",
             deleteRequest.getCorrelationId(), replica.getDataNodeId(), replica.getDataNodeId().getDatacenterName());
         routerMetrics.crossColoRequestCount.inc();
@@ -562,6 +569,9 @@ class DeleteOperation {
       DataNodeId sourceDataNode = successfulReplica.get(0).getDataNodeId();
       replicateBlobCallback = new ReplicateBlobCallback(blobId, sourceDataNode);
 
+      if (deleteRequestTracker != null) {
+        deleteRequestTracker.markOnDemandRepair();
+      }
       nonBlockingRouter.replicateBlob(blobId.getID(), this.getClass().getSimpleName(), sourceDataNode,
           replicateBlobCallback);
       logger.info("Start the on-demand replication {} {} on DeleteOperation.", replicateBlobCallback.getBlobId(),

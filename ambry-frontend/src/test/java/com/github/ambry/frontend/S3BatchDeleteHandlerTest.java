@@ -52,6 +52,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -59,6 +60,8 @@ import org.junit.Test;
 
 import static com.github.ambry.frontend.s3.S3Constants.*;
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 
 public class S3BatchDeleteHandlerTest {
@@ -74,6 +77,8 @@ public class S3BatchDeleteHandlerTest {
   private FrontendMetrics metrics;
   private NamedBlobPutHandler namedBlobPutHandler;
   private S3BatchDeleteHandler s3BatchDeleteHandler;
+  private DeleteBlobHandler deleteBlobHandler;
+  private final MetricRegistry registry = new MetricRegistry();
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
 
@@ -100,6 +105,49 @@ public class S3BatchDeleteHandlerTest {
   @After
   public void after() {
     nettyByteBufLeakHelper.afterTest();
+  }
+
+  @Test
+  public void testBatchCohortSharedWithChildren() throws Exception {
+    for (boolean ssl : new boolean[]{false, true}) {
+      String uri = String.format("/s3/%s/%s", account.getName(), container.getName());
+      String xml = "<Delete><Object><Key>key-success</Key></Object><Object><Key>missing</Key></Object></Delete>";
+      RestRequest request = spy(FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri,
+          new JSONObject(), new LinkedList<>(Arrays.asList(ByteBuffer.wrap(xml.getBytes(StandardCharsets.UTF_8)), null))));
+      doReturn(ssl).when(request).isSslUsed();
+      request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+          RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+      DeleteBlobHandler childHandler = spy(deleteBlobHandler);
+      doAnswer(invocation -> {
+        RestRequest child = invocation.getArgument(0);
+        assertNotSame(request.getMetricsTracker(), child.getMetricsTracker());
+        assertSame(request.getMetricsTracker().getDeleteRequestTracker(),
+            child.getMetricsTracker().getDeleteRequestTracker());
+        if (((RequestPath) child.getArgs().get(RestUtils.InternalKeys.REQUEST_PATH))
+            .getOperationOrBlobId(false).endsWith("missing")) {
+          child.getMetricsTracker().getDeleteRequestTracker().markOnDemandRepair();
+        } else {
+          child.getMetricsTracker().getDeleteRequestTracker().markRemoteAttempt();
+        }
+        return invocation.callRealMethod();
+      }).when(childHandler).handle(any(), any(), any());
+      FutureResult<ReadableStreamChannel> result = new FutureResult<>();
+      new S3BatchDeleteHandler(childHandler, metrics).handle(request, new MockRestResponseChannel(), result::done);
+      result.get(10, TimeUnit.SECONDS).close();
+      String prefix = MetricRegistry.name(FrontendRestRequestService.class, "BatchDeleteBlob" + (ssl ? "Ssl" : ""));
+      assertEquals(0, registry.getMeters().get(prefix + "OnDemandRepairRate").getCount());
+      request.getMetricsTracker().nioMetricsTracker.markFirstByteSent();
+      request.getMetricsTracker().recordMetrics();
+      request.getMetricsTracker().recordMetrics();
+      assertEquals(1, registry.getMeters().get(prefix + "OnDemandRepairRate").getCount());
+      assertEquals(0, registry.getMeters().get(prefix + "RemoteAttemptRate").getCount());
+      assertEquals(0, registry.getMeters().get(prefix + "NoRemoteAttemptRate").getCount());
+      assertEquals(1, registry.getCounters().get(prefix + "Count").getCount());
+      assertArrayEquals(registry.getHistograms().get(prefix + "NioTimeToFirstByteInMs").getSnapshot().getValues(),
+          registry.getHistograms().get(prefix + "OnDemandRepairNioTimeToFirstByteInMs").getSnapshot().getValues());
+      assertEquals(0, registry.getMeters().get(MetricRegistry.name(FrontendRestRequestService.class,
+          "DeleteBlob" + (ssl ? "Ssl" : "") + "OnDemandRepairRate")).getCount());
+    }
   }
 
   @Test
@@ -249,6 +297,9 @@ public class S3BatchDeleteHandlerTest {
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Parse-error counter should increment by 1", parseErrorsBefore + 1,
         metrics.s3BatchDeleteRequestParseError.getCount());
+    request.getMetricsTracker().recordMetrics();
+    assertEquals(1, registry.getMeters().get(MetricRegistry.name(FrontendRestRequestService.class,
+        "BatchDeleteBlobNoRemoteAttemptRate")).getCount());
   }
 
   @Test
@@ -318,7 +369,7 @@ public class S3BatchDeleteHandlerTest {
     CommonTestUtils.populateRequiredRouterProps(properties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    metrics = new FrontendMetrics(registry, frontendConfig);
     AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     IdSigningService idSigningService = new AmbryIdSigningService();
     AmbrySecurityServiceFactory securityServiceFactory =
@@ -334,7 +385,7 @@ public class S3BatchDeleteHandlerTest {
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
             QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
-    DeleteBlobHandler deleteBlobHandler =
+    deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, ambryIdConverterFactory.getIdConverter(), injector, metrics,
             new MockClusterMap(), QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     s3BatchDeleteHandler = new S3BatchDeleteHandler(deleteBlobHandler, metrics);
