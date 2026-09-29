@@ -81,6 +81,7 @@ import static com.github.ambry.router.RouterErrorCode.*;
  * blob content, accepts a UTF-8 JSON object that includes the signed IDs for the chunks to stitch, and header x-ambry-put-mode should set as "STITCH".
  * <h3>Request body format</h3>
  * The body of the request should be a JSON object that conforms to the format described in {@link StitchRequestSerDe}.
+ * Invalid generated blob IDs are server errors; invalid client-supplied stitch IDs are client errors.
  */
 public class NamedBlobPutHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(NamedBlobPutHandler.class);
@@ -152,6 +153,7 @@ public class NamedBlobPutHandler {
     private final Callback<Void> finalCallback;
     private final Callback<Void> deleteDatasetCallback;
     private final String uri;
+    private boolean blobIdIsServerGenerated;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -162,8 +164,14 @@ public class NamedBlobPutHandler {
         Callback<Void> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.finalCallback = finalCallback;
-      this.deleteDatasetCallback = deleteDatasetVersionIfUploadFailedCallBack(finalCallback);
+      this.finalCallback = (result, exception) -> {
+        if (blobIdIsServerGenerated && exception instanceof RouterException
+            && ((RouterException) exception).getErrorCode() == RouterErrorCode.InvalidBlobId) {
+          exception = new RestServiceException(exception, RestServiceErrorCode.InternalServerError);
+        }
+        finalCallback.onCompletion(result, exception);
+      };
+      this.deleteDatasetCallback = deleteDatasetVersionIfUploadFailedCallBack(this.finalCallback);
       this.uri = restRequest.getUri();
     }
 
@@ -226,6 +234,7 @@ public class NamedBlobPutHandler {
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
+          blobIdIsServerGenerated = true;
           router.putBlob(restRequest, getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest,
               options, routerPutBlobCallback(blobInfo),
               QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
@@ -291,6 +300,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo, BlobProperties propertiesForRouterUpload) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, convertedBlobId -> {
+        blobIdIsServerGenerated = true;
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesForRouterUpload.getBlobSize());

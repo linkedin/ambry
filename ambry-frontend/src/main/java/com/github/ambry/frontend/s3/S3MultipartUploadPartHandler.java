@@ -29,12 +29,15 @@ import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -123,6 +126,7 @@ public class S3MultipartUploadPartHandler<R> {
     private final RestResponseChannel restResponseChannel;
     private final Callback<ReadableStreamChannel> finalCallback;
     private final String uri;
+    private boolean blobIdIsServerGenerated;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -133,7 +137,13 @@ public class S3MultipartUploadPartHandler<R> {
         Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.finalCallback = finalCallback;
+      this.finalCallback = (result, exception) -> {
+        if (blobIdIsServerGenerated && exception instanceof RouterException
+            && ((RouterException) exception).getErrorCode() == RouterErrorCode.InvalidBlobId) {
+          exception = new RestServiceException(exception, RestServiceErrorCode.InternalServerError);
+        }
+        finalCallback.onCompletion(result, exception);
+      };
       this.uri = restRequest.getUri();
     }
 
@@ -174,6 +184,7 @@ public class S3MultipartUploadPartHandler<R> {
           finalCallback.onCompletion(null, null);
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
+          blobIdIsServerGenerated = true;
           router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }

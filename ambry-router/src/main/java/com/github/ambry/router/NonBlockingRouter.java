@@ -36,6 +36,8 @@ import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
@@ -1070,6 +1072,7 @@ public class NonBlockingRouter implements Router {
 
   /**
    * Create id converter callback after router put the blob.
+   * Invalid IDs from conversion of a generated blob ID are server errors.
    * @param restRequest {@link RestRequest} to put the blob.
    * @param blobProperties {@link BlobProperties} for the blob.
    * @return
@@ -1088,7 +1091,13 @@ public class NonBlockingRouter implements Router {
           blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         }
         // Call idConverter.convert after putBlob succeeds
-        idConverter.convert(restRequest, blobId, blobProperties, callback);
+        idConverter.convert(restRequest, blobId, blobProperties, callback == null ? null : (convertedId, error) -> {
+          if (error instanceof RouterException
+              && ((RouterException) error).getErrorCode() == RouterErrorCode.InvalidBlobId) {
+            error = new RestServiceException(error, RestServiceErrorCode.InternalServerError);
+          }
+          callback.onCompletion(convertedId, error);
+        });
       }
     };
   }

@@ -33,6 +33,8 @@ import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -64,6 +66,7 @@ import static com.github.ambry.rest.RestUtils.Headers.*;
  * blob content, accepts a UTF-8 JSON object that includes the signed IDs for the chunks to stitch.
  * <h3>Request body format</h3>
  * The body of the request should be a JSON object that conforms to the format described in {@link StitchRequestSerDe}.
+ * Invalid generated blob IDs are server errors; invalid client-supplied stitch IDs are client errors.
  */
 class PostBlobHandler {
   /**
@@ -128,6 +131,7 @@ class PostBlobHandler {
     private final String uri;
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
+    private boolean blobIdIsServerGenerated;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -138,7 +142,13 @@ class PostBlobHandler {
         Callback<Void> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.finalCallback = finalCallback;
+      this.finalCallback = (result, exception) -> {
+        if (blobIdIsServerGenerated && exception instanceof RouterException
+            && ((RouterException) exception).getErrorCode() == RouterErrorCode.InvalidBlobId) {
+          exception = new RestServiceException(exception, RestServiceErrorCode.InternalServerError);
+        }
+        finalCallback.onCompletion(result, exception);
+      };
       this.uri = restRequest.getUri();
     }
 
@@ -194,6 +204,7 @@ class PostBlobHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
+          blobIdIsServerGenerated = true;
           router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
@@ -223,9 +234,10 @@ class PostBlobHandler {
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo)), uri, LOGGER,
-          finalCallback);
+      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics, blobId -> {
+        blobIdIsServerGenerated = true;
+        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo));
+      }, uri, LOGGER, finalCallback);
     }
 
     /**

@@ -136,6 +136,7 @@ public class S3MultipartCompleteUploadHandler<R> {
     private final RestResponseChannel restResponseChannel;
     private final Callback<ReadableStreamChannel> finalCallback;
     private final String uri;
+    private boolean blobIdIsServerGenerated;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -146,7 +147,13 @@ public class S3MultipartCompleteUploadHandler<R> {
         Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.finalCallback = finalCallback;
+      this.finalCallback = (result, exception) -> {
+        if (blobIdIsServerGenerated && exception instanceof RouterException
+            && ((RouterException) exception).getErrorCode() == RouterErrorCode.InvalidBlobId) {
+          exception = new RestServiceException(exception, RestServiceErrorCode.InternalServerError);
+        }
+        finalCallback.onCompletion(result, exception);
+      };
       this.uri = restRequest.getUri();
     }
 
@@ -241,6 +248,7 @@ public class S3MultipartCompleteUploadHandler<R> {
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo,
         BlobProperties propertiesPassedInRouterUpload) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
+        blobIdIsServerGenerated = true;
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
