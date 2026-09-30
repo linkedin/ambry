@@ -15,6 +15,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
@@ -38,10 +39,14 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingBiConsumer;
 import com.github.ambry.utils.ThrowingConsumer;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
@@ -51,6 +56,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -60,12 +66,13 @@ public class GetAccountsHandlerTest {
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
   private final InMemAccountService accountService;
   private final GetAccountsHandler handler;
+  private final FrontendMetrics metrics;
 
   public GetAccountsHandlerTest() {
-    FrontendMetrics metrics =
+    metrics =
         new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties())));
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
-    accountService = new InMemAccountService(false, true);
+    accountService = spy(new InMemAccountService(false, true));
     handler = new GetAccountsHandler(securityServiceFactory.getSecurityService(), accountService, metrics);
   }
 
@@ -103,7 +110,9 @@ public class GetAccountsHandlerTest {
    */
   @Test
   public void badRequestsTest() throws Exception {
-    Account existingAccount = accountService.createAndAddRandomAccount();
+    Account existingAccount = new AccountBuilder(accountService.createAndAddRandomAccount())
+        .migrationConfigs(Collections.singletonMap("DC-1", new MigrationConfig())).build();
+    accountService.updateAccounts(Collections.singleton(existingAccount));
     Account nonExistentAccount = accountService.generateRandomAccount();
     ThrowingBiConsumer<RestRequest, RestServiceErrorCode> testAction = (request, expectedErrorCode) -> {
       TestUtils.assertException(RestServiceException.class,
@@ -120,6 +129,7 @@ public class GetAccountsHandlerTest {
         RestServiceErrorCode.NotFound);
     testAction.accept(createRestRequest(null, Short.toString(nonExistentAccount.getId()), null, Operations.ACCOUNTS),
         RestServiceErrorCode.NotFound);
+    assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
   }
 
   /**
@@ -128,6 +138,9 @@ public class GetAccountsHandlerTest {
    */
   @Test
   public void securityServiceDenialTest() throws Exception {
+    Account account = new AccountBuilder(accountService.createAndAddRandomAccount())
+        .migrationConfigs(Collections.singletonMap("DC-1", new MigrationConfig())).build();
+    accountService.updateAccounts(Collections.singleton(account));
     IllegalStateException injectedException = new IllegalStateException("@@expected");
     TestUtils.ThrowingRunnable testAction =
         () -> sendRequestGetResponse(createRestRequest(null, null, null, Operations.ACCOUNTS),
@@ -144,6 +157,7 @@ public class GetAccountsHandlerTest {
     TestUtils.assertException(IllegalStateException.class, testAction, errorChecker);
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PostProcessRequest;
     TestUtils.assertException(IllegalStateException.class, testAction, errorChecker);
+    assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
   }
 
   /**
@@ -152,7 +166,9 @@ public class GetAccountsHandlerTest {
    */
   @Test
   public void getSingleContainerSuccessTest() throws Exception {
-    Account existingAccount = accountService.createAndAddRandomAccount();
+    Account existingAccount = new AccountBuilder(accountService.createAndAddRandomAccount())
+        .migrationConfigs(Collections.singletonMap("DC-1", new MigrationConfig())).build();
+    accountService.updateAccounts(Collections.singleton(existingAccount));
     Container existingContainer = existingAccount.getAllContainers().iterator().next();
     ThrowingBiConsumer<RestRequest, Container> testAction = (request, expectedContainer) -> {
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -172,6 +188,7 @@ public class GetAccountsHandlerTest {
     testAction.accept(
         createRestRequest(existingAccount.getName(), null, existingContainer.getName(), Operations.ACCOUNTS_CONTAINERS),
         existingContainer);
+    assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
   }
 
   @Test
@@ -214,6 +231,9 @@ public class GetAccountsHandlerTest {
     Account account = new AccountBuilder(accountService.createAndAddRandomAccount())
         .migrationConfigs(migrationConfigs).build();
     accountService.updateAccounts(Collections.singleton(account));
+    assertSame(metrics.nonEmptyMigrationConfigsResponseCount, metrics.getMetricRegistry().getCounters()
+        .get(MetricRegistry.name(GetAccountsHandler.class, "NonEmptyMigrationConfigsResponseCount")));
+    assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
 
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel channel =
@@ -227,6 +247,71 @@ public class GetAccountsHandlerTest {
             .iterator().next();
     assertEquals("Account should match", account, receivedAccount);
     assertEquals("migrationConfigs should match", migrationConfigs, receivedAccount.getMigrationConfigs());
+    assertEquals(1, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
+  }
+
+  @Test
+  public void migrationConfigsResponseCountTest() throws Exception {
+    Account first = accountService.createAndAddRandomAccount();
+    Account second = accountService.createAndAddRandomAccount();
+    long expectedCount = 0;
+    for (Map<String, MigrationConfig> configs : Arrays.asList(null, Collections.<String, MigrationConfig>emptyMap(),
+        Collections.singletonMap("DC-1", new MigrationConfig()))) {
+      accountService.updateAccounts(Arrays.asList(new AccountBuilder(first).migrationConfigs(configs).build(),
+          new AccountBuilder(second).migrationConfigs(configs).build()));
+      for (boolean ignoreContainers : new boolean[]{false, true}) {
+        for (RestRequest request : Arrays.asList(createRestRequest(null, null, null, Operations.ACCOUNTS),
+            createRestRequest(first.getName(), null, null, Operations.ACCOUNTS),
+            createRestRequest(null, Short.toString(first.getId()), null, Operations.ACCOUNTS))) {
+          request.setArg(RestUtils.Headers.IGNORE_CONTAINERS, ignoreContainers);
+          try (ReadableStreamChannel response = sendRequestGetResponse(request, new MockRestResponseChannel())) {
+            assertNotNull(response);
+            if (configs != null && !configs.isEmpty()) {
+              expectedCount++;
+            }
+            assertEquals(expectedCount, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void failedSerializationDoesNotCountMigrationConfigsTest() throws Exception {
+    MigrationConfig config = new MigrationConfig() {
+      @Override
+      public WriteRamp getWriteRamp() {
+        throw new IllegalStateException("injected serialization failure");
+      }
+    };
+    Account account = new AccountBuilder(accountService.createAndAddRandomAccount())
+        .migrationConfigs(Collections.singletonMap("DC-1", config)).build();
+    accountService.updateAccounts(Collections.singleton(account));
+    TestUtils.assertException(JsonMappingException.class,
+        () -> sendRequestGetResponse(createRestRequest(null, null, null, Operations.ACCOUNTS),
+            new MockRestResponseChannel()), null);
+    assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
+  }
+
+  @Test
+  public void migrationConfigsScanFailurePreservesResponseTest() throws Exception {
+    Account account = new AccountBuilder(accountService.createAndAddRandomAccount())
+        .migrationConfigs(Collections.singletonMap("DC-1", new MigrationConfig())).build();
+    accountService.updateAccounts(Collections.singleton(account));
+    List<Account> scannedAccounts = spy(new ArrayList<>(Collections.singleton(account)));
+    doThrow(new ConcurrentModificationException("injected scan failure")).when(scannedAccounts).spliterator();
+    when(accountService.getAllAccounts()).thenReturn(scannedAccounts);
+
+    RestRequest request = createRestRequest(null, null, null, Operations.ACCOUNTS);
+    try (ReadableStreamChannel response = sendRequestGetResponse(request, new MockRestResponseChannel());
+        RetainingAsyncWritableChannel output = new RetainingAsyncWritableChannel((int) response.getSize())) {
+      response.readInto(output, null).get();
+      assertEquals(Collections.singletonList(account),
+          AccountCollectionSerde.accountsFromInputStreamInJson(output.consumeContentAsInputStream()));
+      assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
+    }
+    verify(scannedAccounts).spliterator();
+    verify(accountService).getAllAccounts();
   }
 
   /**

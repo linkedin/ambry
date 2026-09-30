@@ -850,11 +850,12 @@ public class AccountContainerTest {
   }
 
   /**
-   * Test account metadata serialization with DC-specific migrationConfigs map.
+   * Test account metadata serialization after repeated copies with DC-specific migration configs.
    */
   @Test
-  public void testAccountWithMigrationConfigsSerDe() throws IOException {
+  public void testAccountWithMigrationConfigsAfterRepeatedCopies() throws IOException {
     ObjectMapper mapper = JsonUtil.newObjectMapper();
+
     // Account with migrationConfigs set.
     Map<String, MigrationConfig> migrationConfigs = new HashMap<>();
     migrationConfigs.put("DC-1", new MigrationConfig(false,
@@ -862,19 +863,43 @@ public class AccountContainerTest {
         new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
     migrationConfigs.put("DC-2", new MigrationConfig(true,
         new MigrationConfig.WriteRamp(), new MigrationConfig.ReadRamp(), new MigrationConfig.ListRamp()));
-    Account accountWithMigrationConfigs =
-        new AccountBuilder(refAccount).migrationConfigs(migrationConfigs).build();
-    String serializedAccountStr = mapper.writeValueAsString(accountWithMigrationConfigs);
-    Account deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
-    assertEquals("migrationConfigs should match", migrationConfigs, deserializedAccount.getMigrationConfigs());
-    assertEquals("Account should match", accountWithMigrationConfigs, deserializedAccount);
+    for (Map<String, MigrationConfig> configs : Arrays.asList(null, Collections.<String, MigrationConfig>emptyMap(),
+        migrationConfigs)) {
+      Account original = new AccountBuilder(refAccount).migrationConfigs(configs).lastModifiedTime(1234).build();
+      String expectedJson = mapper.writeValueAsString(original);
+      Account copied = original;
+      for (int i = 0; i < 100_000; i++) {
+        copied = new AccountBuilder(copied).build();
+      }
+      String serializedAccountStr = mapper.writeValueAsString(copied);
+      assertEquals("Serialized metadata should match", mapper.readTree(expectedJson),
+          mapper.readTree(serializedAccountStr));
+      Account deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
+      assertEquals("migrationConfigs should match", configs, deserializedAccount.getMigrationConfigs());
+      assertEquals("Account should match", original, deserializedAccount);
+    }
+  }
 
-    // Account with migrationConfigs not set.
-    Account accountWithoutMigrationConfigs =
-        new AccountBuilder(refAccount).migrationConfigs(null).build();
-    serializedAccountStr = mapper.writeValueAsString(accountWithoutMigrationConfigs);
-    deserializedAccount = mapper.readValue(serializedAccountStr, Account.class);
-    assertNull("migrationConfigs should be null", deserializedAccount.getMigrationConfigs());
+  @Test
+  public void testAccountMigrationConfigsAreImmutableSnapshots() throws Exception {
+    MigrationConfig config = new MigrationConfig();
+    for (Map<String, MigrationConfig> initial : Arrays.asList(Collections.<String, MigrationConfig>emptyMap(),
+        Collections.singletonMap("DC-1", config))) {
+      Map<String, MigrationConfig> input = new HashMap<>(initial);
+      Account account = new AccountBuilder(refAccount).migrationConfigs(input).build();
+      Account copied = new AccountBuilder(account).build();
+      input.put("DC-2", config);
+      input.remove("DC-1");
+      for (Account snapshot : Arrays.asList(account, copied)) {
+        assertEquals("Input mutations must not change the account", initial, snapshot.getMigrationConfigs());
+        TestUtils.assertException(UnsupportedOperationException.class,
+            () -> snapshot.getMigrationConfigs().put("DC-3", config), null);
+        if (!initial.isEmpty()) {
+          TestUtils.assertException(UnsupportedOperationException.class,
+              () -> snapshot.getMigrationConfigs().entrySet().iterator().next().setValue(config), null);
+        }
+      }
+    }
   }
 
   /**

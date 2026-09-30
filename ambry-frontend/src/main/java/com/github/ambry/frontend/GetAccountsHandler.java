@@ -129,7 +129,16 @@ class GetAccountsHandler {
         } else {
           boolean ignoreContainers =
               RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.IGNORE_CONTAINERS, false);
-          serializedAccountsOrContainers = AccountCollectionSerde.serializeAccountsInJson(getAccounts(), ignoreContainers);
+          Collection<Account> accounts = getAccounts();
+          serializedAccountsOrContainers = AccountCollectionSerde.serializeAccountsInJson(accounts, ignoreContainers);
+          try {
+            if (accounts.stream()
+                .anyMatch(account -> account.getMigrationConfigs() != null && !account.getMigrationConfigs().isEmpty())) {
+              frontendMetrics.nonEmptyMigrationConfigsResponseCount.inc();
+            }
+          } catch (RuntimeException e) {
+            LOGGER.error("Failed to inspect migration configs for account response", e);
+          }
         }
         ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(
             serializedAccountsOrContainers));

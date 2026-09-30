@@ -227,7 +227,8 @@ public class Account {
     this.quotaResourceType = quotaResourceType;
     this.rampControl = rampControl;
     this.migrationConfig = migrationConfig;
-    this.migrationConfigs = migrationConfigs != null ? Collections.unmodifiableMap(migrationConfigs) : null;
+    this.migrationConfigs =
+        migrationConfigs != null ? Collections.unmodifiableMap(new HashMap<>(migrationConfigs)) : null;
   }
 
   /**
